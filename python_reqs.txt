@@ -3,12 +3,6 @@ abagen
 numpy
 scipy
 pandas
-requests
 pyminc
 tqdm
 sklearn
-torch
-skorch
-openpyxl
-matplotlib
-seaborn
