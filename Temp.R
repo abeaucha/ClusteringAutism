@@ -17,3 +17,12 @@ sliceSeries(nrow = 5, ncol = 5, begin = 10, end = 60) %>%
 
 length(avg)
 length(effect)
+
+
+mask <- mincGetVolume('temp.mnc')
+sum(mask)
+
+sliceSeries(nrow = 5, ncol = 5, begin = 10, end = 60) %>% 
+  anatomy(avg_vol, low = 20, high = 250) %>% 
+  overlay(mincArray(mask), low = 0.5, high = 1) %>%
+  draw()
