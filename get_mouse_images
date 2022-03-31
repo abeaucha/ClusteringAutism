@@ -2,7 +2,7 @@
 
 files=(/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/Clusters/Group_*_200_*.mnc)
 
-outdir=data/mouse/
+outdir=data/mouse/cluster_maps/
 
 #echo ${files[@]}
 
