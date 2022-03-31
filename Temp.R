@@ -19,8 +19,10 @@ length(avg)
 length(effect)
 
 
-mask <- mincGetVolume('temp.mnc')
+mask <- mincGetVolume('temp_threshold0.3_asymmetric_lessthan.mnc')
 sum(mask)
+
+hist(effect[mask != 0])
 
 sliceSeries(nrow = 5, ncol = 5, begin = 10, end = 60) %>% 
   anatomy(avg_vol, low = 20, high = 250) %>% 
