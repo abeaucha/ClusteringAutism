@@ -1,0 +1,15 @@
+#!/bin/bash
+
+python3 build_voxel_matrix_dev.py \
+	--datadir /projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/AMBA/data/expression/ \
+	--dataset coronal \
+	--outdir data/mouse/ \
+	--mask data/mouse/atlas/average_template_200um_mask.mnc \
+	--log2 true \
+	--groupexp true \
+	--threshold 0.2 \
+	--impute false \
+	--parallel true \
+	--nproc 4
+
+
