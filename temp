@@ -8,7 +8,7 @@ python3 build_voxel_matrix_dev.py \
 	--log2 true \
 	--groupexp true \
 	--threshold 0.2 \
-	--impute false \
+	--impute true \
 	--parallel true \
 	--nproc 4
 
