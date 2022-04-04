@@ -1,15 +1,20 @@
 #!/bin/bash
 
-python3 build_voxel_matrix.py \
-	--datadir /projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/AMBA/data/expression/ \
-	--dataset coronal \
-	--outdir data/mouse/ \
-	--mask data/mouse/atlas/average_template_200um_mask.mnc \
-	--log2 true \
-	--groupexp true \
-	--threshold 0.2 \
-	--impute true \
-	--parallel true \
-	--nproc 4
+#python3 build_voxel_matrix.py \
+#	--datadir /projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/AMBA/data/expression/ \
+#	--dataset coronal \
+#	--outdir data/mouse/ \
+#	--mask data/mouse/atlas/average_template_200um_mask.mnc \
+#	--log2 true \
+#	--groupexp true \
+#	--threshold 0.2 \
+#	--impute true \
+#	--parallel true \
+#	--nproc 4
 
-
+python3 intersect_gene_homologs.py \
+	--mouse data/mouse/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed.csv \
+	--human data/human/HumanExpressionMatrix_samples_pipeline_v1.csv \
+	--homologs data/MouseHumanGeneHomologs.csv \
+	--outdir data/ \
+	--verbose true
