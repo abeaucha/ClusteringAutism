@@ -1,6 +1,6 @@
 #!/bin/bash
 
-python3 build_voxel_matrix_dev.py \
+python3 build_voxel_matrix.py \
 	--datadir /projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/AMBA/data/expression/ \
 	--dataset coronal \
 	--outdir data/mouse/ \
