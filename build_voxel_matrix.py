@@ -321,7 +321,6 @@ def main():
     #Write to file
     print("Writing to file...")
     
-#     outfile = 'MouseExpressionMatrix_voxel_{}_mask{}'.format(dataset, mask)
     outfile = 'MouseExpressionMatrix_voxel_{}'.format(dataset)
     
     if log_transform:
