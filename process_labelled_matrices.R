@@ -139,6 +139,9 @@ if (args[["aggregate"]] == "true") {
 }
 
 if(verbose){message("Writing to file...")}
+# 
+# write_csv(dfExpression,
+#           file = file.path(args[["outdir"]], outfile))
 
-write_csv(dfExpression,
-          file = file.path(args[["outdir"]], outfile))
+data.table::fwrite(dfExpression,
+                   file = file.path(args[["outdir"]], outfile))
