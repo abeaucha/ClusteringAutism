@@ -23,6 +23,7 @@ source activate_venv
 
 Rscript process_labelled_matrices.R \
 	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
+	--transpose true \
 	--scale true \
 	--aggregate false \
 	--outdir data/ \
@@ -30,6 +31,7 @@ Rscript process_labelled_matrices.R \
 
 Rscript process_labelled_matrices.R \
 	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv \
+	--transpose true \
 	--scale true \
 	--aggregate false \
 	--outdir data/ \
