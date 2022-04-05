@@ -18,6 +18,11 @@ option_list <- list(
               type = "character",
               help = paste("Path to CSV file containing labelled expression",
                            "matrix.")),
+  make_option("--transpose",
+              type = "character",
+              default = "false",
+              help = paste("Option to transpose expression data",
+                           "[default %default]")),
   make_option("--scale",
               type = "character",
               default = "true",
@@ -45,6 +50,10 @@ option_list <- list(
 )
 
 args <- parse_args(OptionParser(option_list = option_list))
+
+if (!(args[["transpose"]] %in% c("true", "false"))) {
+  stop()
+}
 
 if (!(args[["scale"]] %in% c("true", "false"))) {
   stop()
@@ -82,27 +91,48 @@ if(verbose){message("Importing data...")}
 
 #Import data
 dfExpression <- suppressMessages(data.table::fread(args[["infile"]],
-                                                   header = TRUE)) %>% 
+                                                   header = TRUE)) %>%
   as_tibble()
+
+if (('Gene' %in% colnames(dfExpression)) & args[['transpose']] == 'false') {
+  stop("Detected column named 'Gene' in matrix. Consider transposing.")
+}
+
+if (args[['transpose']] == 'true') {
+  dfExpression <- dfExpression %>% 
+    column_to_rownames('Gene') %>% 
+    as.matrix() %>% 
+    t() %>% 
+    as_tibble() 
+}
 
 #Extract genes list from data
 genes <- colnames(dfExpression)[!str_detect(colnames(dfExpression), "Region")]
+
+#Do any columns contain regions?
+containsRegion <- any(str_detect(colnames(dfExpression), "Region"))
 
 if (args[["scale"]] == "true") {
   
   if(verbose){message("Scaling data...")}
   
   #Extract labels from data frame
-  dfLabels <- dfExpression %>% select(contains("Region"))
+  if (containsRegion) {
+    dfLabels <- dfExpression %>% select(contains("Region"))
+  }
   
   #Normalize data
   dfExpression <- dfExpression %>% 
-    select(-contains("Region")) %>% 
+    select(all_of(genes)) %>% 
     as.matrix() %>% 
     scaler(axis = "rows") %>% 
     scaler(scale = FALSE, axis = "columns") %>% 
-    as_tibble() %>% 
-    bind_cols(dfLabels)
+    as_tibble()
+  
+  if (containsRegion) {
+    dfExpression <- dfExpression %>% 
+      bind_cols(dfLabels)
+  }
   
   outfile <- args[["infile"]] %>% 
     basename() %>% 
@@ -139,9 +169,6 @@ if (args[["aggregate"]] == "true") {
 }
 
 if(verbose){message("Writing to file...")}
-# 
-# write_csv(dfExpression,
-#           file = file.path(args[["outdir"]], outfile))
 
 data.table::fwrite(dfExpression,
                    file = file.path(args[["outdir"]], outfile))
