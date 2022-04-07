@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# process_labelled_matrices.R
+# process_expression_matrix.R
 # Antoine Beauchamp
 # Created: August 25th, 2021
 #
@@ -72,33 +72,37 @@ if (args[["scale"]] == "false" & args[["aggregate"]] == "false"){
 working_dir <- getwd()
 
 script_dir <- commandArgs() %>% 
-  str_subset("--file=") %>% 
-  str_remove("--file=") %>% 
+  str_subset('--file=') %>% 
+  str_remove('--file=') %>% 
   dirname()
 
 path_processing_tools <- file.path(working_dir,
                                    script_dir,
-                                   "functions",
-                                   "processing_tools.R")
+                                   'functions',
+                                   'processing_tools.R')
 source(path_processing_tools)
 
 
 # Main -----------------------------------------------------------------------
 
-verbose <- ifelse(args[["verbose"]] == 'true', TRUE, FALSE)
+verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
+transpose <- ifelse(args[['transpose']] == 'true', TRUE, FALSE)
+normalize <- ifelse(args[['scale']] == 'true', TRUE, FALSE)
+aggregate <- ifelse(args[['aggregate']] == 'true', TRUE, FALSE)
+infile <- args[['infile']]
 
 if(verbose){message("Importing data...")}
 
 #Import data
-dfExpression <- suppressMessages(data.table::fread(args[["infile"]],
+dfExpression <- suppressMessages(data.table::fread(infile,
                                                    header = TRUE)) %>%
   as_tibble()
 
-if (('Gene' %in% colnames(dfExpression)) & args[['transpose']] == 'false') {
+if (('Gene' %in% colnames(dfExpression)) & !transpose) {
   stop("Detected column named 'Gene' in matrix. Consider transposing.")
 }
 
-if (args[['transpose']] == 'true') {
+if (transpose) {
   dfExpression <- dfExpression %>% 
     column_to_rownames('Gene') %>% 
     as.matrix() %>% 
@@ -107,62 +111,54 @@ if (args[['transpose']] == 'true') {
 }
 
 #Extract genes list from data
-genes <- colnames(dfExpression)[!str_detect(colnames(dfExpression), "Region")]
+genes <- colnames(dfExpression)[!str_detect(colnames(dfExpression), 'Region')]
 
-#Do any columns contain regions?
-containsRegion <- any(str_detect(colnames(dfExpression), "Region"))
+#Do any columns contain region labels?
+containsLabels <- any(str_detect(colnames(dfExpression), 'Region'))
 
-if (args[["scale"]] == "true") {
+if (normalize) {
   
-  if(verbose){message("Scaling data...")}
+  if(verbose){message("Normalizing data...")}
   
   #Extract labels from data frame
-  if (containsRegion) {
-    dfLabels <- dfExpression %>% select(contains("Region"))
+  if (containsLabels) {
+    dfLabels <- dfExpression %>% select(contains('Region'))
   }
   
   #Normalize data
   dfExpression <- dfExpression %>% 
     select(all_of(genes)) %>% 
     as.matrix() %>% 
-    scaler(axis = "rows") %>% 
-    scaler(scale = FALSE, axis = "columns") %>% 
+    scaler(axis = 'rows') %>% 
+    scaler(scale = FALSE, axis = 'columns') %>% 
     as_tibble()
   
-  if (containsRegion) {
+  if (containsLabels) {
     dfExpression <- dfExpression %>% 
       bind_cols(dfLabels)
   }
   
-  outfile <- args[["infile"]] %>% 
+  outfile <- infile %>% 
     basename() %>% 
-    str_replace(".csv", "_scaled.csv")
+    str_replace('.csv', '_scaled.csv')
   
 }
 
-if (args[["aggregate"]] == "true") {
+if (aggregate) {
   
   if(verbose){message("Aggregating data...")}
   
-  labels <- str_c("Region", args[["nlabels"]])
-  
-  if (!(labels %in% colnames(dfExpression))) {
-    stop()
-  }
-  
-  #Aggregate mouse expression data under label set
+  # #Aggregate mouse expression data under label set
   dfExpression <- dfExpression %>% 
-    select(Region = all_of(labels), all_of(genes)) %>% 
     group_by(Region) %>% 
     summarise_all(mean) %>% 
     ungroup()
-  
-  outfile <- args[["infile"]] %>% 
+    
+  outfile <- infile %>% 
     basename() %>% 
-    str_extract("^[a-zA-Z]*") %>% 
-    str_c("_ROI_", labels, ".csv")
+    str_replace('voxel', 'ROI')
   
-  if (args[["scale"]] == "true") {
+  if (normalize) {
     outfile <- str_replace(outfile, ".csv", "_scaled.csv")
   }
   
