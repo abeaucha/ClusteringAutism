@@ -21,22 +21,22 @@ option_list <- list(
   make_option("--transpose",
               type = "character",
               default = "false",
-              help = paste("Option to transpose expression data",
+              help = paste("Transpose expression matrix.",
                            "[default %default]")),
   make_option("--scale",
               type = "character",
               default = "true",
-              help = paste("Option to scale expression data",
+              help = paste("Scale expression matrix.",
                            "[default %default]")),
   make_option("--aggregate",
               type = "character",
               default = "false",
-              help = paste("Option to aggregate expression data under a",
-                           "set of atlas labels [default %default]")),
+              help = paste("Aggregate expression data under a set of",
+                           "atlas labels. [default %default]")),
   make_option("--outdir",
               default = "data/",
               type = "character",
-              help = paste("Directory in which to save processed data.",
+              help = paste("Output directory.",
                            "[default %default]")),
   make_option("--verbose",
               default = "true",
@@ -47,20 +47,17 @@ option_list <- list(
 args <- parse_args(OptionParser(option_list = option_list))
 
 if (!(args[["transpose"]] %in% c("true", "false"))) {
-  stop()
+  stop('Argument --transpose must be one of [true, false]')
 }
 
 if (!(args[["scale"]] %in% c("true", "false"))) {
-  stop()
+  stop('Argument --scale must be one of [true, false]')
 }
 
 if (!(args[["aggregate"]] %in% c("true", "false"))) {
-  stop()
+  stop('Argument --aggregate must be one of [true, false]')
 }
 
-if (args[["scale"]] == "false" & args[["aggregate"]] == "false"){
-  stop(paste("Both --scale and --aggregate were false. This does nothing."))
-}
 
 # Functions ------------------------------------------------------------------
 
@@ -85,6 +82,11 @@ transpose <- ifelse(args[['transpose']] == 'true', TRUE, FALSE)
 normalize <- ifelse(args[['scale']] == 'true', TRUE, FALSE)
 aggregate <- ifelse(args[['aggregate']] == 'true', TRUE, FALSE)
 infile <- args[['infile']]
+
+if (!transpose & !normalize & !aggregate){
+  stop("One of {--transpose, --scale, --aggregate} must be true.")
+}
+
 
 if (verbose) {message("Processing data from file: ", infile)}
 
