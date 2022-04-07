@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# label_expression_matrices.R 
+# label_expression_matrix.R 
 # Antoine Beauchamp
 # 
 # Description
@@ -113,14 +113,10 @@ labelRegions <- function(measurements, tree, treefield){
 }
 
 
-# Paths ----------------------------------------------------------------------
+# Init -----------------------------------------------------------------------
 
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-
-
-# fileHumanMat <- "data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv"
-# fileHumanTree <- "data/human/HumanExpressionTree.RData"
 
 if (!(args[['greymatter']] %in% c('true', 'false'))) {
   stop(paste("--greymatter must be one of [true, false].",
@@ -139,6 +135,15 @@ fileMat <- args[['matrix']]
 fileTree <- args[['tree']]
 fileTreeLabels <- args[['treelabels']]
 nlabels <- args[['nlabels']]
+
+# species <- 'mouse'
+# gm <- TRUE
+# nlabels <- 67
+# fileMat <- 'data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv'
+# # fileMat <- "data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv"
+# fileTree <- 'data/mouse/MouseExpressionTree_DSURQE.RData'
+# # fileTree <- "data/human/HumanExpressionTree.RData"
+# fileTreeLabels <- 'data/TreeLabels.RData'
 
 if (!(species %in% c('mouse', 'human'))) {
   stop(paste("--species must be one of [mouse, human].",
@@ -178,6 +183,9 @@ if (species == 'mouse') {
   labels <- args[['labels']]
   mask <- args[['mask']]
   
+  # labels <- 'data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc'
+  # mask <- 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc'
+  
   if (is.null(labels)){
     stop("--labels empty with no default. Required when --species is mouse.")
   }
@@ -198,11 +206,10 @@ if (species == 'mouse') {
 
 if (verbose) {message("Labelling data from file: ", fileMat)}
 
+
 # Importing and processing ---------------------------------------------------
 
-if (verbose) {
-  message("Importing the expression matrix...")
-}
+if (verbose) {message("Importing the expression matrix...")}
 
 #Import expression matrices
 dfExpr <- suppressMessages(data.table::fread(fileMat,
@@ -239,6 +246,8 @@ if (species == 'mouse') {
   #Mask the atlas
   labels_masked <- label_vol[mask_vol == 1]
   
+  treefield <- 'voxels'
+  
   #Assign voxels to leaf nodes on the tree
   tree$Do(function(node){
     if(isLeaf(node)){
@@ -248,17 +257,15 @@ if (species == 'mouse') {
   
   #Aggregate voxel names up the tree
   tree$Do(function(node){
-    node$voxels <- unlist(Aggregate(node, 'voxels', c))
+    node$voxels <- unlist(Aggregate(node, treefield, c))
   })
 
   #Remove white matter and ventricles
   if (gm) {
-    cutAtNodes <- c("fiber tracts", "ventricular systems")
-    pruneAnatTree(tree, nodes = cutAtNodes, method = "AtNode")
+    cutAtNodes <- c('fiber tracts', 'ventricular systems')
+    pruneAnatTree(tree, nodes = cutAtNodes, method = 'AtNode')
+    tree <- FindNode(tree, 'Basic cell groups and regions')
   }
-  
-  treefield <- 'voxels'
-  tree_measurements <- unlist(tree$Get(treefield, filterFun = isLeaf))
   
 } else if (species == 'human') {
   
@@ -266,28 +273,27 @@ if (species == 'mouse') {
   tree <- Clone(treeHumanExpr)
   rm(treeHumanExpr)
   
+  treefield <- 'samples'
+
   #Remove white matter and ventricles
   if (gm) {
-    cutAtNodes <- c("white matter", "sulci & spaces")
-    pruneAnatTree(tree, cutAtNodes, method = "AtNode")
+    cutAtNodes <- c('white matter', 'sulci & spaces')
+    pruneAnatTree(tree, cutAtNodes, method = 'AtNode')
     tree <- FindNode(tree, 'gray matter')
   }
-  
-  treefield <- 'samples'
-  tree_measurements <- tree$samples
   
 } else {
   stop()
 }
   
-
 #Filter expression data for measurements that are in the pruned tree
+tree_measurements <- tree[[treefield]]
 dfExpr <- dfExpr[, (colnames(dfExpr) %in% tree_measurements)]
 
 
-# Assign regional labels ------------------------------------------------------
+# Assign regional labels -----------------------------------------------------
 
-message("Assigning labels...")
+if (verbose) {message("Assigning labels to expression matrix...")}
 
 #Transpose data frames
 dfExpr <- dfExpr %>% as.matrix() %>% t()
@@ -315,26 +321,37 @@ if (species == 'mouse') {
 
 #Prune tree to given level of aggregation
 region <- paste0('Region', nlabels)
-treePruned <- Clone(tree)
-pruneAnatTree(treePruned, nodes = listLabels[[region]], method = 'BelowNode')
 
-#Get the region labels for every voxel
-dfExpr[,'Region'] <- labelRegions(rownames(dfExpr),
-                                           treePruned,
-                                           treefield)
-
-#Remove identifiers from rownames
-rownames(dfExpr) <- NULL
-
-quit()
+if (region %in% names(listLabels)) {
+  treePruned <- Clone(tree)
+  pruneAnatTree(treePruned, nodes = listLabels[[region]], method = 'BelowNode')
+  
+  #Get the region labels for every voxel
+  dfExpr[,'Region'] <- labelRegions(measurements = rownames(dfExpr), 
+                                    tree = treePruned,
+                                    treefield = treefield)
+  
+  #Remove identifiers from rownames
+  rownames(dfExpr) <- NULL
+  
+} else {
+  stop(paste("Label set", region, "not found in --treelabels file", 
+             fileTreeLabels, "for --species", species))
+}
 
 
 # Write to file --------------------------------------------------------------
 
-message("Writing to file...")
+if (verbose) {message("Writing to file...")}
 
 outfile <- fileMat %>% 
   basename() %>% 
-  str_replace('.csv', '_labelled.csv')
+  str_remove('.csv') %>% 
+  str_c('_labelled') %>% 
+  str_c('_', str_to_lower(region)) %>% 
+  str_c('.csv')
+
+outdir <- args[['outdir']]
+outfile <- file.path(outdir, outfile)
 
 data.table::fwrite(dfExpr, file = outfile)

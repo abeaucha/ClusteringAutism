@@ -21,7 +21,7 @@ source activate_venv
 #	--outdir data/ \
 #	--verbose true
 
-Rscript label_expression_matrices_dev_2.R \
+Rscript label_expression_matrix.R \
 	--species mouse \
 	--matrix data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
 	--tree data/mouse/MouseExpressionTree_DSURQE.RData \
@@ -31,7 +31,13 @@ Rscript label_expression_matrices_dev_2.R \
 	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 	--greymatter true
 
- 
+Rscript label_expression_matrix.R \
+	--species human \
+	--matrix data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv \
+	--tree data/human/HumanExpressionTree.RData \
+	--treelabels data/TreeLabels.RData \
+	--nlabels 88 \
+	--greymatter true
 
 #Rscript process_labelled_matrices.R \
 #	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
