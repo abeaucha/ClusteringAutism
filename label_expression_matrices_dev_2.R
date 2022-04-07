@@ -16,38 +16,37 @@ suppressPackageStartupMessages(library(optparse))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option("--mousematrix",
-              type = "character",
-              help = paste("Path to CSV file containing mouse voxel",
+  make_option('--species',
+              type = 'character',
+              help = paste("The species whose data to process.")),
+  make_option('--matrix',
+              type = 'character',
+              help = paste("Path to CSV file containing voxel- or sample-wise",
                            "expression matrix to label.")),
-  make_option("--humanmatrix",
-              type = "character",
-              help = paste("Path to CSV file containing human sample",
-                           "expression matrix to label.")),
-  make_option("--mousetree",
-              type = "character",
-              help = paste("")),
-  make_option("--humantree",
-              type = "character",
-              help = paste("")),
-  make_option("--homologs",
-              type = "character",
-              help = paste("Path to CSV file containing mouse and human gene",
-                           "homologs")),
-  make_option("--outdir",
-              type = "character",
-              default = "data/",
-              help = paste("[default %default]")),
-  make_option("--savemouse",
-              type = "character",
-              default = "true",
-              help = paste("Option to save labelled mouse data to file",
+  make_option('--tree',
+              type = 'character',
+              help = paste("Path to .RData file containing neuroanatomical tree")),
+  make_option('--treelabels',
+              type = 'character'),
+  make_option('--nlabels',
+              type = 'numeric'),
+  make_option('--greymatter',
+              type = 'character',
+              default = 'true',
+              help = paste("Option to use only grey matter measurements.",
                            "[default %default]")),
-  make_option("--savehuman",
-              type = "character",
-              default = "true",
-              help = paste("Option to save labelled human data to file",
-                           "[default %default]"))
+  make_option('--labels',
+              type = 'character'),
+  make_option('--mask',
+              type = 'character'),
+  make_option('--outdir',
+              type = 'character',
+              default = 'data/',
+              help = paste("[default %default]")),
+  make_option('--verbose',
+              type = 'character',
+              default = 'true',
+              help = paste("Verbosity option. [default %default]"))
 )
 
 
@@ -56,23 +55,21 @@ option_list <- list(
 working_dir <- getwd()
 
 script_dir <- commandArgs() %>% 
-  str_subset("--file=") %>% 
-  str_remove("--file=") %>% 
+  str_subset('--file=') %>% 
+  str_remove('--file=') %>% 
   dirname()
 
 path_tree_tools <- file.path(working_dir, 
                              script_dir, 
-                             "functions", 
-                             "tree_tools.R")
-# source(path_tree_tools)
-source("functions/tree_tools.R")
+                             'functions', 
+                             'tree_tools.R')
+source(path_tree_tools)
 
 path_processing_tools <- file.path(working_dir,
                                    script_dir,
-                                   "functions",
-                                   "processing_tools.R")
-# source(path_processing_tools)
-source("functions/processing_tools.R")
+                                   'functions',
+                                   'processing_tools.R')
+source(path_processing_tools)
 
 
 #' Label voxels/samples with neuroanatomical regions
@@ -121,171 +118,171 @@ labelRegions <- function(measurements, tree, treefield){
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
 
-if (is.null(args[["mousematrix"]])){
-  stop("No input file given to --mousematrix")
+
+# fileHumanMat <- "data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv"
+# fileHumanTree <- "data/human/HumanExpressionTree.RData"
+
+if (!(args[['greymatter']] %in% c('true', 'false'))) {
+  stop(paste("--greymatter must be one of [true, false].",
+             "Got:", args[['greymatter']]))
 }
 
-if (is.null(args[["humanmatrix"]])){
-  stop("No input file given to --humanmatrix")
+if (!(args[['verbose']] %in% c('true', 'false'))) {
+  stop(paste("--verbose must be one of [true, false].",
+             "Got:", args[['verbose']]))
 }
 
+verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
+gm <- ifelse(args[['greymatter']] == 'true', TRUE, FALSE)
+species <- args[['species']]
+fileMat <- args[['matrix']]
+fileTree <- args[['tree']]
+fileTreeLabels <- args[['treelabels']]
+nlabels <- args[['nlabels']]
 
-if (!(args[["savemouse"]] %in% c("true", "false"))) {
-  stop(paste("Argument --savemouse must be one of [true, false] (got ", 
-             args[["savemouse"]], ")"))
+if (!(species %in% c('mouse', 'human'))) {
+  stop(paste("--species must be one of [mouse, human].",
+             "Got:", species))
 }
 
-if (!(args[["savehuman"]] %in% c("true", "false"))) {
-  stop(paste("Argument --savehuman must be one of [true, false] (got ", 
-             args[["savehuman"]], ")"))
+if (is.null(fileMat)){
+  stop("--matrix empty with no default.")
 }
 
-
-# fileMouseMat <- args[["mousematrix"]]
-# fileMouseTree <- args[["mousetree"]]
-# fileHumanMat <- args[["humanmatrix"]]
-# fileHumanTree <- args[["humantree"]]
-# homologs <- args[["homologs"]]
-
-fileMouseMat <- "data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv"
-fileHumanMat <- "data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv"
-fileMouseTree <- "data/mouse/MouseExpressionTree_DSURQE.RData"
-fileHumanTree <- "data/human/HumanExpressionTree.RData"
-
-if (!file.exists(fileMouseMat)) {
-  stop("Mouse file ", fileMouseMat, " not found")
+if (is.null(fileTree)){
+  stop("--tree empty with no default.")
 }
 
-if (!file.exists(fileHumanMat)) {
-  stop("Human file ", fileHumanMat, " not found")
+if (is.null(fileTreeLabels)){
+  stop("--treelabels empty with no default.")
 }
 
-if (!file.exists(fileMouseTree)) {
-  stop("Mouse tree file ", fileMouseTree, " not found")
+if (is.null(nlabels)){
+  stop("--nlabels empty with no default.")
 }
 
-if (!file.exists(fileHumanTree)) {
-  stop("Human tree file ", fileHumanTree, " not found")
+if (!file.exists(fileMat)) {
+  stop("Matrix file ", fileMat, " not found.")
 }
 
-# if (!file.exists(homologs)) {
-#   stop("Homologs file ", homologs, " not found")
-# }
+if (!file.exists(fileTree)) {
+  stop("Tree file ", fileTree, " not found.")
+}
 
-message("Labelling data from mouse file: ", fileMouseMat)
-message("Labelling data from human file: ", fileHumanMat)
+if (!file.exists(fileTreeLabels)) {
+  stop("Tree label file ", fileTreeLabels, " not found.")
+}
 
-# maskFlag <- str_extract(fileMouseMat, "mask[a-z]+")
+if (species == 'mouse') {
+  
+  labels <- args[['labels']]
+  mask <- args[['mask']]
+  
+  if (is.null(labels)){
+    stop("--labels empty with no default. Required when --species is mouse.")
+  }
+  
+  if (is.null(mask)){
+    stop("--mask empty with no default. Required when --species is mouse.")
+  }
+  
+  if (!file.exists(labels)) {
+    stop("Mouse label file ", labels, " not found.")
+  }
+  
+  if (!file.exists(mask)) {
+    stop("Mouse mask file ", mask, " not found.")
+  }
+  
+}
 
+if (verbose) {message("Labelling data from file: ", fileMat)}
 
 # Importing and processing ---------------------------------------------------
 
-message("Importing data...")
+if (verbose) {
+  message("Importing the expression matrix...")
+}
 
 #Import expression matrices
-dfExprMouse <- suppressMessages(data.table::fread(fileMouseMat, 
-                                                  header = TRUE)) %>% 
+dfExpr <- suppressMessages(data.table::fread(fileMat,
+                                             header = TRUE)) %>% 
   as_tibble()
-
-dfExprHuman <- suppressMessages(data.table::fread(fileHumanMat,
-                                                  header = TRUE)) %>% 
-  as_tibble()
-
-# #Subset genes for mouse-human homologs
-# listExpr <- intersectGeneHomologs(data = list(Mouse = dfExprMouse, 
-#                                               Human = dfExprHuman),
-#                                   homologs = homologs)
-# 
-# #Extract the data frames from list
-# dfExprMouse <- listExpr$Mouse
-# dfExprHuman <- listExpr$Human
-# rm(listExpr)
 
 #Extract genes and remove from df
-genesMouse <- dfExprMouse$Gene
-genesHuman <- dfExprHuman$Gene
+genes <- dfExpr$Gene
 
-dfExprMouse <- dfExprMouse %>% select(-Gene)
-dfExprHuman <- dfExprHuman %>% select(-Gene)
+dfExpr <- dfExpr %>% select(-Gene)
 
 #Clean up mouse column names
-colnames(dfExprMouse) <- str_c("V", colnames(dfExprMouse))
+if (species == 'mouse') {
+  colnames(dfExpr) <- str_c("V", colnames(dfExpr))
+}
 
 
-# Build the mouse data tree --------------------------------------------------
+# Build the data tree --------------------------------------------------------
 
-message("Importing mouse data tree...")
+if (verbose) {message("Importing the data tree...")}
+  
+load(fileTree)
 
-labels <- "data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc"
-mask <- "data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
+if (species == 'mouse') {
 
-#Load DSURQE atlas and mask
-# dsurqe <- mincGetVolume("AMBA/data/imaging/DSURQE_CCFv3_labels_200um.mnc")
-label_vol <- mincGetVolume(labels)
+  #Rename the tree
+  tree <- Clone(treeMouseExpr)
+  rm(treeMouseExpr)
+  
+  #Load atlas labels and mask
+  label_vol <- mincGetVolume(labels)
+  mask_vol <- mincGetVolume(mask)
 
-# if (maskFlag == "masksagittal"){
-#   mask <- mincGetVolume("AMBA/data/imaging/sagittal_200um_coverage_bin0.8.mnc")
-# } else if (maskFlag == "maskcoronal") {
-#   mask <- mincGetVolume("AMBA/data/imaging/coronal_200um_coverage_bin0.8.mnc")
-# } else {
-#   stop(str_c("Invalid maskFlag value: ", maskFlag))
-# }
-mask_vol <- mincGetVolume(mask)
+  #Mask the atlas
+  labels_masked <- label_vol[mask_vol == 1]
+  
+  #Assign voxels to leaf nodes on the tree
+  tree$Do(function(node){
+    if(isLeaf(node)){
+      node$voxels <- colnames(dfExpr)[labels_masked == node$label]
+    }
+  })
+  
+  #Aggregate voxel names up the tree
+  tree$Do(function(node){
+    node$voxels <- unlist(Aggregate(node, 'voxels', c))
+  })
 
-#Mask the DSURQE atlas
-# dsurqe_masked <- dsurqe[mask == 1]
-labels_masked <- label_vol[mask_vol == 1]
-
-#Load the mouse tree
-load(fileMouseTree)
-treeMouse <- Clone(treeMouseExpr)
-rm(treeMouseExpr)
-
-#Assign voxels to leaf nodes on the tree
-treeMouse$Do(function(node){
-  if(isLeaf(node)){
-    node$voxels <- colnames(dfExprMouse)[labels_masked == node$label]
+  #Remove white matter and ventricles
+  if (gm) {
+    cutAtNodes <- c("fiber tracts", "ventricular systems")
+    pruneAnatTree(tree, nodes = cutAtNodes, method = "AtNode")
   }
-})
-
-#Aggregate voxel names up the tree
-treeMouse$Do(function(node){
-  node$voxels <- unlist(Aggregate(node, "voxels", c))
-})
-
-#Remove white matter and ventricles
-gm_only <- TRUE
-if (gm_only) {
-  cutAtNodes <- c("fiber tracts", "ventricular systems")
-  pruneAnatTree(treeMouse, nodes = cutAtNodes, method = "AtNode")
+  
+  treefield <- 'voxels'
+  tree_measurements <- unlist(tree$Get(treefield, filterFun = isLeaf))
+  
+} else if (species == 'human') {
+  
+  #Rename
+  tree <- Clone(treeHumanExpr)
+  rm(treeHumanExpr)
+  
+  #Remove white matter and ventricles
+  if (gm) {
+    cutAtNodes <- c("white matter", "sulci & spaces")
+    pruneAnatTree(tree, cutAtNodes, method = "AtNode")
+    tree <- FindNode(tree, 'gray matter')
+  }
+  
+  treefield <- 'samples'
+  tree_measurements <- tree$samples
+  
+} else {
+  stop()
 }
+  
 
-#Filter expression data for voxels that are in the pruned tree
-treeMouseVoxels <- unlist(treeMouse$Get("voxels", filterFun = isLeaf))
-dfExprMouse <- dfExprMouse[, (colnames(dfExprMouse) %in% treeMouseVoxels)]
-
-
-
-# Build the human data tree ---------------------------------------------------
-
-message("Importing human data tree...")
-
-#Load human tree
-#Samples are already mapped to nodes
-load(fileHumanTree)
-treeHuman <- Clone(treeHumanExpr)
-rm(treeHumanExpr)
-
-#Remove white matter and ventricles
-if (gm_only) {
-  cutAtNodes <- c("white matter", "sulci & spaces")
-  pruneAnatTree(treeHuman, cutAtNodes, method = "AtNode")
-  treeHuman <- FindNode(treeHuman, 'gray matter')
-}
-
-#Filter expression data for samples that are in the pruned tree
-treeHumanSamples <- treeHuman$samples
-dfExprHuman <- dfExprHuman[,colnames(dfExprHuman) %in% treeHumanSamples]
+#Filter expression data for measurements that are in the pruned tree
+dfExpr <- dfExpr[, (colnames(dfExpr) %in% tree_measurements)]
 
 
 # Assign regional labels ------------------------------------------------------
@@ -293,72 +290,51 @@ dfExprHuman <- dfExprHuman[,colnames(dfExprHuman) %in% treeHumanSamples]
 message("Assigning labels...")
 
 #Transpose data frames
-dfExprMouse <- dfExprMouse %>% as.matrix() %>% t()
-dfExprHuman <- dfExprHuman %>% as.matrix() %>% t()
+dfExpr <- dfExpr %>% as.matrix() %>% t()
 
 #Assign gene names as columns. 
 #Note: Necessary to do it this way if there are duplicate genes
-colnames(dfExprMouse) <- genesMouse
-colnames(dfExprHuman) <- genesHuman
+colnames(dfExpr) <- genes
 
 #Convert back to data frame
 #Note: This will create new names if there are duplicated genes. 
 #This is fine and desired.
-dfExprMouse <- dfExprMouse %>% 
-  as_tibble(rownames = "Voxels", .name_repair = "unique") %>% 
-  column_to_rownames("Voxels")
-dfExprHuman <- dfExprHuman %>% 
-  as_tibble(rownames = "Samples", .name_repair = "unique") %>% 
-  column_to_rownames("Samples")
+dfExpr <- dfExpr %>% 
+  as_tibble(rownames = "Measurement", .name_repair = "unique") %>% 
+  column_to_rownames("Measurement")
 
 #Load tree labels
-load("data/TreeLabels.RData")
-
-#Iterate over mouse parcellations
-for (l in 1:length(listLabelsMouse)){
-  
-  #Prune tree to given level of aggregation
-  treeMousePruned <- Clone(treeMouse)
-  pruneAnatTree(treeMousePruned, listLabelsMouse[[l]], method = "BelowNode")
-  
-  #Get the region labels for every voxel
-  dfExprMouse[,names(listLabelsMouse)[[l]]] <- labelRegions(rownames(dfExprMouse),
-                                                            treeMousePruned,
-                                                            "voxels")
+load(fileTreeLabels)
+if (species == 'mouse') {
+  listLabels <- listLabelsMouse
+} else if (species == 'human') {
+  listLabels <- listLabelsHuman
+} else {
+  stop()
 }
 
-#Iterate over human parcellations
-for (l in 1:length(listLabelsHuman)){
-  
-  #Prune tree
-  treeHumanPruned <- Clone(treeHuman)
-  pruneAnatTree(treeHumanPruned, listLabelsHuman[[l]], method = "BelowNode")
-  
-  #Get the region labels
-  dfExprHuman[,names(listLabelsHuman)[[l]]] <- labelRegions(rownames(dfExprHuman),
-                                                            treeHumanPruned, 
-                                                            "samples")
-}
+#Prune tree to given level of aggregation
+region <- paste0('Region', nlabels)
+treePruned <- Clone(tree)
+pruneAnatTree(treePruned, nodes = listLabels[[region]], method = 'BelowNode')
+
+#Get the region labels for every voxel
+dfExpr[,'Region'] <- labelRegions(rownames(dfExpr),
+                                           treePruned,
+                                           treefield)
 
 #Remove identifiers from rownames
-rownames(dfExprMouse) <- NULL
-rownames(dfExprHuman) <- NULL
+rownames(dfExpr) <- NULL
+
+quit()
 
 
 # Write to file --------------------------------------------------------------
 
 message("Writing to file...")
 
-if (args[["savemouse"]] == "true") {
-  outFileMouse <- fileMouseMat %>% 
-    basename() %>% 
-    str_replace(".csv", "_labelled.csv")
-  write_csv(dfExprMouse, file = str_c(args[["outdir"]], outFileMouse))
-}
+outfile <- fileMat %>% 
+  basename() %>% 
+  str_replace('.csv', '_labelled.csv')
 
-if (args[["savehuman"]] == "true"){
-  outFileHuman <- fileHumanMat %>% 
-    basename() %>% 
-    str_replace(".csv", "_labelled.csv")
-  write_csv(dfExprHuman, file = str_c(args[["outdir"]], outFileHuman))
-}
+data.table::fwrite(dfExpr, file = outfile)
