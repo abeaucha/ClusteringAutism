@@ -16,12 +16,12 @@ source activate_venv
 
 echo "Filtering homologous genes..."
 
-python3 intersect_gene_homologs.py \
-	--mouse data/mouse/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed.csv \
-	--human data/human/HumanExpressionMatrix_samples_pipeline_v1.csv \
-	--homologs data/MouseHumanGeneHomologs.csv \
-	--outdir data/ \
-	--verbose true
+#python3 intersect_gene_homologs.py \
+#	--mouse data/mouse/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed.csv \
+#	--human data/human/HumanExpressionMatrix_samples_pipeline_v1.csv \
+#	--homologs data/MouseHumanGeneHomologs.csv \
+#	--outdir data/ \
+#	--verbose true
 
 echo "Labelling expression matrices..."
 
@@ -48,7 +48,7 @@ Rscript label_expression_matrix.R \
 echo "Processing expression matrices..."
 
 Rscript process_expression_matrix.R \
-	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_labelled_region67.csv \
+	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_GM_labelled_67.csv \
 	--transpose false \
 	--scale true \
 	--aggregate false \
@@ -56,7 +56,7 @@ Rscript process_expression_matrix.R \
 	--verbose true
 
 Rscript process_expression_matrix.R \
-	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs_labelled_region88.csv \
+	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs_GM_labelled_88.csv \
 	--transpose false \
 	--scale true \
 	--aggregate false \
