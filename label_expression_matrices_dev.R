@@ -64,13 +64,15 @@ path_tree_tools <- file.path(working_dir,
                              script_dir, 
                              "functions", 
                              "tree_tools.R")
-source(path_tree_tools)
+# source(path_tree_tools)
+source("functions/tree_tools.R")
 
 path_processing_tools <- file.path(working_dir,
                                    script_dir,
                                    "functions",
                                    "processing_tools.R")
-source(path_processing_tools)
+# source(path_processing_tools)
+source("functions/processing_tools.R")
 
 
 #' Label voxels/samples with neuroanatomical regions
@@ -139,11 +141,16 @@ if (!(args[["savehuman"]] %in% c("true", "false"))) {
 }
 
 
-fileMouseMat <- args[["mousematrix"]]
-fileMouseTree <- args[["mousetree"]]
-fileHumanMat <- args[["humanmatrix"]]
-fileHumanTree <- args[["humantree"]]
-homologs <- args[["homologs"]]
+# fileMouseMat <- args[["mousematrix"]]
+# fileMouseTree <- args[["mousetree"]]
+# fileHumanMat <- args[["humanmatrix"]]
+# fileHumanTree <- args[["humantree"]]
+# homologs <- args[["homologs"]]
+
+fileMouseMat <- "data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv"
+fileHumanMat <- "data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv"
+fileMouseTree <- "data/mouse/MouseExpressionTree_DSURQE.RData"
+fileHumanTree <- "data/human/HumanExpressionTree.RData"
 
 if (!file.exists(fileMouseMat)) {
   stop("Mouse file ", fileMouseMat, " not found")
@@ -161,14 +168,14 @@ if (!file.exists(fileHumanTree)) {
   stop("Human tree file ", fileHumanTree, " not found")
 }
 
-if (!file.exists(homologs)) {
-  stop("Homologs file ", homologs, " not found")
-}
+# if (!file.exists(homologs)) {
+#   stop("Homologs file ", homologs, " not found")
+# }
 
 message("Labelling data from mouse file: ", fileMouseMat)
 message("Labelling data from human file: ", fileHumanMat)
 
-maskFlag <- str_extract(fileMouseMat, "mask[a-z]+")
+# maskFlag <- str_extract(fileMouseMat, "mask[a-z]+")
 
 
 # Importing and processing ---------------------------------------------------
@@ -184,15 +191,15 @@ dfExprHuman <- suppressMessages(data.table::fread(fileHumanMat,
                                                   header = TRUE)) %>% 
   as_tibble()
 
-#Subset genes for mouse-human homologs
-listExpr <- intersectGeneHomologs(data = list(Mouse = dfExprMouse, 
-                                              Human = dfExprHuman),
-                                  homologs = homologs)
-
-#Extract the data frames from list
-dfExprMouse <- listExpr$Mouse
-dfExprHuman <- listExpr$Human
-rm(listExpr)
+# #Subset genes for mouse-human homologs
+# listExpr <- intersectGeneHomologs(data = list(Mouse = dfExprMouse, 
+#                                               Human = dfExprHuman),
+#                                   homologs = homologs)
+# 
+# #Extract the data frames from list
+# dfExprMouse <- listExpr$Mouse
+# dfExprHuman <- listExpr$Human
+# rm(listExpr)
 
 #Extract genes and remove from df
 genesMouse <- dfExprMouse$Gene
@@ -209,19 +216,25 @@ colnames(dfExprMouse) <- str_c("V", colnames(dfExprMouse))
 
 message("Importing mouse data tree...")
 
-#Load DSURQE atlas and mask
-dsurqe <- mincGetVolume("AMBA/data/imaging/DSURQE_CCFv3_labels_200um.mnc")
+labels <- "data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc"
+mask <- "data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
 
-if (maskFlag == "masksagittal"){
-  mask <- mincGetVolume("AMBA/data/imaging/sagittal_200um_coverage_bin0.8.mnc")
-} else if (maskFlag == "maskcoronal") {
-  mask <- mincGetVolume("AMBA/data/imaging/coronal_200um_coverage_bin0.8.mnc")
-} else {
-  stop(str_c("Invalid maskFlag value: ", maskFlag))
-}
+#Load DSURQE atlas and mask
+# dsurqe <- mincGetVolume("AMBA/data/imaging/DSURQE_CCFv3_labels_200um.mnc")
+label_vol <- mincGetVolume(labels)
+
+# if (maskFlag == "masksagittal"){
+#   mask <- mincGetVolume("AMBA/data/imaging/sagittal_200um_coverage_bin0.8.mnc")
+# } else if (maskFlag == "maskcoronal") {
+#   mask <- mincGetVolume("AMBA/data/imaging/coronal_200um_coverage_bin0.8.mnc")
+# } else {
+#   stop(str_c("Invalid maskFlag value: ", maskFlag))
+# }
+mask_vol <- mincGetVolume(mask)
 
 #Mask the DSURQE atlas
-dsurqe_masked <- dsurqe[mask == 1]
+# dsurqe_masked <- dsurqe[mask == 1]
+labels_masked <- label_vol[mask_vol == 1]
 
 #Load the mouse tree
 load(fileMouseTree)
@@ -231,7 +244,7 @@ rm(treeMouseExpr)
 #Assign voxels to leaf nodes on the tree
 treeMouse$Do(function(node){
   if(isLeaf(node)){
-    node$voxels <- colnames(dfExprMouse)[dsurqe_masked == node$label]
+    node$voxels <- colnames(dfExprMouse)[labels_masked == node$label]
   }
 })
 
@@ -241,8 +254,11 @@ treeMouse$Do(function(node){
 })
 
 #Remove white matter and ventricles
-cutAtNodes <- c("fiber tracts", "ventricular systems")
-pruneAnatTree(treeMouse, nodes = cutAtNodes, method = "AtNode")
+gm_only <- TRUE
+if (gm_only) {
+  cutAtNodes <- c("fiber tracts", "ventricular systems")
+  pruneAnatTree(treeMouse, nodes = cutAtNodes, method = "AtNode")
+}
 
 #Filter expression data for voxels that are in the pruned tree
 treeMouseVoxels <- unlist(treeMouse$Get("voxels", filterFun = isLeaf))
@@ -261,11 +277,14 @@ treeHuman <- Clone(treeHumanExpr)
 rm(treeHumanExpr)
 
 #Remove white matter and ventricles
-cutAtNodes <- c("white matter", "sulci & spaces")
-pruneAnatTree(treeHuman, cutAtNodes, method = "AtNode")
+if (gm_only) {
+  cutAtNodes <- c("white matter", "sulci & spaces")
+  pruneAnatTree(treeHuman, cutAtNodes, method = "AtNode")
+  treeHuman <- FindNode(treeHuman, 'gray matter')
+}
 
 #Filter expression data for samples that are in the pruned tree
-treeHumanSamples <- treeHuman$`gray matter`$samples
+treeHumanSamples <- treeHuman$samples
 dfExprHuman <- dfExprHuman[,colnames(dfExprHuman) %in% treeHumanSamples]
 
 
