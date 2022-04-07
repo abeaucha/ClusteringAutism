@@ -344,9 +344,16 @@ if (region %in% names(listLabels)) {
 
 outfile <- fileMat %>% 
   basename() %>% 
-  str_remove('.csv') %>% 
+  str_remove('.csv') 
+
+if (gm) {
+  outfile <- outfile %>% 
+    str_c('_GM')
+}
+
+outfile <- outfile %>% 
   str_c('_labelled') %>% 
-  str_c('_', str_to_lower(region)) %>% 
+  str_c('_', nlabels) %>% 
   str_c('.csv')
 
 outdir <- args[['outdir']]
