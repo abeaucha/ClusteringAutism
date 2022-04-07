@@ -33,11 +33,6 @@ option_list <- list(
               default = "false",
               help = paste("Option to aggregate expression data under a",
                            "set of atlas labels [default %default]")),
-  make_option("--nlabels",
-              type = "integer",
-              help = paste("Number of labels in the atlas used to",
-                           "aggregate the data. Ignored if --aggregate",
-                           "is false.")),
   make_option("--outdir",
               default = "data/",
               type = "character",
@@ -91,7 +86,9 @@ normalize <- ifelse(args[['scale']] == 'true', TRUE, FALSE)
 aggregate <- ifelse(args[['aggregate']] == 'true', TRUE, FALSE)
 infile <- args[['infile']]
 
-if(verbose){message("Importing data...")}
+if (verbose) {message("Processing data from file: ", infile)}
+
+if(verbose){message("Importing...")}
 
 #Import data
 dfExpression <- suppressMessages(data.table::fread(infile,
@@ -103,6 +100,9 @@ if (('Gene' %in% colnames(dfExpression)) & !transpose) {
 }
 
 if (transpose) {
+  
+  if(verbose){message("Transposing...")}
+  
   dfExpression <- dfExpression %>% 
     column_to_rownames('Gene') %>% 
     as.matrix() %>% 
@@ -118,7 +118,7 @@ containsLabels <- any(str_detect(colnames(dfExpression), 'Region'))
 
 if (normalize) {
   
-  if(verbose){message("Normalizing data...")}
+  if(verbose){message("Normalizing...")}
   
   #Extract labels from data frame
   if (containsLabels) {
@@ -146,7 +146,7 @@ if (normalize) {
 
 if (aggregate) {
   
-  if(verbose){message("Aggregating data...")}
+  if(verbose){message("Aggregating...")}
   
   # #Aggregate mouse expression data under label set
   dfExpression <- dfExpression %>% 
@@ -164,7 +164,9 @@ if (aggregate) {
   
 }
 
-if(verbose){message("Writing to file...")}
+outfile <- file.path(args[['outdir']], outfile)
+
+if (verbose) {message(paste("Writing to file:", outfile, "..."))}
 
 data.table::fwrite(dfExpression,
-                   file = file.path(args[["outdir"]], outfile))
+                   file = outfile)

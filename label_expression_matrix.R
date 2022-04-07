@@ -293,7 +293,7 @@ dfExpr <- dfExpr[, (colnames(dfExpr) %in% tree_measurements)]
 
 # Assign regional labels -----------------------------------------------------
 
-if (verbose) {message("Assigning labels to expression matrix...")}
+if (verbose) {message("Assigning labels to the expression matrix...")}
 
 #Transpose data frames
 dfExpr <- dfExpr %>% as.matrix() %>% t()
@@ -342,8 +342,6 @@ if (region %in% names(listLabels)) {
 
 # Write to file --------------------------------------------------------------
 
-if (verbose) {message("Writing to file...")}
-
 outfile <- fileMat %>% 
   basename() %>% 
   str_remove('.csv') %>% 
@@ -353,5 +351,7 @@ outfile <- fileMat %>%
 
 outdir <- args[['outdir']]
 outfile <- file.path(outdir, outfile)
+
+if (verbose) {message(paste("Writing to file:", outfile, "..."))}
 
 data.table::fwrite(dfExpr, file = outfile)
