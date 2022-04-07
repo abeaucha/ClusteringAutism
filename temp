@@ -14,12 +14,16 @@ source activate_venv
 #	--parallel true \
 #	--nproc 4
 
-#python3 intersect_gene_homologs.py \
-#	--mouse data/mouse/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed.csv \
-#	--human data/human/HumanExpressionMatrix_samples_pipeline_v1.csv \
-#	--homologs data/MouseHumanGeneHomologs.csv \
-#	--outdir data/ \
-#	--verbose true
+echo "Filtering homologous genes..."
+
+python3 intersect_gene_homologs.py \
+	--mouse data/mouse/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed.csv \
+	--human data/human/HumanExpressionMatrix_samples_pipeline_v1.csv \
+	--homologs data/MouseHumanGeneHomologs.csv \
+	--outdir data/ \
+	--verbose true
+
+echo "Labelling expression matrices..."
 
 Rscript label_expression_matrix.R \
 	--species mouse \
@@ -29,7 +33,8 @@ Rscript label_expression_matrix.R \
 	--nlabels 67 \
 	--labels data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc \
 	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-	--greymatter true
+	--greymatter true \
+	--verbose true
 
 Rscript label_expression_matrix.R \
 	--species human \
@@ -37,20 +42,25 @@ Rscript label_expression_matrix.R \
 	--tree data/human/HumanExpressionTree.RData \
 	--treelabels data/TreeLabels.RData \
 	--nlabels 88 \
-	--greymatter true
+	--greymatter true \
+	--verbose true
 
-#Rscript process_labelled_matrices.R \
-#	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
-#	--transpose true \
-#	--scale true \
-#	--aggregate false \
-#	--outdir data/ \
-#	--verbose true
+echo "Processing expression matrices..."
 
-#Rscript process_labelled_matrices.R \
-#	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv \
-#	--transpose true \
-#	--scale true \
-#	--aggregate false \
-#	--outdir data/ \
-#	--verbose true
+Rscript process_expression_matrix.R \
+	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_labelled_region67.csv \
+	--transpose false \
+	--scale true \
+	--aggregate false \
+	--outdir data/ \
+	--verbose true
+
+Rscript process_expression_matrix.R \
+	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs_labelled_region88.csv \
+	--transpose false \
+	--scale true \
+	--aggregate false \
+	--outdir data/ \
+	--verbose true
+
+deactivate
