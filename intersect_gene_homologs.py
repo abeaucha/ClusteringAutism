@@ -10,9 +10,10 @@
 
 import argparse
 import os
-import numpy  as np
-import pandas as pd
-from re import sub
+import numpy   as np
+import pandas  as pd
+from datatable import fread
+from re        import sub
 
 # Functions ------------------------------------------------------------------
 
@@ -103,9 +104,16 @@ def main():
         print("Importing files...")
     
     #Import data frames
-    mouse = pd.read_csv(mousefile, index_col = 'Gene')
-    human = pd.read_csv(humanfile, index_col = 'Gene')
-    homologs = pd.read_csv(homologs)
+    mouse = (fread(mousefile, header = True)
+             .to_pandas()
+             .set_index('Gene'))
+    
+    human = (fread(humanfile, header = True)
+             .to_pandas()
+             .set_index('Gene'))
+    
+    homologs = (fread(homologs, header = True)
+               .to_pandas())
     
     if verbose:
         print("Intersecting gene homologs...")
