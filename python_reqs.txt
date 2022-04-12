@@ -3,6 +3,7 @@ abagen
 numpy
 scipy
 pandas
+datatable
 pyminc
 tqdm
 sklearn
