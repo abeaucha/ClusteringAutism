@@ -7,3 +7,5 @@ datatable
 pyminc
 tqdm
 sklearn
+torch
+skorch
