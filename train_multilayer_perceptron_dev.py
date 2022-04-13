@@ -13,12 +13,12 @@ Description
 
 # Packages -------------------------------------------------------------------
 
+import argparse
+import os
+import random
 import pandas as pd
 import numpy as np
-import pickle
-import argparse
-import sys
-import os
+from datatable import fread
 
 import torch
 import torch.nn.functional as F
@@ -37,7 +37,9 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 
 def parse_args():
     
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+                 formatter_class = argparse.ArgumentDefaultsHelpFormatter
+             )
     
     parser.add_argument(
         "--datadir",
@@ -54,43 +56,61 @@ def parse_args():
     )
     
     parser.add_argument(
-        "--labels",
+        '--training',
         type = str,
-        default = 'region5',
-        choices = ['region5', 
-                   'region11',
-                   'region28',
-                   'region46',
-                   'region67',
-                   'region134'],
-        help = "Class of mouse labels on which to train."
+        help = "Path to CSV file containing training data."
     )
     
     parser.add_argument(
-        "--mousedata",
+        '--mousetransform',
         type = str,
-        default = 'region134',
-        choices = ['region5', 
-                   'region11',
-                   'region28',
-                   'region46',
-                   'region67',
-                   'region134'],
-        help = "Mouse data to apply the trained network to."
+        help = ("Path to CSV file containing mouse data to transform")
     )
     
     parser.add_argument(
-        "--humandata",
+        '--humantransform',
         type = str,
-        default = 'region166',
-        choices = ['region5',
-                   'region16',
-                   'region56',
-                   'region79',
-                   'region88',
-                   'region166'],
-        help = "Human data to apply the trained network to."
+        help = ("Path to CSV file containing human data to transform")
     )
+    
+#     parser.add_argument(
+#         "--labels",
+#         type = str,
+#         default = 'region5',
+#         choices = ['region5', 
+#                    'region11',
+#                    'region28',
+#                    'region46',
+#                    'region67',
+#                    'region134'],
+#         help = "Class of mouse labels on which to train."
+#     )
+    
+#     parser.add_argument(
+#         "--mousedata",
+#         type = str,
+#         default = 'region134',
+#         choices = ['region5', 
+#                    'region11',
+#                    'region28',
+#                    'region46',
+#                    'region67',
+#                    'region134'],
+#         help = "Mouse data to apply the trained network to."
+#     )
+    
+#     parser.add_argument(
+#         "--humandata",
+#         type = str,
+#         default = 'region166',
+#         choices = ['region5',
+#                    'region16',
+#                    'region56',
+#                    'region79',
+#                    'region88',
+#                    'region166'],
+#         help = "Human data to apply the trained network to."
+#     )
     
     parser.add_argument(
         "--nunits",
@@ -138,6 +158,13 @@ def parse_args():
                 "modified MLP.")
     )
     
+    parser.add_argument(
+        '--seed',
+        type = int,
+        help = ("Random seed")
+    )
+        
+    
     args = vars(parser.parse_args())
     
     return args
@@ -164,61 +191,60 @@ def main():
 
     #Set up files for import
     #Mouse voxelwise data to train over
-    file_voxel = ("MouseExpressionMatrix_"
-                  "voxel_coronal_maskcoronal_"
-                  "log2_grouped_imputed_labelled_scaled.csv")
-    filepath_voxel = os.path.join(datadir, file_voxel)
+    training_file = args['training']
+    
+#     file_voxel = ("MouseExpressionMatrix_"
+#                   "voxel_coronal_maskcoronal_"
+#                   "log2_grouped_imputed_labelled_scaled.csv")
+#     filepath_voxel = os.path.join(datadir, file_voxel)
     
     #Mouse and human data to pass to network
-    file_mouse = ("MouseExpressionMatrix_ROI_{}_scaled.csv"
-                  .format(args['mousedata'].capitalize()))
-    file_human = ("HumanExpressionMatrix_ROI_{}_scaled.csv"
-                  .format(args['humandata'].capitalize()))
-    filepath_mouse = os.path.join(datadir, file_mouse)
-    filepath_human = os.path.join(datadir, file_human)
+#     file_mouse = ("MouseExpressionMatrix_ROI_{}_scaled.csv"
+#                   .format(args['mousedata'].capitalize()))
+#     file_human = ("HumanExpressionMatrix_ROI_{}_scaled.csv"
+#                   .format(args['humandata'].capitalize()))
+#     filepath_mouse = os.path.join(datadir, file_mouse)
+#     filepath_human = os.path.join(datadir, file_human)
 
     print("Importing data...")
 
     #Import data
-    dfExprVoxel = pd.read_csv(filepath_voxel)
-    dfExprMouse = pd.read_csv(filepath_mouse)
-    dfExprHuman = pd.read_csv(filepath_human)
+    df_training = (fread(training_file, header = True)
+                   .to_pandas())
+
+#     dfExprVoxel = pd.read_csv(filepath_voxel)
+#     dfExprMouse = pd.read_csv(filepath_mouse)
+#     dfExprHuman = pd.read_csv(filepath_human)
 
     # Process data ------------------------------------------------------------
 
     print("Preparing data for learning...")
 
     #Identify which columns contain labels
-    indLabels = dfExprVoxel.columns.str.match('Region')
+    ind_labels = df_training.columns.str.match('Region')
 
     #Extract matrix of gene expression values
-    dfInput = dfExprVoxel.loc[:,~indLabels]
-    
-    dfInput = dfInput.loc[:, dfInput.columns.isin(dfExprHuman.columns)]
-    
-    dfInputMouse = dfExprMouse.loc[:, dfExprMouse.columns.isin(dfInput.columns)]
-    dfInputHuman = dfExprHuman.loc[:, dfExprHuman.columns.isin(dfInput.columns)]
-    
-    labelcol = args['labels'].capitalize()
-    
-    print("Using labels: {}".format(labelcol))
+    df_input = df_training.loc[:, ~ind_labels]
     
     #Create a new data frame containing intermediate labels
-    dfLabels = dfExprVoxel[[labelcol]].copy()
+    df_labels = df_training[['Region']].copy()
 
     #Convert labels to category type
-    dfLabels.loc[:,labelcol] = dfLabels.loc[:,labelcol].astype('category')
-
+    df_labels.loc[:,'Region'] = df_labels.loc[:,'Region'].astype('category')
+    
     # Create an instance of the transformer
     dftx = DataFrameTransformer()
 
     # Fit and transform the input and label data frames
-    X_temp = dftx.fit_transform(dfInput)
-    y_temp = dftx.fit_transform(dfLabels)
+    X_temp = dftx.fit_transform(df_input)
+    y_temp = dftx.fit_transform(df_labels)
 
     # Extract the arrays from the dictionaries.
     X = X_temp['X']
-    y = y_temp[labelcol]
+    y = y_temp['Region']
+    
+    nlabels = len(np.unique(y))
+    
 
     # Initialize the network --------------------------------------------------
 
@@ -261,7 +287,11 @@ def main():
     max_epochs = args['nepochs']
     learning_rate = args['learningrate']
 
-    np.random.seed(123)
+    seed = args['seed']
+    if seed is not None:
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        random.seed(seed)
 
     #Create the classifier
     net = NeuralNetClassifier(
@@ -295,10 +325,13 @@ def main():
     
     #Compute training accuracy
     print("Training accuracy: {}".format(accuracy_score(y, y_pred)))
-
+    
     #Match the dummy variable labels to the region names
-    dfLabels['DummyVariable'] = y
-    dfLabelsUnique = dfLabels.sort_values('DummyVariable').drop_duplicates()
+    df_labels['dummy'] = y
+    df_labels_unique = df_labels.sort_values('dummy').drop_duplicates()
+    
+#     dfLabels['DummyVariable'] = y
+#     dfLabelsUnique = dfLabels.sort_values('DummyVariable').drop_duplicates()
     
     # Compute training confusion matrix --------------------------------------
     
@@ -308,35 +341,65 @@ def main():
         print("Computing confusion matrix from training set...")
     
         #Compute confusion matrix and store as data frame
-        dfConfusionMat = pd.DataFrame(confusion_matrix(y, y_pred))
+#         dfConfusionMat = pd.DataFrame(confusion_matrix(y, y_pred))
+        df_confmat = pd.DataFrame(confusion_matrix(y, y_pred))
     
         #Assign region names to the confusion matrix columns
-        dfConfusionMat.columns = dfLabelsUnique[labelcol].astype('str')
+        df_confmat.columns = df_labels_unique['Region'].astype('str')
+#         dfConfusionMat.columns = dfLabelsUnique[labelcol].astype('str')
     
         #Assign region names to the confusion matrix rows
-        dfConfusionMat['TrueLabels'] = (dfLabelsUnique[labelcol]
-                                        .astype('str')
-                                        .reset_index(drop = True))
+        df_confmat['TrueLabels'] = (df_labels_unique['Region']
+                                    .astype('str')
+                                    .reset_index(drop = True))
+        
+#         dfConfusionMat['TrueLabels'] = (dfLabelsUnique[labelcol]
+#                                         .astype('str')
+#                                         .reset_index(drop = True))
         
         #File to save confusion matrix
-        fileConfMat = "MLP_ConfusionMatrix_Training"+\
-        "_"+args['labels'].capitalize()+\
-        "_Layers3"+\
-        "_Units"+str(args['nunits'])+\
+        file_confmat = "MLP_confusionmatrix_training"+\
+        "_labels"+str(nlabels)+\
+        "_layers3"+\
+        "_units"+str(args['nunits'])+\
         "_L2"+str(args['L2'])+".csv"
-    
+        
         #Write confusion matrix to file
-        dfConfusionMat.to_csv(os.path.join(outdir, fileConfMat), 
-                              index = False)
+        df_confmat.to_csv(os.path.join(outdir, file_confmat), 
+                          index = False)
 
 
     # Predict label probabilities for mouse/human data -----------------------
+        
+    mouse_transform = args['mousetransform']
+    human_transform = args['humantransform']
+    
+    print(mouse_transform)
+    print(human_transform)
+    
+    if mouse_transform is not None:
+        
+        df_mouse = (fread(mouse_transform, header = True).
+                    to_pandas())
+        
+        X_mouse = dftx.
+        
+    
+    if (mouse_transform is None) & (human_transform is None):
+        print("Test")
+    
+    quit()
+    
+#     if mouse_transform is not None: 
+    
+    
         
     print("Applying trained network to mouse and human data...")
 
     #Put mouse/human data into appropriate format for network        
     X_Mouse = dftx.fit_transform(dfInputMouse)['X']
     X_Human = dftx.fit_transform(dfInputHuman)['X']
+    
     
     #Compute label probabilities for mouse/human data
     dfPredictionsMouse = pd.DataFrame(net.predict_proba(X_Mouse))
