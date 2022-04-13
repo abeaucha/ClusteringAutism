@@ -1,0 +1,18 @@
+#!/bin/bash
+
+source activate_venv
+
+python3 train_multilayer_perceptron_dev.py \
+	--outdir data/MLP_outcomes/ \
+	--training data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_GM_labelled_67_scaled.csv \
+	--mousetransform data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_GM_labelled_67_scaled.csv \
+	--humantransform data/HumanExpressionMatrix_samples_pipeline_v1_homologs_GM_labelled_88_scaled.csv \
+	--nunits 200 \
+	--L2 1e-6 \
+	--nepochs 1 \
+	--learningrate 1e-5 \
+	--confusionmatrix false \
+	--seed 1 \
+	--verbose true
+
+deactivate
