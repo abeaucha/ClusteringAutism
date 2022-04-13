@@ -105,15 +105,6 @@ def parse_args():
     )
     
     parser.add_argument(
-        "--voxeltransform",
-        type = str,
-        default = 'true',
-        choices = ['true', 'false'],
-        help = ("Option to transform the voxel-wise data using the "
-                "modified MLP.")
-    )
-    
-    parser.add_argument(
         '--seed',
         type = int,
         help = ("Random seed")
