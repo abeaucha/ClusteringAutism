@@ -348,11 +348,13 @@ def main():
             print("Importing mouse data to transform...")
         
         df_mouse = fread(mouse_transform, header = True).to_pandas()
+        
     else: 
         df_mouse = df_training
 
     if verbose:
         print("Computing mouse label probabilities...")
+
         
     #Compute mouse probabilities
     df_mouse_prob = transform_input_space(data = df_mouse,
