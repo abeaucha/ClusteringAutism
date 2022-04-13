@@ -9,22 +9,23 @@ if [ ! -d "$outdir" ]; then
 fi
 
 
-for i in {1..500}
+#for i in {1..500}
+for i in {1..5}
 do
  echo "Iteration $i"
-
+ 
  python3 train_multilayer_perceptron.py \
-	 --datadir data/ \
 	 --outdir $outdir \
-	 --labels region67 \
-	 --mousedata region67 \
-	 --humandata region88 \
+	 --training data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_GM_labelled_67_scaled.csv \
+	 --mousetransform data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv \
+	 --humantransform data/HumanExpressionMatrix_samples_pipeline_v1_homologs_scaled.csv \
 	 --nunits 200 \
 	 --L2 1e-6 \
 	 --nepochs 200 \
 	 --learningrate 1e-5 \
 	 --confusionmatrix true \
-	 --voxeltransform true
+	 --seed $i \
+	 --verbose true
 
  mv ${outdir}MLP_ConfusionMatrix_Training_Region67_Layers3_Units200_L21e-06.csv \
 	 ${outdir}MLP_ConfusionMatrix_Training_Region67_Layers3_Units200_L21e-06_$i.csv
