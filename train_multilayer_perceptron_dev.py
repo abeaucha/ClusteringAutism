@@ -163,92 +163,39 @@ def parse_args():
         type = int,
         help = ("Random seed")
     )
+    
+    parser.add_argument(
+        '--verbose',
+        type = str,
+        default = 'true',
+        choices = ['true', 'false'],
+        help = ("Verbosity.")
+    )
         
     
     args = vars(parser.parse_args())
     
     return args
-    
-    
-# Main ------------------------------------------------------------------------
 
-def main():
+def prepare_data(data, labelcol):
 
-    #Load command line arguments
-    args = parse_args()
-    
-    datadir = args['datadir']
-    outdir = args['outdir']
-    
-    datadir = os.path.join(datadir, '')
-    outdir = os.path.join(outdir, '')
-    
-    if os.path.exists(outdir) == False:
-        print('Output directory {} not found. Creating it...'.format(outdir))
-        os.mkdir(outdir)
-    
-    # Import data -------------------------------------------------------------
+    """
+    """
 
-    #Set up files for import
-    #Mouse voxelwise data to train over
-    training_file = args['training']
-    
-#     file_voxel = ("MouseExpressionMatrix_"
-#                   "voxel_coronal_maskcoronal_"
-#                   "log2_grouped_imputed_labelled_scaled.csv")
-#     filepath_voxel = os.path.join(datadir, file_voxel)
-    
-    #Mouse and human data to pass to network
-#     file_mouse = ("MouseExpressionMatrix_ROI_{}_scaled.csv"
-#                   .format(args['mousedata'].capitalize()))
-#     file_human = ("HumanExpressionMatrix_ROI_{}_scaled.csv"
-#                   .format(args['humandata'].capitalize()))
-#     filepath_mouse = os.path.join(datadir, file_mouse)
-#     filepath_human = os.path.join(datadir, file_human)
+    ind_labels = data.columns.str.match(labelcol)
 
-    print("Importing data...")
+    input_data = data.loc[:, ~ind_labels].copy()
+    label_data = data.loc[:, ind_labels].copy()
 
-    #Import data
-    df_training = (fread(training_file, header = True)
-                   .to_pandas())
+    label_data.loc[:, labelcol] = label_data.loc[:, labelcol].astype('category')
 
-#     dfExprVoxel = pd.read_csv(filepath_voxel)
-#     dfExprMouse = pd.read_csv(filepath_mouse)
-#     dfExprHuman = pd.read_csv(filepath_human)
+    X = DataFrameTransformer().fit_transform(input_data)['X']
+    y = DataFrameTransformer().fit_transform(label_data)[labelcol]
 
-    # Process data ------------------------------------------------------------
+    return X, y
 
-    print("Preparing data for learning...")
 
-    #Identify which columns contain labels
-    ind_labels = df_training.columns.str.match('Region')
-
-    #Extract matrix of gene expression values
-    df_input = df_training.loc[:, ~ind_labels]
-    
-    #Create a new data frame containing intermediate labels
-    df_labels = df_training[['Region']].copy()
-
-    #Convert labels to category type
-    df_labels.loc[:,'Region'] = df_labels.loc[:,'Region'].astype('category')
-    
-    # Create an instance of the transformer
-    dftx = DataFrameTransformer()
-
-    # Fit and transform the input and label data frames
-    X_temp = dftx.fit_transform(df_input)
-    y_temp = dftx.fit_transform(df_labels)
-
-    # Extract the arrays from the dictionaries.
-    X = X_temp['X']
-    y = y_temp['Region']
-    
-    nlabels = len(np.unique(y))
-    
-
-    # Initialize the network --------------------------------------------------
-
-    print("Initializing neural network...")
+def define_classifier(input_units, output_units, hidden_units, weight_decay, max_epochs, learning_rate, train_split = None):
 
     #Define network architecture
     class ClassifierModule(nn.Module):
@@ -268,7 +215,6 @@ def main():
             self.hidden3 = nn.Linear(hidden_units, hidden_units)
             self.output = nn.Linear(hidden_units, output_units)
 
-
         def forward(self, X, **kwargs):
             X = F.relu(self.hidden1(X))
             X = F.relu(self.hidden2(X))
@@ -280,23 +226,10 @@ def main():
 
             return X
 
-
-    #Get network parameters from command line args
-    hidden_units = args['nunits']
-    weight_decay = args['L2']
-    max_epochs = args['nepochs']
-    learning_rate = args['learningrate']
-
-    seed = args['seed']
-    if seed is not None:
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        random.seed(seed)
-
     #Create the classifier
     net = NeuralNetClassifier(
-            ClassifierModule(input_units = X.shape[1],
-                             output_units = len(np.unique(y)),
+            ClassifierModule(input_units = input_units,
+                             output_units = output_units,
                              hidden_units = hidden_units),
             train_split = None,
             optimizer = AdamW,
@@ -309,8 +242,96 @@ def main():
                                       max_lr=learning_rate))] 
         )
 
+    return net
+
+
+def calc_confusion_matrix(data, y_true, y_pred, labelcol):
+
+    """
+    """
+
+    df_confmat = pd.DataFrame(confusion_matrix(y_true, y_pred))
+
+    df_labels = data[[labelcol]].copy()
+    df_labels['Dummy'] = y_true
+    df_labels = df_labels.sort_values('Dummy').drop_duplicates().reset_index(drop = True)
+
+    df_confmat.columns = df_labels[labelcol].astype('str')
+
+    df_confmat['TrueLabels'] = (df_labels[labelcol]
+                                .astype('str')
+                                .reset_index(drop = True))
+
+    return df_confmat
     
+    
+# Main ------------------------------------------------------------------------
+
+def main():
+
+    #Load command line arguments
+    args = parse_args()
+    
+    datadir = args['datadir']
+    outdir = args['outdir']
+    confmat = True if args['confusionmatrix'] == 'true' else False
+    verbose = True if args['verbose'] == 'true' else False
+    
+    datadir = os.path.join(datadir, '')
+    outdir = os.path.join(outdir, '')
+    
+    if os.path.exists(outdir) == False:
+        print('Output directory {} not found. Creating it...'.format(outdir))
+        os.mkdir(outdir)
+    
+    
+    # Import data -------------------------------------------------------------
+
+    #Set up files for import
+    #Mouse voxelwise data to train over
+    training_file = args['training']
+    
+    if verbose:
+        print("Importing data...")
+
+    #Import data
+    df_training = (fread(training_file, header = True)
+                   .to_pandas())
+
+    
+    # Process data ------------------------------------------------------------
+
+    if verbose:
+        print("Preparing data for learning...")
+    
+    X, y = prepare_data(data = df_training, 
+                        labelcol = 'Region')
+    
+
     # Train the network ------------------------------------------------------
+
+    if verbose:
+        print("Initializing neural network...")
+
+    seed = args['seed']
+    if seed is not None:
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        random.seed(seed)
+        
+    #Get network parameters from command line args
+    hidden_units = args['nunits']
+    weight_decay = args['L2']
+    max_epochs = args['nepochs']
+    learning_rate = args['learningrate']
+    nlabels = len(np.unique(y))
+    
+    net = define_classifier(input_units = X.shape[1],
+                            output_units = nlabels,
+                            hidden_units = hidden_units,
+                            weight_decay = weight_decay,
+                            max_epochs = max_epochs,
+                            learning_rate = learning_rate)
     
     if is_available() == True:
         print("GPU available. Training network using GPU...")
@@ -324,38 +345,21 @@ def main():
     y_pred = net.predict(X)
     
     #Compute training accuracy
-    print("Training accuracy: {}".format(accuracy_score(y, y_pred)))
+    if verbose:
+        print("Training accuracy: {}".format(accuracy_score(y, y_pred)))
     
-    #Match the dummy variable labels to the region names
-    df_labels['dummy'] = y
-    df_labels_unique = df_labels.sort_values('dummy').drop_duplicates()
-    
-#     dfLabels['DummyVariable'] = y
-#     dfLabelsUnique = dfLabels.sort_values('DummyVariable').drop_duplicates()
     
     # Compute training confusion matrix --------------------------------------
-    
-    #Switch to compute confusion matrix
-    if args['confusionmatrix'] == 'true':
-    
-        print("Computing confusion matrix from training set...")
-    
-        #Compute confusion matrix and store as data frame
-#         dfConfusionMat = pd.DataFrame(confusion_matrix(y, y_pred))
-        df_confmat = pd.DataFrame(confusion_matrix(y, y_pred))
-    
-        #Assign region names to the confusion matrix columns
-        df_confmat.columns = df_labels_unique['Region'].astype('str')
-#         dfConfusionMat.columns = dfLabelsUnique[labelcol].astype('str')
-    
-        #Assign region names to the confusion matrix rows
-        df_confmat['TrueLabels'] = (df_labels_unique['Region']
-                                    .astype('str')
-                                    .reset_index(drop = True))
+ 
+    if confmat:
         
-#         dfConfusionMat['TrueLabels'] = (dfLabelsUnique[labelcol]
-#                                         .astype('str')
-#                                         .reset_index(drop = True))
+        if verbose:
+            print("Computing confusion matrix from training set...")
+        
+        df_confmat = calc_confusion_matrix(data = df_training,
+                                           y_true = y,
+                                           y_pred = y_pred,
+                                           labelcol = 'Region')
         
         #File to save confusion matrix
         file_confmat = "MLP_confusionmatrix_training"+\
@@ -370,7 +374,18 @@ def main():
 
 
     # Predict label probabilities for mouse/human data -----------------------
+    
+    def transform_input_space(data, network, labelcol):
         
+        X, y = prepare_data(data = data, 
+                            labelcol = labelcol)
+        
+        df_transformed = pd.DataFrame(network.predict_proba(X))
+        
+        df_transformed[labelcol] = data[labelcol]
+        
+        return df_transformed
+    
     mouse_transform = args['mousetransform']
     human_transform = args['humantransform']
     
@@ -378,24 +393,59 @@ def main():
     print(human_transform)
     
     if mouse_transform is not None:
+        df_mouse = (fread(mouse_transform, header = True)
+                    .to_pandas())
+    else: 
+        df_mouse = df_training
+
+
+    df_mouse_prob = transform_input_space(data = df_mouse,
+                                          network = net,
+                                          labelcol = 'Region')
+    
+    df_mouse_prob.columns = np.append(np.unique(df_mouse['Region']), 'Region')
+    
+    nlabels_mouse = len(np.unique(df_mouse['Region']))
+    
+    #File to save mouse probabilities
+    file_mouse_prob = 'MLP'+\
+    '_labels'+str(nlabels)+\
+    '_layers3'+\
+    '_units'+str(args['nunits'])+\
+    '_L2'+str(args['L2'])+\
+    '_mouseprob_'+str(nlabels_mouse)+\
+    '.csv'
+    
+    print(file_mouse_prob)
+    quit()
+    
+    # STOPPED HERE ---------------
+    
+    
+    if human_transform is not None:
         
-        df_mouse = (fread(mouse_transform, header = True).
-                    to_pandas())
+        df_human = (fread(human_transform, header = True)
+                    .to_pandas())
         
-        X_mouse = dftx.
+        df_human_prob = transform_input_space(data = df_human,
+                                              network = net,
+                                              labelcol = 'Region')
+        
+        df_human_prob.columns = np.append(np.unique(df_human['Region']), 'Region')
+        
+    
+    
+    quit()
         
     
     if (mouse_transform is None) & (human_transform is None):
         print("Test")
     
-    quit()
-    
-#     if mouse_transform is not None: 
-    
-    
         
     print("Applying trained network to mouse and human data...")
 
+        
+    
     #Put mouse/human data into appropriate format for network        
     X_Mouse = dftx.fit_transform(dfInputMouse)['X']
     X_Human = dftx.fit_transform(dfInputHuman)['X']
