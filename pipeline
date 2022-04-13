@@ -37,16 +37,6 @@ Rscript label_expression_matrix.R \
 	--greymatter true \
 	--verbose true
 
-# #Label human matrix
-# Rscript label_expression_matrix.R \
-# 	--species human \
-# 	--matrix data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv \
-# 	--tree data/human/HumanExpressionTree.RData \
-# 	--treelabels data/TreeLabels.RData \
-# 	--nlabels 88 \
-# 	--greymatter true \
-# 	--verbose true
-
 echo "Processing expression matrices..."
 
 #Normalize labelled mouse matrix
