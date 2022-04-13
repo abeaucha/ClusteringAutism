@@ -37,19 +37,19 @@ Rscript label_expression_matrix.R \
 	--greymatter true \
 	--verbose true
 
-#Label human matrix
-Rscript label_expression_matrix.R \
-	--species human \
-	--matrix data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv \
-	--tree data/human/HumanExpressionTree.RData \
-	--treelabels data/TreeLabels.RData \
-	--nlabels 88 \
-	--greymatter true \
-	--verbose true
+# #Label human matrix
+# Rscript label_expression_matrix.R \
+# 	--species human \
+# 	--matrix data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv \
+# 	--tree data/human/HumanExpressionTree.RData \
+# 	--treelabels data/TreeLabels.RData \
+# 	--nlabels 88 \
+# 	--greymatter true \
+# 	--verbose true
 
 echo "Processing expression matrices..."
 
-#Normalize mouse matrix
+#Normalize labelled mouse matrix
 Rscript process_expression_matrix.R \
 	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_GM_labelled_67.csv \
 	--transpose false \
@@ -58,10 +58,19 @@ Rscript process_expression_matrix.R \
 	--outdir data/ \
 	--verbose true
 
-#Normalize human matrix
+#Normalize unlabelled mouse matrix with white matter
 Rscript process_expression_matrix.R \
-	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs_GM_labelled_88.csv \
-	--transpose false \
+	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
+	--transpose true \
+	--scale true \
+	--aggregate false \
+	--outdir data/ \
+	--verbose true
+
+#Normalize unlabelled human matrix with white matter
+Rscript process_expression_matrix.R \
+	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv \
+	--transpose true \
 	--scale true \
 	--aggregate false \
 	--outdir data/ \
