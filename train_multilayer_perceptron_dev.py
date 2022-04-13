@@ -43,13 +43,6 @@ def parse_args():
              )
     
     parser.add_argument(
-        "--datadir",
-        type = str,
-        default = 'data/',
-        help = "Directory containing input data."
-    )
-    
-    parser.add_argument(
         "--outdir",
         type = str,
         default = 'data/MLP_outcomes/',
@@ -73,45 +66,6 @@ def parse_args():
         type = str,
         help = ("Path to CSV file containing human data to transform")
     )
-    
-#     parser.add_argument(
-#         "--labels",
-#         type = str,
-#         default = 'region5',
-#         choices = ['region5', 
-#                    'region11',
-#                    'region28',
-#                    'region46',
-#                    'region67',
-#                    'region134'],
-#         help = "Class of mouse labels on which to train."
-#     )
-    
-#     parser.add_argument(
-#         "--mousedata",
-#         type = str,
-#         default = 'region134',
-#         choices = ['region5', 
-#                    'region11',
-#                    'region28',
-#                    'region46',
-#                    'region67',
-#                    'region134'],
-#         help = "Mouse data to apply the trained network to."
-#     )
-    
-#     parser.add_argument(
-#         "--humandata",
-#         type = str,
-#         default = 'region166',
-#         choices = ['region5',
-#                    'region16',
-#                    'region56',
-#                    'region79',
-#                    'region88',
-#                    'region166'],
-#         help = "Human data to apply the trained network to."
-#     )
     
     parser.add_argument(
         "--nunits",
@@ -173,7 +127,6 @@ def parse_args():
         help = ("Verbosity.")
     )
         
-    
     args = vars(parser.parse_args())
     
     return args
@@ -199,6 +152,9 @@ def prepare_data(data, labelcol):
 
 def define_classifier(input_units, output_units, hidden_units, weight_decay, max_epochs, learning_rate):
 
+    """
+    """
+    
     #Define network architecture
     class ClassifierModule(nn.Module):
         def __init__(
@@ -289,12 +245,10 @@ def main():
     #Load command line arguments
     args = parse_args()
     
-    datadir = args['datadir']
     outdir = args['outdir']
     confmat = True if args['confusionmatrix'] == 'true' else False
     verbose = True if args['verbose'] == 'true' else False
     
-    datadir = os.path.join(datadir, '')
     outdir = os.path.join(outdir, '')
     
     if os.path.exists(outdir) == False:
@@ -374,6 +328,10 @@ def main():
                                            y_true = y,
                                            y_pred = y_pred,
                                            labelcol = 'Region')
+        
+               
+        if verbose:
+            print("Writing the confusion matrix to file...")
         
         #File to save confusion matrix
         file_confmat = "MLP_confusionmatrix_training"+\
@@ -466,7 +424,7 @@ def main():
                              index = False)
     
        
-    # Extract hidden layer for mouse/human data ------------------------------
+    # Transform the mouse/human data to the latent space ------------------------------
 
     #Change the mode of the network to extract a hidden layer
     net.module_.apply_output_layer = False
