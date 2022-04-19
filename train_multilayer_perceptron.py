@@ -123,21 +123,29 @@ def parse_args():
     return args
 
 
-def prepare_data(data, labelcol):
+def prepare_data(data, labelcol = None):
 
     """
     """
 
-    ind_labels = data.columns.str.match(labelcol)
+    if labelcol is not None:
+    
+        ind_labels = data.columns.str.match(labelcol)
 
-    input_data = data.loc[:, ~ind_labels].copy()
-    label_data = data.loc[:, ind_labels].copy()
+        input_data = data.loc[:, ~ind_labels].copy()
+        label_data = data.loc[:, ind_labels].copy()
 
-    label_data.loc[:, labelcol] = label_data.loc[:, labelcol].astype('category')
+        label_data.loc[:, labelcol] = label_data.loc[:, labelcol].astype('category')
+
+        y = DataFrameTransformer().fit_transform(label_data)[labelcol]
+        
+    else:
+        
+        input_data = data.copy()
+        y = None
 
     X = DataFrameTransformer().fit_transform(input_data)['X']
-    y = DataFrameTransformer().fit_transform(label_data)[labelcol]
-
+        
     return X, y
 
 
@@ -214,7 +222,7 @@ def calc_confusion_matrix(data, y_true, y_pred, labelcol):
     return df_confmat
     
     
-def transform_input_space(data, network, labelcol):
+def transform_input_space(data, network, labelcol = None):
 
     """
     """
@@ -224,7 +232,8 @@ def transform_input_space(data, network, labelcol):
 
     df_transformed = pd.DataFrame(network.predict_proba(X))
 
-    df_transformed[labelcol] = data[labelcol]
+    if labelcol is not None:
+        df_transformed[labelcol] = data[labelcol]
 
     return df_transformed
     
@@ -325,11 +334,12 @@ def main():
             print("Writing the confusion matrix to file...")
         
         #File to save confusion matrix
-        file_confmat = "MLP_confusionmatrix_training"+\
+        file_confmat = "MLP"+\
         "_labels"+str(nlabels)+\
         "_layers3"+\
         "_units"+str(args['nunits'])+\
-        "_L2"+str(args['L2'])+".csv"
+        "_L2"+str(args['L2'])+\
+        "_confusionmatrix_training.csv"
         
         #Write confusion matrix to file
         df_confmat.to_csv(os.path.join(outdir, file_confmat), 
@@ -351,34 +361,44 @@ def main():
         
     else: 
         df_mouse = df_training
+        
+    if 'Region' in df_mouse.columns:
+        mouselabels = 'Region'
+    else:
+        mouselabels = None
 
     if verbose:
         print("Computing mouse label probabilities...")
-
         
     #Compute mouse probabilities
     df_mouse_prob = transform_input_space(data = df_mouse,
                                           network = net,
-                                          labelcol = 'Region')
+                                          labelcol = mouselabels)
     
     #Assign column names 
-    df_mouse_prob.columns = np.append(np.unique(df_training['Region']), 'Region')
-    
-    #Number of labels in the mouse file
-    nlabels_mouse = len(np.unique(df_mouse['Region']))
-    
+    if mouselabels is None:
+        df_mouse_prob.columns = np.unique(df_training['Region'])
+    else:
+        df_mouse_prob.columns = np.append(np.unique(df_training['Region']), mouselabels)
+        
     if verbose:
         print("Writing mouse probabilities to file...")
-    
+
     #File to save mouse probabilities
     file_mouse_prob = 'MLP'+\
     '_labels'+str(nlabels)+\
     '_layers3'+\
     '_units'+str(args['nunits'])+\
     '_L2'+str(args['L2'])+\
-    '_mouseprob_'+str(nlabels_mouse)+\
-    '.csv'
+    '_mouseprob'
     
+    if mouselabels is not None:
+        #Number of labels in the mouse file
+        nlabels_mouse = len(np.unique(df_mouse[mouselabels]))
+        file_mouse_prob = file_mouse_prob+'_'+str(nlabels_mouse)
+        
+    file_mouse_prob = file_mouse_prob+'.csv'
+
     #Write probability data to file
     df_mouse_prob.to_csv(os.path.join(outdir, file_mouse_prob),
                          index = False)
@@ -391,16 +411,23 @@ def main():
         df_human = (fread(human_transform, header = True)
                     .to_pandas())
         
+        if 'Region' in df_human.columns:
+            humanlabels = 'Region'
+        else:
+            humanlabels = None
+        
         if verbose:
             print("Computing human label probabilities...")
         
         df_human_prob = transform_input_space(data = df_human,
                                               network = net,
-                                              labelcol = 'Region')
+                                              labelcol = humanlabels)
         
-        df_human_prob.columns = np.append(np.unique(df_training['Region']), 'Region')
-        
-        nlabels_human = len(np.unique(df_human['Region']))
+        #Assign column names 
+        if humanlabels is None:
+            df_human_prob.columns = np.unique(df_training['Region'])
+        else:
+            df_human_prob.columns = np.append(np.unique(df_training['Region']), humanlabels)
         
         if verbose:
             print("Writing human probabilities to file...")
@@ -410,8 +437,14 @@ def main():
         '_layers3'+\
         '_units'+str(args['nunits'])+\
         '_L2'+str(args['L2'])+\
-        '_humanprob_'+str(nlabels_human)+\
-        '.csv'
+        '_humanprob'
+        
+        if humanlabels is not None:
+            #Number of labels in the human file
+            nlabels_human = len(np.unique(df_human[humanlabels]))
+            file_human_prob = file_human_prob+'_'+str(nlabels_human)
+            
+        file_human_prob = file_human_prob+'.csv'
         
         df_human_prob.to_csv(os.path.join(outdir, file_human_prob),
                              index = False)
@@ -427,7 +460,7 @@ def main():
     
     df_mouse_transform = transform_input_space(data = df_mouse,
                                                network = net,
-                                               labelcol = 'Region')
+                                               labelcol = mouselabels)
     
     if verbose:
         print("Writing mouse latent space data to file...")
@@ -437,8 +470,12 @@ def main():
     '_layers3'+\
     '_units'+str(args['nunits'])+\
     '_L2'+str(args['L2'])+\
-    '_mousetransform_'+str(nlabels_mouse)+\
-    '.csv'
+    '_mousetransform'
+
+    if mouselabels is not None:
+        file_mouse_transform = file_mouse_transform+'_'+str(nlabels_mouse)
+        
+    file_mouse_transform = file_mouse_transform+'.csv'
     
     df_mouse_transform.to_csv(os.path.join(outdir, file_mouse_transform), 
                               index = False)
@@ -450,7 +487,7 @@ def main():
         
         df_human_transform = transform_input_space(data = df_human,
                                                    network = net,
-                                                   labelcol = 'Region')
+                                                   labelcol = humanlabels)
         
         if verbose:
             print("Writing human latent space data to file...")
@@ -460,12 +497,15 @@ def main():
         '_layers3'+\
         '_units'+str(args['nunits'])+\
         '_L2'+str(args['L2'])+\
-        '_humantransform_'+str(nlabels_human)+\
-        '.csv'
+        '_humantransform'
+        
+        if humanlabels is not None:
+            file_human_transform = file_human_transform+'_'+str(nlabels_human)
+            
+        file_human_transform = file_human_transform+'.csv'
         
         df_human_transform.to_csv(os.path.join(outdir, file_human_transform),
                                   index = False)
-    
     
         
 if __name__ == "__main__":
