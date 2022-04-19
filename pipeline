@@ -25,7 +25,7 @@ python3 intersect_gene_homologs.py \
 
 echo "Labelling expression matrices..."
 
-#Label mouse matrix
+#Label mouse matrix with 67 grey matter labels
 Rscript label_expression_matrix.R \
 	--species mouse \
 	--matrix data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
@@ -48,7 +48,7 @@ Rscript process_expression_matrix.R \
 	--outdir data/ \
 	--verbose true
 
-#Normalize unlabelled mouse matrix with white matter
+#Normalize unlabelled mouse matrix with all voxels
 Rscript process_expression_matrix.R \
 	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
 	--transpose true \
@@ -57,7 +57,7 @@ Rscript process_expression_matrix.R \
 	--outdir data/ \
 	--verbose true
 
-#Normalize unlabelled human matrix with white matter
+#Normalize unlabelled human matrix with all samples
 Rscript process_expression_matrix.R \
 	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs.csv \
 	--transpose true \
@@ -65,5 +65,7 @@ Rscript process_expression_matrix.R \
 	--aggregate false \
 	--outdir data/ \
 	--verbose true
+    
+#source generate_latent_spaces
 
 deactivate
