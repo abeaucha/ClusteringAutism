@@ -1,5 +1,5 @@
 HumanRegistration/
-project_env/
+.venv/
 .ipynb_checkpoints/
 Group_1_Clusternum_2_ES_abs_200_mean.mnc
 average_template_200um.mnc
