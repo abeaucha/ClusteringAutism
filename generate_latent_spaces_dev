@@ -21,32 +21,27 @@ do
 	 --humantransform data/HumanExpressionMatrix_samples_pipeline_v1_homologs_scaled.csv \
 	 --nunits 200 \
 	 --L2 1e-6 \
-	 --nepochs 200 \
+	 --nepochs 5 \
 	 --learningrate 1e-5 \
 	 --confusionmatrix true \
 	 --seed $i \
 	 --verbose true
 
- mv ${outdir}MLP_ConfusionMatrix_Training_Region67_Layers3_Units200_L21e-06.csv \
-	 ${outdir}MLP_ConfusionMatrix_Training_Region67_Layers3_Units200_L21e-06_$i.csv
 
- mv ${outdir}MLP_Region67_Layers3_Units200_L21e-06_HumanProb_Region88.csv \
-	 ${outdir}MLP_Region67_Layers3_Units200_L21e-06_HumanProb_Region88_$i.csv
+ mv ${outdir}MLP_labels67_layers3_units200_L21e-06_confusionmatrix_training.csv \
+	 ${outdir}MLP_labels67_layers3_units200_L21e-06_confusionmatrix_training_$i.csv
 
- mv ${outdir}MLP_Region67_Layers3_Units200_L21e-06_HumanTx_Region88.csv \
-	 ${outdir}MLP_Region67_Layers3_Units200_L21e-06_HumanTx_Region88_$i.csv
+ mv ${outdir}MLP_labels67_layers3_units200_L21e-06_humanprob.csv \
+	 ${outdir}MLP_labels67_layers3_units200_L21e-06_humanprob_$i.csv
 
- mv ${outdir}MLP_Region67_Layers3_Units200_L21e-06_MouseProb_Region67.csv \
-	 ${outdir}MLP_Region67_Layers3_Units200_L21e-06_MouseProb_Region67_$i.csv
+ mv ${outdir}MLP_labels67_layers3_units200_L21e-06_humantransform.csv \
+	 ${outdir}MLP_labels67_layers3_units200_L21e-06_humantransform_$i.csv
 
- mv ${outdir}MLP_Region67_Layers3_Units200_L21e-06_MouseTx_Region67.csv \
-	 ${outdir}MLP_Region67_Layers3_Units200_L21e-06_MouseTx_Region67_$i.csv
+ mv ${outdir}MLP_labels67_layers3_units200_L21e-06_mouseprob.csv \
+	 ${outdir}MLP_labels67_layers3_units200_L21e-06_mouseprob_$i.csv
 
-mv ${outdir}MLP_Region67_Layers3_Units200_L21e-06_MouseVoxelTx.csv \
-	${outdir}MLP_Region67_Layers3_Units200_L21e-06_MouseVoxelTx_$i.csv
-
-mv ${outdir}MLP_Region67_Layers3_Units200_L21e-06_HumanVoxelTx.csv \
-	${outdir}MLP_Region67_Layers3_Units200_L21e-06_HumanVoxelTx_$i.csv
+ mv ${outdir}MLP_labels67_layers3_units200_L21e-06_mousetransform.csv \
+	 ${outdir}MLP_labels67_layers3_units200_L21e-06_mousetransform_$i.csv
 
 done
 
