@@ -34,7 +34,6 @@ import numpy                as np
 import pandas               as pd
 import multiprocessing      as mp
 from pyminc.volumes.factory import volumeFromFile
-from re                     import sub
 from glob                   import glob
 from tqdm                   import tqdm
 from functools              import partial
