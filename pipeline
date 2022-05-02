@@ -2,17 +2,17 @@
 
 source activate_venv
 
-#python3 build_voxel_matrix.py \
-#	--datadir /projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/AMBA/data/expression/ \
-#	--dataset coronal \
-#	--outdir data/mouse/ \
-#	--mask data/mouse/atlas/average_template_200um_mask.mnc \
-#	--log2 true \
-#	--groupexp true \
-#	--threshold 0.2 \
-#	--impute true \
-#	--parallel true \
-#	--nproc 4
+python3 build_voxel_matrix.py \
+	--datadir /projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/AMBA/data/expression/ \
+	--dataset coronal \
+	--outdir data/mouse/ \
+	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+	--log2 true \
+	--groupexp true \
+	--threshold 0.2 \
+	--impute true \
+	--parallel true \
+	--nproc 4
 
 #Filter gene sets for homologous genes
 echo "Filtering homologous genes..."
@@ -23,9 +23,8 @@ python3 intersect_gene_homologs.py \
 	--outdir data/ \
 	--verbose true
 
-echo "Labelling expression matrices..."
-
 #Label mouse matrix with 67 grey matter labels
+echo "Labelling expression matrices..."
 Rscript label_expression_matrix.R \
 	--species mouse \
 	--matrix data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
