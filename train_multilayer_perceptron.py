@@ -16,6 +16,7 @@ Description
 import argparse
 import os
 import random
+import csv
 import pandas as pd
 import numpy as np
 from datatable import fread
@@ -108,6 +109,14 @@ def parse_args():
         '--seed',
         type = int,
         help = ("Random seed")
+    )
+    
+    parser.add_argument(
+        '--saveparams',
+        type = str,
+        default = 'false',
+        choices = ['true', 'false'],
+        help = ("Save neural network parameters?")
     )
     
     parser.add_argument(
@@ -247,6 +256,7 @@ def main():
     
     outdir = args['outdir']
     confmat = True if args['confusionmatrix'] == 'true' else False
+    saveparams = True if args['saveparams'] == 'true' else False
     verbose = True if args['verbose'] == 'true' else False
     
     outdir = os.path.join(outdir, '')
@@ -312,9 +322,45 @@ def main():
     #Predict training labels
     y_pred = net.predict(X)
     
+#     print(net.__dict__.keys())
+#     print(type(net.__dict__['module']))
+    
+#     print(net.__dict__['history_'])
+#     print(type(net.__dict__['history_']))
+#     print(len(net.__dict__['history_']))
+#     print(net.__dict__['history_'][max_epochs-1])
+#     print(type(net.__dict__['history_'][0]))
+#     print(net.__dict__['history_'][0].keys())
+#     print(net.__dict__['history_'][0]['epoch'])
+#     print(net.__dict__['history_'][0]['dur'])
+#     print(net.__dict__['history_'][max_epochs-1]['train_loss'])
+    
+    train_accuracy = accuracy_score(y, y_pred)
+    
     #Training accuracy
     if verbose:
-        print("Training accuracy: {}".format(accuracy_score(y, y_pred)))
+        print("Training accuracy: {}".format(train_accuracy))
+    
+    #Save parameters
+    if saveparams:
+    
+        loss_func = net.__dict__['criterion'].__name__
+        train_loss = net.__dict__['history_'][max_epochs-1]['train_loss']
+    
+        params = [hidden_units,
+                  weight_decay,
+                  max_epochs,
+                  learning_rate,
+                  seed,
+                  nlabels,
+                  loss_func, 
+                  train_loss, 
+                  train_accuracy]
+    
+        file_params = os.path.join(outdir, 'MLP_params.csv')
+        with open(file_params, 'w') as file:
+            write = csv.writer(file)
+            write.writerow(params)
     
     
     # Compute training confusion matrix --------------------------------------

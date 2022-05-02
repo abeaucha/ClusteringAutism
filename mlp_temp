@@ -9,10 +9,11 @@ python3 train_multilayer_perceptron.py \
 	--humantransform data/HumanExpressionMatrix_samples_pipeline_v1_homologs_scaled.csv \
 	--nunits 200 \
 	--L2 1e-6 \
-	--nepochs 200 \
+	--nepochs 5 \
 	--learningrate 1e-5 \
-	--confusionmatrix true \
 	--seed 1 \
+	--confusionmatrix true \
+	--saveparams true \
 	--verbose true
 
 deactivate
