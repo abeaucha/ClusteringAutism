@@ -2,32 +2,9 @@
 
 source activate_venv
 
-echo "Processing expression matrices..."
-
-Rscript process_expression_matrix.R \
-	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs.csv \
-	--transpose true \
-	--scale true \
-	--aggregate false \
+python3 create_average_latent_space.py \
+	--datadir data/MLP_outcomes/ \
 	--outdir data/ \
-	--verbose true
-
-#Normalize mouse matrix
-#Rscript process_expression_matrix.R \
-#	--infile data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_GM_labelled_67.csv \
-#	--transpose false \
-#	--scale true \
-#	--aggregate false \
-#	--outdir data/ \
-#	--verbose true
-
-#Normalize human matrix
-#Rscript process_expression_matrix.R \
-#	--infile data/HumanExpressionMatrix_samples_pipeline_v1_homologs_GM_labelled_88.csv \
-#	--transpose false \
-#	--scale true \
-#	--aggregate false \
-#	--outdir data/ \
-#	--verbose true
+	--fileglob MLP_labels67_layers3_units200_L21e-06_mousetransform*.csv
 
 deactivate
