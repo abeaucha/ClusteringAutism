@@ -67,4 +67,14 @@ Rscript process_expression_matrix.R \
     
 #source generate_latent_spaces
 
+python3 create_average_latent_space.py \
+	--datadir data/MLP_outcomes/ \
+	--outdir data/ \
+	--fileglob MLP_labels67_layers3_units200_L21e-06_mousetransform*.csv
+
+python3 create_average_latent_space.py \
+	--datadir data/MLP_outcomes/ \
+	--outdir data/ \
+	--fileglob MLP_labels67_layers3_units200_L21e-06_humantransform*.csv 
+
 deactivate
