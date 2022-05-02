@@ -8,6 +8,7 @@ if [ ! -d "$outdir" ]; then
 	mkdir "$outdir"
 fi
 
+touch ${outdir}MLP_params_temp.csv
 
 #for i in {1..500}
 for i in {1..5}
@@ -21,12 +22,14 @@ do
 	 --humantransform data/HumanExpressionMatrix_samples_pipeline_v1_homologs_scaled.csv \
 	 --nunits 200 \
 	 --L2 1e-6 \
-	 --nepochs 5 \
+	 --nepochs 200 \
 	 --learningrate 1e-5 \
 	 --confusionmatrix true \
 	 --seed $i \
+	 --saveparams true \
 	 --verbose true
 
+ cat ${outdir}MLP_params.csv >> ${outdir}MLP_params_temp.csv
 
  mv ${outdir}MLP_labels67_layers3_units200_L21e-06_confusionmatrix_training.csv \
 	 ${outdir}MLP_labels67_layers3_units200_L21e-06_confusionmatrix_training_$i.csv
@@ -44,5 +47,7 @@ do
 	 ${outdir}MLP_labels67_layers3_units200_L21e-06_mousetransform_$i.csv
 
 done
+
+mv ${outdir}MLP_params_temp.csv ${outdir}MLP_params.csv
 
 deactivate
