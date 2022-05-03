@@ -67,14 +67,14 @@ Rscript process_expression_matrix.R \
     
 #source generate_latent_spaces
 
-python3 create_average_latent_space.py \
-	--datadir data/MLP_outcomes/ \
+python3 create_cluster_signatures.py \
+	--clusterdir data/mouse/cluster_masks/ \
+	--exprdir data/MLP_outcomes/ \
+	--exprglob MLP_labels67_layers3_units200_L21e-06_mousetransform*.csv \
+	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 	--outdir data/ \
-	--fileglob MLP_labels67_layers3_units200_L21e-06_mousetransform*.csv
-
-python3 create_average_latent_space.py \
-	--datadir data/MLP_outcomes/ \
-	--outdir data/ \
-	--fileglob MLP_labels67_layers3_units200_L21e-06_humantransform*.csv 
+	--outfile MouseClusterSignatures_latentspace.csv \
+	--parallel true \
+	--nproc 8
 
 deactivate
