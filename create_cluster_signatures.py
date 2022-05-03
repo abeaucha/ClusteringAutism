@@ -28,7 +28,7 @@ from tqdm                   import tqdm
 from io                     import StringIO
 
 
-# Command line arguments ------------------------------------------------------------------
+# Command line arguments -----------------------------------------------------
 
 def parse_args():
     
@@ -161,7 +161,8 @@ def create_cluster_signature(infiles, mask):
     return signature
 
 
-def build_signatures_table(clusters, expression, mask, parallel = False, nproc = None):
+def build_signatures_table(clusters, expression, mask, 
+                           parallel = False, nproc = None):
     
     """
     """
