@@ -238,7 +238,7 @@ def main():
     outfile = args['outfile']
     outfile = os.path.join(outdir, outfile)
         
-    df_signatures.to_csv(outfile)
+    df_signatures.to_csv(outfile, index = False)
     
     return
     
