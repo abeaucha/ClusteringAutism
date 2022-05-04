@@ -158,7 +158,7 @@ def prepare_data(data, labelcol = None):
     return X, y
 
 
-def define_classifier(input_units, output_units, hidden_units, weight_decay, max_epochs, learning_rate):
+def define_classifier(input_units, output_units, hidden_units, weight_decay, max_epochs, learning_rate, device):
 
     """
     """
@@ -205,7 +205,8 @@ def define_classifier(input_units, output_units, hidden_units, weight_decay, max
                           LRScheduler(policy=OneCycleLR,
                                       total_steps=max_epochs,
                                       cycle_momentum=False,  
-                                      max_lr=learning_rate))] 
+                                      max_lr=learning_rate))],
+        device = device
         )
 
     return net
@@ -303,18 +304,21 @@ def main():
     learning_rate = args['learningrate']
     nlabels = len(np.unique(y))
     
+    if is_available() == True:
+        print("GPU available. Training network using GPU...")
+        device = 'cuda'
+    else:
+        print("GPU unavailable. Training network using CPU...")
+        device = 'cpu'
+    
     #Define the model object
     net = define_classifier(input_units = X.shape[1],
                             output_units = nlabels,
                             hidden_units = hidden_units,
                             weight_decay = weight_decay,
                             max_epochs = max_epochs,
-                            learning_rate = learning_rate)
-    
-    if is_available() == True:
-        print("GPU available. Training network using GPU...")
-    else:
-        print("GPU unavailable. Training network using CPU...")
+                            learning_rate = learning_rate,
+                            device = device)
     
     #Fit the network
     net.fit(X, y)
