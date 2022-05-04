@@ -120,6 +120,14 @@ def parse_args():
     )
     
     parser.add_argument(
+        '--paramsheader',
+        type = str,
+        default = 'false',
+        choices = ['true', 'false'],
+        help = ("Save neural network parameters header?")
+    )
+    
+    parser.add_argument(
         '--verbose',
         type = str,
         default = 'true',
@@ -258,6 +266,7 @@ def main():
     outdir = args['outdir']
     confmat = True if args['confusionmatrix'] == 'true' else False
     saveparams = True if args['saveparams'] == 'true' else False
+    paramsheader = True if args['paramsheader'] == 'true' else False
     verbose = True if args['verbose'] == 'true' else False
     
     outdir = os.path.join(outdir, '')
@@ -326,30 +335,15 @@ def main():
     #Predict training labels
     y_pred = net.predict(X)
     
-#     print(net.__dict__.keys())
-#     print(type(net.__dict__['module']))
-    
-#     print(net.__dict__['history_'])
-#     print(type(net.__dict__['history_']))
-#     print(len(net.__dict__['history_']))
-#     print(net.__dict__['history_'][max_epochs-1])
-#     print(type(net.__dict__['history_'][0]))
-#     print(net.__dict__['history_'][0].keys())
-#     print(net.__dict__['history_'][0]['epoch'])
-#     print(net.__dict__['history_'][0]['dur'])
-#     print(net.__dict__['history_'][max_epochs-1]['train_loss'])
-    
-    train_accuracy = accuracy_score(y, y_pred)
-    
-    #Training accuracy
-    if verbose:
-        print("Training accuracy: {}".format(train_accuracy))
-    
     #Save parameters
     if saveparams:
     
         loss_func = net.__dict__['criterion'].__name__
         train_loss = net.__dict__['history_'][max_epochs-1]['train_loss']
+        train_accuracy = accuracy_score(y, y_pred)
+        dur_list = [net.__dict__['history_'][i]['dur'] 
+                    for i in range(len(net.__dict__['history_']))]
+        dur_mean = np.mean(dur_list)
     
         params = [hidden_units,
                   weight_decay,
@@ -359,11 +353,31 @@ def main():
                   nlabels,
                   loss_func, 
                   train_loss, 
-                  train_accuracy]
-    
+                  train_accuracy,
+                  dur_mean]
+        
+        if paramsheader:
+            
+            header = ['hidden_units',
+                      'weight_decay',
+                      'nepochs',
+                      'learning_rate',
+                      'random_seed',
+                      'nlabels',
+                      'loss_function',
+                      'training_loss',
+                      'training_accuracy',
+                      'mean_epoch_duration']
+            
         file_params = os.path.join(outdir, 'MLP_params.csv')
+
         with open(file_params, 'w') as file:
+            
             write = csv.writer(file)
+            
+            if paramsheader:
+                write.writerow(header)
+                
             write.writerow(params)
     
     
