@@ -8,13 +8,22 @@ if [ ! -d "$outdir" ]; then
 	mkdir "$outdir"
 fi
 
-touch ${outdir}MLP_params_temp.csv
+current_date=$(date +'%Y%m%d')
+paramsfile=${outdir}MLP_params_${current_date}.csv
+touch $paramsfile
 
 #for i in {1..500}
-for i in {1..5}
+for i in {1..3}
 do
  echo "Iteration $i"
- 
+
+ if [ $i -eq 1 ];
+ then
+	 paramsheader=true
+ else
+	 paramsheader=false
+ fi
+
  python3 train_multilayer_perceptron.py \
 	 --outdir $outdir \
 	 --training data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_GM_labelled_67_scaled.csv \
@@ -27,9 +36,10 @@ do
 	 --confusionmatrix true \
 	 --seed $i \
 	 --saveparams true \
+	 --paramsheader $paramsheader \
 	 --verbose true
 
- cat ${outdir}MLP_params.csv >> ${outdir}MLP_params_temp.csv
+ cat ${outdir}MLP_params.csv >> $paramsfile
 
  mv ${outdir}MLP_labels67_layers3_units200_L21e-06_confusionmatrix_training.csv \
 	 ${outdir}MLP_labels67_layers3_units200_L21e-06_confusionmatrix_training_$i.csv
@@ -48,6 +58,6 @@ do
 
 done
 
-mv ${outdir}MLP_params_temp.csv ${outdir}MLP_params.csv
+rm ${outdir}MLP_params.csv
 
 deactivate
