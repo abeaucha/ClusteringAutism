@@ -2,14 +2,9 @@
 
 source activate_venv
 
-python3 create_cluster_signatures.py \
-	--clusterdir data/mouse/cluster_masks/ \
-	--exprdir data/MLP_outcomes/ \
-	--exprglob MLP_labels67_layers3_units200_L21e-06_mousetransform*.csv \
-	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-	--outdir data/ \
-	--outfile MouseClusterSignatures_latentspace.csv \
-	--parallel true \
-	--nproc 8
+python3 calculate_effect_sizes.py \
+	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
+	--imgdir data/human/registration/jacobians/absolute/ \
+	--outdir data/human/registration/
 
 deactivate
