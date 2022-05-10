@@ -2,9 +2,9 @@
 
 source activate_venv
 
-Rscript calculate_effect_sizes.R \
-	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
-	--imgdir data/human/registration/jacobians/absolute/ \
-	--outdir data/human/registration/
+#Rscript calculate_effect_sizes.R \
+#	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
+#	--imgdir data/human/registration/jacobians/absolute/ \
+#	--outdir data/human/registration/
 
 deactivate
