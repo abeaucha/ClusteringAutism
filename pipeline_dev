@@ -2,6 +2,11 @@
 
 source activate_venv
 
+python3 extract_jacobian_images.py \
+	--imgdir data/human/registration/jacobians/absolute/smooth/ \
+	--parallel true \
+	--nproc 8
+
 #Rscript calculate_effect_sizes.R \
 #	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
 #	--imgdir data/human/registration/jacobians/absolute/ \
