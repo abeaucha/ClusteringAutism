@@ -7,8 +7,8 @@ Rscript calculate_effect_sizes.R \
 	--imgdir data/human/registration/jacobians/absolute/smooth/ \
 	--outdir data/human/effect_sizes/absolute/ \
 	--maskfile data/human/registration/reference_files/mask.mnc \
-	--ncontrols 2 \
-	--parallel false \
+	--ncontrols 10 \
+	--parallel true \
 	--nproc 4
 
 deactivate
