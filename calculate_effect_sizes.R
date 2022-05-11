@@ -197,7 +197,7 @@ if (inparallel) {
   nproc <- args[['nproc']]
   cl <- makeCluster(nproc)
   registerDoParallel(cl)
-  tmp <- foreach(i = 1:nrow(participants[1:20,]), 
+  tmp <- foreach(i = 1:nrow(participants), 
                  .packages = c('tidyverse', 'RMINC')) %dopar% {
                    executor(participant = participants[i,],
                             controls = controls,
@@ -209,7 +209,7 @@ if (inparallel) {
                  } 
   stopCluster(cl)
 } else {
-  tmp <- foreach(i = 1:nrow(participants[1:20,]), 
+  tmp <- foreach(i = 1:nrow(participants), 
                  .packages = c('tidyverse', 'RMINC')) %do% {
                    executor(participant = participants[i,],
                             controls = controls,
