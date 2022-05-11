@@ -9,7 +9,7 @@ Rscript calculate_effect_sizes.R \
 	--maskfile data/human/registration/reference_files/mask.mnc \
 	--ncontrols 10 \
 	--parallel true \
-	--nproc 8
+	--nproc 4
 
 Rscript calculate_effect_sizes.R \
 	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
@@ -18,6 +18,6 @@ Rscript calculate_effect_sizes.R \
 	--maskfile data/human/registration/reference_files/mask.mnc \
 	--ncontrols 10 \
 	--parallel true \
-	--nproc 8
+	--nproc 4
 
 deactivate
