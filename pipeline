@@ -77,7 +77,15 @@ python3 create_cluster_signatures.py \
 	--parallel true \
 	--nproc 8
 
+#Extract jacobians and convert to minc
+#python3 extract_jacobian_images.py \
+#	--imgdir data/human/registration/jacobians/absolute/smooth/ \
+#	--parallel true \
+#	--nproc 8
 
-#source extract_jacobians
+#python3 extract_jacobian_images.py \
+#	--imgdir data/human/registration/jacobians/relative/smooth/ \
+#	--parallel true \
+#	--nproc 8
 
 deactivate
