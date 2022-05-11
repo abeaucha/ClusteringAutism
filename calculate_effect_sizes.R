@@ -46,7 +46,7 @@ option_list <- list(
 # Functions ------------------------------------------------------------------
 
 
-#' Title
+#' Get controls for a study participant
 #'
 #' @param participant 
 #' @param controls 
@@ -54,10 +54,8 @@ option_list <- list(
 #' @param seed 
 #'
 #' @return
-#' @export
-#'
-#' @examples
-get_control_files <- function(participant, controls, imgfiles, ncontrols = 10, seed = NULL){
+get_control_files <- function(participant, controls, imgfiles,
+                              ncontrols = 10, seed = NULL){
   
   if (!is.null(seed)){set.seed(seed)}
   
@@ -82,16 +80,13 @@ get_control_files <- function(participant, controls, imgfiles, ncontrols = 10, s
 }
 
 
-#' Title
+#' Compute the effect size for one participant
 #'
 #' @param participant 
 #' @param controls 
 #' @param mask 
 #'
 #' @return
-#' @export
-#'
-#' @examples
 compute_effect_size <- function(participant, controls, imgfiles, mask) {
   
   control_mean <- mincMean(filenames = controls)
@@ -134,7 +129,8 @@ compute_effect_size <- function(participant, controls, imgfiles, mask) {
 #' @export
 #'
 #' @examples
-executor <- function(participant, controls, ncontrols = 10, mask, imgdir, outdir, seed = NULL) {
+executor <- function(participant, controls, ncontrols = 10, 
+                     mask, imgdir, outdir, seed = NULL) {
   
   imgfiles <- list.files(imgdir, full.names = TRUE) %>% 
     str_subset('.mnc')
@@ -166,7 +162,6 @@ executor <- function(participant, controls, ncontrols = 10, mask, imgdir, outdir
 
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-
 demofile <- args[['demographics']]
 imgdir <- args[['imgdir']]
 maskfile <- args[['maskfile']]
@@ -181,23 +176,28 @@ inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 # ncontrols <- 10
 # inparallel <- FALSE
 
+#Import demographics data
 demographics <- data.table::fread(demofile, header = TRUE) %>% 
   as_tibble()
 
+#Remove entries with no DX
 demographics <- demographics %>% 
   filter(!is.na(DX))
 
+#Extract control participants
 controls <- demographics %>% 
   filter(DX == 'Control')
 
+#Extract participants
 participants <- demographics %>% 
   filter(DX != 'Control')
 
+#Option to run in parallel
 if (inparallel) {
   nproc <- args[['nproc']]
   cl <- makeCluster(nproc)
   registerDoParallel(cl)
-  tmp <- foreach(i = 1:nrow(participants[1:3,]), 
+  tmp <- foreach(i = 1:nrow(participants[1:20,]), 
                  .packages = c('tidyverse', 'RMINC')) %dopar% {
                    executor(participant = participants[i,],
                             controls = controls,
@@ -209,7 +209,7 @@ if (inparallel) {
                  } 
   stopCluster(cl)
 } else {
-  tmp <- foreach(i = 1:nrow(participants[1:3,]), 
+  tmp <- foreach(i = 1:nrow(participants[1:20,]), 
                  .packages = c('tidyverse', 'RMINC')) %do% {
                    executor(participant = participants[i,],
                             controls = controls,
