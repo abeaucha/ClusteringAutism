@@ -2,8 +2,13 @@
 
 source activate_venv
 
+#python3 extract_jacobian_images.py \
+#	--imgdir data/human/registration/jacobians/absolute/smooth/ \
+#	--parallel true \
+#	--nproc 8
+
 python3 extract_jacobian_images.py \
-	--imgdir data/human/registration/jacobians/absolute/smooth/ \
+	--imgdir data/human/registration/jacobians/relative/smooth/ \
 	--parallel true \
 	--nproc 8
 
