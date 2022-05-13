@@ -140,16 +140,16 @@ executor <- function(participant, controls, ncontrols = 10,
                                      imgfiles = imgfiles,
                                      ncontrols = ncontrols,
                                      seed = seed)
-  effect_size <- compute_effect_size(participant = participant, 
-                                     controls = control_files, 
+  effect_size <- compute_effect_size(participant = participant,
+                                     controls = control_files,
                                      imgfiles = imgfiles,
                                      mask = mask)
-  
-  outfile <- attributes(effect_size)[['filename']] %>% 
-    basename() %>% 
+
+  outfile <- attributes(effect_size)[['filename']] %>%
+    basename() %>%
     str_replace('.mnc', str_c('_effectsize_ncontrols', ncontrols, '.mnc'))
   outfile <- file.path(outdir, outfile)
-  
+
   mincWriteVolume(effect_size,
                   output.filename = outfile,
                   clobber = TRUE)
@@ -174,7 +174,7 @@ inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 # maskfile <- 'data/human/registration/reference_files/mask.mnc'
 # outdir <- 'data/human/effect_sizes/absolute/'
 # ncontrols <- 10
-# inparallel <- FALSE
+# inparallel <- TRUE
 
 #Import demographics data
 demographics <- data.table::fread(demofile, header = TRUE) %>% 
@@ -182,7 +182,9 @@ demographics <- data.table::fread(demofile, header = TRUE) %>%
 
 #Remove entries with no DX
 demographics <- demographics %>% 
-  filter(!is.na(DX))
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex))
 
 #Extract control participants
 controls <- demographics %>% 
