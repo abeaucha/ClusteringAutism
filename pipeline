@@ -88,4 +88,22 @@ python3 create_cluster_signatures.py \
 #	--parallel true \
 #	--nproc 8
 
+Rscript calculate_effect_sizes.R \
+	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
+	--imgdir data/human/registration/jacobians/absolute/smooth/ \
+	--outdir data/human/effect_sizes/absolute/ \
+	--maskfile data/human/registration/reference_files/mask.mnc \
+	--ncontrols 10 \
+	--parallel true \
+	--nproc 4
+
+Rscript calculate_effect_sizes.R \
+	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
+	--imgdir data/human/registration/jacobians/relative/smooth/ \
+	--outdir data/human/effect_sizes/relative/ \
+	--maskfile data/human/registration/reference_files/mask.mnc \
+	--ncontrols 10 \
+	--parallel true \
+	--nproc 4
+
 deactivate
