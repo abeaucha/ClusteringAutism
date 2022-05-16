@@ -93,7 +93,7 @@ python3 create_cluster_signatures.py \
 Rscript calculate_effect_sizes.R \
 	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
 	--imgdir data/human/registration/jacobians/absolute/smooth/ \
-	--outdir data/human/effect_sizes/absolute/ \
+	--outdir data/human/effect_sizes/absolute/resolution_0.5/ \
 	--maskfile data/human/registration/reference_files/mask.mnc \
 	--ncontrols 10 \
 	--parallel true \
@@ -102,7 +102,7 @@ Rscript calculate_effect_sizes.R \
 Rscript calculate_effect_sizes.R \
 	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
 	--imgdir data/human/registration/jacobians/relative/smooth/ \
-	--outdir data/human/effect_sizes/relative/ \
+	--outdir data/human/effect_sizes/relative/resolution_0.5/ \
 	--maskfile data/human/registration/reference_files/mask.mnc \
 	--ncontrols 10 \
 	--parallel true \
@@ -110,15 +110,15 @@ Rscript calculate_effect_sizes.R \
     
 #Downsample human effect size images 
 python3 downsample_images.py \
-	--imgdir data/human/effect_sizes/absolute/ \
-	--outdir data/human/effect_sizes/absolute/downsampled/ \
+	--imgdir data/human/effect_sizes/absolute/resolution_0.5/ \
+	--outdir data/human/effect_sizes/absolute/resolution_3.0/ \
 	--isostep 3.0 \
 	--parallel true \
 	--nproc 4
 
 python3 downsample_images.py \
-	--imgdir data/human/effect_sizes/relative/ \
-	--outdir data/human/effect_sizes/relative/downsampled/ \
+	--imgdir data/human/effect_sizes/relative/resolution_0.5/ \
+	--outdir data/human/effect_sizes/relative/resolution_3.0/ \
 	--isostep 3.0 \
 	--parallel true \
 	--nproc 4
