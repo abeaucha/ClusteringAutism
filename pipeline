@@ -67,6 +67,7 @@ Rscript process_expression_matrix.R \
     
 #source generate_latent_spaces
 
+#Create cluster signatures for mouse clusters
 python3 create_cluster_signatures.py \
 	--clusterdir data/mouse/cluster_masks/ \
 	--exprdir data/MLP_outcomes/ \
@@ -88,6 +89,7 @@ python3 create_cluster_signatures.py \
 #	--parallel true \
 #	--nproc 8
 
+#Calculate human effect sizes based on relative and absolute volumes
 Rscript calculate_effect_sizes.R \
 	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
 	--imgdir data/human/registration/jacobians/absolute/smooth/ \
@@ -103,6 +105,21 @@ Rscript calculate_effect_sizes.R \
 	--outdir data/human/effect_sizes/relative/ \
 	--maskfile data/human/registration/reference_files/mask.mnc \
 	--ncontrols 10 \
+	--parallel true \
+	--nproc 4
+    
+#Downsample human effect size images 
+python3 downsample_images.py \
+	--imgdir data/human/effect_sizes/absolute/ \
+	--outdir data/human/effect_sizes/absolute/downsampled/ \
+	--isostep 3.0 \
+	--parallel true \
+	--nproc 4
+
+python3 downsample_images.py \
+	--imgdir data/human/effect_sizes/relative/ \
+	--outdir data/human/effect_sizes/relative/downsampled/ \
+	--isostep 3.0 \
 	--parallel true \
 	--nproc 4
 
