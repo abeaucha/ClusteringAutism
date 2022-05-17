@@ -107,7 +107,16 @@ Rscript calculate_effect_sizes.R \
 	--ncontrols 10 \
 	--parallel true \
 	--nproc 4
-    
+
+#Downsample model and mask files
+autocrop -quiet -clobber -isostep 3.0 \
+	data/human/registration/reference_files/model.mnc \
+	data/human/registration/reference_files/model_downsampled_3.0mm.mnc
+
+autocrop -quiet -clobber -isostep 3.0 \
+	data/human/registration/reference_files/mask.mnc \
+	data/human/registration/reference_files/mask_downsampled_3.0mm.mnc
+
 #Downsample human effect size images 
 python3 downsample_images.py \
 	--imgdir data/human/effect_sizes/absolute/resolution_0.5/ \
