@@ -146,7 +146,8 @@ def main():
     df_imgs['imagefile'] = [os.path.basename(i) for i in imgfiles]
 
     outfile = os.path.join(outdir, outfile)
-    df_imgs.to_csv(outfile)
+    df_imgs.sort_values(by = 'imagefile').to_csv(outfile, index = False)
+#     df_imgs.to_csv(outfile, index = False)
 
     return
     
