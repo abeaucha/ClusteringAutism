@@ -27,7 +27,7 @@ def parse_args():
              )
     
     parser.add_argument(
-        '--datadir',
+        '--imgdir',
         type = str,
         help = ("Directory containing effect size MINC images.")
     )
@@ -82,6 +82,22 @@ def parse_args():
 
 # Functions ------------------------------------------------------------------
 
+def import_image(img, mask):
+    
+    """
+    """
+    
+    mask_vol = volumeFromFile(mask)
+    mask_array = np.array(mask_vol.data.flatten())
+    mask_vol.closeVolume()
+    
+    img_vol = volumeFromFile(img)
+    img_array = np.array(img_vol.data.flatten())
+    img_vol.closeVolume()
+    
+    img_masked = img_array[mask_array == 1]
+    
+    return img_masked
 
 
 # Main -----------------------------------------------------------------------
@@ -90,15 +106,50 @@ def main():
     
     #Parse command line arguments
     args = parse_args()
-    datadir = args['datadir']
+    imgdir = args['imgdir']
     outdir = args['outdir']
     outfile = args['outfile']
     mask = args['mask']
     parallel = True if args['parallel'] == 'true' else False
 #     verbose = True if args['verbose'] == 'true' else False
 
+    imgdir = os.path.join(imgdir, '')
+    outdir = os.path.join(outdir, '')
     
+    if os.path.exists(outdir) == False:
+        os.mkdir(outdir)
+    
+    imgfiles = glob(imgdir+'*.mnc')
+    
+    import_image_partial = partial(import_image,
+                                   mask = mask)
+    
+    if parallel:
+        if nproc is None:
+            nproc = mp.cpu_count()
+            
+        pool = mp.Pool(nproc)
+        
+        imgs = []
+        for img in tqdm(pool.imap(import_image_partial, imgfiles),
+                        total = len(imgfiles)):
+            imgs.append(img)
+            
+        pool.close()
+        pool.join()
+        
+    else:
+        
+        imgs = list(map(import_image_partial, tqdm(imgfiles)))
 
+    df_imgs = pd.DataFrame(np.asarray(imgs))
+    df_imgs['imagefile'] = [os.path.basename(i) for i in imgfiles]
+
+    outfile = os.path.join(outdir, outfile)
+    df_imgs.to_csv(outfile)
+
+    return
+    
     
 if __name__=='__main__':
     main()
