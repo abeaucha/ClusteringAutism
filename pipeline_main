@@ -6,6 +6,19 @@
 
 source activate_venv
 
+#Create masks indicating which voxels are in the cluster
+python3 create_cluster_masks.py \
+    --datadir data/mouse/cluster_maps/ \
+    --outdir data/mouse/cluster_masks \
+    --threshold 0.5 \
+    --symmetric true 
+    
+python3 create_cluster_masks.py \
+    --datadir data/human/clustering/cluster_maps/resolution_3.0/ \
+    --outdir data/human/clustering/cluster_masks/resolution_3.0/ \
+    --threshold 0.5 \
+    --symmetric true 
+
 #Create cluster signatures for mouse clusters
 python3 create_cluster_signatures.py \
 	--clusterdir data/mouse/cluster_masks/ \
