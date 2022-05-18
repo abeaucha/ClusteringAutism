@@ -14,7 +14,7 @@ source activate_venv
 #	--outdir data/human/effect_sizes/ \
 #	--outfile human_effect_sizes_relative_3.0mm.csv \
 #	--mask data/human/registration/reference_files/mask_downsampled_3.0mm.mnc \
-	
+
 #Cluster human effect sizes
 #Rscript cluster_human_data.R \
 #	--file1 data/human/effect_sizes/human_effect_sizes_absolute_3.0mm.csv \
@@ -27,32 +27,44 @@ source activate_venv
 #	--metric cor \
 #	--outfile data/human/clustering/clusters_groups10_3.0mm.csv
 
-Rscript create_cluster_maps.R \
-	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
-	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
-	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
-	--method mean \
-	--jacobians absolute
+# Rscript create_cluster_maps.R \
+# 	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+# 	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
+# 	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
+# 	--method mean \
+# 	--jacobians absolute
 	
-Rscript create_cluster_maps.R \
-	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
-	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
-	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
-	--method median \
-	--jacobians absolute
+# Rscript create_cluster_maps.R \
+# 	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+# 	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
+# 	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
+# 	--method median \
+# 	--jacobians absolute
 	
-Rscript create_cluster_maps.R \
-	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
-	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
-	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
-	--method mean \
-	--jacobians relative
+# Rscript create_cluster_maps.R \
+# 	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+# 	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
+# 	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
+# 	--method mean \
+# 	--jacobians relative
 	
-Rscript create_cluster_maps.R \
-	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
-	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
-	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
-	--method median \
-	--jacobians relative
+# Rscript create_cluster_maps.R \
+# 	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+# 	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
+# 	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
+# 	--method median \
+# 	--jacobians relative
+
+python3 create_cluster_masks.py \
+    --datadir data/mouse/cluster_maps/ \
+    --outdir data/mouse/cluster_masks \
+    --threshold 0.5 \
+    --symmetric true 
+    
+python3 create_cluster_masks.py \
+    --datadir data/human/clustering/cluster_maps/resolution_3.0/ \
+    --outdir data/human/clustering/cluster_masks/resolution_3.0/ \
+    --threshold 0.5 \
+    --symmetric true 
 
 deactivate
