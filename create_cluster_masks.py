@@ -84,6 +84,7 @@ def create_cluster_mask(infile, outfile, threshold = 0.2, symmetric = True, comp
 
 def main():
     
+    
     args = parse_args()
     datadir = args['datadir']
     outdir = args['outdir']
@@ -94,7 +95,7 @@ def main():
     outdir = os.path.join(outdir, '')
     
     if not os.path.exists(outdir):
-        os.mkdir(outdir)
+        os.makedirs(outdir)
     
     infiles = glob(datadir+'*.mnc')
     
