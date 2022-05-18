@@ -30,25 +30,29 @@ source activate_venv
 Rscript create_cluster_maps.R \
 	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
 	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
-	--outdir data/human/clustering/cluster_maps/resolution_3.0/absolute/ \
-	--method mean
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
+	--method mean \
+	--jacobians absolute
 	
 Rscript create_cluster_maps.R \
 	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
 	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
-	--outdir data/human/clustering/cluster_maps/resolution_3.0/absolute/ \
-	--method median
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
+	--method median \
+	--jacobians absolute
 	
 Rscript create_cluster_maps.R \
 	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
 	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
-	--outdir data/human/clustering/cluster_maps/resolution_3.0/relative/ \
-	--method mean
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
+	--method mean \
+	--jacobians relative
 	
 Rscript create_cluster_maps.R \
 	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
 	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
-	--outdir data/human/clustering/cluster_maps/resolution_3.0/relative/ \
-	--method median
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/ \
+	--method median \
+	--jacobians relative
 
 deactivate
