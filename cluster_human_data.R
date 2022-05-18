@@ -45,9 +45,6 @@ option_list <- list(
               type = 'character',
               default = 'cor',
               help = ""),
-  # make_option('--outdir',
-  #             type = 'character',
-  #             help = ""),
   make_option('--outfile',
               type = 'character',
               help = ""),
@@ -98,7 +95,7 @@ create_clusters <- function(W, nk = 10, method = 'spectral',
       assign(group_name, group)
       if (k == 2) {
         all_clusters <- data.frame(rownames(W), group, stringsAsFactors = F)
-        colnames(all_clusters) <- c('Model', group_name)
+        colnames(all_clusters) <- c('ID', group_name)
       } else {
         group <- data.frame(group)
         colnames(group) <- group_name
@@ -107,11 +104,8 @@ create_clusters <- function(W, nk = 10, method = 'spectral',
     }
   }
   
-  rownames(all_clusters) <- all_clusters[['Model']]
-  all_clusters <- all_clusters[,2:nk]
-  
   if (save_output) {
-    write.csv(x = all_clusters, file = outfile)
+    write.csv(x = all_clusters, file = outfile, row.names = FALSE)
   }
   
   return(all_clusters)
@@ -137,23 +131,24 @@ x1 <- data.table::fread(file1, header = TRUE) %>%
   column_to_rownames(row_names) %>% 
   as.matrix() 
 colnames(x1) <- NULL
+rownames(x1) <- basename(rownames(x1))
 
 x2 <- data.table::fread(file2, header = TRUE) %>% 
   as_tibble() %>% 
   column_to_rownames(row_names) %>% 
   as.matrix() 
 colnames(x2) <- NULL
+rownames(x2) <- basename(rownames(x2))
 
 if (verbose) {message("Running similarity network fusion...")}
 
 W <- SNF_combine(x1 = x1, x2 = x2,
-                 K = args[['K']], alpha = args[['alpha']], 
+                 K = args[['K']], alpha = args[['alpha']],
                  t = args[['t']], metric = args[['metric']],
                  save_output = save_w, outfile = args[['wfile']])
 
 if (verbose) {message("Assigning clusters...")}
 
-clusters <- create_clusters(W = W, nk = args[['nclusters']], 
-                            method = 'spectral', save_output = TRUE, 
+clusters <- create_clusters(W = W, nk = args[['nclusters']],
+                            method = 'spectral', save_output = TRUE,
                             outfile = outfile)
-
