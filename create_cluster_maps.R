@@ -25,6 +25,10 @@ option_list <- list(
               type = 'character',
               default = 'mean',
               help = "[default %default]"),
+  make_option('--jacobians',
+              type = 'character',
+              default = 'absolute',
+              help = "[default %default]"),
   make_option('--outdir',
               type = 'character',
               help = ""),
@@ -85,9 +89,12 @@ for (j in 1:ncol(df_clusters)) {
     class(cluster_map) <- class(mincGetVolume(files_k[1]))
     attributes(cluster_map) <- attributes(mincGetVolume(files_k[1]))
     
+    res <- max(minc.separation.sizes(files_k[1]))
     outfile <- paste0('Group_', k,
                       '_Clusternum_', max(krange), 
-                      '_ES_', method, '.mnc')
+                      '_ES_', args[['jacobians']],
+                      '_', res, 
+                      '_', method, '.mnc')
     outfile <- file.path(outdir, outfile)
     
     mincWriteVolume(cluster_map,
