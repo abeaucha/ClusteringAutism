@@ -1,12 +1,27 @@
+# ----------------------------------------------------------------------------
+# create_cluster_mask.py 
+# Author: Antoine Beauchamp
+# Created: May 18th, 2022
+
+"""
+
+
+Description
+-----------
+"""
+
+# Packages -------------------------------------------------------------------
+
 import argparse
 import os
-import numpy as np
+import numpy                as np
 from pyminc.volumes.factory import volumeLikeFile, volumeFromFile
-from glob import glob
-from re import sub
-from functools import partial
-from tqdm import tqdm
+from glob                   import glob
+from re                     import sub
+from functools              import partial
+from tqdm                   import tqdm
 
+# Command line arguments -----------------------------------------------------
 
 def parse_args():
     
@@ -50,7 +65,10 @@ def parse_args():
     return args
 
 
-def create_cluster_mask(infile, outfile, threshold = 0.2, symmetric = True, comparison = '>'):
+# Functions ------------------------------------------------------------------
+
+def create_cluster_mask(infile, outfile, threshold = 0.2, symmetric = True, 
+                        comparison = '>'):
     
     """
     """
@@ -82,6 +100,8 @@ def create_cluster_mask(infile, outfile, threshold = 0.2, symmetric = True, comp
     return
 
 
+# Main -----------------------------------------------------------------------
+
 def main():
     
     
@@ -101,7 +121,8 @@ def main():
     
     outfiles = [os.path.basename(file) for file in infiles]
     outfiles = [sub(r'.mnc', '', file) for file in outfiles]
-    outfiles = [file+'_mask_threshold{}.mnc'.format(threshold) for file in outfiles]
+    outfiles = [file+'_mask_threshold{}.mnc'.format(threshold) 
+                for file in outfiles]
     outfiles = [os.path.join(outdir, file) for file in outfiles]
     
     create_cluster_mask_partial = partial(create_cluster_mask,
@@ -110,9 +131,7 @@ def main():
     
     list(map(create_cluster_mask_partial, tqdm(infiles), outfiles))
     
-    
     return
-    
     
 if __name__=='__main__':
     main()
