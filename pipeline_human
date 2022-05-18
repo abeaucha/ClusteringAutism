@@ -81,5 +81,31 @@ Rscript cluster_human_data.R \
 	--metric cor \
 	--outfile data/human/clustering/clusters_groups10_3.0mm.csv
 
+# Create cluster maps for abs and rel volumes using mean and median
+Rscript create_cluster_maps.R \
+	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/absolute/ \
+	--method mean
+	
+Rscript create_cluster_maps.R \
+	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/absolute/ \
+	--method median
+	
+Rscript create_cluster_maps.R \
+	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/relative/ \
+	--method mean
+	
+Rscript create_cluster_maps.R \
+	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/relative/ \
+	--method median
+	
+
 
 deactivate
