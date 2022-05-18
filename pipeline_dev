@@ -3,31 +3,52 @@
 source activate_venv
 
 #Create matrices for human effect sizes
-python3 build_effect_size_matrix.py \
-	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
-	--outdir data/human/effect_sizes/ \
-	--outfile human_effect_sizes_absolute_3.0mm.csv \
-	--mask data/human/registration/reference_files/mask_downsampled_3.0mm.mnc \
+#python3 build_effect_size_matrix.py \
+#	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
+#	--outdir data/human/effect_sizes/ \
+#	--outfile human_effect_sizes_absolute_3.0mm.csv \
+#	--mask data/human/registration/reference_files/mask_downsampled_3.0mm.mnc \
     
-python3 build_effect_size_matrix.py \
-	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
-	--outdir data/human/effect_sizes/ \
-	--outfile human_effect_sizes_relative_3.0mm.csv \
-	--mask data/human/registration/reference_files/mask_downsampled_3.0mm.mnc \
+#python3 build_effect_size_matrix.py \
+#	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
+#	--outdir data/human/effect_sizes/ \
+#	--outfile human_effect_sizes_relative_3.0mm.csv \
+#	--mask data/human/registration/reference_files/mask_downsampled_3.0mm.mnc \
 	
 #Cluster human effect sizes
-Rscript cluster_human_data.R \
-	--file1 data/human/effect_sizes/human_effect_sizes_absolute_3.0mm.csv \
-	--file2 data/human/effect_sizes/human_effect_sizes_relative_3.0mm.csv \
-	--rownames file \
-	--nclusters 10 \
-	--K 10 \
-	--t 20 \
-	--alpha 0.5 \
-	--metric cor \
-	--outfile data/human/clustering/clusters_groups10_3.0mm.csv
+#Rscript cluster_human_data.R \
+#	--file1 data/human/effect_sizes/human_effect_sizes_absolute_3.0mm.csv \
+#	--file2 data/human/effect_sizes/human_effect_sizes_relative_3.0mm.csv \
+#	--rownames file \
+#	--nclusters 10 \
+#	--K 10 \
+#	--t 20 \
+#	--alpha 0.5 \
+#	--metric cor \
+#	--outfile data/human/clustering/clusters_groups10_3.0mm.csv
 
-python3 create_cluster_maps.py \
-	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv
+Rscript create_cluster_maps.R \
+	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/absolute/ \
+	--method mean
+	
+Rscript create_cluster_maps.R \
+	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/absolute/ \
+	--method median
+	
+Rscript create_cluster_maps.R \
+	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/relative/ \
+	--method mean
+	
+Rscript create_cluster_maps.R \
+	--clusterfile data/human/clustering/clusters_groups10_3.0mm.csv \
+	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
+	--outdir data/human/clustering/cluster_maps/resolution_3.0/relative/ \
+	--method median
 
 deactivate
