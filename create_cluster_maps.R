@@ -45,11 +45,6 @@ method <- args[['method']]
 outdir <- args[['outdir']]
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
 
-clusterfile <- 'data/human/clustering/clusters_groups10_3.0mm.csv'
-imgdir <- 'data/human/effect_sizes/absolute/resolution_3.0/'
-outdir <- 'data/human/clustering/cluster_maps/absolute/resolution_3.0/'
-method <- 'median'
-
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 }
