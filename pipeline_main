@@ -20,7 +20,7 @@ python3 create_cluster_masks.py \
     --symmetric true 
 
 #Create cluster signatures for mouse clusters
-python3 create_cluster_signatures.py \
+python3 mouse_cluster_signatures.py \
 	--clusterdir data/mouse/cluster_masks/ \
 	--exprdir data/MLP_outcomes/ \
 	--exprglob MLP_labels67_layers3_units200_L21e-06_mousetransform*.csv \
