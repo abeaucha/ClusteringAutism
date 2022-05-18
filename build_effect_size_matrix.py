@@ -111,7 +111,7 @@ def main():
     outfile = args['outfile']
     mask = args['mask']
     parallel = True if args['parallel'] == 'true' else False
-#     verbose = True if args['verbose'] == 'true' else False
+    verbose = True if args['verbose'] == 'true' else False
 
     imgdir = os.path.join(imgdir, '')
     outdir = os.path.join(outdir, '')
@@ -123,6 +123,9 @@ def main():
     
     import_image_partial = partial(import_image,
                                    mask = mask)
+    
+    if verbose:
+        print("Importing images...")
     
     if parallel:
         if nproc is None:
@@ -142,11 +145,18 @@ def main():
         
         imgs = list(map(import_image_partial, tqdm(imgfiles)))
 
+    if verbose:
+        print("Building matrix...")
+        
     df_imgs = pd.DataFrame(np.asarray(imgs))
-    df_imgs['imagefile'] = [os.path.basename(i) for i in imgfiles]
-
+    df_imgs['file'] = imgfiles
+#     df_imgs['imagefile'] = [os.path.basename(i) for i in imgfiles]
+    
+    if verbose:
+        print("Writing to file...")
+    
     outfile = os.path.join(outdir, outfile)
-    df_imgs.sort_values(by = 'imagefile').to_csv(outfile, index = False)
+    df_imgs.sort_values(by = 'file').to_csv(outfile, index = False)
 #     df_imgs.to_csv(outfile, index = False)
 
     return
