@@ -2,29 +2,60 @@ library(tidyverse)
 library(RMINC)
 library(MRIcrotome)
 
-avg <- mincGetVolume(filename = "average_template_200um.mnc")
-effect <- mincGetVolume(filename = "Group_1_Clusternum_2_ES_abs_200_mean.mnc")
+# 
+# cluster_ids <- read_csv('data/human/clustering/clusters_groups10_3.0mm.csv')
+# 
+# library(ggalluvial)
+# 
+# cluster_ids_long <- cluster_ids %>% 
+#   pivot_longer(cols = -ID, names_to = 'nk_name', values_to = 'k') %>% 
+#   mutate(nk = str_extract(nk_name, '[0-9]+'),
+#          nk = as.numeric(nk),
+#          nk = factor(nk, levels = 2:10),
+#          k = factor(k, levels = 1:10))
+# 
+# ggplot(data = cluster_ids_long,
+#        aes(x = nk,
+#            stratum = k,
+#            alluvium = ID,
+#            fill = k,
+#            label = k)) + 
+#   geom_flow(stat = 'alluvium', colour = 'darkgrey', aes.flow = 'forward') + 
+#   geom_stratum(alpha = 0.5) + 
+#   theme_bw()
+#   
+# ---
 
-avg_vol <- mincArray(avg)
-effect_vol <- mincArray(effect)
+imgdir <- 'data/human/clustering/cluster_maps/resolution_3.0/'
 
-dim(avg)
+template <- mincArray(mincGetVolume('data/human/registration/reference_files/model_downsampled_3.0mm.mnc'))
+mask <- mincArray(mincGetVolume('data/human/registration/reference_files/mask_downsampled_3.0mm.mnc'))
 
-sliceSeries(nrow = 5, ncol = 5, begin = 10, end = 60) %>% 
-  anatomy(avg_vol, low = 60, high = 150) %>% 
-  overlay(effect_vol, low = 0.1, high = 0.5, symmetric = T) %>% 
+clusternum <- 4
+groupnum <- 4
+jacobians <- 'absolute'
+method <- 'mean'
+
+file_abs <- str_c('Group_', groupnum, '_Clusternum_', clusternum, '_ES_absolute_3_', method, '.mnc')
+file_rel <- str_c('Group_', groupnum, '_Clusternum_', clusternum, '_ES_relative_3_', method, '.mnc')
+file_abs <- file.path(imgdir, file_abs)
+file_rel <- file.path(imgdir, file_rel)
+
+cluster_map_abs <- mincArray(mincGetVolume(file_abs))
+cluster_map_rel <- mincArray(mincGetVolume(file_rel))
+
+sliceSeries(nrow = 5, ncol = 1, begin = 15, end = 60) %>% 
+  anatomy(template, low = 3, high = 7) %>% 
+  addtitle(str_c('nk: ', clusternum, ', k: ', groupnum)) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(cluster_map_abs, symmetric = T, low = 0.1, high = 0.9) %>% 
+  addtitle('Absolute') %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(cluster_map_rel, symmetric = T, low = 0.1, high = 0.9) %>% 
+  addtitle('Relative') %>% 
+  legend('mean z-score') %>% 
   draw()
 
-length(avg)
-length(effect)
 
 
-mask <- mincGetVolume('temp_threshold0.3_asymmetric_lessthan.mnc')
-sum(mask)
 
-hist(effect[mask != 0])
-
-sliceSeries(nrow = 5, ncol = 5, begin = 10, end = 60) %>% 
-  anatomy(avg_vol, low = 20, high = 250) %>% 
-  overlay(mincArray(mask), low = 0.5, high = 1) %>%
-  draw()
