@@ -42,14 +42,14 @@ autocrop -quiet -clobber -isostep 3.0 \
 	data/human/registration/reference_files/mask_3.0mm.mnc
 
 #Downsample human effect size images 
-python3 downsample_images.py \
+python3 resample_minc_images.py \
 	--imgdir data/human/effect_sizes/absolute/resolution_0.5/ \
 	--outdir data/human/effect_sizes/absolute/resolution_3.0/ \
 	--isostep 3.0 \
 	--parallel true \
 	--nproc 4
 
-python3 downsample_images.py \
+python3 resample_minc_images.py \
 	--imgdir data/human/effect_sizes/relative/resolution_0.5/ \
 	--outdir data/human/effect_sizes/relative/resolution_3.0/ \
 	--isostep 3.0 \

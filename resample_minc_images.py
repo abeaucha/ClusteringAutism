@@ -1,10 +1,10 @@
 # ----------------------------------------------------------------------------
-# downsample_images.py 
+# resample_minc_images.py 
 # Author: Antoine Beauchamp
 # Created: May 16th, 2022
 
 """
-Downsample a set of MINC images.
+Downsample a set of MINC images. 
 """
 
 # Packages -------------------------------------------------------------------
