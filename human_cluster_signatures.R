@@ -48,6 +48,9 @@ expr_files <- Sys.glob(file.path(expr_dir, expr_glob))
 
 cluster_dir <- 'data/human/clustering/cluster_masks/resolution_3.0/'
 cluster_files <- list.files(cluster_dir, full.names = TRUE)
+# cluster_files <- cluster_files %>% 
+#   str_subset('threshold0.1') %>% 
+#   str_subset('_mean_')
 
 infiles <- expand_grid(clusterfile = cluster_files, 
                        exprfile = expr_files)
@@ -78,4 +81,7 @@ for (i in 1:nrow(infiles)){
 
 tmp <- bind_cols(infiles, signatures)
 
+outfile <- 'data/human/human_cluster_signatures.csv'
 
+write_csv(x = tmp, 
+          file = outfile)
