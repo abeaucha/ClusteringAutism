@@ -12,12 +12,13 @@
 suppressPackageStartupMessages(library(optparse))
 suppressPackageStartupMessages(library(RMINC))
 
+
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
   make_option('--clusterfile',
               type = 'character',
-              help = "Path to CSV file containing cluster data."),
+              help = "Path to CSV file containing cluster assignment data."),
   make_option('--imgdir',
               type = 'character',
               help = ""),
