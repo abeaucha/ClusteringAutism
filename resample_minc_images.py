@@ -4,7 +4,7 @@
 # Created: May 16th, 2022
 
 """
-Downsample a set of MINC images. 
+Resample a set of MINC images using the autocrop command line tool.
 """
 
 # Packages -------------------------------------------------------------------
@@ -31,19 +31,19 @@ def parse_args():
     parser.add_argument(
         '--imgdir',
         type = str,
-        help = ("Path to directory containing images to downsample.")
+        help = ("Path to directory containing images to resample.")
     )
     
     parser.add_argument(
         '--outdir',
         type = str,
-        help = ("Path to directory in which to save downsampled images.")
+        help = ("Path to directory in which to save resampled images.")
     )
     
     parser.add_argument(
         '--isostep',
         type = str,
-        help = ("Resolution of voxels in downsampled images (mm).")
+        help = ("Resolution of voxels in resampled images (mm).")
     )
     
     parser.add_argument(
@@ -69,12 +69,27 @@ def parse_args():
 
 # Functions ------------------------------------------------------------------
 
-def downsample_image(infile, outdir, isostep):
+def resample_image(infile, outdir, isostep):
     
     """
-    """
+    Resample a MINC image
     
-    outfile = sub(r'.mnc', '_downsampled_{}.mnc'.format(isostep), infile)
+    Arguments
+    ---------
+    infile: str
+        Path to the MINC file to resample.
+    outdir: str
+        Path to the directory in which to save the resampled image.
+    isostep: float
+        Isotropic dimension of voxels in resampled image (millimeters).
+    
+    
+    Returns
+    -------
+    None
+    """
+
+    outfile = sub(r'.mnc', '_resampled_{}.mnc'.format(isostep), infile)
     outfile = os.path.basename(outfile)
     outfile = os.path.join(outdir, outfile)
     cmd_autocrop = ('autocrop -quiet -clobber -isostep {} {} {}'
@@ -96,14 +111,18 @@ def main():
     parallel = True if args['parallel'] == 'true' else False
     nproc = args['nproc']
     
+    #Ensure proper paths
     imgdir = os.path.join(imgdir, '')
     outdir = os.path.join(outdir, '')
     
+    #Create outdir if needed
     if os.path.exists(outdir) == False:
         os.mkdir(outdir)
     
+    #Get MINC images in dir
     files = glob(imgdir+'*.mnc')
     
+    #Create partial function for mapping
     downsample_partial = partial(downsample_image, 
                                  outdir = outdir,
                                  isostep = isostep)
@@ -124,7 +143,6 @@ def main():
         tmp_list = list(map(downsample_partial, tqdm(files)))
     
     return
-
 
 if __name__=='__main__':
     main()
