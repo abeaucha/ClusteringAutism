@@ -200,7 +200,7 @@ demographics <- demographics %>%
          !is.na(Age),
          !is.na(Sex))
 
-#Extract control demographics
+#Extract control demographics 
 controls <- demographics %>% 
   filter(DX == 'Control')
 
