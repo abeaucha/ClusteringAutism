@@ -14,7 +14,7 @@ source activate_venv
 #	--nproc 8
 
 #Calculate human effect sizes based on relative and absolute volumes
-Rscript calculate_effect_sizes.R \
+Rscript calculate_human_effect_sizes.R \
 	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
 	--imgdir data/human/registration/jacobians/absolute/smooth/ \
 	--outdir data/human/effect_sizes/absolute/resolution_0.5/ \
@@ -23,7 +23,7 @@ Rscript calculate_effect_sizes.R \
 	--parallel true \
 	--nproc 4
 
-Rscript calculate_effect_sizes.R \
+Rscript calculate_human_effect_sizes.R \
 	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
 	--imgdir data/human/registration/jacobians/relative/smooth/ \
 	--outdir data/human/effect_sizes/relative/resolution_0.5/ \

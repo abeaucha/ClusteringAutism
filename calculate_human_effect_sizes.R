@@ -3,6 +3,8 @@
 # Author: Antoine Beauchamp
 # Created: May 9th, 2022
 #
+# Calculate voxel-wise effect sizes for human patients
+#
 # Description
 # -----------
 #
