@@ -3,12 +3,12 @@
 source activate_venv
 
 #Extract jacobians and convert to minc
-#python3 extract_jacobian_images.py \
+#python3 extract_zipped_images.py \
 #	--imgdir data/human/registration/jacobians/absolute/smooth/ \
 #	--parallel true \
 #	--nproc 8
 
-#python3 extract_jacobian_images.py \
+#python3 extract_zipped_images.py \
 #	--imgdir data/human/registration/jacobians/relative/smooth/ \
 #	--parallel true \
 #	--nproc 8
