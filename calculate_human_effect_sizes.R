@@ -1,13 +1,16 @@
 # ----------------------------------------------------------------------------
-# calculate_effect_sizes.R
+# calculate_human_effect_sizes.R
 # Author: Antoine Beauchamp
 # Created: May 9th, 2022
 #
-# Calculate voxel-wise effect sizes for human patients
+# Calculate voxel-wise effect sizes for human patients.
 #
 # Description
 # -----------
-#
+# This script computes effect sizes for human study participants. Effect sizes
+# are calculated on a voxel-wise basis by taking z-scores with respect to 
+# study controls. Controls are matched to participants based on sex and 
+# minimal absolute age difference. Effect size images are saved as MINC files.
 
 
 # Packages -------------------------------------------------------------------
@@ -23,39 +26,49 @@ suppressPackageStartupMessages(library(doParallel))
 option_list <- list(
   make_option('--demographics',
               type = 'character',
-              help = "Path to CSV file containing demographics data."),
+              help = "Path to CSV file containing human demographics data."),
   make_option('--imgdir',
               type = 'character',
-              help = ""),
+              help = paste("Path to directory containing images to use",
+                           "to compute effect sizes.")),
   make_option('--maskfile',
               type = 'character',
-              help = ""),
+              help = "Path to mask file for the images."),
   make_option('--outdir',
               type = 'character',
-              help = ""),
+              help = paste("Path to directory in which to save the effect",
+                           "size images.")),
   make_option('--ncontrols',
               type = 'numeric',
-              help = ""),
+              default = 10,
+              help = paste("Number of controls to use when computing effect sizes.",
+                           "[default %default]")),
   make_option('--parallel',
               type = 'character',
-              help = ""),
+              default = 'false',
+              help = "Option to run in parallel. [default %default]"),
   make_option('--nproc',
               type = 'numeric',
-              help = "")
+              help = paste("Number of processors to use in parallel.",
+                           "Ignored if --parallel is false."))
 ) 
 
 
 # Functions ------------------------------------------------------------------
 
-
-#' Get controls for a study participant
+#' Get propensity-matched controls for study participant
 #'
-#' @param participant 
-#' @param controls 
-#' @param ncontrols 
-#' @param seed 
+#' @param participant (data.frame) A data.frame row containing demographic 
+#' information for the participant of interest. 
+#' @param controls (data.frame) Demographic information for the controls.
+#' @param imgfiles (character vector) A set of paths to MINC image files that 
+#' include (but are not limited to) all control images.
+#' @param ncontrols (numeric scalar) Number of controls to use for propensity
+#' matching
+#' @param seed (numeric scalar) Random seed to use for control sampling.
 #'
-#' @return
+#' @return (character vector) The paths to the images of the propensity-
+#' matched controls.
 get_control_files <- function(participant, controls, imgfiles,
                               ncontrols = 10, seed = NULL){
   
@@ -82,13 +95,17 @@ get_control_files <- function(participant, controls, imgfiles,
 }
 
 
-#' Compute the effect size for one participant
+#' Compute the effect size for a participant
 #'
-#' @param participant 
-#' @param controls 
-#' @param mask 
+#' @param participant (data.frame) A data.frame row containing demographic 
+#' information for the participant of interest. 
+#' @param controls (character vector) Paths to the MINC images of the 
+#' propensity-matched controls.
+#' @param imgfiles (character vector) Paths to image MINC files including 
+#' (but not limited to) the participant of interest.
+#' @param mask (character scalar) Path to mask image MINC file. 
 #'
-#' @return
+#' @return (mincSingleDim) A vector of voxel-wise effect size values.
 compute_effect_size <- function(participant, controls, imgfiles, mask) {
   
   control_mean <- mincMean(filenames = controls)
@@ -118,19 +135,20 @@ compute_effect_size <- function(participant, controls, imgfiles, mask) {
 }
 
 
-#' Title
+#' Calculate a participant's effect size
 #'
-#' @param participant 
-#' @param controls 
-#' @param ncontrols 
-#' @param mask 
-#' @param outdir 
-#' @param seed 
+#' @param participant (data.frame) A data.frame row containing demographic 
+#' information for the participant of interest.
+#' @param controls (data.frame) Demographic information for the controls.
+#' @param ncontrols (numeric scalar) Number of controls to use for propensity
+#' matching
+#' @param mask (character scalar) Path to mask image MINC file. 
+#' @param imgdir (character vector) Paths to image MINC files.
+#' @param outdir (character scalar) Path to directory in which to save effect 
+#' size MINC image.
+#' @param seed (numeric scalar) Random seed to use for control sampling.
 #'
-#' @return
-#' @export
-#'
-#' @examples
+#' @return (numeric scalar) Value of 1 if function succeeds.
 executor <- function(participant, controls, ncontrols = 10, 
                      mask, imgdir, outdir, seed = NULL) {
   
@@ -142,16 +160,17 @@ executor <- function(participant, controls, ncontrols = 10,
                                      imgfiles = imgfiles,
                                      ncontrols = ncontrols,
                                      seed = seed)
+  
   effect_size <- compute_effect_size(participant = participant,
                                      controls = control_files,
                                      imgfiles = imgfiles,
                                      mask = mask)
-
+  
   outfile <- attributes(effect_size)[['filename']] %>%
     basename() %>%
     str_replace('.mnc', str_c('_effectsize_ncontrols', ncontrols, '.mnc'))
   outfile <- file.path(outdir, outfile)
-
+  
   mincWriteVolume(effect_size,
                   output.filename = outfile,
                   clobber = TRUE)
@@ -171,28 +190,21 @@ outdir <- args[['outdir']]
 ncontrols <- args[['ncontrols']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 
-# demofile <- 'data/human/registration/DBM_input_demo_passedqc.csv'
-# imgdir <- 'data/human/registration/jacobians/absolute/smooth/'
-# maskfile <- 'data/human/registration/reference_files/mask.mnc'
-# outdir <- 'data/human/effect_sizes/absolute/'
-# ncontrols <- 10
-# inparallel <- TRUE
-
 #Import demographics data
 demographics <- data.table::fread(demofile, header = TRUE) %>% 
   as_tibble()
 
-#Remove entries with no DX
+#Remove entries with missing diagnosis, age, or sex
 demographics <- demographics %>% 
   filter(!is.na(DX),
          !is.na(Age),
          !is.na(Sex))
 
-#Extract control participants
+#Extract control demographics
 controls <- demographics %>% 
   filter(DX == 'Control')
 
-#Extract participants
+#Extract participant demographics
 participants <- demographics %>% 
   filter(DX != 'Control')
 
