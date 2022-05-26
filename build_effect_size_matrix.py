@@ -3,6 +3,10 @@
 # Author: Antoine Beauchamp
 # Created: May 16th, 2022
 
+"""
+Build a matrix containing voxel-wise effect sizes.
+"""
+
 
 # Packages -------------------------------------------------------------------
 
