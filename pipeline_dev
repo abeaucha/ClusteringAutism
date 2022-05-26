@@ -55,16 +55,26 @@ source activate_venv
 # 	--method median \
 # 	--jacobians relative
 
-python3 create_cluster_masks.py \
-    --datadir data/mouse/cluster_maps/ \
-    --outdir data/mouse/cluster_masks \
-    --threshold 0.5 \
-    --symmetric true 
+#python3 create_cluster_masks.py \
+#    --datadir data/mouse/cluster_maps/ \
+#    --outdir data/mouse/cluster_masks \
+#    --threshold 0.5 \
+#    --symmetric true 
     
-python3 create_cluster_masks.py \
-    --datadir data/human/clustering/cluster_maps/resolution_3.0/ \
-    --outdir data/human/clustering/cluster_masks/resolution_3.0/ \
-    --threshold 0.5 \
-    --symmetric true 
+#python3 create_cluster_masks.py \
+#    --datadir data/human/clustering/cluster_maps/resolution_3.0/ \
+#    --outdir data/human/clustering/cluster_masks/resolution_3.0/ \
+#    --threshold 0.1 \
+#    --symmetric true
+
+python3 mouse_cluster_signatures.py \
+	--clusterdir data/mouse/cluster_masks/ \
+	--exprdir data/ \
+	--exprglob MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv \
+	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+	--outdir data/mouse/ \
+	--outfile mouse_cluster_signatures.csv \
+	--parallel true \
+	--nproc 4
 
 deactivate
