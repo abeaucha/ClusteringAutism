@@ -77,7 +77,7 @@ Rscript cluster_human_data.R \
 	--nclusters 10 \
 	--K 10 \
 	--t 20 \
-	--alpha 0.5 \
+	--sigma 0.5 \
 	--metric cor \
 	--outfile data/human/clustering/clusters_groups10_3.0mm.csv
 
