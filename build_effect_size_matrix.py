@@ -16,6 +16,7 @@ from glob                   import glob
 from tqdm                   import tqdm
 from functools              import partial
 
+
 # Command line arguments -----------------------------------------------------
 
 def parse_args():
@@ -35,20 +36,13 @@ def parse_args():
     parser.add_argument(
         '--mask',
         type = str,
-        help = ("Mask file."))
+        help = ("Path to mask file."))
     
-    parser.add_argument(
-        '--outdir',
-        type = str,
-        default = 'data/',
-        help = ("Directory in which to save effect size CSV file.")
-    )
-        
     parser.add_argument(
         '--outfile',
         type = str,
         default = 'effect_sizes.csv',
-        help = ("Name of CSV file in which to export effect sizes.")
+        help = ("Path to .csv file in which to export effect size matrix.")
     )
     
     parser.add_argument(
@@ -85,6 +79,19 @@ def parse_args():
 def import_image(img, mask):
     
     """
+    Import and mask a MINC image.
+    
+    Arguments
+    ---------
+    img: str
+        Path to the MINC file to import.
+    mask: str
+        Path to the mask MINC file. 
+    
+    Returns
+    -------
+    img_masked: numpy.ndarray
+        A 1-dimensional NumPy array containing the masked image voxels.
     """
     
     mask_vol = volumeFromFile(mask)
@@ -107,26 +114,25 @@ def main():
     #Parse command line arguments
     args = parse_args()
     imgdir = args['imgdir']
-    outdir = args['outdir']
     outfile = args['outfile']
     mask = args['mask']
     parallel = True if args['parallel'] == 'true' else False
     verbose = True if args['verbose'] == 'true' else False
 
+    #Ensure proper paths
     imgdir = os.path.join(imgdir, '')
-    outdir = os.path.join(outdir, '')
     
-    if os.path.exists(outdir) == False:
-        os.mkdir(outdir)
-    
+    #Get MINC images in dir
     imgfiles = glob(imgdir+'*.mnc')
     
+    #Create partial function for mapping
     import_image_partial = partial(import_image,
                                    mask = mask)
     
     if verbose:
         print("Importing images...")
     
+    #Import images
     if parallel:
         if nproc is None:
             nproc = mp.cpu_count()
@@ -148,19 +154,17 @@ def main():
     if verbose:
         print("Building matrix...")
         
+    #Convert to data frame
     df_imgs = pd.DataFrame(np.asarray(imgs))
     df_imgs['file'] = imgfiles
-#     df_imgs['imagefile'] = [os.path.basename(i) for i in imgfiles]
     
     if verbose:
         print("Writing to file...")
-    
-    outfile = os.path.join(outdir, outfile)
+
+    #Save matrix
     df_imgs.sort_values(by = 'file').to_csv(outfile, index = False)
-#     df_imgs.to_csv(outfile, index = False)
 
     return
-    
     
 if __name__=='__main__':
     main()
