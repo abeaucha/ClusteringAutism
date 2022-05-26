@@ -61,13 +61,13 @@ python3 build_effect_size_matrix.py \
 	--imgdir data/human/effect_sizes/absolute/resolution_3.0/ \
 	--outdir data/human/effect_sizes/ \
 	--outfile human_effect_sizes_absolute_3.0mm.csv \
-	--mask data/human/registration/reference_files/mask_downsampled_3.0mm.mnc \
+	--mask data/human/registration/reference_files/mask_3.0mm.mnc \
     
 python3 build_effect_size_matrix.py \
 	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
 	--outdir data/human/effect_sizes/ \
 	--outfile human_effect_sizes_relative_3.0mm.csv \
-	--mask data/human/registration/reference_files/mask_downsampled_3.0mm.mnc \
+	--mask data/human/registration/reference_files/mask_3.0mm.mnc \
 	
 #Cluster human effect sizes
 Rscript cluster_human_data.R \
