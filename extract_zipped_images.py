@@ -4,10 +4,7 @@
 # Created: May 9th, 2022
 
 """
-
-
-Description
------------
+Extract images from files compressed using GNU zip.
 """
 
 # Packages -------------------------------------------------------------------
@@ -19,6 +16,7 @@ import multiprocessing      as mp
 from glob                   import glob
 from re                     import sub
 from tqdm                   import tqdm
+
 
 # Command line arguments -----------------------------------------------------
 
@@ -33,7 +31,7 @@ def parse_args():
     parser.add_argument(
         '--imgdir',
         type = str,
-        help = ("")
+        help = ("Path to directory containing compressed images.")
     )
     
     parser.add_argument(
@@ -61,6 +59,19 @@ def parse_args():
 
 def extract_minc(gzfile):
     
+    """
+    Extract MINC image from compressed file
+    
+    Arguments
+    ---------
+    gzfile: str
+        Path to image file to extract.
+        
+    Returns
+    -------
+    None
+    """
+    
     os.system('gunzip -f -k {}'.format(gzfile))
     gzfile = sub(r'.gz', '', gzfile)
     os.system('nii2mnc -quiet -clobber {}'.format(gzfile))
@@ -79,9 +90,11 @@ def main():
     parallel = True if args['parallel'] == 'true' else False
     nproc = args['nproc']
     
+    #Get paths to compressed files
     imgdir = os.path.join(imgdir, '')
     files = glob(imgdir+'*.nii.gz')
     
+    #Extract MINC files in parallel or sequentially
     if parallel:
         
         pool = mp.Pool(nproc)
