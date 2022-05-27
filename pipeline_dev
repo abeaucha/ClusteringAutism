@@ -72,9 +72,8 @@ python3 mouse_cluster_signatures.py \
 	--exprdir data/ \
 	--exprglob MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv \
 	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-	--outdir data/mouse/ \
-	--outfile mouse_cluster_signatures.csv \
-	--parallel true \
+	--outfile data/mouse/mouse_cluster_signatures.csv \
+	--parallel false \
 	--nproc 4
 
 deactivate

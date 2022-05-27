@@ -1,10 +1,10 @@
 # ----------------------------------------------------------------------------
-# create_cluster_signatures.py 
+# mouse_cluster_signatures.py 
 # Author: Antoine Beauchamp
 # Created: May 3rd, 2022
 
 """
-
+Create gene expression signatures for mouse imaging clusters.
 
 Description
 -----------
@@ -41,38 +41,32 @@ def parse_args():
     parser.add_argument(
         '--clusterdir',
         type = str,
-        help = ("Directory containing cluster masks.")
+        help = ("Directory containing cluster mask images.")
     )
     
     parser.add_argument(
         '--exprdir',
         type = str,
-        help = ("Directory containing expression data sets.")
+        help = ("Directory containing gene expression data sets.")
     )
     
     parser.add_argument(
         '--exprglob',
         type = str,
-        help = ("Glob to get expression CSV files.")
+        help = ("Glob to get desired gene expression .csv files.")
     )
     
     parser.add_argument(
         '--mask',
         type = str,
-        help = ("Mask file used to generated the expression data sets."))
+        help = ("Mask file used to generate the expression data sets."))
     
-    parser.add_argument(
-        '--outdir',
-        type = str,
-        default = 'data/',
-        help = ("Directory in which to save cluster signatures file.")
-    )
-        
     parser.add_argument(
         '--outfile',
         type = str,
         default = 'cluster_signatures.csv',
-        help = ("Name of CSV file in which to export cluster signatures.")
+        help = ("Path to the .csv file in which to export cluster ",
+                "signatures.")
     )
     
     parser.add_argument(
@@ -114,27 +108,56 @@ def silence():
     sys.stdout = save_stdout
     
 
-def import_cluster_mask(cluster, mask):
+def import_image(img, mask):
     
     """
+    Import and mask a MINC image.
+    
+    Arguments
+    ---------
+    img: str
+        Path to the MINC file to import.
+    mask: str
+        Path to the mask MINC file. 
+    
+    Returns
+    -------
+    img_masked: numpy.ndarray
+        A 1-dimensional NumPy array containing the masked image voxels.
     """
-        
+    
     mask_vol = volumeFromFile(mask)
     mask_array = np.array(mask_vol.data.flatten())
     mask_vol.closeVolume()
     
-    cluster_vol = volumeFromFile(cluster)
-    cluster_array = np.array(cluster_vol.data.flatten())
-    cluster_vol.closeVolume()
+    img_vol = volumeFromFile(img)
+    img_array = np.array(img_vol.data.flatten())
+    img_vol.closeVolume()
     
-    cluster_masked = cluster_array[mask_array == 1]
+    img_masked = img_array[mask_array == 1]
     
-    return cluster_masked
+    return img_masked
 
 
 def aggregate_expression(cluster, expression):
 
     """
+    Aggregate expression values in a cluster.
+    
+    Arguments
+    ---------
+    cluster: numpy.ndarray
+        A NumPy array of dimension 1 containing a voxel-wise binary 
+        mask with values {0,1}. 
+    expression: pandas.core.frame.DataFrame
+        A DataFrame with rows corresponding to voxels and columns 
+        corresponding to gene expression variables.
+    
+    Returns
+    -------
+    numpy.ndarray
+        A NumPy array of dimension 1 containing the aggregated 
+        expression values.
     """
         
     return np.array(expression
@@ -145,16 +168,32 @@ def aggregate_expression(cluster, expression):
 def create_cluster_signature(infiles, mask):
     
     """
+    Create an expression signature for a cluster. 
+    
+    Arguments
+    ---------
+    infiles: tuple of str
+        Tuple with two elements containing 1. the path to the cluster 
+        mask image and 2. the path to the gene expression .csv file.
+    mask: str
+        Path to mask image file used to create the gene expression 
+        files.
+    
+    Returns
+    -------
+    signature: numpy.ndarray
+        A NumPy array of dimension 1 containing the expression 
+        signature. 
     """
         
-    cluster = import_cluster_mask(cluster = infiles[0],
-                                  mask = mask)
+    cluster = import_image(img = infiles[0],
+                           mask = mask)
     
     with silence():
         expression = (fread(infiles[1], 
                             header = True)
                       .to_pandas())
-    
+        
     signature = aggregate_expression(cluster = cluster,
                                      expression = expression)
     
@@ -165,6 +204,26 @@ def build_signatures_table(clusters, expression, mask,
                            parallel = False, nproc = None):
     
     """
+    Create a DataFrame containing cluster expression signatures.
+    
+    Arguments
+    ---------
+    clusters: list of str
+        Paths to cluster mask image files.
+    expression: list of str
+        Paths to gene expression .csv files.
+    mask: str
+        Path to mask image file used to create the gene expression 
+        files.
+    parallel: bool (optional)
+        Run in parallel.
+    nproc: int (optional)
+        Number of processors to use in parallel.
+    
+    Returns
+    -------
+    df_signatures: pandas.core.frame.DataFrame
+        A DataFrame containing expression signatures for each cluster.
     """
         
     infiles = list(product(clusters, expression))
@@ -235,14 +294,10 @@ def main():
     if verbose:
         print("Writing to file...")
         
-    outdir = args['outdir']
     outfile = args['outfile']
-    outfile = os.path.join(outdir, outfile)
-        
     df_signatures.to_csv(outfile, index = False)
     
     return
-    
     
 if __name__=='__main__':
     main()
