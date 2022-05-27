@@ -3,9 +3,14 @@
 # Author: Antoine Beauchamp
 # Created: May 18th, 2022
 #
+# Create representative voxel-wise maps for clustered images.
+#
 # Description
 # -----------
-#
+# This script creates a representative voxel-wise map for each cluster. 
+# The representative cluster maps are computed by aggregating the voxel-wise
+# values for all images in a cluster. 
+
 
 # Packages -------------------------------------------------------------------
 
@@ -18,21 +23,22 @@ suppressPackageStartupMessages(library(RMINC))
 option_list <- list(
   make_option('--clusterfile',
               type = 'character',
-              help = "Path to CSV file containing cluster assignment data."),
+              help = "Path to .csv file containing cluster assignment data."),
   make_option('--imgdir',
               type = 'character',
-              help = ""),
+              help = "Path to directory containing images to use."),
   make_option('--method',
               type = 'character',
               default = 'mean',
-              help = "[default %default]"),
+              help = paste("Method used to create the representative cluster",
+                           "maps. [default %default]")),
   make_option('--jacobians',
               type = 'character',
-              default = 'absolute',
-              help = "[default %default]"),
+              help = paste("Optional flag to indicate type of jacobians",
+                           "used in outfile.")),
   make_option('--outdir',
               type = 'character',
-              help = ""),
+              help = paste("Path to output directory.")),
   make_option('--verbose',
               type = 'character',
               default = 'true',
@@ -50,16 +56,19 @@ method <- args[['method']]
 outdir <- args[['outdir']]
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
 
+#Create outdir if needed
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 }
 
+#Import cluster information
 if (verbose) {message("Importing cluster information...")}
 
 df_clusters <- as.data.frame(data.table::fread(clusterfile, header = TRUE))
 rownames(df_clusters) <- df_clusters[,'ID']
 df_clusters <- df_clusters[,colnames(df_clusters) != 'ID']
 
+#Create cluster maps
 if (verbose) {message("Creating cluster maps...")}
 
 sink(file = 'tmp.log', type = 'output')
@@ -80,6 +89,7 @@ for (j in 1:ncol(df_clusters)) {
     cluster_map <- mincSummary(filenames = files_k,
                                method = method,
                                grouping = NULL)
+    
     if (method == 'mean') {
       cluster_map <- cluster_map[,1]
     } else if (method == 'median') {
@@ -87,15 +97,22 @@ for (j in 1:ncol(df_clusters)) {
     } else {
       stop()
     }
+    
     class(cluster_map) <- class(mincGetVolume(files_k[1]))
     attributes(cluster_map) <- attributes(mincGetVolume(files_k[1]))
     
     res <- max(minc.separation.sizes(files_k[1]))
+    
     outfile <- paste0('Group_', k,
-                      '_Clusternum_', max(krange), 
-                      '_ES_', args[['jacobians']],
-                      '_', res, 
+                      '_Clusternum_', max(krange), '_ES')
+    
+    if (!is.null(args[['jacobians']])) {
+      outfile <- paste0(outfile, '_', args[['jacobians']])
+    }
+    
+    outfile <- paste0(outfile, '_', res,
                       '_', method, '.mnc')
+    
     outfile <- file.path(outdir, outfile)
     
     mincWriteVolume(cluster_map,
