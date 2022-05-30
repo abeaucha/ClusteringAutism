@@ -2,78 +2,77 @@
 
 source activate_venv
 
-echo "Creating cluster masks at threshold 0.1..."
+# echo "Creating cluster masks at threshold 0.1..."
 
-python3 create_cluster_masks.py \
-   --imgdir data/mouse/cluster_maps/ \
-   --outdir data/mouse/cluster_masks/threshold_0.1/ \
-   --threshold 0.1 \
-   --symmetric true 
+# python3 create_cluster_masks.py \
+#    --imgdir data/mouse/cluster_maps/ \
+#    --outdir data/mouse/cluster_masks/threshold_0.1/ \
+#    --threshold 0.1 \
+#    --symmetric true 
     
-python3 create_cluster_masks.py \
-   --imgdir data/human/clustering/cluster_maps/resolution_3.0/ \
-   --outdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.1/ \
-   --threshold 0.1 \
-   --symmetric true
+# python3 create_cluster_masks.py \
+#    --imgdir data/human/clustering/cluster_maps/resolution_3.0/ \
+#    --outdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.1/ \
+#    --threshold 0.1 \
+#    --symmetric true
    
-echo "Creating cluster masks at threshold 0.5..."
+# echo "Creating cluster masks at threshold 0.5..."
    
-python3 create_cluster_masks.py \
-   --imgdir data/mouse/cluster_maps/ \
-   --outdir data/mouse/cluster_masks/threshold_0.5/ \
-   --threshold 0.5 \
-   --symmetric true 
+# python3 create_cluster_masks.py \
+#    --imgdir data/mouse/cluster_maps/ \
+#    --outdir data/mouse/cluster_masks/threshold_0.5/ \
+#    --threshold 0.5 \
+#    --symmetric true 
    
-python3 create_cluster_masks.py \
-   --imgdir data/human/clustering/cluster_maps/resolution_3.0/ \
-   --outdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.5/ \
-   --threshold 0.5 \
-   --symmetric true
+# python3 create_cluster_masks.py \
+#    --imgdir data/human/clustering/cluster_maps/resolution_3.0/ \
+#    --outdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.5/ \
+#    --threshold 0.5 \
+#    --symmetric true
 
-echo "Organizing gene expression files..."
+# echo "Organizing gene expression files..."
+# source organize_expression_files
 
-source organize_expression_files
+# echo "Creating mouse cluster signatures using threshold 0.1 masks and input gene space..."
 
-echo "Creating mouse cluster signatures using threshold 0.1 masks and input gene space..."
-
-python3 mouse_cluster_signatures.py \
-	--clusterdir data/mouse/cluster_masks/threshold_0.1/ \
-	--exprdir data/mouse/expression/input_space/ \
-	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-	--outfile data/mouse/mouse_cluster_signatures_threshold0.1_inputspace.csv \
-	--parallel true \
-	--nproc 4
+# python3 mouse_cluster_signatures.py \
+# 	--clusterdir data/mouse/cluster_masks/threshold_0.1/ \
+# 	--exprdir data/mouse/expression/input_space/ \
+# 	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+# 	--outfile data/mouse/mouse_cluster_signatures_threshold0.1_inputspace.csv \
+# 	--parallel true \
+# 	--nproc 4
     
 echo "Creating human cluster signatures using threshold 0.1 masks and input gene space..."
 
 Rscript human_cluster_signatures.R \
 	--clusterdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.1/ \
-	--exprdir data/human/expression/latent_space/ \
+	--exprdir data/human/expression/input_space/ \
 	--metadata data/human/SampleInformation_pipeline_v1.csv \
 	--template data/human/registration/reference_files/model_3.0mm.mnc \
     --outfile data/human/human_cluster_signatures_threshold0.1_inputspace.csv \
     --parallel true \
     --nproc 4
     
-echo "Creating mouse cluster signatures using threshold 0.1 masks and latent gene space..."
+# echo "Creating mouse cluster signatures using threshold 0.1 masks and latent gene space..."
 
-python3 mouse_cluster_signatures.py \
-	--clusterdir data/mouse/cluster_masks/threshold_0.1/ \
-	--exprdir data/mouse/expression/latent_space/ \
-	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-	--outfile data/mouse/mouse_cluster_signatures_threshold0.1_latentspace.csv \
-	--parallel true \
-	--nproc 8
+# python3 mouse_cluster_signatures.py \
+# 	--clusterdir data/mouse/cluster_masks/threshold_0.1/ \
+# 	--exprdir data/mouse/expression/latent_space/ \
+# 	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+# 	--outfile data/mouse/mouse_cluster_signatures_threshold0.1_latentspace.csv \
+# 	--parallel true \
+# 	--nproc 8
     
-echo "Creating human cluster signatures using threshold 0.1 masks and latent gene space..."
+# echo "Creating human cluster signatures using threshold 0.1 masks and latent gene space..."
 
-Rscript human_cluster_signatures.R \
-	--clusterdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.1/ \
-	--exprdir data/human/expression/latent_space/ \
-	--metadata data/human/SampleInformation_pipeline_v1.csv \
-	--template data/human/registration/reference_files/model_3.0mm.mnc \
-    --outfile data/human/human_cluster_signatures_threshold0.1_latentspace.csv \
-    --parallel true \
-    --nproc 8
+# Rscript human_cluster_signatures.R \
+# 	--clusterdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.1/ \
+# 	--exprdir data/human/expression/latent_space/ \
+# 	--metadata data/human/SampleInformation_pipeline_v1.csv \
+# 	--template data/human/registration/reference_files/model_3.0mm.mnc \
+#     --outfile data/human/human_cluster_signatures_threshold0.1_latentspace.csv \
+#     --parallel true \
+#     --nproc 8
     
 deactivate
