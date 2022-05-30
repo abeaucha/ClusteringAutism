@@ -22,9 +22,6 @@ option_list <- list(
               type = 'character',
               help = paste("Path to directory containing gene expression",
                            "data sets.")),
-  make_option('--exprglob',
-              type = 'character',
-              help = "Glob to get desired gene expression .csv files."),
   make_option('--metadata',
               type = 'character',
               help = "Path to .csv file containing AHBA sample metadata."),
@@ -146,7 +143,6 @@ create_cluster_signature <- function(infile, sample_coordinates) {
 args <- parse_args(OptionParser(option_list = option_list))
 cluster_dir <- args[['clusterdir']]
 expr_dir <- args[['exprdir']]
-expr_glob <- args[['exprglob']]
 metadata <- args[['metadata']]
 template <- args[['template']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
@@ -156,7 +152,8 @@ sample_coordinates <- get_sample_coordinates(metadata = metadata,
                                              template = template)
 
 #Get cluster and expression input files
-expr_files <- Sys.glob(file.path(expr_dir, expr_glob))
+expr_files <- Sys.glob(file.path(expr_dir, '*.csv'))
+
 cluster_files <- list.files(cluster_dir, full.names = TRUE)
 infiles <- expand_grid(clusterfile = cluster_files, 
                        exprfile = expr_files)
