@@ -15,7 +15,7 @@ cd data/mouse/expression/input_space/
 input_space=MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv
 if [ ! -f $input_space ];
 then
-    ln -s ../../../{$input_space} ./
+    ln -s ../../../$input_space ./
 fi
 
 #Return to main directory
@@ -31,7 +31,8 @@ cd data/mouse/expression/latent_space/
 mouse_latent_spaces=(../../../MLP_outcomes/*mousetransform*.csv)
 for file in ${mouse_latent_spaces[@]}; 
 do
-    if [ ! -f $file ];
+    filename=$(basename -- "$file")
+    if [ ! -f $filename ];
     then
         ln -s $file ./
     fi
@@ -55,7 +56,7 @@ cd data/human/expression/input_space/
 input_space=HumanExpressionMatrix_samples_pipeline_v1_homologs_scaled.csv
 if [ ! -f $input_space ];
 then
-    ln -s ../../../{$input_space} ./
+    ln -s ../../../$input_space ./
 fi
 
 #Return to main directory
@@ -71,7 +72,8 @@ cd data/human/expression/latent_space/
 human_latent_spaces=(../../../MLP_outcomes/*humantransform*.csv)
 for file in ${human_latent_spaces[@]}; 
 do
-    if [ ! -f $file ];
+    filename=$(basename -- "$file")
+    if [ ! -f $filename ];
     then
         ln -s $file ./
     fi
