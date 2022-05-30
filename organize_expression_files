@@ -1,0 +1,63 @@
+#!/bin/bash
+
+#Create mouse expression directory
+if [ ! -d "data/mouse/expression/" ]; then
+    mkdir data/mouse/expression
+fi
+
+#Create mouse input space directory
+if [ ! -d "data/mouse/expression/input_space/" ]; then
+    mkdir data/mouse/expression/input_space/
+fi
+
+#Create symlink for input space data
+cd data/mouse/expression/input_space/
+ln -s ../../../MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv ./
+cd ../../../..
+
+#Create mouse latent space directory
+if [ ! -d "data/mouse/expression/latent_space/" ]; then
+    mkdir data/mouse/expression/latent_space/
+fi
+
+#Create symlinks for mouse latent space data
+cd data/mouse/expression/latent_space/
+mouse_latent_spaces=(../../../MLP_outcomes/*mousetransform*.csv)
+for file in ${mouse_latent_spaces[@]}; 
+do
+    ln -s $file ./
+done
+
+#Return to main directory
+cd ../../../..
+
+#Create human expression directory
+if [ ! -d "data/human/expression/" ]; then
+    mkdir data/human/expression
+fi
+
+#Create human input space directory
+if [ ! -d "data/human/expression/input_space/" ]; then
+    mkdir data/human/expression/input_space/
+fi
+
+#Create symlink for input space data
+cd data/human/expression/input_space/
+ln -s ../../../HumanExpressionMatrix_samples_pipeline_v1_homologs_scaled.csv ./
+cd ../../../..
+
+#Create human latent space directory
+if [ ! -d "data/human/expression/latent_space/" ]; then
+    mkdir data/human/expression/latent_space/
+fi
+
+#Create symlinks for human latent space data
+cd data/human/expression/latent_space/
+human_latent_spaces=(../../../MLP_outcomes/*humantransform*.csv)
+for file in ${human_latent_spaces[@]}; 
+do
+    ln -s $file ./
+done
+
+#Return to main directory
+cd ../../../..
