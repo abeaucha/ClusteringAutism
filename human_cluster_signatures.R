@@ -165,18 +165,18 @@ if (inparallel) {
   registerDoParallel(cl)
   signatures <- foreach(i = 1:nrow(infiles),
                         .packages = c('tidyverse', 'RMINC'),
-                        .combine = 'bind_rows') 
-  %dopar% {create_cluster_signature(infile = infiles[i,],
-                                    sample_coordinate = sample_coordinates)
+                        .combine = 'bind_rows') %dopar% {
+      create_cluster_signature(infile = infiles[i,],
+                               sample_coordinate = sample_coordinates)
   }
   stopCluster(cl)
 } else {
   signatures <- foreach(i = 1:nrow(infiles),
                         .packages = c('tidyverse', 'RMINC'),
-                        .combine = 'bind_rows') 
-  %do% {create_cluster_signature(infile = infiles[i,],
-                                 sample_coordinate = sample_coordinates)
-    }
+                        .combine = 'bind_rows') %do% {
+      create_cluster_signature(infile = infiles[i,],
+                               sample_coordinate = sample_coordinates)
+  }
 }
 
 #Write to file
