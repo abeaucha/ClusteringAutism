@@ -47,13 +47,7 @@ def parse_args():
     parser.add_argument(
         '--exprdir',
         type = str,
-        help = ("Directory containing gene expression data sets.")
-    )
-    
-    parser.add_argument(
-        '--exprglob',
-        type = str,
-        help = ("Glob to get desired gene expression .csv files.")
+        help = ("Directory containing gene expression .csv files.")
     )
     
     parser.add_argument(
@@ -267,7 +261,6 @@ def main():
     args = parse_args()
     cluster_dir = args['clusterdir']
     expr_dir = args['exprdir']
-    expr_glob = args['exprglob']
     parallel = True if args['parallel'] == 'true' else False
     verbose = True if args['verbose'] == 'true' else False
     
@@ -276,10 +269,10 @@ def main():
     expr_dir = os.path.join(expr_dir, '')
     
     #Input files
-    expr_files = glob(expr_dir+expr_glob)
+    expr_files = glob(expr_dir+'*.csv')
     cluster_files = glob(cluster_dir+'*.mnc')
     mask_file = args['mask']
-        
+    
     #Build signatures data frame        
     if verbose:
         print("Creating cluster signatures...")
