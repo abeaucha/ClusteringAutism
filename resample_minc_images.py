@@ -123,15 +123,15 @@ def main():
     files = glob(imgdir+'*.mnc')
     
     #Create partial function for mapping
-    downsample_partial = partial(downsample_image, 
-                                 outdir = outdir,
-                                 isostep = isostep)
+    resample_partial = partial(resample_image, 
+                               outdir = outdir,
+                               isostep = isostep)
 
     if parallel:
         
         pool = mp.Pool(nproc)
         tmp_list = []
-        for tmp in tqdm(pool.imap(downsample_partial, files), 
+        for tmp in tqdm(pool.imap(resample_partial, files), 
                         total = len(files)):
             tmp_list.append(tmp)
             
@@ -140,7 +140,7 @@ def main():
         
     else:
         
-        tmp_list = list(map(downsample_partial, tqdm(files)))
+        tmp_list = list(map(resample_partial, tqdm(files)))
     
     return
 
