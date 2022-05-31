@@ -80,7 +80,7 @@ python3 build_effect_size_matrix.py \
 	--imgdir data/human/effect_sizes/relative/resolution_3.0/ \
 	--outfile data/human/effect_sizes/relative/human_effect_sizes_relative_3.0mm.csv \
 	--mask data/human/registration/reference_files/mask_3.0mm.mnc \
-	
+
     
 echo "Clustering human effect size images..."
     
@@ -105,7 +105,7 @@ Rscript create_cluster_maps.R \
 	--outdir data/human/clustering/cluster_maps/absolute/resolution_3.0/mean/ \
 	--method mean \
 	--jacobians absolute
-	
+
 echo "Creating cluster maps using median aggregation and absolute effect sizes..."
     
 Rscript create_cluster_maps.R \
@@ -132,7 +132,5 @@ Rscript create_cluster_maps.R \
 	--outdir data/human/clustering/cluster_maps/relative/resolution_3.0/median/ \
 	--method median \
 	--jacobians relative
-	
-
 
 deactivate
