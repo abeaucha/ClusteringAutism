@@ -10,18 +10,77 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library(tidyverse)
-library(RMINC)
-library(ggalluvial)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(patchwork))
 ```
 
 ```{r}
 cluster_file_human <- '../data/human/clustering/human_clusters_groups10_3.0mm.csv'
-df_human_clusters <- suppressMessages(read_csv(cluster_file_human))
+human_cluster_ids <- suppressMessages(read_csv(cluster_file_human))
 ```
 
 ```{r}
-str(df_human_clusters)
+str(human_cluster_ids)
 ```
 
+```{r}
+cluster_file_mouse <- '../data/mouse/clustering/mouse_clusters_groups10_200um.csv'
+mouse_cluster_ids <- suppressMessages(read_csv(cluster_file_mouse))
+colnames(mouse_cluster_ids) <- colnames(human_cluster_ids)
+```
 
+```{r}
+mouse_cluster_ids_long <- mouse_cluster_ids %>% 
+  pivot_longer(cols = -ID, names_to = 'nk_name', values_to = 'k') %>% 
+  mutate(nk = str_extract(nk_name, '[0-9]+'),
+         nk = as.numeric(nk),
+         nk = factor(nk, levels = 2:10),
+         k = factor(k, levels = 1:10))
+
+human_cluster_ids_long <- human_cluster_ids %>% 
+  pivot_longer(cols = -ID, names_to = 'nk_name', values_to = 'k') %>% 
+  mutate(nk = str_extract(nk_name, '[0-9]+'),
+         nk = as.numeric(nk),
+         nk = factor(nk, levels = 2:10),
+         k = factor(k, levels = 1:10))
+```
+
+```{r fig.height = 8, fig.width = 8}
+p_alluvial_mouse <- ggplot(mouse_cluster_ids_long,
+       aes(x = nk,
+           stratum = k,
+           alluvium = ID,
+           fill = k,
+           label = k)) +
+  geom_flow(stat = 'alluvium', aes.flow = 'forward') +
+  geom_stratum(alpha = 0.5) +
+  labs(x = 'Number of clusters',
+       y = 'Number of mouse models',
+       title = 'Mouse clustering dispersion') + 
+  theme_bw() + 
+  theme(axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank())
+
+p_alluvial_human <- ggplot(human_cluster_ids_long,
+       aes(x = nk,
+           stratum = k,
+           alluvium = ID,
+           fill = k,
+           label = k)) +
+  geom_flow(stat = 'alluvium', aes.flow = 'forward') +
+  geom_stratum(alpha = 0.5) +
+  labs(x = 'Number of clusters',
+       y = 'Number of patients',
+       title = 'Human clustering dispersion') + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+
+p_alluvial_mouse / p_alluvial_human + 
+  plot_layout(guides = 'collect')
+```
+
+I think I need to work out the ggplot slice series functions to make this more useful. 
+
+What is going on with cluster 2 in the 2-cluster solution. 
