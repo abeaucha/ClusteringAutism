@@ -95,3 +95,8 @@ for file in ${files_rel_200_median[@]};
 do
     ln -s $file ${outdir}
 done
+
+cluster_file=/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/Clusters/Clusters.csv
+
+ln -s $cluster_file data/mouse/clustering/mouse_clusters_groups10_200um.csv
+
