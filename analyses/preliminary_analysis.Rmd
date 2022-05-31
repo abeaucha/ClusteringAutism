@@ -1,0 +1,27 @@
+---
+title: "Preliminary analysis"
+author: "Antoine Beauchamp"
+date: '2022-05-31'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(RMINC)
+library(ggalluvial)
+```
+
+```{r}
+cluster_file_human <- '../data/human/clustering/human_clusters_groups10_3.0mm.csv'
+df_human_clusters <- suppressMessages(read_csv(cluster_file_human))
+```
+
+```{r}
+str(df_human_clusters)
+```
+
+
