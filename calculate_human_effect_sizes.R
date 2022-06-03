@@ -199,6 +199,7 @@ inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 demographics <- data.table::fread(demofile, header = TRUE) %>% 
   as_tibble()
 
+#Filter for POND sample if desired
 if (dataset == 'POND') {
   demographics <- demographics %>% 
     filter(Dataset == 'POND')
