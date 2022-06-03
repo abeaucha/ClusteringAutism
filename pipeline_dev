@@ -74,88 +74,48 @@ do
 done
 
 
+thresholds=(0.1 0.2 0.3 0.4 0.5 0.6 0.8 0.9 1.0)
+for i in ${thresholds[@]};
+do
         
-#     echo "Creating mouse cluster signatures using threshold $i masks and latent gene space..."
+    echo "Creating mouse cluster signatures using threshold $i masks and latent gene space..."
 
-#     python3 mouse_cluster_signatures.py \
-#         --clusterdir data/mouse/clustering/cluster_masks/absolute/resolution_200/mean/threshold_$i/ \
-#         --exprdir data/mouse/expression/latent_space/ \
-#         --mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-#         --outfile data/mouse/mouse_cluster_signatures_abs_mean_threshold${i}_latentspace.csv \
-#         --parallel true \
-#         --nproc 8
+    python3 mouse_cluster_signatures.py \
+        --clusterdir data/mouse/clustering/cluster_masks/absolute/resolution_200/mean/threshold_$i/ \
+        --exprdir data/mouse/expression/latent_space_100/ \
+        --mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+        --outfile data/mouse/mouse_cluster_signatures_abs_mean_threshold${i}_latentspace100.csv \
+        --parallel true \
+        --nproc 8
         
-#     python3 mouse_cluster_signatures.py \
-#         --clusterdir data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_$i/ \
-#         --exprdir data/mouse/expression/latent_space/ \
-#         --mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-#         --outfile data/mouse/mouse_cluster_signatures_rel_mean_threshold${i}_latentspace.csv \
-#         --parallel true \
-#         --nproc 8
+    python3 mouse_cluster_signatures.py \
+        --clusterdir data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_$i/ \
+        --exprdir data/mouse/expression/latent_space_100/ \
+        --mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+        --outfile data/mouse/mouse_cluster_signatures_rel_mean_threshold${i}_latentspace100.csv \
+        --parallel true \
+        --nproc 8
     
-#     echo "Creating human cluster signatures using threshold $i masks and latent gene space..."
+    echo "Creating human cluster signatures using threshold $i masks and latent gene space..."
 
-#     Rscript human_cluster_signatures.R \
-#         --clusterdir data/human/clustering/cluster_masks/absolute/resolution_3.0/mean/threshold_$i/ \
-#         --exprdir data/human/expression/latent_space/ \
-#         --metadata data/human/SampleInformation_pipeline_v1.csv \
-#         --template data/human/registration/reference_files/model_3.0mm.mnc \
-#         --outfile data/human/human_cluster_signatures_abs_mean_threshold${i}_latentspace.csv \
-#         --parallel true \
-#         --nproc 8
+    Rscript human_cluster_signatures.R \
+        --clusterdir data/human/clustering/cluster_masks/absolute/resolution_3.0/mean/threshold_$i/ \
+        --exprdir data/human/expression/latent_space_100/ \
+        --metadata data/human/SampleInformation_pipeline_v1.csv \
+        --template data/human/registration/reference_files/model_3.0mm.mnc \
+        --outfile data/human/human_cluster_signatures_abs_mean_threshold${i}_latentspace100.csv \
+        --parallel true \
+        --nproc 8
         
-#     Rscript human_cluster_signatures.R \
-#         --clusterdir data/human/clustering/cluster_masks/relative/resolution_3.0/mean/threshold_$i/ \
-#         --exprdir data/human/expression/latent_space/ \
-#         --metadata data/human/SampleInformation_pipeline_v1.csv \
-#         --template data/human/registration/reference_files/model_3.0mm.mnc \
-#         --outfile data/human/human_cluster_signatures_rel_mean_threshold${i}_latentspace.csv \
-#         --parallel true \
-#         --nproc 8
+    Rscript human_cluster_signatures.R \
+        --clusterdir data/human/clustering/cluster_masks/relative/resolution_3.0/mean/threshold_$i/ \
+        --exprdir data/human/expression/latent_space_100/ \
+        --metadata data/human/SampleInformation_pipeline_v1.csv \
+        --template data/human/registration/reference_files/model_3.0mm.mnc \
+        --outfile data/human/human_cluster_signatures_rel_mean_threshold${i}_latentspace100.csv \
+        --parallel true \
+        --nproc 8
         
-# done
+done
 
-
-# echo "Creating mouse cluster signatures using threshold 0.1 masks and input gene space..."
-
-# python3 mouse_cluster_signatures.py \
-# 	--clusterdir data/mouse/cluster_masks/threshold_0.1/ \
-# 	--exprdir data/mouse/expression/input_space/ \
-# 	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-# 	--outfile data/mouse/mouse_cluster_signatures_threshold0.1_inputspace.csv \
-# 	--parallel true \
-# 	--nproc 4
-    
-#echo "Creating human cluster signatures using threshold 0.1 masks and input gene space..."
-
-#Rscript human_cluster_signatures.R \
-#	--clusterdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.1/ \
-#	--exprdir data/human/expression/input_space/ \
-#	--metadata data/human/SampleInformation_pipeline_v1.csv \
-#	--template data/human/registration/reference_files/model_3.0mm.mnc \
-#    --outfile data/human/human_cluster_signatures_threshold0.1_inputspace.csv \
-#    --parallel true \
-#    --nproc 4
-    
-# echo "Creating mouse cluster signatures using threshold 0.1 masks and latent gene space..."
-
-# python3 mouse_cluster_signatures.py \
-#  	--clusterdir data/mouse/cluster_masks/threshold_0.1/ \
-#  	--exprdir data/mouse/expression/latent_space/ \
-#  	--mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
-#  	--outfile data/mouse/mouse_cluster_signatures_threshold0.1_latentspace.csv \
-#  	--parallel true \
-#  	--nproc 8
-    
-# echo "Creating human cluster signatures using threshold 0.1 masks and latent gene space..."
-
-# Rscript human_cluster_signatures.R \
-#  	--clusterdir data/human/clustering/cluster_masks/resolution_3.0/threshold_0.1/ \
-#  	--exprdir data/human/expression/latent_space/ \
-#  	--metadata data/human/SampleInformation_pipeline_v1.csv \
-#  	--template data/human/registration/reference_files/model_3.0mm.mnc \
-#      --outfile data/human/human_cluster_signatures_threshold0.1_latentspace.csv \
-#      --parallel true \
-#      --nproc 8
-    
 deactivate
