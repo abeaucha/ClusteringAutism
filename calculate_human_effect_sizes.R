@@ -43,6 +43,10 @@ option_list <- list(
               default = 10,
               help = paste("Number of controls to use when computing effect",
                            "sizes. [default %default]")),
+  make_option('--dataset',
+              type = 'character',
+              help = paste("Human data subset to use when computing effect",
+                           "sizes.")),
   make_option('--parallel',
               type = 'character',
               default = 'false',
@@ -188,11 +192,17 @@ imgdir <- args[['imgdir']]
 maskfile <- args[['maskfile']]
 outdir <- args[['outdir']]
 ncontrols <- args[['ncontrols']]
+dataset <- args[['dataset']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 
 #Import demographics data
 demographics <- data.table::fread(demofile, header = TRUE) %>% 
   as_tibble()
+
+if (dataset == 'POND') {
+  demographics <- demographics %>% 
+    filter(Dataset == 'POND')
+}
 
 #Remove entries with missing diagnosis, age, or sex
 demographics <- demographics %>% 
