@@ -41,7 +41,11 @@ option_list <- list(
   make_option('--nproc',
               type = 'numeric',
               help = paste("Number of processors to use in parallel.",
-                           "Ignored if --parallel is false."))
+                           "Ignored if --parallel is false.")),
+  make_option('--verbose',
+              type = 'character',
+              default = 'true',
+              help = paste("Verbosity option. [default %default]"))
 )
 
 
@@ -147,10 +151,15 @@ expr_dir <- args[['exprdir']]
 metadata <- args[['metadata']]
 template <- args[['template']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
+verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
+
+if (verbose) {message("Getting voxel coordinates for microarray samples...")}
 
 #Get AHBA microarray sample coordinates
 sample_coordinates <- get_sample_coordinates(metadata = metadata, 
                                              template = template)
+
+if (verbose) {message("Identifying input files...")}
 
 #Get cluster and expression input files
 expr_files <- Sys.glob(file.path(expr_dir, '*.csv'))
@@ -159,6 +168,7 @@ cluster_files <- list.files(cluster_dir, full.names = TRUE)
 infiles <- expand_grid(clusterfile = cluster_files, 
                        exprfile = expr_files)
 
+if (verbose) {message("Computing cluster signatures...")}
 
 #Compute cluster signatures
 pb <- txtProgressBar(max = nrow(infiles), style = 3)
