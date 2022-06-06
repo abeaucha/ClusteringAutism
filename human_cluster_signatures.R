@@ -160,7 +160,6 @@ infiles <- expand_grid(clusterfile = cluster_files,
                        exprfile = expr_files)
 
 
-inparallel <- FALSE
 #Compute cluster signatures
 pb <- txtProgressBar(max = nrow(infiles), style = 3)
 progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
