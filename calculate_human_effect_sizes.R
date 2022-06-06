@@ -18,7 +18,8 @@
 suppressPackageStartupMessages(library(optparse))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
-suppressPackageStartupMessages(library(doParallel))
+suppressPackageStartupMessages(library(doSNOW))
+suppressPackageStartupMessages(library(tcltk))
 
 
 # Command line arguments -----------------------------------------------------
@@ -224,13 +225,17 @@ controls <- demographics %>%
 participants <- demographics %>% 
   filter(DX != 'Control')
 
-#Option to run in parallel
+#Compute effect sizes
+pb <- txtProgressBar(max = nrow(participants), style = 3)
+progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
 if (inparallel) {
   nproc <- args[['nproc']]
-  cl <- makeCluster(nproc)
-  registerDoParallel(cl)
+  cl <- makeSOCKcluster(nproc)
+  registerDoSNOW(cl)
+  opts <- list(progress=progress)
   tmp <- foreach(i = 1:nrow(participants), 
-                 .packages = c('tidyverse', 'RMINC')) %dopar% {
+                 .packages = c('tidyverse', 'RMINC'),
+                 .options.snow=opts) %dopar% {
                    executor(participant = participants[i,],
                             controls = controls,
                             ncontrols = ncontrols,
@@ -239,10 +244,12 @@ if (inparallel) {
                             outdir = outdir,
                             seed = i)
                  } 
+  close(pb)
   stopCluster(cl)
 } else {
   tmp <- foreach(i = 1:nrow(participants), 
                  .packages = c('tidyverse', 'RMINC')) %do% {
+                   progress(n = i)
                    executor(participant = participants[i,],
                             controls = controls,
                             ncontrols = ncontrols,
@@ -251,4 +258,5 @@ if (inparallel) {
                             outdir = outdir,
                             seed = i)
                  }
+  close(pb)
 }
