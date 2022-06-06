@@ -45,6 +45,5 @@ args <- parse_args(OptionParser(option_list = option_list))
 arg <- args[['arg']]
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
 
-#Import cluster information
 if (verbose) {message("")}
 
