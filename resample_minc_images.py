@@ -116,8 +116,8 @@ def main():
     outdir = os.path.join(outdir, '')
     
     #Create outdir if needed
-    if os.path.exists(outdir) == False:
-        os.mkdir(outdir)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
     
     #Get MINC images in dir
     files = glob(imgdir+'*.mnc')
