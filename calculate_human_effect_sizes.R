@@ -195,6 +195,11 @@ ncontrols <- args[['ncontrols']]
 dataset <- args[['dataset']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 
+#Create outdir if needed
+if (!dir.exists(outdir)) {
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+}
+
 #Import demographics data
 demographics <- data.table::fread(demofile, header = TRUE) %>% 
   as_tibble()
