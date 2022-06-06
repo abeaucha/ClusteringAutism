@@ -10,7 +10,8 @@
 suppressPackageStartupMessages(library(optparse))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
-suppressPackageStartupMessages(library(doParallel))
+suppressPackageStartupMessages(library(doSNOW))
+suppressPackageStartupMessages(library(tcltk))
 
 # Command line arguments -----------------------------------------------------
 
@@ -158,26 +159,37 @@ cluster_files <- list.files(cluster_dir, full.names = TRUE)
 infiles <- expand_grid(clusterfile = cluster_files, 
                        exprfile = expr_files)
 
-#Option to run in parallel
+
+inparallel <- FALSE
+#Compute cluster signatures
+pb <- txtProgressBar(max = nrow(infiles), style = 3)
+progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
 if (inparallel) {
   nproc <- args[['nproc']]
-  cl <- makeCluster(nproc)
-  registerDoParallel(cl)
+  cl <- makeSOCKcluster(nproc)
+  registerDoSNOW(cl)
+  opts <- list(progress=progress)
   signatures <- foreach(i = 1:nrow(infiles),
                         .packages = c('tidyverse', 'RMINC'),
-                        .combine = 'bind_rows') %dopar% {
-      create_cluster_signature(infile = infiles[i,],
-                               sample_coordinate = sample_coordinates)
-  }
+                        .combine = 'bind_rows', .options.snow=opts) %dopar% {
+                          create_cluster_signature(infile = infiles[i,],
+                                                   sample_coordinate = sample_coordinates)
+                        }
+  close(pb)
   stopCluster(cl)
 } else {
   signatures <- foreach(i = 1:nrow(infiles),
                         .packages = c('tidyverse', 'RMINC'),
                         .combine = 'bind_rows') %do% {
-      create_cluster_signature(infile = infiles[i,],
-                               sample_coordinate = sample_coordinates)
-  }
+                          progress(n = i)
+                          create_cluster_signature(infile = infiles[i,],
+                                                   sample_coordinate = sample_coordinates)
+                        }
+  close(pb)
 }
+
+#Include file info
+signatures <- bind_cols(signatures, infiles)
 
 #Write to file
 data.table::fwrite(signatures,
