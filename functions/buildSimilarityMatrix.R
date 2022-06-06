@@ -1,3 +1,14 @@
+#' Check if object is a data tree
+#'
+#' @description 
+#' `isTree` checks whether its argument is a data tree
+#'
+#' @param x Object to test for tree structure
+#' 
+#' @return Boolean value TRUE or FALSE
+isTree <- function(x){any(class(x) == "Node") & any(class(x) == "R6")}
+
+
 #' Build a similarity matrix
 #'
 #' @description
