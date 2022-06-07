@@ -174,7 +174,7 @@ rownames(x2) <- basename(rownames(x2))
 if (verbose) {message("Running similarity network fusion...")}
 
 W <- SNF_combine(x1 = x1, x2 = x2,
-                 K = args[['K']], alpha = args[['alpha']],
+                 K = args[['K']], sigma = args[['sigma']],
                  t = args[['t']], metric = args[['metric']],
                  outfile = wfile)
 
