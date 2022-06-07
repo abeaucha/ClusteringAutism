@@ -16,27 +16,27 @@ source activate_venv
 echo "Calculating human effect sizes using absolute jacobians..."
 
 #Calculate human effect sizes based on relative and absolute volumes
-Rscript calculate_human_effect_sizes.R \
-	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
-	--imgdir data/human/registration/jacobians/absolute/smooth/ \
-	--outdir data/human/POND/effect_sizes/absolute/resolution_0.5/ \
-	--maskfile data/human/registration/reference_files/mask.mnc \
-	--ncontrols 10 \
-	--dataset POND \
-	--parallel true \
-	--nproc 4
+# Rscript calculate_human_effect_sizes.R \
+# 	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
+# 	--imgdir data/human/registration/jacobians/absolute/smooth/ \
+# 	--outdir data/human/POND/effect_sizes/absolute/resolution_0.5/ \
+# 	--maskfile data/human/registration/reference_files/mask.mnc \
+# 	--ncontrols 10 \
+# 	--dataset POND \
+# 	--parallel true \
+# 	--nproc 4
     
-echo "Calculating human effect sizes using relative jacobians..."
+# echo "Calculating human effect sizes using relative jacobians..."
 
-Rscript calculate_human_effect_sizes.R \
-	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
-	--imgdir data/human/registration/jacobians/relative/smooth/ \
-	--outdir data/human/POND/effect_sizes/relative/resolution_0.5/ \
-	--maskfile data/human/registration/reference_files/mask.mnc \
-	--ncontrols 10 \
-	--dataset POND \
-	--parallel true \
-	--nproc 4
+# Rscript calculate_human_effect_sizes.R \
+# 	--demographics data/human/registration/DBM_input_demo_passedqc.csv \
+# 	--imgdir data/human/registration/jacobians/relative/smooth/ \
+# 	--outdir data/human/POND/effect_sizes/relative/resolution_0.5/ \
+# 	--maskfile data/human/registration/reference_files/mask.mnc \
+# 	--ncontrols 10 \
+# 	--dataset POND \
+# 	--parallel true \
+# 	--nproc 4
     
 # echo "Resampling template and mask images..."
 
@@ -49,24 +49,24 @@ Rscript calculate_human_effect_sizes.R \
 # 	data/human/registration/reference_files/mask.mnc \
 # 	data/human/registration/reference_files/mask_3.0mm.mnc
 
-# echo "Resampling absolute effect size images..."
+echo "Resampling absolute effect size images..."
 
-# #Downsample human effect size images 
-# python3 resample_minc_images.py \
-# 	--imgdir data/human/POND/effect_sizes/absolute/resolution_0.5/ \
-# 	--outdir data/human/POND/effect_sizes/absolute/resolution_3.0/ \
-# 	--isostep 3.0 \
-# 	--parallel true \
-# 	--nproc 4
+#Downsample human effect size images 
+python3 resample_minc_images.py \
+	--imgdir data/human/POND/effect_sizes/absolute/resolution_0.5/ \
+	--outdir data/human/POND/effect_sizes/absolute/resolution_3.0/ \
+	--isostep 3.0 \
+	--parallel true \
+	--nproc 4
     
-# echo "Resampling relative effect size images..."
+echo "Resampling relative effect size images..."
 
-# python3 resample_minc_images.py \
-# 	--imgdir data/human/POND/effect_sizes/relative/resolution_0.5/ \
-# 	--outdir data/human/POND/effect_sizes/relative/resolution_3.0/ \
-# 	--isostep 3.0 \
-# 	--parallel true \
-# 	--nproc 4
+python3 resample_minc_images.py \
+	--imgdir data/human/POND/effect_sizes/relative/resolution_0.5/ \
+	--outdir data/human/POND/effect_sizes/relative/resolution_3.0/ \
+	--isostep 3.0 \
+	--parallel true \
+	--nproc 4
     
 # echo "Build absolute effect size matrix..."
 
