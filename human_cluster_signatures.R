@@ -150,8 +150,15 @@ cluster_dir <- args[['clusterdir']]
 expr_dir <- args[['exprdir']]
 metadata <- args[['metadata']]
 template <- args[['template']]
+outfile <- args[['outfile']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
+
+#Create outdir if needed
+outdir <- dirname(outfile)
+if (!dir.exists(outdir)) {
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+}
 
 if (verbose) {message("Getting voxel coordinates for microarray samples...")}
 
@@ -202,4 +209,4 @@ signatures <- bind_cols(signatures, infiles)
 
 #Write to file
 data.table::fwrite(signatures,
-                   file = args[['outfile']])
+                   file = outfile)
