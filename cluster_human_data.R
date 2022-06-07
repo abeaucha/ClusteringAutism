@@ -155,6 +155,12 @@ outfile <- args[['outfile']]
 wfile <- args[['wfile']]
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
 
+#Create outdir if needed
+outdir <- dirname(outfile)
+if (!dir.exists(outdir)) {
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+}
+
 if (verbose) {message("Importing data...")}
 
 x1 <- data.table::fread(file1, header = TRUE) %>% 
