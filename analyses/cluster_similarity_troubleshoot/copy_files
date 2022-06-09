@@ -1,0 +1,35 @@
+#!/bin/bash
+
+mkdir data
+cp ../../data/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv data/
+cp ../../data/HumanExpressionMatrix_samples_pipeline_v1_homologs_scaled.csv data/
+cp ../../data/TreeLabelsReordered.RData data/
+
+mkdir data/mouse
+cp ../../data/mouse/MouseExpressionTree_DSURQE.RData data/mouse/
+
+mkdir data/mouse/atlas
+cp ../../data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc data/mouse/atlas/
+cp ../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc data/mouse/atlas/
+
+mkdir data/human
+cp ../../data/human/HumanExpressionTree.RData data/human/
+cp ../../data/human/SampleInformation_pipeline_v1.csv data/human/
+
+mkdir -p data/mouse/expression/latent_space_100
+cp ../../data/mouse/expression/latent_space_100/* data/mouse/expression/latent_space_100/
+
+mkdir -p data/human/expression/latent_space_100
+cp ../../data/human/expression/latent_space_100/* data/human/expression/latent_space_100/
+
+mkdir -p data/mouse/cluster_signatures/input_space/
+cp ../../data/mouse/cluster_signatures/input_space/mouse_cluster_signatures_rel_mean_threshold0.5_inputspace.csv data/mouse/cluster_signatures/input_space/
+
+mkdir -p data/human/cluster_signatures/input_space/
+cp ../../data/human/cluster_signatures/input_space/human_cluster_signatures_rel_mean_threshold0.5_inputspace.csv data/human/cluster_signatures/input_space/
+
+mkdir -p data/similarity/latent_space_100
+cp ../../data/similarity/latent_space_100/similarity_hm_rel_mean_threshold0.5_latentspace100.csv data/similarity/latent_space_100/
+
+mkdir -p data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_0.5
+cp ../../data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_0.5/* data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_0.5

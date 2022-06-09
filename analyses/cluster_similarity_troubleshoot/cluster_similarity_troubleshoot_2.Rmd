@@ -1,0 +1,253 @@
+---
+title: "Troubleshooting the cluster similarity matrices"
+subtitle: "Assessing gene expression spaces"
+author: "Antoine Beauchamp"
+date: '2022-06-09'
+output: 
+  html_document:
+    theme: paper
+    highlight: pygments
+    code_folding: hide
+---
+
+# Initialization
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(data.tree))
+suppressPackageStartupMessages(library(pheatmap))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(viridisLite))
+suppressPackageStartupMessages(library(ggplotify))
+```
+
+# Functions
+
+```{r}
+source('../../functions/tree_tools.R')
+source('../../functions/buildSimilarityMatrix.R')
+
+#' Title
+#'
+#' @param x 
+#' @param tree 
+#' @param labels 
+#' @param mask 
+#'
+#' @return
+label_mouse_data <- function(x, tree, labels, mask) {
+  
+  labels_pruned <- hanatToAtlas(tree, mincArray(labels))
+  defs_pruned <- hanatToAtlasDefs(tree)
+  
+  labels_pruned <- labels_pruned[mask == 1]
+  
+  x <- x %>% 
+    mutate(label = labels_pruned) %>% 
+    left_join(defs_pruned, by = c('label' = 'Label')) %>% 
+    select(-label) %>% 
+    rename(Region = Structure)
+  
+  return(x)
+  
+}
+
+#' Title
+#'
+#' @param x 
+#' @param tree 
+#' @param samples 
+#'
+#' @return
+label_human_data <- function(x, tree, samples) {
+  
+  tree <- Clone(tree)
+  
+  tree$Do(function(node){
+    node$struct <- rep(node$name, length(node$samples))
+  }, traversal = 'post-order')
+  
+  tree_structs <- unlist(tree$Get('struct', filterFun = isLeaf))
+  names(tree_structs) <- NULL
+  
+  tree_samples <- unlist(tree$Get('samples', filterFun = isLeaf))
+  names(tree_samples) <- NULL
+  
+  sample_defs <- tibble(Structure = tree_structs,
+                        sample_id = tree_samples)
+  
+  x <- x %>% 
+    mutate(sample_id = samples) %>% 
+    left_join(sample_defs, by = 'sample_id') %>% 
+    select(-sample_id) %>% 
+    rename(Region = Structure)
+    
+  return(x)
+  
+}
+
+aggregate <- function(x, groupby, method = 'mean', output = 'tibble'){
+  
+  if (method == 'mean') {
+    aggfunc <- mean
+  } else if (method == 'median') {
+    aggfunc <- median
+  } else if (method == 'sd') {
+    aggfunc <- sd
+  } else {
+    stop()
+  }
+  
+  if (!(groupby %in% colnames(x))) {
+    stop()
+  }
+  
+  if (any(is.na(x[[groupby]]))){
+    warning(paste("Grouping variable", groupby, "contains NA.",
+                  "These observations will be ommitted when aggregating."))
+  }
+  
+  x <- x %>% 
+    filter(!is.na(.data[[groupby]])) %>% 
+    group_by_at(.vars = vars(groupby)) %>% 
+    summarise_all(.funs = aggfunc) %>% 
+    ungroup() 
+  
+  if (output == 'tibble') {
+    x %>% 
+      as_tibble() %>% 
+      return()
+  } else if (output == 'data.frame') {
+    x %>% 
+      as.data.frame(stringsAsFactors = FALSE) %>% 
+      return()
+  } else if (output == 'matrix') {
+    x %>% 
+      column_to_rownames(groupby) %>% 
+      as.matrix() %>% 
+      return()
+  } else {
+    stop()
+  }
+}
+
+generate_heatmap <- function(mousefile, humanfile, mousetree, humantree, mouseregions, humanregions, labels, mask, samples) {
+  
+  mouse <- data.table::fread(mousefile, header = TRUE) %>% 
+    as_tibble()
+  human <- data.table::fread(humanfile, header = TRUE) %>%
+    as_tibble()
+  
+  mouse <- mouse %>% 
+    label_mouse_data(tree = mousetree,
+                     labels = labels,
+                     mask = mask) %>% 
+    filter(!is.na(Region)) %>% 
+    aggregate(groupby = 'Region',
+              output = 'matrix') %>%
+    t()
+  
+  human <- human %>% 
+    label_human_data(tree = humantree,
+                     samples = samples) %>% 
+    aggregate(groupby = 'Region',
+              output = 'matrix') %>% 
+    t()
+  
+  similarity <- buildSimilarityMatrix(x1 = human, 
+                                      x2 = mouse,
+                                      method = 'correlation')
+  
+  similarity <- similarity[,match(mouseregions, colnames(similarity))]
+  similarity <- similarity[match(humanregions, rownames(similarity)),]
+  
+  p <- pheatmap(similarity,
+                cluster_cols = F,
+                cluster_rows = F,
+                silent = TRUE, 
+                na_col = 'black')
+  
+  return(p)
+}
+```
+
+# Importing
+
+```{r}
+#Mouse files
+mouse_labelfile <- '../../data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc'
+mouse_maskfile <- '../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc'
+mouse_treefile <- '../../data/mouse/MouseExpressionTree_DSURQE.RData'
+
+#Human files
+human_treefile <- '../../data/human/HumanExpressionTree.RData'
+human_samplefile <- '../../data/human/SampleInformation_pipeline_v1.csv'
+
+#Tree labels
+treelabels <- '../../data/TreeLabelsReordered.RData'
+
+#Trees
+load(mouse_treefile)
+tree_mouse <- Clone(treeMouseExpr)
+rm(treeMouseExpr)
+
+load(human_treefile)
+tree_human <- Clone(treeHumanExpr)
+rm(treeHumanExpr)
+
+#Tree labels
+load(treelabels)
+
+#Prune mouse tree to desired level
+mouse_regions <- c(listLabelsMouseReordered$Region67, 
+                   'fiber tracts', 
+                   'ventricular systems')
+tree_mouse_pruned <- Clone(tree_mouse)
+pruneAnatTree(tree_mouse_pruned, 
+              nodes = mouse_regions, 
+              method = 'BelowNode')
+
+#Pruned human tree to desired level
+human_regions <- c(listLabelsHumanReordered$Region88, 
+                   'white matter', 
+                   'sulci & spaces')
+tree_human_pruned <- Clone(tree_human)
+pruneAnatTree(tree_human_pruned, 
+              nodes = human_regions, 
+              method = 'BelowNode')
+
+#DSURQE labels and AMBA mask
+labels <- mincGetVolume(mouse_labelfile)
+mask <- mincGetVolume(mouse_maskfile)
+
+#Human microarray sample IDs
+sample_ids <- data.table::fread(human_samplefile, header = TRUE) %>% 
+  as_tibble() %>% 
+  pull(SampleID)
+```
+
+# Overview 
+
+What do I want to do here? I'll do this separately for the mouse and human I guess. First import a given cluster mask and see what that looks like on the brain of either species. Does the mask look like what I would expect, etc? And somehow I need to think of a way to determine what the gene expression is doing in that mask. There are many steps here where something can go wrong. It's weird that it's behaving weirdly specifically in the latent space though. A good thing to do would be to compute a single latent space signature and see what that looks like. 
+
+
+# Troubleshooting
+
+```{r}
+
+```
+
+
+# Conclusions
+
+
+# Next steps
+
+
