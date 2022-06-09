@@ -12,3 +12,6 @@ dev.ipynb
 .Rhistory
 plots_temp/
 analyses/preliminary_analysis.html
+analyses/cluster_similarity_troubleshoot/data/
+analyses/cluster_similarity_troubleshoot/cluster_similarity_troubleshoot_overview.html
+analyses/cluster_similarity_troubleshoot/cluster_similarity_troubleshoot_1.html
