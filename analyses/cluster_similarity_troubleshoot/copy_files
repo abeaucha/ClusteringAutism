@@ -9,12 +9,17 @@ mkdir data/mouse
 cp ../../data/mouse/MouseExpressionTree_DSURQE.RData data/mouse/
 
 mkdir data/mouse/atlas
+cp ../../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc data/mouse/atlas/
 cp ../../data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc data/mouse/atlas/
 cp ../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc data/mouse/atlas/
 
 mkdir data/human
 cp ../../data/human/HumanExpressionTree.RData data/human/
 cp ../../data/human/SampleInformation_pipeline_v1.csv data/human/
+
+mkdir -p data/human/registration/reference_files/
+cp ../../data/human/registration/reference_files/model_3.0mm.mnc data/human/registration/reference_files/
+cp ../../data/human/registration/reference_files/mask_3.0mm.mnc data/human/registration/reference_files/
 
 mkdir -p data/mouse/expression/latent_space_100
 cp ../../data/mouse/expression/latent_space_100/* data/mouse/expression/latent_space_100/
@@ -33,3 +38,12 @@ cp ../../data/similarity/latent_space_100/similarity_hm_rel_mean_threshold0.5_la
 
 mkdir -p data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_0.5
 cp ../../data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_0.5/* data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_0.5
+
+mkdir -p data/mouse/clustering/cluster_maps/relative/resolution_200/mean/
+cp ../../data/mouse/clustering/cluster_maps/relative/resolution_200/mean/* data/mouse/clustering/cluster_maps/relative/resolution_200/mean/
+
+mkdir -p data/human/clustering/cluster_maps/relative/resolution_3.0/mean/
+cp ../../data/human/clustering/cluster_maps/relative/resolution_3.0/mean/* data/human/clustering/cluster_maps/relative/resolution_3.0/mean/
+
+mkdir -p data/human/clustering/cluster_masks/relative/resolution_3.0/mean/threshold_0.5/
+cp ../../data/human/clustering/cluster_masks/relative/resolution_3.0/mean/threshold_0.5/* data/human/clustering/cluster_masks/relative/resolution_3.0/mean/threshold_0.5/
