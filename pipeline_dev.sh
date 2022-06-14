@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source activate_venv
+source activate_venv.sh
 
 # echo "Organizing gene expression files..."
 # source organize_expression_files
@@ -117,27 +117,32 @@ source activate_venv
         
 # done
 
-for i in ${thresholds[@]};
-do
+# for i in ${thresholds[@]};
+# do
 
-    echo "Computing latent space similarity matrices using threshold $i data..."
+#     echo "Computing latent space similarity matrices using threshold $i data..."
 
-    echo "Using absolute jacobians..."
-    Rscript latent_space_similarity_matrix.R \
-        --mouse data/mouse/cluster_signatures/latent_space_100/mouse_cluster_signatures_abs_mean_threshold${i}_latentspace100.csv \
-        --human data/human/cluster_signatures/latent_space_100/human_cluster_signatures_abs_mean_threshold${i}_latentspace100.csv \
-        --metric correlation \
-        --outfile data/similarity/latent_space_100/similarity_hm_abs_mean_threshold${i}_latentspace100.csv \
-        --save-intermediate false
+#     echo "Using absolute jacobians..."
+#     Rscript latent_space_similarity_matrix.R \
+#         --mouse data/mouse/cluster_signatures/latent_space_100/mouse_cluster_signatures_abs_mean_threshold${i}_latentspace100.csv \
+#         --human data/human/cluster_signatures/latent_space_100/human_cluster_signatures_abs_mean_threshold${i}_latentspace100.csv \
+#         --metric correlation \
+#         --outfile data/similarity/latent_space_100/similarity_hm_abs_mean_threshold${i}_latentspace100.csv \
+#         --save-intermediate false
 
-    echo "Using relative jacobians..."
-    Rscript latent_space_similarity_matrix.R \
-        --mouse data/mouse/cluster_signatures/latent_space_100/mouse_cluster_signatures_rel_mean_threshold${i}_latentspace100.csv \
-        --human data/human/cluster_signatures/latent_space_100/human_cluster_signatures_rel_mean_threshold${i}_latentspace100.csv \
-        --metric correlation \
-        --outfile data/similarity/latent_space_100/similarity_hm_rel_mean_threshold${i}_latentspace100.csv \
-        --save-intermediate false
+#     echo "Using relative jacobians..."
+#     Rscript latent_space_similarity_matrix.R \
+#         --mouse data/mouse/cluster_signatures/latent_space_100/mouse_cluster_signatures_rel_mean_threshold${i}_latentspace100.csv \
+#         --human data/human/cluster_signatures/latent_space_100/human_cluster_signatures_rel_mean_threshold${i}_latentspace100.csv \
+#         --metric correlation \
+#         --outfile data/similarity/latent_space_100/similarity_hm_rel_mean_threshold${i}_latentspace100.csv \
+#         --save-intermediate false
 
-done
+# done
+
+Rscript microarray_sample_image.R \
+--metadata data/human/SampleInformation_pipeline_v1.csv \
+--template data/human/atlas/mni_icbm152_t1_tal_nlin_sym_09c.mnc \
+--outdir data/human/expression/
 
 deactivate
