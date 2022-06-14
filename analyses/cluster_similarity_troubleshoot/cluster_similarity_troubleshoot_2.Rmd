@@ -1,13 +1,14 @@
 ---
 title: "Troubleshooting the cluster similarity matrices"
-subtitle: "Assessing gene expression spaces"
+subtitle: "Cluster masks and mapping microarray samples"
 author: "Antoine Beauchamp"
-date: '2022-06-09'
+date: 'June 14th, 2022'
 output: 
   html_document:
     theme: paper
     highlight: pygments
     code_folding: hide
+    toc: true
 ---
 
 # Initialization
@@ -19,6 +20,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
 suppressPackageStartupMessages(library(data.tree))
 suppressPackageStartupMessages(library(pheatmap))
 suppressPackageStartupMessages(library(patchwork))
@@ -33,6 +35,7 @@ suppressPackageStartupMessages(library(ggplotify))
 ```{r}
 source('../../functions/tree_tools.R')
 source('../../functions/buildSimilarityMatrix.R')
+source('/projects/abeauchamp/Functions/ggsliceseries/ggsliceseries.R')
 
 #' Title
 #'
@@ -88,7 +91,7 @@ label_human_data <- function(x, tree, samples) {
     left_join(sample_defs, by = 'sample_id') %>% 
     select(-sample_id) %>% 
     rename(Region = Structure)
-    
+  
   return(x)
   
 }
@@ -138,44 +141,6 @@ aggregate <- function(x, groupby, method = 'mean', output = 'tibble'){
   }
 }
 
-generate_heatmap <- function(mousefile, humanfile, mousetree, humantree, mouseregions, humanregions, labels, mask, samples) {
-  
-  mouse <- data.table::fread(mousefile, header = TRUE) %>% 
-    as_tibble()
-  human <- data.table::fread(humanfile, header = TRUE) %>%
-    as_tibble()
-  
-  mouse <- mouse %>% 
-    label_mouse_data(tree = mousetree,
-                     labels = labels,
-                     mask = mask) %>% 
-    filter(!is.na(Region)) %>% 
-    aggregate(groupby = 'Region',
-              output = 'matrix') %>%
-    t()
-  
-  human <- human %>% 
-    label_human_data(tree = humantree,
-                     samples = samples) %>% 
-    aggregate(groupby = 'Region',
-              output = 'matrix') %>% 
-    t()
-  
-  similarity <- buildSimilarityMatrix(x1 = human, 
-                                      x2 = mouse,
-                                      method = 'correlation')
-  
-  similarity <- similarity[,match(mouseregions, colnames(similarity))]
-  similarity <- similarity[match(humanregions, rownames(similarity)),]
-  
-  p <- pheatmap(similarity,
-                cluster_cols = F,
-                cluster_rows = F,
-                silent = TRUE, 
-                na_col = 'black')
-  
-  return(p)
-}
 ```
 
 # Importing
@@ -235,17 +200,505 @@ sample_ids <- data.table::fread(human_samplefile, header = TRUE) %>%
 
 # Overview 
 
-What do I want to do here? I'll do this separately for the mouse and human I guess. First import a given cluster mask and see what that looks like on the brain of either species. Does the mask look like what I would expect, etc? And somehow I need to think of a way to determine what the gene expression is doing in that mask. There are many steps here where something can go wrong. It's weird that it's behaving weirdly specifically in the latent space though. A good thing to do would be to compute a single latent space signature and see what that looks like. 
+In the previous analysis document, I examined whether the gene expression data sets were being processed as expect in this project. Indeed I found that this was the case, so I'm confident that the gene expression data is the way that it needs to be. 
+
+Next, I want to start digging into how the gene expression data sets are interacting with the cluster data to give rise to the cluster signatures and cluster similarity matrices. To start looking into this, I want to confirm that I'm creating mouse and human cluster masks from the representative cluster maps in the right way. 
 
 
-# Troubleshooting
+# Generating cluster masks
+
+## Mouse cluster masks
+
+I'll start by examining how a mouse cluster mask is generated. To do this, I'm going to use mouse cluster 4-1 at a map threshold of 0.5. In the input space similarity matrix built using relative jacobians, this cluster is one of the most well-matched to the human data. So let's see what the cluster map and associated mask look like.  
 
 ```{r}
+#Mouse anatomy 
+mouse_anat_file <- 'data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc'
+mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_anat_vol <- mincArray(mouse_anat)
 
+#Mouse mask
+mouse_mask_file <- 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc'
+mouse_mask <- mincGetVolume(mouse_mask_file)
+mouse_mask_vol <- mincArray(mouse_mask)
+
+#Set the cluster values
+nk <- 4
+k <- 1
+# nk <- sample(x = 1:10, size = 1)
+# k <- sample(x = 1:nk, size = 1)
+
+#Cluster map data
+mouse_cluster_map_dir <- 'data/mouse/clustering/cluster_maps/relative/resolution_200/mean/'
+mouse_cluster_map_file <- paste0('Group_', k, '_Clusternum_', nk, '_ES_rel_200_mean.mnc')
+mouse_cluster_map_file <- file.path(mouse_cluster_map_dir, mouse_cluster_map_file)
+mouse_cluster_map <- mincGetVolume(mouse_cluster_map_file)
+mouse_cluster_map_vol <- mincArray(mouse_cluster_map)
+
+#Cluster mask data
+mouse_cluster_mask_dir <- 'data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_0.5/'
+mouse_cluster_mask_file <- paste0('Group_', k, '_Clusternum_', nk, '_ES_rel_200_mean_mask_threshold0.5.mnc')
+mouse_cluster_mask_file <- file.path(mouse_cluster_mask_dir, mouse_cluster_mask_file)
+mouse_cluster_mask <- mincGetVolume(mouse_cluster_mask_file)
+mouse_cluster_mask_vol <- mincArray(mouse_cluster_mask)
+```
+
+```{r fig.height = 8, fig.width = 5}
+sliceSeries(nrow = 10, ncol = 1, begin = 10, end = 50) %>% 
+  anatomy(mouse_anat_vol, low = 700, high = 1400) %>%
+  addtitle('Anatomy') %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mouse_cluster_map_vol, low = 0.5, high = 2, symmetric = T) %>% 
+  addtitle('Cluster map') %>% 
+  legend('Effect size') %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mouse_cluster_mask_vol, low = 0, high = 1,
+          col = colorRampPalette(c("black", 'darkmagenta'))(255)) %>% 
+  addtitle('Cluster mask') %>% 
+  draw()
+```
+
+Examining the cluster map and mask, we can see that the mask is being created as expected. Only those voxels that are above 0.5 or below -0.5 are contributing to the mask. This gives me confidence that I'm computing the mask correctly on the mouse side. 
+
+
+## Human cluster masks
+
+Here I'll take a look at a cluster map and mask on the human side. Based on the input space similarity matrix at a threshold of 0.5, one of the human clusters that is most well-matched to mouse cluster 4-1 is human cluster 8-7. We'll use that one here. 
+
+```{r}
+#Human anatomy
+human_anat_file <- 'data/human/registration/reference_files/model_3.0mm.mnc'
+human_anat <- mincGetVolume(human_anat_file)
+human_anat_vol <- mincArray(human_anat)
+
+#Human mask
+human_mask_file <- 'data/human/registration/reference_files/mask_3.0mm.mnc'
+human_mask <- mincGetVolume(human_mask_file)
+human_mask_vol <- mincArray(human_mask)
+
+#Cluster values
+nk <- 8
+k <- 7
+# nk <- sample(x = 1:10, size = 1)
+# k <- sample(x = 1:nk, size = 1)
+
+#Cluster map data
+human_cluster_map_dir <- 'data/human/clustering/cluster_maps/relative/resolution_3.0/mean/'
+human_cluster_map_file <- paste0('Group_', k, '_Clusternum_', nk, '_ES_relative_3_mean.mnc')
+human_cluster_map_file <- file.path(human_cluster_map_dir, human_cluster_map_file)
+human_cluster_map <- mincGetVolume(human_cluster_map_file)
+human_cluster_map_vol <- mincArray(human_cluster_map)
+
+#Cluster mask data
+human_cluster_mask_dir <- 'data/human/clustering/cluster_masks/relative/resolution_3.0/mean/threshold_0.5/'
+human_cluster_mask_file <- paste0('Group_', k, '_Clusternum_', nk, '_ES_relative_3_mean_mask_threshold0.5.mnc')
+human_cluster_mask_file <- file.path(human_cluster_mask_dir, human_cluster_mask_file)
+human_cluster_mask <- mincGetVolume(human_cluster_mask_file)
+human_cluster_mask_vol <- mincArray(human_cluster_mask)
+```
+
+```{r fig.height = 12, fig.width = 5}
+sliceSeries(nrow = 10, ncol = 1, begin = 14, end = 60) %>% 
+  anatomy(human_anat_vol, low = 3, high = 6) %>% 
+  addtitle('Anatomy') %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(human_cluster_map_vol, low = 0.5, high = 2, symmetric = T) %>% 
+  legend('Effect size') %>% 
+  addtitle('Cluster map') %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(human_cluster_mask_vol, low = 0, high = 1,
+          col = colorRampPalette(c("black", 'darkmagenta'))(255)) %>% 
+  addtitle('Cluster mask') %>% 
+  draw()
 ```
 
 
+It looks like the masking is working as intended here as well. 
+
+Given that these masks are correct, it's suspicious to me that the mouse and human clusters shown above are well-matched. On the mouse side, the cluster displays a strong medial hind brain pattern, whereas on the human side, the cluster seems to have more cortical regions. How are these associations being computed and how do they give rise to the strong similarity value? 
+
+# Mapping AHBA microarray samples to image space
+
+An important step in generating cluster signatures for the similarity analysis is mapping the microarray samples from the AHBA on to the imaging space where the masks exist. I am fairly certain that this is being done correctly on the mouse side since the cluster maps are in the Allen CCFv3 space to begin with, but I want to confirm the mapping on the human side. 
+
+The AHBA microarray samples are being mapped to image space using a set of world coordinates that were non-linearly registered to MNI space by  Gabe Devenyi. These world coordinates are used to place the samples on the brain. The process of obtaining these world coordinates and converting them to voxel coordinates in the consensus average space is done in the function below. 
+
+
+```{r}
+#' Get microarray sample coordinates
+#'
+#' @param metadata (character scalar) Path to the .csv file containing AHBA
+#' sample metadata.
+#' @param template (character scalar) Path to the .mnc file containing human
+#' imaging template.
+#'
+#' @return (character vector) AHBA microarray sample voxel coordinates in the 
+#' form "x-y-z".
+get_sample_coordinates <- function(metadata, template) {
+  
+  metadata <- suppressMessages(read_csv(metadata))
+  donors <- unique(metadata[['Donor']])
+  for (i in 1:length(donors)) {
+    
+    url <- paste0("https://raw.githubusercontent.com/gdevenyi/",
+                  "AllenHumanGeneMNI/master/transformed-points/recombine/", 
+                  donors[i], 
+                  "_SampleAnnot.csv")
+    
+    df_tmp <- suppressMessages(read_csv(url)) %>% 
+      mutate(Donor = donors[i]) %>% 
+      unite(SampleID, 
+            structure_id, slab_num, well_id, 
+            sep = '-', remove = FALSE) %>% 
+      column_to_rownames('SampleID') %>% 
+      select(contains('mni_nlin')) %>% 
+      as.matrix()
+    
+    if (i == 1) {
+      sample_coordinates_world <- df_tmp
+    } else {
+      sample_coordinates_world <- rbind(sample_coordinates_world,
+                                        df_tmp)
+    }
+  }
+  
+  ind_match_metadata <- match(rownames(sample_coordinates_world),
+                              metadata[['SampleID']])
+  sample_coordinates_world <- sample_coordinates_world[ind_match_metadata,]
+  
+  sample_coordinates_voxel <- mincConvertWorldMatrix(world_matrix = t(sample_coordinates_world),
+                                                     file = template,
+                                                     nearest_voxel = TRUE)
+  sample_coordinates_voxel <- t(sample_coordinates_voxel)
+  colnames(sample_coordinates_voxel) <- c('x', 'y', 'z')
+  
+  return(sample_coordinates_voxel)
+  
+}
+```
+
+Using this function, we can get the voxel coordinates for every microarray sample:
+
+```{r}
+#Obtain the sample coordinates
+sample_coordinates <- get_sample_coordinates(metadata = human_samplefile,
+                                             template = human_anat_file)
+
+sample_coordinates[1:5,]
+```
+
+Next I want to convert this into a sort of mask to display on a brain slice series
+
+```{r fig.width = 6, fig.height = 6}
+microarray_mask <- array(data = 0, dim = dim(human_anat_vol))
+for(s in 1:nrow(sample_coordinates)){
+  i <- sample_coordinates[s,1]
+  j <- sample_coordinates[s,2]
+  k <- sample_coordinates[s,3]
+  microarray_mask[i,j,k] <- 1
+}
+attributes(microarray_mask) <- attributes(human_anat_vol)
+
+sliceSeries(nrow = 5, ncol = 5, begin = 14, end = 60) %>% 
+  anatomy(human_anat_vol, low = 2, high = 6) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  draw()
+```
+Okay so something is clearly going wrong here. A ton of microarray samples are not even on the brain. There's also a large pocket of samples in the left temporal lobe that are suspicious. There's no reason that there should be that many samples in that specific region, so these are probably rotated in some way. 
+
+To try to tease this out, I'm going to identify the location of some samples that belong to a coarse region. 
+
+```{r fig.width = 6, fig.height = 6}
+#Pruned human tree to desired level
+human_regions <- c(listLabelsHumanReordered$Region16_reordered, 
+                   'white matter', 
+                   'sulci & spaces')
+tree_human_pruned <- Clone(tree_human)
+pruneAnatTree(tree_human_pruned, 
+              nodes = human_regions, 
+              method = 'BelowNode')
+
+#Human microarray sample IDs
+sample_ids <- data.table::fread(human_samplefile, header = TRUE) %>% 
+  as_tibble() %>% 
+  pull(SampleID)
+
+#Label the coordinates with coarse regions
+sample_coordinates_labelled <- label_human_data(x = as_tibble(sample_coordinates),
+                                                tree = tree_human_pruned,
+                                                samples = sample_ids)
+
+#Filter for a coarse region of interest
+sample_coordinates_filter <- sample_coordinates_labelled %>% 
+  filter(Region == 'pons') %>% 
+  select(-Region) %>% 
+  as.matrix()
+
+#Rebuild the mask image
+microarray_mask <- array(data = 0, dim = dim(human_anat_vol))
+for(s in 1:nrow(sample_coordinates_filter)){
+  i <- sample_coordinates_filter[s,1]
+  j <- sample_coordinates_filter[s,2]
+  k <- sample_coordinates_filter[s,3]
+  microarray_mask[i,j,k] <- 1
+}
+attributes(microarray_mask) <- attributes(human_anat_vol)
+
+sliceSeries(nrow = 5, ncol = 5, begin = 14, end = 60) %>% 
+  anatomy(human_anat_vol, low = 2, high = 6) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  draw()
+```
+
+The samples that are annotated as the pons are landing in that pocket of samples in the temporal lobe. There is probably some sort of rotation happening here. 
+
+What if we rebuild the mask of samples but swap the x and z axes? 
+
+```{r fig.width = 6, fig.height = 6}
+microarray_mask <- array(data = 0, dim = dim(human_anat_vol))
+for(s in 1:nrow(sample_coordinates)){
+  k <- sample_coordinates[s,1] #1 -> k
+  j <- sample_coordinates[s,2]
+  i <- sample_coordinates[s,3] #3 -> i
+  microarray_mask[i,j,k] <- 1
+}
+attributes(microarray_mask) <- attributes(human_anat_vol)
+
+sliceSeries(nrow = 5, ncol = 5, begin = 14, end = 60) %>% 
+  anatomy(human_anat_vol, low = 2, high = 6) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  draw()
+```
+
+This is better. The cloud of pons samples is approximately where it should be and the other samples are better situated on the brain. The alignment is still not resolved though. 
+
+Speaking to Yohan, it occurred to me that the way I've been using `mincConvertWorldMatrix()` in the `get_sample_coordinates()` function is probably incorrect. Gabe's modified sample coordinates live in MNI ICBM NLIN SYM 09c space, whereas the template file I'm using to get the voxel coordinates is in a consensus average space from the POND and UK AIMS registration. 
+
+What do the sample locations look like if I use the MNI ICBM NLIN SYM 09c template? 
+
+```{r fig.width = 6, fig.height = 6}
+#MNI template 
+mni_template_file <- 'data/human/atlas/mni_icbm152_pd_tal_nlin_sym_09c_3.0mm.mnc'
+mni_template <- mincGetVolume(mni_template_file)
+mni_template_vol <- mincArray(mni_template)
+
+#Obtain the sample coordinates
+sample_coordinates <- get_sample_coordinates(metadata = human_samplefile,
+                                             template = mni_template_file)
+
+microarray_mask <- array(data = 0, dim = dim(mni_template_vol))
+for(s in 1:nrow(sample_coordinates)){
+  k <- sample_coordinates[s,1] #1 -> k
+  j <- sample_coordinates[s,2]
+  i <- sample_coordinates[s,3] #3 -> i
+  microarray_mask[i,j,k] <- 1
+}
+attributes(microarray_mask) <- attributes(mni_template_vol)
+
+sliceSeries(nrow = 5, ncol = 5, begin = 14, end = 60) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  draw()
+```
+
+That looks much better, though some samples in the cerebellum are still falling outside the brain.  
+
+It's worth running some sanity checks though. Are samples falling where I expect them to? Let's start with the pons again. 
+
+```{r fig.width = 6, fig.height = 6}
+#Label the coordinates with coarse regions
+sample_coordinates_labelled <- label_human_data(x = as_tibble(sample_coordinates),
+                                                tree = tree_human_pruned,
+                                                samples = sample_ids)
+
+#Filter for a coarse region of interest
+sample_coordinates_filter <- sample_coordinates_labelled %>% 
+  filter(Region == 'pons') %>% 
+  select(-Region) %>% 
+  as.matrix()
+
+#Rebuild the mask image
+microarray_mask <- array(data = 0, dim = dim(human_anat_vol))
+for(s in 1:nrow(sample_coordinates_filter)){
+  k <- sample_coordinates_filter[s,1]
+  j <- sample_coordinates_filter[s,2]
+  i <- sample_coordinates_filter[s,3]
+  microarray_mask[i,j,k] <- 1
+}
+attributes(microarray_mask) <- attributes(human_anat_vol)
+
+sliceSeries(nrow = 5, ncol = 5, begin = 25, end = 45) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  draw()
+```
+
+That looks right. 
+
+The cerebellar cortex:
+
+```{r fig.width = 6, fig.height = 6}
+#Filter for a coarse region of interest
+sample_coordinates_filter <- sample_coordinates_labelled %>% 
+  filter(Region == 'cerebellar cortex') %>% 
+  select(-Region) %>% 
+  as.matrix()
+
+#Rebuild the mask image
+microarray_mask <- array(data = 0, dim = dim(human_anat_vol))
+for(s in 1:nrow(sample_coordinates_filter)){
+  k <- sample_coordinates_filter[s,1]
+  j <- sample_coordinates_filter[s,2]
+  i <- sample_coordinates_filter[s,3]
+  microarray_mask[i,j,k] <- 1
+}
+attributes(microarray_mask) <- attributes(human_anat_vol)
+
+sliceSeries(nrow = 4, ncol = 5, begin = 15, end = 35) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  draw()
+```
+
+The amygdala: 
+
+```{r fig.width = 3, fig.height = 5}
+#Filter for a coarse region of interest
+sample_coordinates_filter <- sample_coordinates_labelled %>% 
+  filter(Region == 'amygdala') %>% 
+  select(-Region) %>% 
+  as.matrix()
+
+#Rebuild the mask image
+microarray_mask <- array(data = 0, dim = dim(human_anat_vol))
+for(s in 1:nrow(sample_coordinates_filter)){
+  k <- sample_coordinates_filter[s,1]
+  j <- sample_coordinates_filter[s,2]
+  i <- sample_coordinates_filter[s,3]
+  microarray_mask[i,j,k] <- 1
+}
+attributes(microarray_mask) <- attributes(human_anat_vol)
+
+sliceSeries(nrow = 5, ncol = 2, begin = 35, end = 45) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  draw()
+```
+
+It seems like samples are broadly in the right place. I am concerned about this issue with the cerebellar cortex though. 
+
+I wonder if it's just a downsampling issue. What do the samples look like at native resolution? 
+
+```{r}
+#MNI template 
+mni_template_file <- 'data/human/atlas/mni_icbm152_pd_tal_nlin_sym_09c.mnc'
+mni_template <- mincGetVolume(mni_template_file)
+mni_template_vol <- mincArray(mni_template)
+
+#Obtain the sample coordinates
+sample_coordinates <- get_sample_coordinates(metadata = human_samplefile,
+                                             template = mni_template_file)
+
+microarray_mask <- array(data = 0, dim = dim(mni_template_vol))
+for(s in 1:nrow(sample_coordinates)){
+  k <- sample_coordinates[s,1] #1 -> k
+  j <- sample_coordinates[s,2]
+  i <- sample_coordinates[s,3] #3 -> i
+  microarray_mask[i,j,k] <- 1
+}
+attributes(microarray_mask) <- attributes(mni_template_vol)
+```
+
+```{r fig.width = 10, fig.height = 7}
+sliceSeries(nrow = 4, ncol = 5, begin = 40, end = 60) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  draw()
+```
+
+It's difficult to see because the voxels are so small. Let's blow it up. 
+
+```{r fig.width = 8, fig.height = 8}
+slices <- floor(seq(40, 60, length.out = 20))
+i <- 1
+sliceSeries(nrow = 1, ncol = 1, slices = slices[i]) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  addtitle(paste0("Slice: ", slices[i])) %>% 
+  draw()
+```
+
+```{r fig.width = 8, fig.height = 8}
+i <- 2
+sliceSeries(nrow = 1, ncol = 1, slices = slices[i]) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  addtitle(paste0("Slice: ", slices[i])) %>% 
+  draw()
+```
+
+```{r fig.width = 8, fig.height = 8}
+slices <- floor(seq(40, 60, length.out = 20))
+i <- 3
+sliceSeries(nrow = 1, ncol = 1, slices = slices[i]) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  addtitle(paste0("Slice: ", slices[i])) %>% 
+  draw()
+```
+
+```{r fig.width = 8, fig.height = 8}
+slices <- floor(seq(40, 60, length.out = 20))
+i <- 4
+sliceSeries(nrow = 1, ncol = 1, slices = slices[i]) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  addtitle(paste0("Slice: ", slices[i])) %>% 
+  draw()
+```
+
+```{r fig.width = 8, fig.height = 8}
+slices <- floor(seq(40, 60, length.out = 20))
+i <- 5
+sliceSeries(nrow = 1, ncol = 1, slices = slices[i]) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  addtitle(paste0("Slice: ", slices[i])) %>% 
+  draw()
+```
+
+```{r fig.width = 8, fig.height = 8}
+slices <- floor(seq(40, 60, length.out = 20))
+i <- 6
+sliceSeries(nrow = 1, ncol = 1, slices = slices[i]) %>% 
+  anatomy(mni_template_vol, low = 60, high = 90) %>% 
+  overlay(microarray_mask, low = 0, high = 1, 
+          col = colorRampPalette(c("black", 'red'))(255)) %>% 
+  addtitle(paste0("Slice: ", slices[i])) %>% 
+  draw()
+```
+
+It's possibly not as bad, but there are still some samples that are sitting outside of the cerebellum. Maybe it's fine to ignore these instead of trying to register them. Or potentially I can use a nearest neighbours approach to map those samples to the closest spot on the brain. 
+
+
 # Conclusions
+
+Given that I was incorrectly mapping the AHBA microarray samples to the cluster imaging space, I don't believe any of the similarity results I was seeing before. It also makes sense that a mouse cluster including the pons (4-1) would return a match to a human cluster that had cortical voxels (8-7). Because of the reflection of the x and z axes, cortical voxels within the human mask were picking up microarray samples that belonged to the pons. That association makes a lot more sense now. 
+
+In order to map the AHBA microarray samples to the human cluster masks, I'm going to need to register the POND/UK AIMS consensus average space to the MNI ICBM NLIN SYM 09c template space. Then I can either transform the samples into the consensus space or the masks into the MNI space. The other consideration here is that the sample coordinate association might not work extremely well at a lower resolution. It might be worth computing the effect sizes, cluster maps, and cluster masks at a resolution equivalent to that of the MNI space (1.0 mm), rather than the 3.0 mm that I'm using now. 
 
 
 # Next steps
