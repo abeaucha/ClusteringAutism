@@ -1,3 +1,4 @@
+#!/bin/bash
 
 #On MICe machines: Remove all modules
 module purge

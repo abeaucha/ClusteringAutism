@@ -1,13 +1,13 @@
 #!/bin/bash
 
-#source pipeline_transcriptomic
+#source pipeline_transcriptomic.sh
 
-#source pipeline_human
+#source pipeline_human.sh
 
-source activate_venv
+source activate_venv.sh
 
 echo "Organizing gene expression files..."
-source organize_expression_files
+source organize_expression_files.sh
 
 thresholds=(0.1 0.2 0.3 0.4 0.5 0.6 0.8 0.9 1.0)
 for i in ${thresholds[@]};
