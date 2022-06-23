@@ -141,8 +141,31 @@ source activate_venv.sh
 # done
 
 Rscript microarray_sample_image.R \
---metadata data/human/SampleInformation_pipeline_v1.csv \
---template data/human/atlas/mni_icbm152_t1_tal_nlin_sym_09c.mnc \
---outdir data/human/expression/
+	--metadata data/human/SampleInformation_pipeline_v1.csv \
+	--template data/human/registration/average_to_MNI/mni_icbm152_t1_tal_nlin_sym_09c_extracted.mnc \
+	--outdir data/human/expression/ \
+	--type labels
+
+Rscript microarray_sample_image.R \
+	--metadata data/human/SampleInformation_pipeline_v1.csv \
+	--template data/human/registration/average_to_MNI/mni_icbm152_t1_tal_nlin_sym_09c_extracted.mnc \
+	--outdir data/human/expression/ \
+	--type mask
+
+antsApplyTransforms \
+	-d 3 \
+	--input data/human/expression/AHBA_microarray_samples_mask.mnc \
+	--output data/human/expression/AHBA_microarray_samples_mask_studyspace.mnc \
+	--reference-image data/human/registration/average_to_MNI/template_sharpen_shapeupdate.mnc \
+	-t [data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc0_GenericAffine.xfm,1] \
+	-t data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc1_inverse_NL.xfm
+
+antsApplyTransforms \
+	-d 3 \
+	--input data/human/expression/AHBA_microarray_samples_labels.mnc \
+	--output data/human/expression/AHBA_microarray_samples_labels_studyspace.mnc \
+	--reference-image data/human/registration/average_to_MNI/template_sharpen_shapeupdate.mnc \
+	-t [data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc0_GenericAffine.xfm,1] \
+	-t data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc1_inverse_NL.xfm
 
 deactivate
