@@ -15,6 +15,7 @@
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(optparse))
+suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
 
 
@@ -56,6 +57,11 @@ method <- args[['method']]
 outdir <- args[['outdir']]
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
 
+# clusterfile <- 'data/human/clustering/human_clusters_groups10_3.0mm.csv'
+# imgdir <- 'data/human/effect_sizes/absolute/resolution_1.0/'
+# outdir <- 'data/human/clustering/cluster_maps/absolute/resolution_1.0/mean/'
+
+
 #Create outdir if needed
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
@@ -64,14 +70,15 @@ if (!dir.exists(outdir)) {
 #Import cluster information
 if (verbose) {message("Importing cluster information...")}
 
-df_clusters <- as.data.frame(data.table::fread(clusterfile, header = TRUE))
-rownames(df_clusters) <- df_clusters[,'ID']
-df_clusters <- df_clusters[,colnames(df_clusters) != 'ID']
+df_clusters <- data.table::fread(clusterfile, header = TRUE) %>% 
+  as_tibble() %>% 
+  column_to_rownames('ID')
 
 #Create cluster maps
 if (verbose) {message("Creating cluster maps...")}
 
 sink(file = 'tmp.log', type = 'output')
+imgfiles <- list.files(imgdir, full.names = T)
 for (j in 1:ncol(df_clusters)) {
   
   krange <- sort(unique(df_clusters[,j]))
@@ -83,9 +90,14 @@ for (j in 1:ncol(df_clusters)) {
     }
     
     rows_k <- df_clusters[,j] == k
-    files_k <- rownames(df_clusters)[rows_k]
-    files_k <- file.path(imgdir, files_k)
-  
+    id_k <- rownames(df_clusters)[rows_k]
+    
+    files_k <- character(length(id_k))
+    for (f in 1:length(id_k)) {
+      files_k[f] <- str_subset(imgfiles, id_k[f])
+      
+    }
+    
     cluster_map <- mincSummary(filenames = files_k,
                                method = method,
                                grouping = NULL)
