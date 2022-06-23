@@ -2,13 +2,15 @@
 
 source activate_venv.sh
 
-# echo "Organizing gene expression files..."
-# source organize_expression_files
+echo "Organizing gene expression files..."
+source organize_expression_files.sh
 
-# thresholds=(0.1 0.2 0.3 0.4 0.5 0.6 0.8 0.7 0.9 1.0)
-#for i in ${thresholds[@]};
-#do
-#     echo "Creating masks at threshold ${i} ..."
+
+#Create cluster masks
+thresholds=(0.1 0.2 0.3 0.4 0.5 0.6 0.8 0.7 0.9 1.0)
+for i in ${thresholds[@]};
+do
+    echo "Creating masks at threshold ${i} ..."
 
 #     python3 create_cluster_masks.py \
 #         --imgdir data/mouse/clustering/cluster_maps/absolute/resolution_200/mean/ \
@@ -34,6 +36,20 @@ source activate_venv.sh
 #         --threshold $i \
 #         --symmetric true
         
+    python3 create_cluster_masks.py \
+        --imgdir data/human/clustering/cluster_maps/absolute/resolution_1.0/mean/ \
+        --outdir data/human/clustering/cluster_masks/absolute/resolution_1.0/mean/threshold_$i/ \
+        --threshold $i \
+        --symmetric true
+        
+    python3 create_cluster_masks.py \
+        --imgdir data/human/clustering/cluster_maps/relative/resolution_1.0/mean/ \
+        --outdir data/human/clustering/cluster_masks/relative/resolution_1.0/mean/threshold_$i/ \
+        --threshold $i \
+        --symmetric true
+
+done
+
 #     echo "Creating mouse cluster signatures using threshold $i masks and input gene space..."
     
 #     python3 mouse_cluster_signatures.py \
@@ -73,6 +89,38 @@ source activate_venv.sh
 #         --nproc 4
 # done
 
+
+# Create images containing AHBA microarray samples
+
+# Rscript microarray_sample_image.R \
+# 	--metadata data/human/SampleInformation_pipeline_v1.csv \
+# 	--template data/human/registration/average_to_MNI/mni_icbm152_t1_tal_nlin_sym_09c_extracted.mnc \
+# 	--outdir data/human/expression/ \
+# 	--type labels
+
+# Rscript microarray_sample_image.R \
+# 	--metadata data/human/SampleInformation_pipeline_v1.csv \
+# 	--template data/human/registration/average_to_MNI/mni_icbm152_t1_tal_nlin_sym_09c_extracted.mnc \
+# 	--outdir data/human/expression/ \
+# 	--type mask
+
+# #Transform microarray sample images to study space
+
+# antsApplyTransforms \
+# 	-d 3 \
+# 	--input data/human/expression/AHBA_microarray_samples_mask.mnc \
+# 	--output data/human/expression/AHBA_microarray_samples_mask_studyspace.mnc \
+# 	--reference-image data/human/registration/average_to_MNI/template_sharpen_shapeupdate.mnc \
+# 	-t [data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc0_GenericAffine.xfm,1] \
+# 	-t data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc1_inverse_NL.xfm
+
+# antsApplyTransforms \
+# 	-d 3 \
+# 	--input data/human/expression/AHBA_microarray_samples_labels.mnc \
+# 	--output data/human/expression/AHBA_microarray_samples_labels_studyspace.mnc \
+# 	--reference-image data/human/registration/average_to_MNI/template_sharpen_shapeupdate.mnc \
+# 	-t [data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc0_GenericAffine.xfm,1] \
+# 	-t data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc1_inverse_NL.xfm
 
 # for i in ${thresholds[@]};
 # do
@@ -139,33 +187,5 @@ source activate_venv.sh
 #         --save-intermediate false
 
 # done
-
-Rscript microarray_sample_image.R \
-	--metadata data/human/SampleInformation_pipeline_v1.csv \
-	--template data/human/registration/average_to_MNI/mni_icbm152_t1_tal_nlin_sym_09c_extracted.mnc \
-	--outdir data/human/expression/ \
-	--type labels
-
-Rscript microarray_sample_image.R \
-	--metadata data/human/SampleInformation_pipeline_v1.csv \
-	--template data/human/registration/average_to_MNI/mni_icbm152_t1_tal_nlin_sym_09c_extracted.mnc \
-	--outdir data/human/expression/ \
-	--type mask
-
-antsApplyTransforms \
-	-d 3 \
-	--input data/human/expression/AHBA_microarray_samples_mask.mnc \
-	--output data/human/expression/AHBA_microarray_samples_mask_studyspace.mnc \
-	--reference-image data/human/registration/average_to_MNI/template_sharpen_shapeupdate.mnc \
-	-t [data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc0_GenericAffine.xfm,1] \
-	-t data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc1_inverse_NL.xfm
-
-antsApplyTransforms \
-	-d 3 \
-	--input data/human/expression/AHBA_microarray_samples_labels.mnc \
-	--output data/human/expression/AHBA_microarray_samples_labels_studyspace.mnc \
-	--reference-image data/human/registration/average_to_MNI/template_sharpen_shapeupdate.mnc \
-	-t [data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc0_GenericAffine.xfm,1] \
-	-t data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc1_inverse_NL.xfm
 
 deactivate
