@@ -168,14 +168,18 @@ x1 <- data.table::fread(file1, header = TRUE) %>%
   column_to_rownames(row_names) %>% 
   as.matrix() 
 colnames(x1) <- NULL
-rownames(x1) <- basename(rownames(x1))
+rownames(x1) <- basename(rownames(x1)) %>% 
+  str_extract('.*extracted') %>% 
+  str_remove('\\.extracted')
 
 x2 <- data.table::fread(file2, header = TRUE) %>% 
   as_tibble() %>% 
   column_to_rownames(row_names) %>% 
   as.matrix() 
 colnames(x2) <- NULL
-rownames(x2) <- basename(rownames(x2))
+rownames(x2) <- basename(rownames(x2)) %>% 
+  str_extract('.*extracted') %>% 
+  str_remove('\\.extracted')
 
 if (verbose) {message("Running similarity network fusion...")}
 
