@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# template.R
+# microarray_sample_image.R
 # Author: Antoine Beauchamp
 # Created:
 #
@@ -27,6 +27,10 @@ option_list <- list(
   make_option('--outdir',
               type = 'character',
               help = "Path to directory in which to save output files."),
+  make_option('--type',
+              type = 'character',
+              default = 'labels',
+              help = "[default %default]"),
   make_option('--verbose',
               type = 'character',
               default = 'true',
@@ -43,8 +47,7 @@ option_list <- list(
 #' @param template (character scalar) Path to the .mnc file containing human
 #' imaging template.
 #'
-#' @return (character vector) AHBA microarray sample voxel coordinates in the 
-#' form "x-y-z".
+#' @return (matrix) 
 get_sample_coordinates <- function(metadata, template) {
   
   metadata <- suppressMessages(read_csv(metadata))
@@ -93,7 +96,7 @@ get_sample_coordinates <- function(metadata, template) {
 #' @param template 
 #'
 #' @return
-coords_to_img <- function(coords, template) {
+coords_to_img <- function(coords, template, type = 'labels') {
   
   template <- template %>% 
     mincGetVolume() %>% 
@@ -104,7 +107,13 @@ coords_to_img <- function(coords, template) {
     i <- coords[s,3]
     j <- coords[s,2]
     k <- coords[s,1]
-    img[i,j,k] <- as.integer(s)
+    if (type == 'mask') {
+      img[i,j,k] <- 1
+    } else if (type == 'labels') {
+      img[i,j,k] <- as.integer(s)
+    } else {
+      stop()
+    }
   }
   attributes(img) <- attributes(template)
   
@@ -120,6 +129,7 @@ args <- parse_args(OptionParser(option_list = option_list))
 metadata <- args[['metadata']]
 template <- args[['template']]
 outdir <- args[['outdir']]
+type <- args[['type']]
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
 
 if (!dir.exists(outdir)) {
@@ -128,34 +138,34 @@ if (!dir.exists(outdir)) {
 
 if (verbose) {message("Downloading AHBA microarray sample coordinates...")}
 
-# metadata <- 'data/human/SampleInformation_pipeline_v1.csv'
-# template <- 'data/human/atlas/mni_icbm152_t1_tal_nlin_sym_09c.mnc'
-
-get_sample_coordinates(metadata = metadata,
-                       template = template)
-
 sample_coordinates <- get_sample_coordinates(metadata = metadata,
                                              template = template)
 
 if (verbose) {message("Mapping AHBA samples to image space...")}
 
-sample_labels <- coords_to_img(coords = sample_coordinates,
-                               template = template)
-
-defs <- tibble(sample_id = rownames(sample_coordinates),
-               label = 1:length(sample_id))
+sample_img <- coords_to_img(coords = sample_coordinates,
+                            template = template,
+                            type = type)
 
 if (verbose) {message("Writing sample image to file...")}
 
-outfile_img <- file.path(outdir, 'AHBA_microarray_samples.mnc')
-mincWriteVolume(buffer = sample_labels,
+if (type == 'mask') {
+  outfile_img <- file.path(outdir, 'AHBA_microarray_samples_mask.mnc')
+} else if (type == 'labels') {
+  outfile_img <- file.path(outdir, 'AHBA_microarray_samples_labels.mnc')
+} else {
+  stop()
+}
+mincWriteVolume(buffer = sample_img,
                 output.filename = outfile_img,
                 clobber = TRUE)
 
-if (verbose) {message("Writing sample definitions to file...")}
-
-outfile_defs <- file.path(outdir, 'AHBA_microarray_samples_defs.csv')
-write_csv(x = defs, file = outfile_defs)
-
-quit()
-
+if (type == 'labels') {
+  defs <- tibble(sample_id = rownames(sample_coordinates),
+                 label = 1:length(sample_id))
+  
+  if (verbose) {message("Writing sample definitions to file...")}
+  
+  outfile_defs <- file.path(outdir, 'AHBA_microarray_samples_defs.csv')
+  write_csv(x = defs, file = outfile_defs)
+}
