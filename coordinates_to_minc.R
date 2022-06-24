@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------------
 # coordinates_to_minc.R
 # Author: Antoine Beauchamp
-# Created:
+# Created: June 23rd, 2022
 #
 # Brief description
 #
