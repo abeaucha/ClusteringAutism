@@ -23,9 +23,9 @@ option_list <- list(
               type = 'character',
               help = paste("Path to directory containing gene expression",
                            "data sets.")),
-  make_option('--metadata',
+  make_option('--coordinates',
               type = 'character',
-              help = "Path to .csv file containing AHBA sample metadata."),
+              help = ""),
   make_option('--template',
               type = 'character',
               help = "Path to MINC file containing human imaging template."),
@@ -51,70 +51,38 @@ option_list <- list(
 
 # Functions ------------------------------------------------------------------
 
-#' Get microarray sample coordinates
+
+#' Convert a set of world coordinates to voxel coordinates
 #'
-#' @param metadata (character scalar) Path to the .csv file containing AHBA
-#' sample metadata.
-#' @param template (character scalar) Path to the .mnc file containing human
-#' imaging template.
+#' @param coords (character scalar)
+#' @param template (character scalar) 
 #'
-#' @return (character vector) AHBA microarray sample voxel coordinates in the 
-#' form "x-y-z".
-get_sample_coordinates <- function(metadata, template) {
+#' @return (matrix)
+world_to_voxel <- function(coords, template) {
   
-  metadata <- suppressMessages(read_csv(metadata))
-  donors <- unique(metadata[['Donor']])
-  for (i in 1:length(donors)) {
-    
-    url <- paste0("https://raw.githubusercontent.com/gdevenyi/",
-                  "AllenHumanGeneMNI/master/transformed-points/recombine/", 
-                  donors[i], 
-                  "_SampleAnnot.csv")
-    
-    df_tmp <- suppressMessages(read_csv(url)) %>% 
-      mutate(Donor = donors[i]) %>% 
-      unite(SampleID, 
-            structure_id, slab_num, well_id, 
-            sep = '-', remove = FALSE) %>% 
-      column_to_rownames('SampleID') %>% 
-      select(contains('mni_nlin')) %>% 
-      as.matrix()
-    
-    if (i == 1) {
-      sample_coordinates_world <- df_tmp
-    } else {
-      sample_coordinates_world <- rbind(sample_coordinates_world,
-                                        df_tmp)
-    }
-  }
+  coords <- suppressMessages(read_csv(coords)) %>% 
+    select(label, x, y, z) %>% 
+    column_to_rownames('label') %>% 
+    as.matrix()
   
-  ind_match_metadata <- match(rownames(sample_coordinates_world),
-                              metadata[['SampleID']])
-  sample_coordinates_world <- sample_coordinates_world[ind_match_metadata,]
+  coords_voxel <- mincConvertWorldMatrix(world_matrix = t(coords),
+                                         file = template,
+                                         nearest_voxel = TRUE)
+  coords_voxel <- t(coords_voxel)
+  colnames(coords_voxel) <- c('x', 'y', 'z')
+  rownames(coords_voxel) <- rownames(coords)
   
-  sample_coordinates_voxel <- mincConvertWorldMatrix(world_matrix = t(sample_coordinates_world),
-                                                     file = template,
-                                                     nearest_voxel = TRUE)
-  sample_coordinates_voxel <- t(sample_coordinates_voxel)
-  colnames(sample_coordinates_voxel) <- c('x', 'y', 'z')
-  
-  sample_coordinates <- sample_coordinates_voxel %>% 
-    as_tibble() %>% 
-    unite(coords, x, y, z, sep = '-') %>% 
-    pull(coords)
-  
-  return(sample_coordinates)
+  return(coords_voxel)
   
 }
-
 
 #'  Create an expression signature for a cluster
 #'
 #' @param infile (data.frame) A data.frame row with two columns 
 #' containing 1. the path to the cluster mask image, and 2. the path to 
 #' the gene expression .csv file.
-#' @param sample_coordinates (character vector) AHBA microarray sample 
-#' voxel coordinates in the form "x-y-z".
+#' @param sample_coordinates (matrix) AHBA microarray sample 
+#' voxel coordinates. 
 #'
 #' @return (data.frame) A data.frame row containing the expression 
 #' signature.
@@ -129,10 +97,15 @@ create_cluster_signature <- function(infile, sample_coordinates) {
     unite(coords, 1:3, sep = '-') %>% 
     pull(coords)
   
-  expression <- data.table::fread(infile[, 2][[1]], header = TRUE) %>% 
-    as_tibble()
+  sample_coordinates <- sample_coordinates %>% 
+    as_tibble() %>% 
+    unite(coords, 1:3, sep = '-') %>% 
+    pull(coords)
   
   ind <- sample_coordinates %in% cluster_coordinates
+  
+  expression <- data.table::fread(infile[, 2][[1]], header = TRUE) %>% 
+    as_tibble()
   
   signature <- expression[ind,] %>% 
     summarise_all(.funs = mean)
@@ -148,7 +121,7 @@ create_cluster_signature <- function(infile, sample_coordinates) {
 args <- parse_args(OptionParser(option_list = option_list))
 cluster_dir <- args[['clusterdir']]
 expr_dir <- args[['exprdir']]
-metadata <- args[['metadata']]
+coords <- args[['coordinates']]
 template <- args[['template']]
 outfile <- args[['outfile']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
@@ -162,15 +135,13 @@ if (!dir.exists(outdir)) {
 
 if (verbose) {message("Getting voxel coordinates for microarray samples...")}
 
-#Get AHBA microarray sample coordinates
-sample_coordinates <- get_sample_coordinates(metadata = metadata, 
-                                             template = template)
+sample_coordinates <- world_to_voxel(coords = coords,
+                                     template = template)
 
 if (verbose) {message("Identifying input files...")}
 
 #Get cluster and expression input files
 expr_files <- Sys.glob(file.path(expr_dir, '*.csv'))
-
 cluster_files <- list.files(cluster_dir, full.names = TRUE)
 infiles <- expand_grid(clusterfile = cluster_files, 
                        exprfile = expr_files)
@@ -189,7 +160,7 @@ if (inparallel) {
                         .packages = c('tidyverse', 'RMINC'),
                         .combine = 'bind_rows', .options.snow=opts) %dopar% {
                           create_cluster_signature(infile = infiles[i,],
-                                                   sample_coordinate = sample_coordinates)
+                                                   sample_coordinates = sample_coordinates)
                         }
   close(pb)
   stopCluster(cl)
@@ -199,7 +170,7 @@ if (inparallel) {
                         .combine = 'bind_rows') %do% {
                           progress(n = i)
                           create_cluster_signature(infile = infiles[i,],
-                                                   sample_coordinate = sample_coordinates)
+                                                   sample_coordinates = sample_coordinates)
                         }
   close(pb)
 }
