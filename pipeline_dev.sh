@@ -5,25 +5,33 @@ source activate_venv.sh
 # echo "Organizing gene expression files..."
 # source organize_expression_files.sh
 
-Rscript fetch_microarray_coordinates.R \
-    --metadata data/human/SampleInformation_pipeline_v1.csv \
-    --outfile data/human/expression/AHBA_microarray_coordinates_mni.csv \
-    --labels true
+# Rscript fetch_microarray_coordinates.R \
+#     --metadata data/human/SampleInformation_pipeline_v1.csv \
+#     --outfile data/human/expression/AHBA_microarray_coordinates_mni.csv \
+#     --labels true
 
-antsApplyTransformsToPoints \
-    -d 3 \
-    --input data/human/expression/AHBA_microarray_coordinates_mni.csv \
-    --output data/human/expression/AHBA_microarray_coordinates_studyspace.csv \
-    -t [data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc0_GenericAffine.xfm,1] \
-	-t data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc1_inverse_NL.xfm \
-    --precision 1
+# antsApplyTransformsToPoints \
+#     -d 3 \
+#     --input data/human/expression/AHBA_microarray_coordinates_mni.csv \
+#     --output data/human/expression/AHBA_microarray_coordinates_studyspace.csv \
+#     -t [data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc0_GenericAffine.xfm,1] \
+# 	-t data/human/registration/average_to_MNI/average_to_icbm_nlin_sym_09c_minc1_inverse_NL.xfm \
+#     --precision 1
     
-Rscript coordinates_to_minc.R \
+# Rscript coordinates_to_minc.R \
+#     --coordinates data/human/expression/AHBA_microarray_coordinates_studyspace.csv \
+#     --template data/human/registration/reference_files/model_1.0mm.mnc \
+#     --outfile data/human/expression/AHBA_microarray_mask_studyspace.mnc \
+#     --type mask
+
+Rscript human_cluster_signatures_dev.R \
+    --clusterdir data/human/clustering/cluster_masks/absolute/resolution_1.0/mean/threshold_0.1/ \
+    --exprdir data/human/expression/input_space/ \
     --coordinates data/human/expression/AHBA_microarray_coordinates_studyspace.csv \
     --template data/human/registration/reference_files/model_1.0mm.mnc \
-    --outfile data/human/expression/AHBA_microarray_mask_studyspace.mnc \
-    --type mask
-
+    --outfile data/human/cluster_signatures/input_space/human_cluster_signatures_rel_mean_threshold0.1_inputspace.csv \
+    --parallel true \
+    --nproc 4
 
 # python3 human_cluster_signatures_dev.py
 
