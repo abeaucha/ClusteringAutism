@@ -6,8 +6,8 @@ dev.ipynb
 .Rhistory
 plots_temp/
 analyses/*.html
-analyses/cluster_similarity_troubleshoot/data/
-analyses/cluster_similarity_troubleshoot/*.html
+analyses/troubleshoot_cluster_similarity/data/
+analyses/troubleshoot_cluster_similarity/*.html/
 __pycache__/
 analyses/troubleshoot_microarray_transforms/data/
 analyses/troubleshoot_microarray_transforms/transforms/
