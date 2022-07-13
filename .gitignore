@@ -1,13 +1,13 @@
 .venv/
 .ipynb_checkpoints/
+__pycache__/
+plots_temp/
 data/
+.Rhistory
 jacob_code
 dev.ipynb
-.Rhistory
-plots_temp/
 analyses/*.html
 analyses/troubleshoot_cluster_similarity/data/
 analyses/troubleshoot_cluster_similarity/*.html
-__pycache__/
 analyses/troubleshoot_microarray_transforms/data/
 analyses/troubleshoot_microarray_transforms/transforms/
