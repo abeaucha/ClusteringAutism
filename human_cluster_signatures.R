@@ -13,6 +13,7 @@ suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(doSNOW))
 suppressPackageStartupMessages(library(tcltk))
 
+
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
@@ -86,9 +87,9 @@ world_to_voxel <- function(coords, template) {
 #'
 #' @return (data.frame) A data.frame row containing the expression 
 #' signature.
-create_cluster_signature <- function(infile, sample_coordinates) {
+create_cluster_signature <- function(infiles, sample_coordinates) {
   
-  cluster <- mincArray(mincGetVolume(infile[,1][[1]]))
+  cluster <- mincArray(mincGetVolume(infiles[, 1][[1]]))
   
   cluster_voxels <- which(cluster == 1, arr.ind = TRUE)
   
@@ -97,17 +98,17 @@ create_cluster_signature <- function(infile, sample_coordinates) {
     unite(coords, 1:3, sep = '-') %>% 
     pull(coords)
   
-  sample_coordinates <- sample_coordinates %>% 
+  sample_coordinates <- sample_coordinates[,3:1] %>% 
     as_tibble() %>% 
     unite(coords, 1:3, sep = '-') %>% 
     pull(coords)
   
-  ind <- sample_coordinates %in% cluster_coordinates
+  samples_in_cluster <- sample_coordinates %in% cluster_coordinates
   
-  expression <- data.table::fread(infile[, 2][[1]], header = TRUE) %>% 
+  expression <- data.table::fread(infiles[, 2][[1]], header = TRUE) %>% 
     as_tibble()
   
-  signature <- expression[ind,] %>% 
+  signature <- expression[samples_in_cluster,] %>% 
     summarise_all(.funs = mean)
   
   return(signature)
@@ -176,7 +177,7 @@ if (inparallel) {
 }
 
 #Include file info
-signatures <- bind_cols(signatures, infiles)
+signatures <- bind_cols(infiles, signatures)
 
 #Write to file
 data.table::fwrite(signatures,
