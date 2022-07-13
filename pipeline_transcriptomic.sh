@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source activate_venv
+source activate_venv.sh
 
 python3 build_voxel_matrix.py \
 	--datadir /projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/AMBA/data/expression/ \
@@ -66,6 +66,6 @@ Rscript process_expression_matrix.R \
 	--verbose true
 
 #Generate 500 latent spaces    
-source generate_latent_spaces
+source generate_latent_spaces.sh
 
 deactivate
