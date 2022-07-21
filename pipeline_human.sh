@@ -28,6 +28,7 @@ Rscript calculate_human_effect_sizes.R \
 	--outdir data/human/effect_sizes/absolute/resolution_0.5/ \
 	--maskfile data/human/registration/reference_files/mask.mnc \
 	--ncontrols 10 \
+    --threshold 5 \
 	--parallel true \
 	--nproc 4
 
@@ -39,6 +40,7 @@ Rscript calculate_human_effect_sizes.R \
 	--outdir data/human/effect_sizes/relative/resolution_0.5/ \
 	--maskfile data/human/registration/reference_files/mask.mnc \
 	--ncontrols 10 \
+    --threshold 5 \
 	--parallel true \
 	--nproc 4
     
