@@ -22,8 +22,8 @@ fi
 human_expr_dir=/projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/main/AHBA/data/
 
 #Filenames subject to change
-cp ${human_expr_dir}HumanExpressionMatrix_samples_pipeline_v1.csv ${outdir}
-cp ${human_expr_dir}SampleInformation_pipeline_v1.csv ${outdir}
+cp ${human_expr_dir}HumanExpressionMatrix_samples_pipeline_abagen.csv ${outdir}
+cp ${human_expr_dir}SampleInformation_pipeline_abagen.csv ${outdir}
 cp ${human_expr_dir}HumanExpressionTree.RData ${outdir}
 
 expr_dir=/projects/abeauchamp/Projects/MouseHumanMapping/Paper_TranscriptomicSimilarity/main/data/
