@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# ----------------------------------------------------------------------------
+# pipeline_human.sh
+# Author: Antoine Beauchamp
+# 
+# Pipeline to process and cluster human imaging data.
+# Pipeline steps:
+# 1. Extract jacobian images from compressed files
+# 2. Calculate participant voxel-wise effect sizes
+# 3. Downsample template, mask, and effect size images
+# 4. Build effect sizes matrices from images
+# 5. Cluster participants based on effect sizes
+# 6. Generate representative cluster effect size maps
+
+
+#Activate virtual environment 
 source activate_venv.sh
 
 
