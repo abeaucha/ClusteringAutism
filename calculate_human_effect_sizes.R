@@ -227,15 +227,9 @@ imgdir <- args[['imgdir']]
 maskfile <- args[['maskfile']]
 outdir <- args[['outdir']]
 ncontrols <- args[['ncontrols']]
+threshold <- args[['threshold']]
 dataset <- args[['dataset']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
-
-demofile <- 'data/human/registration/DBM_input_demo_passedqc.csv'
-imgdir <- 'data/human/registration/jacobians/absolute/smooth/'
-outdir <- 'data/human/effect_sizes/absolute/resolution_0.5/'
-maskfile <- 'data/human/registration/reference_files/mask.mnc'
-ncontrols <- 10
-threshold <- 5
 
 #Create outdir if needed
 if (!dir.exists(outdir)) {
@@ -282,6 +276,7 @@ if (inparallel) {
                    executor(participant = participants[i,],
                             controls = controls,
                             ncontrols = ncontrols,
+                            threshold = threshold,
                             mask = maskfile,
                             imgdir = imgdir,
                             outdir = outdir,
@@ -296,6 +291,7 @@ if (inparallel) {
                    executor(participant = participants[i,],
                             controls = controls,
                             ncontrols = ncontrols,
+                            threshold = threshold,
                             mask = maskfile,
                             imgdir = imgdir,
                             outdir = outdir,
