@@ -21,6 +21,8 @@ source activate_venv.sh
 dataset='ALL'
 # dataset=POND
 
+echo "Dataset is ${dataset}"
+
 if [ -z $dataset ];
 then
 	human_dir=data/human/
