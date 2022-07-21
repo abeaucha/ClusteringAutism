@@ -82,6 +82,12 @@ transpose <- ifelse(args[['transpose']] == 'true', TRUE, FALSE)
 normalize <- ifelse(args[['scale']] == 'true', TRUE, FALSE)
 aggregate <- ifelse(args[['aggregate']] == 'true', TRUE, FALSE)
 infile <- args[['infile']]
+outdir <- args[['outdir']]
+
+#Create outdir if needed
+if (!dir.exists(outdir)) {
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+}
 
 if (!transpose & !normalize & !aggregate){
   stop("One of {--transpose, --scale, --aggregate} must be true.")
@@ -166,7 +172,7 @@ if (aggregate) {
   
 }
 
-outfile <- file.path(args[['outdir']], outfile)
+outfile <- file.path(outdir, outfile)
 
 if (verbose) {message(paste("Writing to file:", outfile, "..."))}
 
