@@ -241,9 +241,11 @@ demographics <- data.table::fread(demofile, header = TRUE) %>%
   as_tibble()
 
 #Filter for POND sample if desired
-if (dataset == 'POND') {
-  demographics <- demographics %>% 
-    filter(Dataset == 'POND')
+if(!is.null(dataset)){
+  if (dataset == 'POND') {
+    demographics <- demographics %>% 
+      filter(Dataset == 'POND')
+  }
 }
 
 #Remove entries with missing diagnosis, age, or sex
