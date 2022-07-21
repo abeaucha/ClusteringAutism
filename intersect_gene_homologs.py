@@ -117,7 +117,7 @@ def main():
     
     if verbose:
         print("Intersecting gene homologs...")
-    
+        
     #Intersect gene homologs
     mouse, human = intersect_gene_homologs(mouse, human, homologs)
     
