@@ -9,8 +9,9 @@
 # -----------
 # This script computes effect sizes for human study participants. Effect sizes
 # are calculated on a voxel-wise basis by taking z-scores with respect to 
-# study controls. Controls are matched to participants based on sex and 
-# minimal absolute age difference. Effect size images are saved as MINC files.
+# study controls. Controls are matched to participants based on sex, site, 
+# scanner and minimal absolute age difference. Effect size images are saved as 
+# MINC files.
 
 
 # Packages -------------------------------------------------------------------
@@ -44,6 +45,10 @@ option_list <- list(
               default = 10,
               help = paste("Number of controls to use when computing effect",
                            "sizes. [default %default]")),
+  make_option('--threshold',
+              type = 'numeric',
+              default = 10,
+              help = paste("[default %default]")),
   make_option('--dataset',
               type = 'character',
               help = paste("Human data subset to use when computing effect",
@@ -70,20 +75,47 @@ option_list <- list(
 #' include (but are not limited to) all control images.
 #' @param ncontrols (numeric scalar) Number of controls to use for propensity
 #' matching
+#' @param threshold (numeric scalar) 
 #' @param seed (numeric scalar) Random seed to use for control sampling.
 #'
 #' @return (character vector) The paths to the images of the propensity-
 #' matched controls.
 get_control_files <- function(participant, controls, imgfiles,
-                              ncontrols = 10, seed = NULL){
+                              ncontrols = 10, threshold = 10, seed = NULL){
   
   if (!is.null(seed)){set.seed(seed)}
   
-  participant_age <- participant[, 'Age'][[1]]
-  participant_sex <- participant[, 'Sex'][[1]]
+  participant_age <- pull(participant, 'Age')
+  participant_sex <- pull(participant, 'Sex')
+  participant_site <- pull(participant, 'Site')
+  participant_scanner <- pull(participant, 'Scanner')
+  
+  controls_tmp <- controls %>% 
+    filter(Sex == participant_sex,
+           Site == participant_site,
+           Scanner == participant_scanner)
+  
+  ncontrols_test <- nrow(controls_tmp)
+  
+  if (ncontrols_test < threshold) {
+    
+    controls_tmp <- controls %>% 
+      filter(Sex == participant_sex,
+             Site == participant_site)
+    
+    ncontrols_test <- nrow(controls_tmp)
+    
+    if (ncontrols_test < threshold) {
+      
+      controls_tmp <- controls %>% 
+        filter(Sex == participant_sex)
+      
+    }
+  }
+  
+  controls <- controls_tmp
   
   control_ids <- controls %>%
-    filter(Sex == participant_sex) %>% 
     mutate(AgeDiff = abs(Age - participant_age)) %>% 
     top_n(n = -1*ncontrols, wt = AgeDiff) %>% 
     sample_n(size = ncontrols, replace = FALSE) %>% 
@@ -147,6 +179,7 @@ compute_effect_size <- function(participant, controls, imgfiles, mask) {
 #' @param controls (data.frame) Demographic information for the controls.
 #' @param ncontrols (numeric scalar) Number of controls to use for propensity
 #' matching
+#' @param threshold (numeric scalar) 
 #' @param mask (character scalar) Path to mask image MINC file. 
 #' @param imgdir (character vector) Paths to image MINC files.
 #' @param outdir (character scalar) Path to directory in which to save effect 
@@ -155,7 +188,7 @@ compute_effect_size <- function(participant, controls, imgfiles, mask) {
 #'
 #' @return (numeric scalar) Value of 1 if function succeeds.
 executor <- function(participant, controls, ncontrols = 10, 
-                     mask, imgdir, outdir, seed = NULL) {
+                     threshold = 10, mask, imgdir, outdir, seed = NULL) {
   
   imgfiles <- list.files(imgdir, full.names = TRUE) %>% 
     str_subset('.mnc')
@@ -164,6 +197,7 @@ executor <- function(participant, controls, ncontrols = 10,
                                      controls = controls,
                                      imgfiles = imgfiles,
                                      ncontrols = ncontrols,
+                                     threshold = threshold,
                                      seed = seed)
   
   effect_size <- compute_effect_size(participant = participant,
@@ -196,6 +230,13 @@ ncontrols <- args[['ncontrols']]
 dataset <- args[['dataset']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 
+demofile <- 'data/human/registration/DBM_input_demo_passedqc.csv'
+imgdir <- 'data/human/registration/jacobians/absolute/smooth/'
+outdir <- 'data/human/effect_sizes/absolute/resolution_0.5/'
+maskfile <- 'data/human/registration/reference_files/mask.mnc'
+ncontrols <- 10
+threshold <- 5
+
 #Create outdir if needed
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
@@ -215,7 +256,9 @@ if (dataset == 'POND') {
 demographics <- demographics %>% 
   filter(!is.na(DX),
          !is.na(Age),
-         !is.na(Sex))
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner))
 
 #Extract control demographics 
 controls <- demographics %>% 
