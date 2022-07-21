@@ -3,8 +3,10 @@
 source activate_venv.sh
 
 #Get transcriptomic files from transcriptomic similarity repo
-# source get_transcriptomic_files.sh
+echo "Obtaining transcriptomic files..."
+source get_transcriptomic_files.sh
 
+#Transcriptomic directories
 mouse_dir=data/mouse/expression/
 human_dir=data/human/expression/
 
@@ -63,11 +65,6 @@ Rscript process_expression_matrix.R \
 	--aggregate false \
 	--outdir ${human_dir}/input_space/ \
 	--verbose true
-
-#Create symlinks to input space matrices
-#ln -s $(pwd)/data/mouse/expression/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv $(pwd)/data/mouse/expression/input_space/
-
-#ln -s $(pwd)/data/human/expression/HumanExpressionMatrix_samples_pipeline_v1_homologs_scaled.csv $(pwd)/data/human/expression/input_space/
 
 #Generate 500 latent spaces    
 #source generate_latent_spaces.sh
