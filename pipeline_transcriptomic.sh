@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# ----------------------------------------------------------------------------
+# pipeline_transcriptomic.sh
+# Author: Antoine Beauchamp
+# 
+# Pipeline to process mouse and human transcriptomic data sets.
+# Pipeline steps:
+# 1. Copy transcriptomic data files into project directory
+# 2. Filter gene sets for mouse-human homologous genes
+# 3. Label mouse voxel expression matrix with regional labels
+# 4. Normalize and aggregate mouse and human expression matrices
+
 #Activate virtual environment
 source activate_venv.sh
 
