@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#Activate virtual environment
 source activate_venv.sh
 
 #Get transcriptomic files from transcriptomic similarity repo
