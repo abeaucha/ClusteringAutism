@@ -151,12 +151,6 @@ python3 build_effect_size_matrix.py \
 	--outfile ${human_dir}/effect_sizes/absolute/human_effect_sizes_absolute_3.0mm.csv \
 	--mask data/human/registration/reference_files/mask_3.0mm.mnc
     
-#Create matrix using absolute effect sizes at 1.0mm
-python3 build_effect_size_matrix.py \
-	--imgdir ${human_dir}/effect_sizes/absolute/resolution_1.0/ \
-	--outfile ${human_dir}/effect_sizes/absolute/human_effect_sizes_absolute_1.0mm.csv \
-	--mask data/human/registration/reference_files/mask_1.0mm.mnc 
-    
 echo "Build relative effect size matrix..."    
 
 #Create matrix using absolute effect sizes at 3.0mm
@@ -165,12 +159,6 @@ python3 build_effect_size_matrix.py \
 	--outfile ${human_dir}/effect_sizes/relative/human_effect_sizes_relative_3.0mm.csv \
 	--mask data/human/registration/reference_files/mask_3.0mm.mnc
 
-#Create matrix using absolute effect sizes at 1.0mm
-python3 build_effect_size_matrix.py \
-	--imgdir ${human_dir}/effect_sizes/relative/resolution_1.0/ \
-	--outfile ${human_dir}/effect_sizes/relative/human_effect_sizes_relative_1.0mm.csv \
-	--mask data/human/registration/reference_files/mask_1.0mm.mnc
-    
     
 # Run clustering -------------------------------------------------------------
     
