@@ -261,8 +261,14 @@ def main():
     args = parse_args()
     cluster_dir = args['clusterdir']
     expr_dir = args['exprdir']
+    outfile = args['outfile']
     parallel = True if args['parallel'] == 'true' else False
     verbose = True if args['verbose'] == 'true' else False
+    
+    #Create outdir if needed
+    outdir = os.path.dirname(outfile)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
     
     #Ensure directories are proper paths
     cluster_dir = os.path.join(cluster_dir, '')
