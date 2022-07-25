@@ -17,14 +17,14 @@ import argparse
 import os
 import random
 import csv
-import pandas as pd
-import numpy as np
-from datatable import fread
+import pandas                 as pd
+import numpy                  as np
+from datatable                import fread
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional    as F
 from torch                    import nn
-from torch.optim              import AdamW
+from torch.optim              import SGD
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.cuda               import is_available
 
@@ -32,7 +32,7 @@ from skorch                   import NeuralNetClassifier
 from skorch.callbacks         import LRScheduler
 from skorch.helper            import DataFrameTransformer
 
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics          import accuracy_score, confusion_matrix
 
 
 # Functions ------------------------------------------------------------------
@@ -87,6 +87,12 @@ def parse_args():
         type = int,
         default = 200,
         help = "Number of epochs to train over."
+    )
+    
+    parser.add_argument(
+        '--totalsteps',
+        type = int,
+        help = "Number of steps to use in optimizer."
     )
     
     parser.add_argument(
@@ -166,7 +172,7 @@ def prepare_data(data, labelcol = None):
     return X, y
 
 
-def define_classifier(input_units, output_units, hidden_units, weight_decay, max_epochs, learning_rate, device):
+def define_classifier(input_units, output_units, hidden_units, weight_decay, max_epochs, total_steps, learning_rate, device):
 
     """
     """
@@ -202,20 +208,19 @@ def define_classifier(input_units, output_units, hidden_units, weight_decay, max
 
     #Create the classifier
     net = NeuralNetClassifier(
-            ClassifierModule(input_units = input_units,
-                             output_units = output_units,
-                             hidden_units = hidden_units),
-            train_split = None,
-            optimizer = AdamW,
-            optimizer__weight_decay = weight_decay,
-            max_epochs = max_epochs,
-            callbacks = [('lr_scheduler',
-                          LRScheduler(policy=OneCycleLR,
-                                      total_steps=max_epochs,
-                                      cycle_momentum=False,  
-                                      max_lr=learning_rate))],
-        device = device
-        )
+        ClassifierModule(input_units = input_units,
+                         output_units = output_units,
+                         hidden_units = hidden_units),
+        train_split = None,
+        optimizer = SGD,
+        optimizer__weight_decay = weight_decay,
+        max_epochs = max_epochs,
+        callbacks = [('lr_scheduler',
+                      LRScheduler(policy=OneCycleLR,
+                                  total_steps=total_steps,
+                                  cycle_momentum=False,  
+                                  max_lr=learning_rate))],
+        device = device)
 
     return net
 
@@ -270,7 +275,6 @@ def main():
     verbose = True if args['verbose'] == 'true' else False
     
     outdir = os.path.join(outdir, '')
-    
     if os.path.exists(outdir) == False:
         print('Output directory {} not found. Creating it...'.format(outdir))
         os.mkdir(outdir)
@@ -310,6 +314,7 @@ def main():
     hidden_units = args['nunits']
     weight_decay = args['L2']
     max_epochs = args['nepochs']
+    total_steps = args['totalsteps']
     learning_rate = args['learningrate']
     nlabels = len(np.unique(y))
     
@@ -326,6 +331,7 @@ def main():
                             hidden_units = hidden_units,
                             weight_decay = weight_decay,
                             max_epochs = max_epochs,
+                            total_steps = total_steps,
                             learning_rate = learning_rate,
                             device = device)
     
@@ -348,6 +354,7 @@ def main():
         params = [hidden_units,
                   weight_decay,
                   max_epochs,
+                  total_steps,
                   learning_rate,
                   seed,
                   nlabels,
@@ -361,6 +368,7 @@ def main():
             header = ['hidden_units',
                       'weight_decay',
                       'nepochs',
+                      'total_steps',
                       'learning_rate',
                       'random_seed',
                       'nlabels',
