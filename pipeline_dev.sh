@@ -61,8 +61,8 @@ done
 
 # Re-organize gene expression files ------------------------------------------
 
-#echo "Organizing gene expression files..."
-#source organize_expression_files.sh
+echo "Organizing gene expression files..."
+source organize_expression_files.sh
 
 
 # Transform human microarray samples -----------------------------------------
