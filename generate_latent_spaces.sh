@@ -28,10 +28,16 @@ current_date=$(date +'%Y%m%d')
 paramsfile=${outdir}MLP_params_${current_date}.csv
 touch $paramsfile
 
+niterations=500
 nunits=200
 L2=0.0
+nepochs=150
+totalsteps=200
+learningrate=1e-05
+optimizer=AdamW
+confusionmatrix=false
 
-for i in {1..500}
+for i in $(seq 1 $niterations);
 do
 	echo "Iteration $i"
 
@@ -49,9 +55,10 @@ do
 		--humantransform $human_input \
 		--nunits $nunits \
 		--L2 $L2 \
-		--nepochs 25 \
-		--totalsteps 50 \
-		--learningrate 0.01 \
+		--nepochs $nepochs \
+		--totalsteps $totalsteps \
+		--learningrate $learningrate \
+        --optimizer $optimizer \
 		--confusionmatrix false \
 		--seed $i \
 		--saveparams true \
