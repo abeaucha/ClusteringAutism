@@ -24,7 +24,7 @@ from datatable                import fread
 import torch
 import torch.nn.functional    as F
 from torch                    import nn
-from torch.optim              import SGD
+from torch.optim              import SGD, AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.cuda               import is_available
 
@@ -102,6 +102,12 @@ def parse_args():
         help = "Learning rate during training."
     )
     
+     parser.add_argument(
+        '--optimizer',
+        type = str,
+        default = 'SGD'
+    )
+    
     parser.add_argument(
         "--confusionmatrix",
         type = str,
@@ -172,7 +178,7 @@ def prepare_data(data, labelcol = None):
     return X, y
 
 
-def define_classifier(input_units, output_units, hidden_units, weight_decay, max_epochs, total_steps, learning_rate, device):
+def define_classifier(input_units, output_units, hidden_units, weight_decay, max_epochs, total_steps, learning_rate, optimizer, device):
 
     """
     """
@@ -212,7 +218,7 @@ def define_classifier(input_units, output_units, hidden_units, weight_decay, max
                          output_units = output_units,
                          hidden_units = hidden_units),
         train_split = None,
-        optimizer = SGD,
+        optimizer = optimizer,
         optimizer__weight_decay = weight_decay,
         max_epochs = max_epochs,
         callbacks = [('lr_scheduler',
@@ -286,7 +292,6 @@ def main():
         print("Importing training data...")
     
     training_file = args['training']
-
     df_training = fread(training_file, header = True).to_pandas()
 
     
@@ -316,7 +321,18 @@ def main():
     max_epochs = args['nepochs']
     total_steps = args['totalsteps']
     learning_rate = args['learningrate']
+    optimizer = args['optimizer']
     nlabels = len(np.unique(y))
+    
+    if total_steps is None:
+        total_steps = max_epochs
+        
+    if optimizer == 'AdamW':
+        optimizer = AdamW
+    elif optimizer == 'SGD':
+        optimizer = SGD
+    else:
+        raise ValueError
     
     if is_available() == True:
         print("GPU available. Training network using GPU...")
@@ -333,6 +349,7 @@ def main():
                             max_epochs = max_epochs,
                             total_steps = total_steps,
                             learning_rate = learning_rate,
+                            optimizer = optimizer,
                             device = device)
     
     #Fit the network
