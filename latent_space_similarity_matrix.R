@@ -176,8 +176,8 @@ for (i in 1:length(list_sim)){
   #Similarity matrix
   mat_sim <- buildSimilarityMatrix(x1 = mat_human,
                                    x2 = mat_mouse,
-                                   method = metric) 
-  
+                                   method = metric)
+    
   #Add to list
   list_sim[[i]] <- mat_sim
   
