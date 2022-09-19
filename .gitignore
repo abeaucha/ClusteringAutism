@@ -11,3 +11,4 @@ analyses/troubleshoot_cluster_similarity/data/
 analyses/troubleshoot_cluster_similarity/*.html
 analyses/troubleshoot_microarray_transforms/data/
 analyses/troubleshoot_microarray_transforms/transforms/
+analyses/*.pdf
