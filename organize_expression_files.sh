@@ -21,7 +21,7 @@ done
 cd ../../../..
 
 #Create human latent space directory
-if [ ! -d "data/human/expression/latent_space_100/" ]; 
+if [ ! -d 'data/human/expression/latent_space_100/' ]; 
 then
     mkdir data/human/expression/latent_space_100/
 fi
