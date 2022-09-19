@@ -28,7 +28,7 @@ current_date=$(date +'%Y%m%d')
 paramsfile=${outdir}MLP_params_${current_date}.csv
 touch $paramsfile
 
-niterations=500
+niterations=200
 nunits=200
 L2=0.0
 nepochs=150
