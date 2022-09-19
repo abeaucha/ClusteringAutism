@@ -438,8 +438,11 @@ generate_heatmap <- function(x, palette) {
 
 
 ```{r}
-mouse_file <- '../data/mouse/cluster_signatures/input_space/mouse_cluster_signatures_abs_mean_threshold0.5_inputspace.csv'
-human_file <- '../data/human/cluster_signatures/input_space/human_cluster_signatures_abs_mean_threshold0.5_inputspace.csv'
+threshold <- 0.9
+
+mouse_file <- str_c('../data/mouse/cluster_signatures/input_space/mouse_cluster_signatures_abs_mean_threshold', threshold, '_inputspace.csv')
+human_file <- str_c('../data/human/cluster_signatures/input_space/human_cluster_signatures_abs_mean_threshold',
+threshold, '_inputspace.csv')
 
 mat_mouse <- process_signatures(mouse_file)
 mat_human <- process_signatures(human_file)
@@ -455,8 +458,8 @@ p_abs_inputspace <- as.ggplot(generate_heatmap(x = mat_sim, palette = palette)) 
   labs(title = 'Absolute jacobian signatures with input space')
 
 
-mouse_file <- '../data/mouse/cluster_signatures/input_space/mouse_cluster_signatures_rel_mean_threshold0.5_inputspace.csv'
-human_file <- '../data/human/cluster_signatures/input_space/human_cluster_signatures_rel_mean_threshold0.5_inputspace.csv'
+mouse_file <- str_c('../data/mouse/cluster_signatures/input_space/mouse_cluster_signatures_rel_mean_threshold', threshold, '_inputspace.csv')
+human_file <- str_c('../data/human/cluster_signatures/input_space/human_cluster_signatures_rel_mean_threshold', threshold, '_inputspace.csv')
 
 mat_mouse <- process_signatures(mouse_file)
 mat_human <- process_signatures(human_file)
@@ -469,7 +472,7 @@ p_rel_inputspace <- as.ggplot(generate_heatmap(x = mat_sim, palette = palette)) 
   labs(title = 'Relative jacobian signatures with input space')
 
 
-latent_space_file <- '../data/similarity/latent_space_100/similarity_hm_abs_mean_threshold0.5_latentspace100.csv'
+latent_space_file <- str_c('../data/similarity/latent_space_100/similarity_hm_abs_mean_threshold',threshold, '_latentspace100.csv')
 
 mat_sim <- suppressMessages(read_csv(latent_space_file)) %>% 
   column_to_rownames('cluster_id') %>% 
@@ -479,7 +482,7 @@ p_abs_latentspace <- as.ggplot(generate_heatmap(x = mat_sim, palette = palette))
   labs(title = 'Absolute jacobian signatures with latent space')
 
 
-latent_space_file <- '../data/similarity/latent_space_100/similarity_hm_rel_mean_threshold0.5_latentspace100.csv'
+latent_space_file <- str_c('../data/similarity/latent_space_100/similarity_hm_rel_mean_threshold', threshold, '_latentspace100.csv')
 
 mat_sim <- suppressMessages(read_csv(latent_space_file)) %>% 
   column_to_rownames('cluster_id') %>% 
@@ -492,7 +495,7 @@ p_rel_latentspace <- as.ggplot(generate_heatmap(x = mat_sim, palette = palette))
 
 ```{r fig.width = 20, fig.height = 20}
 patchwork_plot <- (p_abs_inputspace | p_rel_inputspace) / (p_abs_latentspace | p_rel_latentspace)
-patchwork_plot + plot_annotation(title = 'Cluster similarity using threshold of 0.5',
+patchwork_plot + plot_annotation(title = str_c('Cluster similarity using threshold of ', threshold),
                                  subtitle = 'Rows human, columns mouse, scale correlation')
 ```
 
