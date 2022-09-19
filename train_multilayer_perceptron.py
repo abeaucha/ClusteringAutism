@@ -102,7 +102,7 @@ def parse_args():
         help = "Learning rate during training."
     )
     
-     parser.add_argument(
+    parser.add_argument(
         '--optimizer',
         type = str,
         default = 'SGD'
