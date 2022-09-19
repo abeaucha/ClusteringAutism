@@ -1,0 +1,716 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: paper
+    highlight: pygments
+params:
+  threshold: 0.5
+  jacobians: absolute
+  gene-space: average_latent_space
+  latent-space-id: 100
+  metric: correlation
+  kcut: 8
+---
+
+```{r}
+print(params)
+```
+
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(data.tree))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(pheatmap))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(ggplotify))
+# suppressPackageStartupMessages(library(ggalluvial))
+# suppressPackageStartupMessages(library(patchwork))
+# suppressPackageStartupMessages(library(RColorBrewer))
+# suppressPackageStartupMessages(library(viridisLite))
+```
+
+```{r}
+source("../functions/buildSimilarityMatrix.R")
+source("../functions/tree_tools.R")
+
+#' Process cluster signatures
+#'
+#' @param signatures (character scalar) Path to the .csv file containing cluster expression signatures
+#' @param expr (character scalar) Name of the .csv containing the expression data using to computed the cluster signatures
+#'
+#' @return (matrix) Expression signatures for each cluster
+process_signatures <- function(signatures, expr){
+  mat_expr <- suppressMessages(read_csv(signatures)) %>% 
+    filter(str_detect(exprfile, expr)) %>% 
+    mutate(nk = clusterfile %>% 
+             str_extract('Clusternum_[0-9]+') %>% 
+             str_extract('[0-9]+') %>% 
+             as.integer(),
+           k = clusterfile %>% 
+             str_extract('Group_[0-9]+') %>% 
+             str_extract('[0-9]+') %>% 
+             as.integer()) %>% 
+    arrange(nk, k) %>% 
+    select(-exprfile, -clusterfile) %>% 
+    unite(col = 'cluster_id', nk, k, sep = '-') %>% 
+    column_to_rownames('cluster_id') %>% 
+    as.matrix() %>% 
+    t() 
+  return(mat_expr)
+}
+
+generate_heatmap <- function(x, palette) {
+  
+  df_annotations <- tibble(cluster_ids = colnames(x)) %>% 
+    separate(cluster_ids, into = c('nk', 'k'), remove = FALSE) %>% 
+    mutate(nk = factor(nk, levels = 1:10),
+           k = factor(k, levels = 1:10)) %>% 
+    column_to_rownames(var = 'cluster_ids')
+  
+  df_colour_palette <- tibble(i = factor(1:10),
+                              colour = palette)
+  
+  df_annotation_colours <- df_annotations %>% 
+    left_join(df_colour_palette, by = c('nk' = 'i')) %>% 
+    rename(nk_col = colour) %>% 
+    left_join(df_colour_palette, by = c('k' = 'i')) %>% 
+    rename(k_col = colour) 
+  
+  nk_colours <- df_annotation_colours$nk_col
+  names(nk_colours) <- df_annotation_colours$nk
+  
+  k_colours <- df_annotation_colours$k_col
+  names(k_colours) <- df_annotation_colours$k
+  
+  annotation_colours <- list(nk = nk_colours,
+                             k = k_colours)
+  
+  p <- pheatmap(x, 
+                cluster_cols = F, cluster_rows = F, 
+                annotation_row = df_annotations,
+                annotation_col = df_annotations,
+                annotation_colors = annotation_colours, 
+                silent = TRUE, 
+                na_col = 'black')
+  
+  return(p)
+}
+```
+
+```{r}
+params
+```
+
+
+```{r}
+threshold <- params[["threshold"]]
+jacobians <- params[["jacobians"]]
+gene_space <- params[["gene-space"]]
+latent_space_id <- params[["latent-space-id"]]
+metric <- params[["metric"]]
+kcut <- params[["kcut"]]
+
+if (jacobians == "absolute") {
+  jacobians <- "abs"
+} else if (jacobians == "relative") {
+  jacobians <- "rel"
+} else {
+  stop()
+}
+```
+
+```{r}
+if (gene_space == "input_space") {
+  
+  mouse_file <- str_c("../data/mouse/cluster_signatures/input_space/mouse_cluster_signatures_", jacobians, "_mean_threshold", threshold, "_inputspace.csv")
+  human_file <- str_c("../data/human/cluster_signatures/input_space/human_cluster_signatures_", jacobians, "_mean_threshold", threshold, "_inputspace.csv")
+  
+  mouse_expr_file <- "MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv"
+  human_expr_file <- "data/human/expression/input_space//HumanExpressionMatrix_samples_pipeline_abagen_homologs_scaled.csv"
+  
+  mat_mouse <- process_signatures(signatures = mouse_file, expr = mouse_expr_file)
+  mat_human <- process_signatures(signatures = human_file, expr = human_expr_file)
+  
+  mat_sim <- buildSimilarityMatrix(x1 = mat_human,
+                                   x2 = mat_mouse,
+                                   method = metric)
+  
+} else if (gene_space == "latent_space") {
+  
+  mouse_file <- str_c("../data/mouse/cluster_signatures/latent_space_100/mouse_cluster_signatures_", jacobians, "_mean_threshold", threshold, "_latentspace100.csv")
+  human_file <- str_c("../data/human/cluster_signatures/latent_space_100/human_cluster_signatures_", jacobians, "_mean_threshold", threshold, "_latentspace100.csv")
+  
+  mouse_expr_file <- str_c("MLP_labels67_layers3_units200_L20.0_mousetransform_", latent_space_id, ".csv")
+  human_expr_file <- str_c("MLP_labels67_layers3_units200_L20.0_humantransform_", latent_space_id, ".csv")
+  
+  mat_mouse <- process_signatures(signatures = mouse_file, expr = mouse_expr_file)
+  mat_human <- process_signatures(signatures = human_file, expr = human_expr_file)
+  
+  mat_sim <- buildSimilarityMatrix(x1 = mat_human,
+                                   x2 = mat_mouse,
+                                   method = metric)
+  
+} else if (gene_space == "average_latent_space") {
+  
+  sim_file <- str_c("../data/similarity/latent_space_100/similarity_hm_", jacobians, "_mean_threshold", threshold, "_latentspace100.csv")
+  mat_sim <- read_csv(file = sim_file,
+                      show_col_types = FALSE) %>% 
+    column_to_rownames('cluster_id') %>% 
+    as.matrix()
+  
+} else {
+  stop()
+}
+```
+
+
+```{r fig.width = 9, fig.height = 8}
+palette <- mako(n = 10, direction = -1, begin = 0.3)
+similarity_heatmap <- as.ggplot(generate_heatmap(x = mat_sim, 
+                                                 palette = palette)) +
+  labs(title = "Cluster similarity",
+       subtitle = str_c("Gene space: ", gene_space, "\n",
+                        "Threshold: ", threshold, "\n",
+                        "Jacobians: ", jacobians, "\n",
+                        "Metric: ", metric, "\n",
+                        "Rows: Human", "\n",
+                        "Columns: Mouse", "\n"))
+similarity_heatmap
+```
+
+We probably want to cluster this though, no?
+
+```{r fig.width = 9, fig.height = 8}
+#' Remove empty matrix cells
+#'
+#' @param x (matrix) A matrix with cells containing NA values
+#'
+#' @return (matrix) A matrix without any NA values
+remove_empty_cells <- function(x) {
+  
+  df_empty <- as_tibble(which(is.na(x), arr.ind = TRUE))
+  
+  empty_rows <- df_empty %>% 
+    group_by(row) %>% 
+    count() %>% 
+    filter(n == ncol(x)) %>% 
+    pull(row)
+  
+  empty_cols <- df_empty %>% 
+    group_by(col) %>% 
+    count() %>% 
+    filter(n == nrow(x)) %>% 
+    pull(col)
+  
+  rows_not_empty <- !(1:nrow(x) %in% empty_rows)
+  cols_not_empty <- !(1:ncol(x) %in% empty_cols)
+  
+  x <- x[rows_not_empty, cols_not_empty]
+  
+  return(x)
+}
+
+
+mat_sim_complete <- remove_empty_cells(x = mat_sim)
+
+similarity_heatmap_clustered <- pheatmap(mat = mat_sim_complete, 
+                                         cutree_rows = kcut, 
+                                         cutree_cols = kcut, 
+                                         silent = T)
+```
+
+What do we do with this? I guess we're mostly interested in which mouse clusters the human clusters are similar to. So we want to pull out the human clusters first right? 
+
+```{r fig.width = 9, fig.height = 8}
+human_labels <- sort(cutree(similarity_heatmap_clustered$tree_row, k = kcut))
+mouse_labels <- sort(cutree(similarity_heatmap_clustered$tree_col, k = kcut))
+
+annotation_row <- tibble(k = human_labels,
+                         cluster_id = names(human_labels)) %>% 
+  column_to_rownames("cluster_id") %>% 
+  mutate(k = factor(k))
+
+annotation_col <- tibble(k = mouse_labels,
+                         cluster_id = names(mouse_labels)) %>% 
+  column_to_rownames("cluster_id") %>% 
+  mutate(k = factor(k))
+
+pheatmap(mat_sim_complete,
+         cutree_rows = kcut, cutree_cols = kcut,
+         annotation_row = annotation_row,
+         annotation_col = annotation_col)
+```
+
+This should allow us to pull out associations more easily. 
+
+For example, human meta-cluster 4 is similar to mouse meta-cluster 5. 
+
+```{r}
+df_human_clusters <- annotation_row %>% 
+  rownames_to_column(var = "cluster_id") %>% 
+  rename(meta_k = k) %>% 
+  separate(col = "cluster_id", 
+           into = c("nk", "k"),
+           sep = "-", 
+           remove = FALSE) %>% 
+  mutate(nk = as.integer(nk),
+         k = as.integer(k)) %>% 
+  arrange(meta_k, nk, k)
+
+df_mouse_clusters <- annotation_col %>% 
+  rownames_to_column(var = "cluster_id") %>% 
+  rename(meta_k = k) %>% 
+  separate(col = "cluster_id", 
+           into = c("nk", "k"),
+           sep = "-", 
+           remove = FALSE) %>% 
+  mutate(nk = as.integer(nk),
+         k = as.integer(k)) %>% 
+  arrange(meta_k, nk, k)
+
+human_meta_k <- 4
+df_human_metak_selection <- df_human_clusters %>% 
+  filter(meta_k == human_meta_k)
+```
+
+```{r}
+mouse_meta_k <- 5
+df_mouse_metak_selection <- df_mouse_clusters %>% 
+  filter(meta_k == mouse_meta_k)
+```
+
+Then we want the absolute effect size maps I guess? 
+
+```{r}
+human_cluster_dir <- "../data/human/clustering/cluster_maps/absolute/resolution_1.0/mean/"
+human_cluster_files <- list.files(human_cluster_dir, full.names = TRUE)
+
+human_files <- character(nrow(df_human_metak_selection))
+human_maps <- vector(mode = 'list', length = nrow(df_human_metak_selection))
+names(human_maps) <- df_human_metak_selection$cluster_id
+for (i in 1:length(human_maps)) {
+  nk <- df_human_metak_selection[[i, "nk"]]
+  k <- df_human_metak_selection[[i, "k"]]
+  infile <- human_cluster_files %>%
+    str_subset(str_c("Clusternum_", nk)) %>%
+    str_subset(str_c("Group_", k))
+  human_maps[[i]] <- mincGetVolume(infile)
+}
+```
+
+```{r}
+human_anat_file <- "../data/human/registration/reference_files/model_1.0mm.mnc"
+human_anat <- mincGetVolume(human_anat_file)
+human_anat_vol <- mincArray(human_anat)
+```
+
+```{r fig.width = 11, fig.height = 10}
+ss_human_maps <- sliceSeries(nrow = 8, ncol = 1, begin = 50, end = 200) %>% 
+  anatomy(human_anat_vol, low = 3, high = 7)
+
+for (i in 1:length(human_maps)) {
+  if(i == 1) {
+    ss_human_maps <- ss_human_maps %>% 
+      overlay(mincArray(human_maps[[i]]), low = threshold, high = 1, symmetric = TRUE)
+  } else {
+    ss_human_maps <- ss_human_maps %>% 
+      sliceSeries() %>% anatomy() %>% 
+      overlay(mincArray(human_maps[[i]]), low = threshold, high = 1, symmetric = TRUE)
+  }
+  
+  ss_human_maps <- ss_human_maps %>% 
+    addtitle(names(human_maps)[i])
+  
+}
+
+ss_human_maps <- ss_human_maps %>% 
+  legend("Effect size") 
+
+draw(ss_human_maps)
+```
+```{r}
+pdf(file = "HumanMaps.pdf",
+    width = 10,
+    height = 10)
+
+draw(ss_human_maps)
+
+dev.off()
+```
+
+
+```{r}
+human_cluster_dir <- "../data/human/clustering/cluster_maps/absolute/resolution_1.0/mean/"
+human_cluster_files <- list.files(human_cluster_dir, full.names = TRUE)
+
+human_maps <- vector(mode = 'list', length = nrow(df_human_metak_selection))
+names(human_maps) <- df_human_metak_selection$cluster_id
+for (i in 1:length(human_maps)) {
+  nk <- df_human_metak_selection[[i, "nk"]]
+  k <- df_human_metak_selection[[i, "k"]]
+  infile <- human_cluster_files %>%
+    str_subset(str_c("Clusternum_", nk)) %>%
+    str_subset(str_c("Group_", k))
+  human_maps[[i]] <- mincGetVolume(infile)
+}
+```
+
+```{r}
+mouse_cluster_dir <- "../data/mouse/clustering/cluster_maps/absolute/resolution_200/mean/"
+mouse_cluster_files <- list.files(mouse_cluster_dir, full.names = TRUE)
+
+mouse_files <- character(nrow(df_mouse_metak_selection))
+mouse_maps <- vector(mode = 'list', length = nrow(df_mouse_metak_selection))
+names(mouse_maps) <- df_mouse_metak_selection$cluster_id
+for (i in 1:length(mouse_maps)) {
+  nk <- df_mouse_metak_selection[[i, "nk"]]
+  k <- df_mouse_metak_selection[[i, "k"]]
+  infile <- mouse_cluster_files %>% 
+    str_subset(str_c("Clusternum_", nk)) %>% 
+    str_subset(str_c("Group_", k))
+  mouse_maps[[i]] <- mincGetVolume(infile)
+}
+```
+
+```{r}
+mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
+mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_anat_vol <- mincArray(mouse_anat)
+```
+
+
+```{r fig.width = 11, fig.height = 10}
+overlay_low <- threshold
+overlay_high <- 3.0
+
+ss_mouse_maps <- sliceSeries(nrow = 8, ncol = 1, begin = 10, end = 60) %>% 
+  anatomy(mouse_anat_vol, low = 700, high = 1400)
+
+for (i in 1:length(mouse_maps)) {
+  if(i == 1) {
+    ss_mouse_maps <- ss_mouse_maps %>% 
+      overlay(mincArray(mouse_maps[[i]]), low = overlay_low, high = overlay_high, symmetric = TRUE)
+  } else {
+    ss_mouse_maps <- ss_mouse_maps %>% 
+      sliceSeries() %>% anatomy() %>% 
+      overlay(mincArray(mouse_maps[[i]]), low = overlay_low, high = overlay_high, symmetric = TRUE)
+  }
+  
+  ss_mouse_maps <- ss_mouse_maps %>% 
+    addtitle(names(mouse_maps)[i])
+  
+}
+
+ss_mouse_maps <- ss_mouse_maps %>% 
+  legend("Effect size") 
+
+draw(ss_mouse_maps)
+```
+```{r}
+pdf(file = "MouseMaps.pdf",
+    width = 10,
+    height = 5)
+
+draw(ss_mouse_maps)
+
+dev.off()
+```
+
+Now what? These maps are fine I guess but this is the point where we need that visualization tool. So what does that entail? 
+
+I need atlases. 
+
+```{r}
+# human_label_file <- "../data/human/atlas/annotation_full_studyspace.mnc"
+# human_labels <- mincGetVolume(human_label_file)
+# human_labels_vol <- mincArray(human_labels)
+# human_defs_file <- "../data/human/atlas/voxel_count.csv"
+# human_defs <- read_csv(human_defs_file, show_col_types = FALSE)
+# ind_atlas <- human_defs$id %in% human_labels
+# human_defs <- human_defs[ind_atlas,]
+# human_defs <- human_defs %>% 
+#   select(name, label = id)
+
+human_label_file <- "../data/human/expression/AHBA_microarray_labels_studyspace_1.0mm.mnc"
+human_labels <- mincGetVolume(human_label_file)
+human_labels_vol <- mincArray(human_labels)
+human_defs_file <- "../data/human/expression/AHBA_microarray_coordinates_mni_defs.csv"
+human_defs <- read_csv(human_defs_file, show_col_types = FALSE)
+ind_atlas <- human_defs$label %in% human_labels
+human_defs <- human_defs[ind_atlas,]
+```
+
+```{r}
+human_tree_file <- "../data/human/expression/HumanExpressionTree.RData"
+load(human_tree_file)
+tree_human <- Clone(treeHumanExpr)
+rm(treeHumanExpr)
+
+load("../data/TreeLabels.RData")
+
+tree_human_reduced <- Clone(tree_human)
+human_structs <- listLabelsHuman[["Region88"]]
+pruneAnatTree(tree_human_reduced, nodes = human_structs, method = "BelowNode")
+human_structs <- c("frontal lobe",
+                   "insula",
+                   "limbic lobe",
+                   "occipital lobe",
+                   "parietal lobe",
+                   "temporal lobe",
+                   "amygdala",
+                   "basal forebrain",
+                   "basal ganglia",
+                   "claustrum",
+                   "diencephalon",
+                   "mesencephalon",
+                   "vermis",
+                   "cerebellar hemispheres",
+                   "cingulum bundle",
+                   "ventricles")
+pruneAnatTree(tree_human_reduced, nodes = human_structs, method = "BelowNode")
+human_structs <- tree_human_reduced$Get("name", filterFun = isLeaf)
+
+tree_human_reduced$Do(function(node){
+  node$df_samples <- tibble(name = node$name,
+                            sample_id = node$samples)
+}, traversal = "post-order")
+
+human_sample_regions <- tree_human_reduced$Get("df_samples", filterFun = isLeaf, simplify = FALSE)
+human_sample_regions <- reduce(.x = human_sample_regions, .f = bind_rows)
+human_sample_regions <- human_sample_regions %>% 
+  left_join(tibble(name = human_structs,
+                   label = 1:length(human_structs)),
+            by = "name")
+
+human_defs_reduced <- human_defs %>% 
+  rename(sample_label = label) %>% 
+  left_join(human_sample_regions,
+            by = "sample_id")
+
+ind_match <- match(x = human_labels, table = human_defs_reduced[["sample_label"]])
+human_labels_reduced <- human_defs_reduced[ind_match,"label"][[1]]
+human_labels_reduced[is.na(human_labels_reduced)] <- 0
+attributes(human_labels_reduced) <- attributes(human_labels)
+
+human_defs_reduced <- human_defs_reduced %>% 
+  select(name, label) %>% 
+  distinct() %>% 
+  arrange(label)
+```
+
+```{r}
+human_cluster_mask_dir <- str_c("../data/human/clustering/cluster_masks/absolute/resolution_1.0/mean/threshold_", threshold)
+human_cluster_mask_files <- list.files(human_cluster_mask_dir, full.names = TRUE)
+
+human_masks <- vector(mode = 'list', length = nrow(df_human_metak_selection))
+names(human_masks) <- df_human_metak_selection$cluster_id
+for (i in 1:length(human_masks)) {
+  nk <- df_human_metak_selection[[i, "nk"]]
+  k <- df_human_metak_selection[[i, "k"]]
+  infile <- human_cluster_mask_files %>%
+    str_subset(str_c("Clusternum_", nk)) %>%
+    str_subset(str_c("Group_", k))
+  human_masks[[i]] <- mincGetVolume(infile)
+}
+
+human_cluster_regions <- vector(mode = "list", length = length(human_masks))
+names(human_cluster_regions) <- names(human_masks)
+for (i in 1:length(human_cluster_regions)) {
+  voxels_in_mask <- human_masks[[i]] == 1
+  voxels_not_zero <- human_labels_reduced != 0
+  cluster_labels <- human_labels_reduced[voxels_in_mask & voxels_not_zero]
+  human_cluster_regions[[i]] <- as_tibble(table(cluster_labels)) %>%
+    as_tibble(table(cluster_labels)) %>% 
+    rename(label = cluster_labels,
+           nvoxels = n) %>% 
+    mutate(label = as.integer(label),
+           nvoxels_cluster = sum(voxels_in_mask),
+           nvoxels_expr = length(cluster_labels),
+           cluster_id = names(human_cluster_regions)[i]) %>% 
+    left_join(human_defs_reduced, by = "label")
+}
+
+df_human_cluster_regions <- reduce(.x = human_cluster_regions, .f = bind_rows)
+
+df_human_cluster_regions <- df_human_cluster_regions %>% 
+  mutate(cluster_id = factor(cluster_id, levels = names(human_cluster_regions)))
+```
+
+
+Do we need to include gene information too though? Because not all of these voxels are contributing to the signature. Probably. Though it might be useful to know what regions are in the full mask anyway. 
+
+```{r}
+mouse_label_file <- "../data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc"
+mouse_labels <- mincGetVolume(mouse_label_file)
+mouse_labels_vol <- mincArray(mouse_labels)
+mouse_defs_file <- "../data/mouse/atlas/DSURQE_40micron_R_mapping_long.csv"
+mouse_defs <- read_csv(mouse_defs_file, show_col_types = FALSE) %>% 
+  select(name = Structure, label = Label)
+
+mouse_tree_file <- "../data/mouse/expression/MouseExpressionTree_DSURQE.RData"
+load(mouse_tree_file)
+tree_mouse <- Clone(treeMouseExpr)
+rm(treeMouseExpr)
+
+tree_mouse_reduced <- Clone(tree_mouse)
+mouse_structs <- listLabelsMouse[["Region67"]]
+pruneAnatTree(tree_mouse_reduced, nodes = mouse_structs, method = "BelowNode")
+mouse_structs <- c("Cortical subplate",
+                   "Olfactory areas",
+                   "Hippocampal formation",
+                   "Auditory areas",
+                   "Somatomotor areas",
+                   "Somatosensory areas",
+                   "Cerebral nuclei",
+                   "Midbrain",
+                   "Interbrain",
+                   "Vermal regions",
+                   "Hemispheric regions",
+                   "cranial nerves",
+                   "medial forebrain bundle system",
+                   "cerebellum related fiber tracts",
+                   "lateral forebrain bundle system",
+                   "extrapyramidal fiber systems",
+                   "ventricular systems")
+pruneAnatTree(tree_mouse_reduced, nodes = mouse_structs, method = "BelowNode")
+mouse_structs <- tree_mouse_reduced$Get("name", filterFun = isLeaf)
+
+mouse_labels_reduced <- hanatToAtlas(tree_mouse_reduced, mouse_labels_vol)
+mouse_defs_reduced <- hanatToAtlasDefs(tree_mouse_reduced)
+mouse_defs_reduced <- mouse_defs_reduced %>% 
+  rename(name = Structure,
+         label = Label)
+```
+
+```{r}
+mouse_cluster_mask_dir <- str_c("../data/mouse/clustering/cluster_masks/absolute/resolution_200/mean/threshold_", threshold)
+mouse_cluster_mask_files <- list.files(mouse_cluster_mask_dir, full.names = TRUE)
+
+mouse_masks <- vector(mode = 'list', length = nrow(df_mouse_metak_selection))
+names(mouse_masks) <- df_mouse_metak_selection$cluster_id
+for (i in 1:length(mouse_masks)) {
+  nk <- df_mouse_metak_selection[[i, "nk"]]
+  k <- df_mouse_metak_selection[[i, "k"]]
+  infile <- mouse_cluster_mask_files %>%
+    str_subset(str_c("Clusternum_", nk)) %>%
+    str_subset(str_c("Group_", k))
+  mouse_masks[[i]] <- mincGetVolume(infile)
+}
+
+mouse_cluster_regions <- vector(mode = "list", length = length(mouse_masks))
+names(mouse_cluster_regions) <- names(mouse_masks)
+for (i in 1:length(mouse_cluster_regions)) {
+  voxels_in_mask <- mouse_masks[[i]] == 1
+  voxels_not_zero <- mouse_labels_reduced != 0
+  cluster_labels <- mouse_labels_reduced[voxels_in_mask & voxels_not_zero]
+  mouse_cluster_regions[[i]] <- as_tibble(table(cluster_labels)) %>%
+    rename(label = cluster_labels,
+           nvoxels = n) %>% 
+    mutate(label = as.integer(label),
+           nvoxels_cluster = sum(voxels_in_mask),
+           nvoxels_expr = length(cluster_labels),
+           cluster_id = names(mouse_cluster_regions)[i]) %>% 
+    left_join(mouse_defs_reduced, by = "label")
+}
+
+df_mouse_cluster_regions <- reduce(.x = mouse_cluster_regions, .f = bind_rows)
+
+df_mouse_cluster_regions <- df_mouse_cluster_regions %>% 
+  mutate(cluster_id = factor(cluster_id, levels = names(mouse_cluster_regions)))
+```
+
+```{r}
+human_structs_viz <- c("frontal lobe",
+                       "insula",
+                       "limbic lobe",
+                       "occipital lobe",
+                       "parietal lobe",
+                       "temporal lobe",
+                       "basal ganglia",
+                       "diencephalon",
+                       "mesencephalon",
+                       "pons",
+                       "myelencephalon",
+                       "vermis",
+                       "cerebellar hemispheres",
+                       "corpus callosum",
+                       "ventricles")
+
+tmp_human <- df_human_cluster_regions %>% 
+  filter(name %in% human_structs_viz) %>% 
+  mutate(name = factor(name, levels = human_structs_viz),
+         fvoxels = nvoxels/nvoxels_expr)
+```
+
+
+```{r}
+p_spider_human <- ggplot(tmp_human, aes(x = name, y = fvoxels, col = cluster_id)) + 
+  geom_line(aes(group = cluster_id)) + 
+  coord_polar(clip = "off") +
+  # scale_y_continuous(limits = c(0, 1)) + 
+  labs(y = "Fraction of cluster voxels",
+       color = "Cluster",
+       title = "Human cluster anatomy") + 
+  theme_bw() + 
+  theme(axis.title.x = element_blank())
+
+p_spider_human
+```
+
+```{r}
+pdf(file = "HumanSpiderPlot.pdf",
+    width = 10,
+    height = 10)
+p_spider_human
+dev.off()
+```
+
+
+```{r fig.width = 8}
+mouse_structs_viz <- c("Frontal pole, cerebral cortex",
+                       "Somatomotor areas",
+                       "Hippocampal formation",
+                       "Visual areas",
+                       "Somatosensory areas",
+                       "Auditory areas",
+                       "Temporal association areas",
+                       "Olfactory areas",
+                       "Cortical subplate",
+                       "Cerebral nuclei",
+                       "Interbrain",
+                       "Midbrain",
+                       "Pons",
+                       "Medulla", 
+                       "Vermal regions",
+                       "Hemispheric regions",
+                       "lateral forebrain bundle system",
+                       "ventricular systems")
+
+tmp_mouse <- df_mouse_cluster_regions %>% 
+  filter(name %in% mouse_structs_viz) %>% 
+  mutate(name = factor(name, levels = mouse_structs_viz),
+         fvoxels = nvoxels/nvoxels_expr)
+
+p_spider_mouse <- ggplot(tmp_mouse, aes(x = name, y = fvoxels, col = cluster_id)) + 
+  geom_line(aes(group = cluster_id)) + 
+  coord_polar(clip = "off") +
+  labs(y = "Fraction of cluster voxels",
+       color = "Cluster",
+       title = "Mouse cluster anatomy") + 
+  theme_bw() + 
+  theme(axis.title.x = element_blank())
+
+p_spider_mouse
+```
+```{r}
+pdf(file = "MouseSpiderPlot.pdf",
+    width = 10,
+    height = 10)
+p_spider_mouse
+dev.off()
+```
