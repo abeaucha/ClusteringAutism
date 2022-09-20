@@ -17,6 +17,7 @@ to retain only those voxels that pass the threshold.
 
 import argparse
 import os
+import sys
 import numpy                as np
 from pyminc.volumes.factory import volumeLikeFile, volumeFromFile
 from glob                   import glob
@@ -62,6 +63,14 @@ def parse_args():
         choices = ['true', 'false'],
         help = ("Option to apply threshold symmetrically to negative and ",
                 "positive values.")
+    )
+    
+    parser.add_argument(
+        '--comparison',
+        type = str,
+        default = 'gt',
+        choices = ['gt', 'lt'],
+        help = ("How to apply the threshold")
     )
     
     args = vars(parser.parse_args())
@@ -135,6 +144,7 @@ def main():
     outdir = args['outdir']
     threshold = args['threshold']
     symmetric = True if args['symmetric'] == 'true' else False
+    comparison = args['comparison']
     
     #Ensure proper paths
     imgdir = os.path.join(imgdir, '')
@@ -154,10 +164,13 @@ def main():
                 for file in outfiles]
     outfiles = [os.path.join(outdir, file) for file in outfiles]
     
+    comparison = '>' if comparison == 'gt' else '<'
+    
     #Partial function for iteration
     create_cluster_mask_partial = partial(create_cluster_mask,
                                           threshold = threshold,
-                                          symmetric = symmetric)
+                                          symmetric = symmetric,
+                                          comparison = comparison)
     
     #Iterate over images
     list(map(create_cluster_mask_partial, tqdm(infiles), outfiles))
