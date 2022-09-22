@@ -90,6 +90,15 @@ def parse_args():
                 "is 'top_n'.")
     )
     
+    parser.add_argument(
+        '--signed',
+        type = str,
+        default = 'false',
+        choices = ['true', 'false'],
+        help = ("If True, the output mask will contain -1 where data < 0 ",
+                "and 1 where data > 0")
+    )
+    
     args = vars(parser.parse_args())
     
     return args
@@ -97,14 +106,15 @@ def parse_args():
 
 # Functions ------------------------------------------------------------------
 
-def threshold_intensity(data, threshold, symmetric = True, comparison = 'gt'):
+def threshold_intensity(img, threshold, symmetric = True, comparison = 'gt', 
+                        signed = False):
     
     """
     Create a mask using an intensity threshold.
     
     Arguments
     --------
-    data: numpy.ndarray
+    img: numpy.ndarray
         Data to threshold
     threshold: float
         Intensity value at which to threshold.  
@@ -114,6 +124,9 @@ def threshold_intensity(data, threshold, symmetric = True, comparison = 'gt'):
     comparison: str
         One of 'gt' or 'lt' indicating whether the mask should 
         return values greater than or lesser than the threshold.
+    signed: bool
+        If True, the output mask will contain -1 where data < 0 
+        and 1 where data > 0
     
     Returns
     -------
@@ -123,28 +136,36 @@ def threshold_intensity(data, threshold, symmetric = True, comparison = 'gt'):
     
     if symmetric:
         if comparison == 'gt':
-            ind = np.abs(data) > threshold
+            ind = np.abs(img) > threshold
         else:
-            ind = np.abs(data) < threshold
+            ind = np.abs(img) < threshold
     else:
         if comparison == 'gt':
-            ind = data > threshold
+            ind = img > threshold
         else:
-            ind = data < threshold
-    out = np.zeros_like(data)
-    out[ind] = 1
+            ind = img < threshold
+    out = np.zeros_like(img)
+    if signed:
+        ind_pos = img > 0
+        ind_neg = img < 0
+        out[ind & ind_pos] = 1
+        out[ind & ind_neg] = -1
+    else: 
+        out[ind] = 1
     return out
         
 
-def threshold_top_n(data, n, symmetric = True, tolerance = 1e-5):
+def threshold_top_n(img, mask, n, symmetric = True, tolerance = 1e-5, signed = False):
     
     """
     Create a mask using the top n values.
     
     Arguments
     ---------
-    data: numpy.ndarray
-        Data to threshold
+    img: numpy.ndarray
+        Image array to threshold
+    mask: numpy.ndarray
+        Image mask
     n: int or float
         If |n| > 1, the top n values will be used. 
         If 0 < |n| < 1, the top fraction of values will be used.
@@ -153,6 +174,9 @@ def threshold_top_n(data, n, symmetric = True, tolerance = 1e-5):
         Option to apply the threshold symmetrically.
     tolerance: float
         Absolute values below this threshold will be excluded.
+    signed: bool
+        If True, the output mask will contain -1 where data < 0 
+        and 1 where data > 0
     
     Returns
     -------
@@ -160,65 +184,72 @@ def threshold_top_n(data, n, symmetric = True, tolerance = 1e-5):
         Mask corresponding to thresholded data.
     """
 
-    #Volume indices
-    ni, nj, nk = data.shape
-    indices =[[i,j,k] for i in range(ni) 
-              for j in range(nj) 
-              for k in range(nk)]
-    indices = np.asarray(indices)
+    #Raise error if symmetric is True and n < 0
+    if (symmetric) & (n < 0):
+        raise ValueError("Setting n < 0 while symmetric = True ",
+                         "will return an empty mask.")
 
-    #Volume values
-    values = np.array(data.flatten())
-    values = values.reshape(len(values), 1)
+    #Flatten image and mask
+    values = img.flatten()
+    mask = mask.flatten()
 
-    #Combine indices and values
-    df = pd.DataFrame(np.concatenate((indices, values), axis = 1),
-                columns = ['i', 'j', 'k', 'value'])
+    #Apply mask to values
+    values[mask != 1] = 0
 
-    #Symmetric option
-    if symmetric:    
-        df['value'] = np.abs(df['value'])
+    #Extract value signs
+    signs = np.sign(values)
+
+    #If symmetric, use absolute values
+    if symmetric:
+        values = np.abs(values)
+
+    #Sort values and corresponding indices
+    sorted_index = values.argsort()
+    sorted_values = values[sorted_index]
 
     #Tolerance filter
-    ind_tolerance = np.abs(df['value']) > tolerance
+    tolerance_filter = np.abs(sorted_values) > tolerance
 
-    #Filter top/bottom values
+    #Compute top n values
     if n > 0:
-        ind_sign = df['value'] > 0
-        df_top_n = df.loc[ind_tolerance & ind_sign]
+        positive_filter = sorted_values > 0
+        sorted_values = sorted_values[positive_filter & tolerance_filter]
+        sorted_index = sorted_index[positive_filter & tolerance_filter]
         if n < 1:
-            n = int(np.floor(n*df_top_n.shape[0]))
-        df_top_n = df_top_n.nlargest(n = n, columns = 'value')
+            n = int(np.floor(n*len(sorted_values)))
+        top_n_values = sorted_values[-n:]
+        top_n_index = sorted_index[-n:]
     elif n < 0:
-        ind_sign = df['value'] < 0
-        df_top_n = df.loc[ind_tolerance & ind_sign]
+        negative_filter = sorted_values < 0
+        sorted_values = sorted_values[negative_filter & tolerance_filter]
+        sorted_index = sorted_index[negative_filter & tolerance_filter]
         n = abs(n)
         if n < 1:
-            n = int(np.floor(n*df_top_n.shape[0]))
-        df_top_n = df_top_n.nsmallest(n = n, columns = 'value')
+            n = int(np.floor(n*len(sorted_values)))
+        top_n_values = sorted_values[:n]
+        top_n_index = sorted_index[:n]
     else:
         raise ValueError("n cannot be 0")
 
-    #Extract top indices
-    top_indices = df_top_n.loc[:,['i', 'j', 'k']].to_numpy()
-
-    #Create mask
-    n = top_indices.shape[0]
-    out = np.zeros_like(data)
-    for row in range(n):
-        i = int(top_indices[row,0])
-        j = int(top_indices[row,1])
-        k = int(top_indices[row,2])
-        out[i,j,k] = 1
+    #Generate top n mask
+    out = np.zeros_like(values)
+    if signed:
+        out[top_n_index] = signs[top_n_index]    
+    else:
+        out[top_n_index] = 1
+        
+    #Reshape output mask into 3D
+    out = out.reshape(img.shape)
         
     return out
         
 
 def create_image_mask(infile, outfile, maskfile = None, method = 'intensity',
-                      threshold = 0.5, symmetric = True, comparison = 'gt'):
+                      threshold = 0.5, symmetric = True, comparison = 'gt', 
+                      signed = False):
     
     """
-    Create a threshold mask based on an input image. 
+    Create a threshold mask based on an input image.
     
     Arguments
     ---------
@@ -244,6 +275,9 @@ def create_image_mask(infile, outfile, maskfile = None, method = 'intensity',
     comparison: str
         String indicating how to apply the threshold if 
         method = 'intensity'. This is ignored if method = 'top_n'.
+    signed: bool
+        If True, the output mask will contain -1 where data < 0 
+        and 1 where data > 0
     
     Returns
     -------
@@ -261,26 +295,31 @@ def create_image_mask(infile, outfile, maskfile = None, method = 'intensity',
         img_data[mask_data == 0] = 0
     
     if method == 'intensity':
-        img_mask_data = threshold_intensity(data = img_data,
+        img_mask_data = threshold_intensity(img = img_data,
                                             threshold = threshold,
                                             symmetric = symmetric,
-                                            comparison = comparison)
+                                            comparison = comparison,
+                                            signed = signed)
     elif method == 'top_n':
-        img_mask_data = threshold_top_n(data = img_data,
+        img_mask_data = threshold_top_n(img = img_data,
+                                        mask = mask_data,
                                         n = threshold, 
-                                        symmetric = symmetric)
+                                        symmetric = symmetric,
+                                        signed = signed)
     else:
         raise ValueError("method must be one of {'intensity', 'top_n'}")
         
+    #MINC files can't handle negative integer labels
+    labels = False if signed else True
     img_mask_vol = volumeLikeFile(likeFilename = infile,
                                   outputFilename = outfile,
-                                  labels = True)
+                                  labels = labels)
         
     img_mask_vol.data = img_mask_data
     img_mask_vol.writeFile()
     img_mask_vol.closeVolume()
     
-    return
+    return 
 
 
 # Main -----------------------------------------------------------------------
@@ -296,6 +335,7 @@ def main():
     threshold = args['threshold']
     symmetric = True if args['symmetric'] == 'true' else False
     comparison = args['comparison']
+    signed = True if args['signed'] == 'true' else False
     
     #Cast threshold to integer if number of voxels used
     if (method == 'top_n') & (abs(threshold) > 1):
@@ -327,6 +367,8 @@ def main():
             outfiles = [file+'_positive' for file in outfiles]
         elif threshold < 0:
             outfiles = [file+'_negative' for file in outfiles]
+    if signed:
+        outfiles = [file+'_signed' for file in outfiles]
     outfiles = [file+'_threshold{}.mnc'.format(abs(threshold)) 
                 for file in outfiles]
     outfiles = [os.path.join(outdir, file) for file in outfiles]
@@ -337,7 +379,8 @@ def main():
                                         method = method,
                                         threshold = threshold,
                                         symmetric = symmetric,
-                                        comparison = comparison)
+                                        comparison = comparison,
+                                        signed = signed)
     
     #Iterate over images
     list(map(create_image_mask_partial, tqdm(infiles), outfiles))
