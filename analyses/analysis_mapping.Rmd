@@ -1,0 +1,132 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: '2022-09-21'
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(RMINC)
+```
+
+```{r}
+world_to_voxel <- function(coords, template) {
+  
+  coords <- suppressMessages(read_csv(coords)) %>% 
+    select(label, x, y, z) %>% 
+    column_to_rownames('label') %>% 
+    as.matrix()
+  
+  coords_voxel <- mincConvertWorldMatrix(world_matrix = t(coords),
+                                         file = template,
+                                         nearest_voxel = TRUE)
+  coords_voxel <- t(coords_voxel)
+  colnames(coords_voxel) <- c('x', 'y', 'z')
+  rownames(coords_voxel) <- rownames(coords)
+  
+  return(coords_voxel)
+  
+}
+```
+
+
+```{r}
+mouse_mask <- "../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
+
+mouse_cluster_dir <- "../data/mouse/clustering/cluster_maps/absolute/resolution_200/mean/"
+mouse_cluster_files <- list.files(mouse_cluster_dir, full.names = T)
+
+mouse_expr_dir <- "../data/mouse/expression/latent_space/"
+mouse_expr_files <- list.files(mouse_expr_dir, full.names = T)
+```
+
+```{r}
+set.seed(123)
+latent_space_id <- sample(x = 1:500, size = 1)
+```
+
+```{r}
+mouse_expr_file <- mouse_expr_files %>% 
+  str_subset(str_c("mousetransform_", latent_space_id, ".csv"))
+
+df_expr_mouse <- as_tibble(data.table::fread(mouse_expr_file, header = TRUE))
+colnames(df_expr_mouse) <- str_c("h", colnames(df_expr_mouse))
+```
+
+```{r}
+mouse_cluster_files <- mouse_cluster_files[1:10]
+
+mouse_mapping <- matrix(data = 0, nrow = ncol(df_expr_mouse), ncol = length(mouse_cluster_files))
+rownames(mouse_mapping) <- colnames(df_expr_mouse)
+for (i in 1:length(mouse_cluster_files)) {
+  
+  mask <- mincGetVolume(mouse_mask)
+  cluster <- mincGetVolume(mouse_cluster_files[i])
+  cluster_masked <- cluster[mask == 1]
+
+  df_model <- df_expr_mouse %>% 
+    mutate(y = cluster_masked)
+
+  model <- lm(y ~ 0 + ., data = df_model)
+  mouse_mapping[,i] <- coefficients(model)
+}
+
+nk <- mouse_cluster_files %>% 
+  str_extract("Clusternum_[0-9]+") %>% 
+  str_extract("[0-9]+")
+k <- mouse_cluster_files %>% 
+  str_extract("Group_[0-9]+") %>% 
+  str_extract("[0-9]+")
+
+colnames(mouse_mapping) <- str_c(nk, k, sep = "-")
+```
+
+
+
+```{r}
+human_cluster_dir <- "../data/human/clustering/cluster_maps/absolute/resolution_1.0/mean/"
+human_cluster_files <- list.files(human_cluster_dir, full.names = T)
+```
+
+
+```{r}
+human_expr_dir <- "../data/human/expression/latent_space/"
+
+human_expr_files <- list.files(human_expr_dir, full.names = T)
+
+set.seed(123)
+latent_space_id <- sample(x = 1:500, size = 1)
+
+human_expr_file <- human_expr_files %>% 
+  str_subset(str_c("humantransform_", latent_space_id, ".csv"))
+```
+
+```{r}
+df_expr_human <- as_tibble(data.table::fread(human_expr_file, header = TRUE))
+dim(df_expr_human)
+```
+
+```{r}
+
+coords <- "../data/human/expression/AHBA_microarray_coordinates_studyspace.csv"
+template <- "../data/human/registration/reference_files/model_1.0mm.mnc"
+human_mask <- "../data/human/registration/reference_files/mask_1.0mm.mnc"
+
+sample_coordinates <- world_to_voxel(coords = coords,
+                                     template = template)
+
+
+cluster <- mincArray(mincGetVolume(human_cluster_files[1]))
+cluster_masked <- numeric(nrow(sample_coordinates))
+for (row in 1:nrow(sample_coordinates)) {
+  i <- sample_coordinates[row, 3]
+  j <- sample_coordinates[row, 2]
+  k <- sample_coordinates[row, 1]
+  cluster_masked[row] <- cluster[i,j,k]
+}
+```
+
+
+
+
