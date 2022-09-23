@@ -17,10 +17,10 @@ suppressPackageStartupMessages(library(tcltk))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option('--clusterdir',
+  make_option('--cluster-dir',
               type = 'character',
               help = "Path to directory containing cluster mask images."),
-  make_option('--exprdir',
+  make_option('--expr-dir',
               type = 'character',
               help = paste("Path to directory containing gene expression",
                            "data sets.")),
@@ -30,6 +30,9 @@ option_list <- list(
   make_option('--template',
               type = 'character',
               help = "Path to MINC file containing human imaging template."),
+  make_option('--sign',
+              type = 'character',
+              help = ""),
   make_option('--outfile',
               type = 'character',
               default = 'cluster_signatures.csv',
@@ -83,13 +86,28 @@ world_to_voxel <- function(coords, template) {
 #' containing 1. the path to the cluster mask image, and 2. the path to 
 #' the gene expression .csv file.
 #' @param sample_coordinates (matrix) AHBA microarray sample 
-#' voxel coordinates. 
+#' voxel coordinates.
+#' @param sign (character scalar) One of {'positive', 'negative'} 
+#' indicating whether to use only negative or positive mask values. 
+#' All values are used if NULL.  
 #'
 #' @return (data.frame) A data.frame row containing the expression 
 #' signature.
-create_cluster_signature <- function(infiles, sample_coordinates) {
+create_cluster_signature <- function(infiles, sample_coordinates, sign = NULL) {
   
-  cluster <- mincArray(mincGetVolume(infiles[, 1][[1]]))
+  cluster <- mincGetVolume(infiles[[1, 1]])
+  cluster <- floor(cluster)
+  if (!is.null(sign)) {
+    if (sign == 'positive') {
+      cluster[cluster < 0] <- 0
+    } else if (sign == 'negative') {
+      cluster[cluster > 0] <- 0
+    } else {
+      stop()
+    }
+  }
+  cluster <- abs(cluster)
+  cluster <- mincArray(cluster)
   
   cluster_voxels <- which(cluster == 1, arr.ind = TRUE)
   
@@ -105,7 +123,7 @@ create_cluster_signature <- function(infiles, sample_coordinates) {
   
   samples_in_cluster <- sample_coordinates %in% cluster_coordinates
   
-  expression <- data.table::fread(infiles[, 2][[1]], header = TRUE) %>% 
+  expression <- data.table::fread(infiles[[1, 2]], header = TRUE) %>% 
     as_tibble()
   
   signature <- expression[samples_in_cluster,] %>% 
@@ -120,11 +138,12 @@ create_cluster_signature <- function(infiles, sample_coordinates) {
 
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-cluster_dir <- args[['clusterdir']]
-expr_dir <- args[['exprdir']]
+cluster_dir <- args[['cluster-dir']]
+expr_dir <- args[['expr-dir']]
 coords <- args[['coordinates']]
 template <- args[['template']]
 outfile <- args[['outfile']]
+sign <- args[['sign']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
 
@@ -144,8 +163,8 @@ if (verbose) {message("Identifying input files...")}
 #Get cluster and expression input files
 expr_files <- Sys.glob(file.path(expr_dir, '*.csv'))
 cluster_files <- list.files(cluster_dir, full.names = TRUE)
-infiles <- expand_grid(clusterfile = cluster_files, 
-                       exprfile = expr_files)
+infiles <- expand_grid(cluster_file = cluster_files, 
+                       expr_file = expr_files)
 
 if (verbose) {message("Computing cluster signatures...")}
 
@@ -161,7 +180,8 @@ if (inparallel) {
                         .packages = c('tidyverse', 'RMINC'),
                         .combine = 'bind_rows', .options.snow=opts) %dopar% {
                           create_cluster_signature(infile = infiles[i,],
-                                                   sample_coordinates = sample_coordinates)
+                                                   sample_coordinates = sample_coordinates,
+                                                   sign = sign)
                         }
   close(pb)
   stopCluster(cl)
@@ -171,13 +191,19 @@ if (inparallel) {
                         .combine = 'bind_rows') %do% {
                           progress(n = i)
                           create_cluster_signature(infile = infiles[i,],
-                                                   sample_coordinates = sample_coordinates)
+                                                   sample_coordinates = sample_coordinates,
+                                                   sign = sign)
                         }
   close(pb)
 }
 
 #Include file info
 signatures <- bind_cols(infiles, signatures)
+if (is.null(sign)) {
+  signatures$sign <- NA
+} else {
+  signatures$sign <- sign
+}
 
 #Write to file
 data.table::fwrite(signatures,
