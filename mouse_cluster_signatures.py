@@ -39,13 +39,13 @@ def parse_args():
              )
     
     parser.add_argument(
-        '--clusterdir',
+        '--cluster-dir',
         type = str,
         help = ("Directory containing cluster mask images.")
     )
     
     parser.add_argument(
-        '--exprdir',
+        '--expr-dir',
         type = str,
         help = ("Directory containing gene expression .csv files.")
     )
@@ -54,6 +54,13 @@ def parse_args():
         '--mask',
         type = str,
         help = ("Mask file used to generate the expression data sets."))
+    
+    parser.add_argument(
+        '--sign',
+        type = str,
+        choices = ['positive', 'negative'],
+        help = ()
+    )
     
     parser.add_argument(
         '--outfile',
@@ -159,7 +166,7 @@ def aggregate_expression(cluster, expression):
                     .mean())
 
 
-def create_cluster_signature(infiles, mask):
+def create_cluster_signature(infiles, mask, sign = None):
     
     """
     Create an expression signature for a cluster. 
@@ -172,6 +179,10 @@ def create_cluster_signature(infiles, mask):
     mask: str
         Path to mask image file used to create the gene expression 
         files.
+    sign: str
+        One of {'positive', 'negative'} indicating whether to use
+        only negative or positive mask values. All values are used
+        if None. 
     
     Returns
     -------
@@ -180,21 +191,33 @@ def create_cluster_signature(infiles, mask):
         signature. 
     """
         
+    if all([sign != val for val in [None, 'positive', 'negative']]):
+        raise ValueError("sign must be one of {None, 'positive', 'negative'}")
+
     cluster = import_image(img = infiles[0],
                            mask = mask)
-    
+
+    cluster = np.int8(np.floor(cluster))
+
+    if sign == 'positive':
+        cluster[cluster < 0] = 0
+    elif sign == 'negative':
+        cluster[cluster > 0] = 0
+
+    cluster = np.abs(cluster)
+
     with silence():
         expression = (fread(infiles[1], 
                             header = True)
                       .to_pandas())
-        
+
     signature = aggregate_expression(cluster = cluster,
                                      expression = expression)
     
     return signature
 
 
-def build_signatures_table(clusters, expression, mask, 
+def build_signatures_table(clusters, expression, mask, sign = None,
                            parallel = False, nproc = None):
     
     """
@@ -209,6 +232,10 @@ def build_signatures_table(clusters, expression, mask,
     mask: str
         Path to mask image file used to create the gene expression 
         files.
+    sign: str
+        One of {'positive', 'negative'} indicating whether to use
+        only negative or positive mask values. All values are used
+        if None.
     parallel: bool (optional)
         Run in parallel.
     nproc: int (optional)
@@ -223,7 +250,8 @@ def build_signatures_table(clusters, expression, mask,
     infiles = list(product(clusters, expression))
     
     create_cluster_signature_partial = partial(create_cluster_signature, 
-                                               mask = mask)
+                                               mask = mask,
+                                               sign = sign)
     
     if parallel:
         
@@ -247,11 +275,11 @@ def build_signatures_table(clusters, expression, mask,
                                tqdm(infiles)))
         
     df_signatures = pd.DataFrame(np.asarray(signatures))
-    df_signatures['clusterfile'] = [os.path.basename(i[0]) for i in infiles]
-    df_signatures['exprfile'] = [os.path.basename(i[1]) for i in infiles]
+    df_signatures['cluster_file'] = [os.path.basename(i[0]) for i in infiles]
+    df_signatures['expr_file'] = [os.path.basename(i[1]) for i in infiles]
+    df_signatures['mask_sign'] = sign
     
     return df_signatures
-
 
 # Main -----------------------------------------------------------------------
 
@@ -259,8 +287,10 @@ def main():
     
     #Parse command line arguments
     args = parse_args()
-    cluster_dir = args['clusterdir']
-    expr_dir = args['exprdir']
+    cluster_dir = args['cluster_dir']
+    expr_dir = args['expr_dir']
+    mask_file = args['mask']
+    sign = args['sign']
     outfile = args['outfile']
     parallel = True if args['parallel'] == 'true' else False
     verbose = True if args['verbose'] == 'true' else False
@@ -277,7 +307,6 @@ def main():
     #Input files
     expr_files = glob(expr_dir+'*.csv')
     cluster_files = glob(cluster_dir+'*.mnc')
-    mask_file = args['mask']
     
     #Build signatures data frame        
     if verbose:
@@ -286,6 +315,7 @@ def main():
     df_signatures = build_signatures_table(clusters = cluster_files,
                                            expression = expr_files,
                                            mask = mask_file,
+                                           sign = sign,
                                            parallel = parallel,
                                            nproc = args['nproc'])
 
