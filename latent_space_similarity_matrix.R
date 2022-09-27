@@ -95,45 +95,45 @@ df_human <- data.table::fread(humanfile, header = TRUE) %>%
   as_tibble()
 
 df_mouse <- df_mouse %>%
-  mutate(latent_space = exprfile %>% 
-           str_extract('transform_[0-9]+') %>% 
+  mutate(latent_space = expr_file %>% 
+           str_extract("transform_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         nk = cluster_file %>% 
+           str_extract("Clusternum_[0-9]+") %>% 
            str_extract('[0-9]+') %>% 
            as.numeric(),
-         nk = clusterfile %>% 
-           str_extract('Clusternum_[0-9]+') %>% 
-           str_extract('[0-9]+') %>% 
-           as.numeric(),
-         k = clusterfile %>% 
-           str_extract('Group_[0-9]+') %>% 
-           str_extract('[0-9]+') %>% 
+         k = cluster_file %>% 
+           str_extract("Group_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
            as.numeric()) %>% 
   arrange(latent_space, nk, k) %>% 
   unite(cluster_id, nk, k, sep = '-')
 
 df_human <- df_human %>%
-  mutate(latent_space = exprfile %>% 
-           str_extract('transform_[0-9]+') %>% 
-           str_extract('[0-9]+') %>% 
+  mutate(latent_space = expr_file %>% 
+           str_extract("transform_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
            as.numeric(),
-         nk = clusterfile %>% 
-           str_extract('Clusternum_[0-9]+') %>% 
-           str_extract('[0-9]+') %>% 
+         nk = cluster_file %>% 
+           str_extract("Clusternum_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
            as.numeric(),
-         k = clusterfile %>% 
-           str_extract('Group_[0-9]+') %>% 
-           str_extract('[0-9]+') %>% 
+         k = cluster_file %>% 
+           str_extract("Group_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
            as.numeric()) %>% 
   arrange(latent_space, nk, k) %>% 
   unite(cluster_id, nk, k, sep = '-')
 
-column_names <- unique(df_mouse[,'cluster_id'][[1]])
-row_names <- unique(df_human[,'cluster_id'][[1]])
+column_names <- unique(df_mouse[,"cluster_id"][[1]])
+row_names <- unique(df_human[,"cluster_id"][[1]])
 
-mouse_latent_space_ids <- df_mouse[,'latent_space'][[1]] %>%
+mouse_latent_space_ids <- df_mouse[,"latent_space"][[1]] %>%
   unique() %>% 
   sort()
 
-human_latent_space_ids <- df_human[,'latent_space'][[1]] %>%
+human_latent_space_ids <- df_human[,"latent_space"][[1]] %>%
   unique() %>% 
   sort()
 
@@ -150,26 +150,28 @@ if(length(mouse_latent_space_ids) != length(human_latent_space_ids)) {
 
 if (verbose) {message("Computing similarity matrices...")}
 
-list_sim <- vector(mode = 'list', length = length(latent_space_ids))
+list_sim <- vector(mode = "list", length = length(latent_space_ids))
 for (i in 1:length(list_sim)){
   
   #Prepare mouse data
   mat_mouse <- df_mouse %>% 
     filter(latent_space == latent_space_ids[i]) %>% 
-    select(-clusterfile,
-           -exprfile,
-           -latent_space) %>% 
-    column_to_rownames('cluster_id') %>% 
+    select(-cluster_file,
+           -expr_file,
+           -latent_space,
+           -mask_sign) %>% 
+    column_to_rownames("cluster_id") %>% 
     as.matrix() %>% 
     t() 
   
   #Prepare human data  
   mat_human <- df_human %>% 
     filter(latent_space == latent_space_ids[i]) %>% 
-    select(-clusterfile,
-           -exprfile,
-           -latent_space) %>% 
-    column_to_rownames('cluster_id') %>% 
+    select(-cluster_file,
+           -expr_file,
+           -latent_space,
+           -sign) %>% 
+    column_to_rownames("cluster_id") %>% 
     as.matrix() %>% 
     t()
   
@@ -184,10 +186,10 @@ for (i in 1:length(list_sim)){
   #Save to file if desired
   if (save_intermediate) {
     outfile_tmp <- outfile %>% 
-      str_replace('.csv', 
-                  str_c('_', latent_space_ids[i], '.csv'))
+      str_replace(".csv", 
+                  str_c("_", latent_space_ids[i], ".csv"))
     mat_sim %>% 
-      as_tibble(rownames = 'cluster_id') %>% 
+      as_tibble(rownames = "cluster_id") %>% 
       data.table::fwrite(file = outfile_tmp)
   }
   
@@ -212,11 +214,9 @@ array_sim <- array(unlist(list_sim),
                    dim = c(nrow_current,
                            ncol_current,
                            length(list_sim)))
-
 avg_sim <- rowMeans(array_sim, dims = 2)
 rownames(avg_sim) <- row_names
 colnames(avg_sim) <- column_names
 
-avg_sim %>% 
-  as_tibble(rownames = 'cluster_id') %>% 
-  data.table::fwrite(file = outfile)
+data.table::fwrite(as_tibble(avg_sim, rownames = "cluster_id"),
+                   file = outfile)
