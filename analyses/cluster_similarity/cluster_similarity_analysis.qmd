@@ -1,0 +1,205 @@
+---
+title: "Similarity analysis of mouse and human autism neuroanatomical clusters"
+format: pdf
+editor: visual
+---
+
+```{r setup, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      eval = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(data.tree))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(pheatmap))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(ggplotify))
+```
+
+```{r functions}
+source("../../functions/buildSimilarityMatrix.R")
+source("../../functions/tree_tools.R")
+source("analysis_tools.R")
+```
+
+```{r parameters-general}
+#Gene space
+gene_space <- "average_latent_space"
+# gene_space <- "input_space"
+# gene_space<- "latent_space"
+
+#Latent space ID
+#Only used if gene_space == "latent_space"
+latent_space_id <- 1
+
+#Jacobians
+# jacobians <- "absolute"
+jacobians <- "relative"
+if (jacobians == "absolute") {
+  jacobians_short <- "abs"
+} else if (jacobians == "relative") {
+  jacobians_short <- "rel"
+} else {
+  stop()
+}
+
+#Thresholding method
+# threshold_method <- "intensity"
+threshold_method <- "topn"
+
+#Threshold value
+threshold <- 0.2
+
+#Mask type
+# mask_type <- "symmetric"
+# mask_type <- "positive"
+mask_type <- "negative"
+
+#Metric
+metric <- "correlation"
+
+df_parameters <- tibble(Parameter = c("Gene space",
+                                      "Jacobians",
+                                      "Thresholding method",
+                                      "Threshold",
+                                      "Mask type",
+                                      "Similarity metric"),
+                        Value = c(gene_space,
+                                  jacobians,
+                                  threshold_method,
+                                  threshold,
+                                  mask_type,
+                                  metric))
+
+knitr::kable(df_parameters)
+```
+
+```{r output-directory}
+plot_dir_base <- "plots/"
+plot_dir <- str_c(gene_space,
+                  "jacobians", jacobians,
+                  "threshold", threshold_method,
+                  threshold,
+                  sep = "_")
+plot_dir <- str_c(plot_dir_base, plot_dir)
+plot_dir <- file.path(plot_dir,
+                      str_c("mask", mask_type, sep = "_"))
+if(!dir.exists(plot_dir)) {
+  dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+}
+```
+
+```{r import-sim-matrix}
+mat_sim <- import_similarity_matrix(gene_space = gene_space,
+                                    jacobians = jacobians_short,
+                                    threshold_method = threshold_method,
+                                    threshold = threshold,
+                                    mask_type = mask_type,
+                                    latent_space_id = latent_space_id)
+```
+
+```{r plot-heatmap, fig.width = 12, fig.height = 12}
+plot_heatmap(x = mat_sim, 
+             clustering = FALSE, 
+             gene_space = gene_space,
+             jacobians = jacobians,
+             mask_type = mask_type,
+             threshold_method = threshold_method,
+             threshold = threshold,
+             metric = metric,
+             save = TRUE, outdir = plot_dir,
+             fig_width = 10, fig_height = 10)
+```
+
+```{r parameters-clustering}
+kcut <- 8
+message(str_c("Number of meta-clusters set to: ", kcut))
+```
+
+```{r plot-heatmap-clustered, fig.width = 12, fig.height = 12}
+plot_heatmap(x = mat_sim, 
+             clustering = TRUE, 
+             kcut = kcut,
+             # kcut = 8,
+             gene_space = gene_space,
+             jacobians = jacobians,
+             mask_type = mask_type,
+             threshold_method = threshold_method,
+             threshold = threshold,
+             metric = metric,
+             # save = FALSE,
+             save = TRUE,
+             outdir = plot_dir,
+             fig_width = 10, fig_height = 10)
+```
+
+```{r parameters-meta-k}
+mouse_meta_k <- 1
+human_meta_k <- 5
+
+message(str_c("Examining mouse meta-cluster: ", mouse_meta_k))
+message(str_c("Examining human meta-cluster: ", human_meta_k))
+```
+
+```{r plot-cluster-maps-mouse, fig.width = 10, fig.height = 5}
+plot_cluster_maps(x = mat_sim,
+                  species = "mouse",
+                  kcut = kcut,
+                  meta_k = mouse_meta_k,
+                  gene_space = gene_space,
+                  jacobians = jacobians,
+                  mask_type = mask_type,
+                  threshold_method = threshold_method,
+                  threshold = threshold,
+                  save = TRUE,
+                  outdir = plot_dir,
+                  fig_width = 10, fig_height = 5)
+```
+
+```{r plot-cluster-maps-human, fig.width = 10, fig.height = 10}
+plot_cluster_maps(x = mat_sim,
+                  species = "human",
+                  kcut = kcut,
+                  meta_k = human_meta_k,
+                  gene_space = gene_space,
+                  jacobians = jacobians,
+                  mask_type = mask_type,
+                  threshold_method = threshold_method,
+                  threshold = threshold,
+                  save = TRUE,
+                  outdir = plot_dir,
+                  fig_width = 6, fig_height = 4)
+```
+
+```{r plot-spider-coarse, fig.width = 10, fig.height = 10}
+plot_spider(x = mat_sim,
+            kcut = kcut,
+            mouse_meta_k = mouse_meta_k,
+            human_meta_k = human_meta_k,
+            spokes = "neuro-coarse",
+            gene_space = gene_space,
+            jacobians = jacobians,
+            mask_type = mask_type,
+            threshold_method = threshold_method,
+            threshold = threshold,
+            outdir = plot_dir,
+            save = TRUE)
+```
+
+```{r plot-spider-mid, fig.width = 10, fig.height = 10}
+plot_spider(x = mat_sim,
+            kcut = kcut,
+            mouse_meta_k = mouse_meta_k,
+            human_meta_k = human_meta_k,
+            spokes = "neuro-mid",
+            gene_space = gene_space,
+            jacobians = jacobians,
+            mask_type = mask_type,
+            threshold_method = threshold_method,
+            threshold = threshold,
+            outdir = plot_dir,
+            save = TRUE)
+```
