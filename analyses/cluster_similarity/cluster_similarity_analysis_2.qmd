@@ -85,7 +85,6 @@ knitr::kable(df_parameters)
 
 We start by examining the cluster similarity using the masks with sign: `r mask_type`.
 
-
 ```{r output-directory}
 plot_dir_base <- "plots/signed_mask_analysis/"
 plot_dir <- str_c(gene_space,
@@ -121,7 +120,7 @@ plot_heatmap(x = mat_sim,
              fig_width = 10, fig_height = 10)
 ```
 
-First we want to identify a coarse match between clusters based on the chosen mask type. 
+First we want to identify a coarse match between clusters based on the chosen mask type.
 
 ```{r parameters-clustering}
 human_kcut <- 3
@@ -160,8 +159,7 @@ message(str_c("Examining mouse meta-cluster: ", mouse_meta_k))
 message(str_c("Examining human meta-cluster: ", human_meta_k))
 ```
 
-The representative mean effect size maps for the clusters within these meta-clusters are as follows: 
-
+The representative mean effect size maps for the clusters within these meta-clusters are as follows:
 
 ```{r plot-cluster-maps-mouse, fig.width = 20, fig.height = 5}
 plot_cluster_maps(x = mat_sim,
@@ -193,7 +191,6 @@ plot_cluster_maps(x = mat_sim,
                   fig_width = 10, fig_height = 6)
 ```
 
-
 ```{r}
 if (mask_type == "positive") {
   mask_opposite <- "negative"
@@ -202,11 +199,9 @@ if (mask_type == "positive") {
 }
 ```
 
+Next we want to determine whether the clusters within these meta-clusters have coherent patterns based on masks of the opposite sign. In this case, that mask is:
 
-Next we want to determine whether the clusters within these meta-clusters have coherent patterns based on masks of the opposite sign. In this case, that mask is: 
-
-To do so, we extract the mouse and human clusters in the chosen meta-clusters, and examine their similarity based on the mask. 
-
+To do so, we extract the mouse and human clusters in the chosen meta-clusters, and examine their similarity based on the mask.
 
 ```{r}
 df_mouse_meta_cluster <- generate_meta_clusters(x = mat_sim, 
@@ -262,7 +257,7 @@ message(str_c("Examining mouse meta-cluster: ", mouse_meta_k_antisign))
 message(str_c("Examining human meta-cluster: ", human_meta_k_antisign))
 ```
 
-The representative mean effect size maps for these clusters are as follows. Note that we examine both positive and negative effect size values now. 
+The representative mean effect size maps for these clusters are as follows. Note that we examine both positive and negative effect size values now.
 
 ```{r fig.width = 10, fig.height = 5}
 plot_cluster_maps(x = mat_sim_reduced,
@@ -288,7 +283,7 @@ plot_cluster_maps(x = mat_sim_reduced,
                   threshold = threshold)
 ```
 
-Next we can examine the weight of different neuroanatomical regions in and cluster masks. 
+Next we can examine the weight of different neuroanatomical regions in and cluster masks.
 
 ```{r}
 p_spider_sign <- plot_spider(x = mat_sim_reduced,
@@ -324,6 +319,7 @@ p_spider_antisign <- p_spider_antisign +
        subtitle = NULL)
 
 ```
+
 ```{r fig.width = 10, fig.height = 10}
 library(patchwork)
 (p_spider_sign | p_spider_antisign) +

@@ -159,7 +159,7 @@ reduce_human_defs <- function(tree, defs, simplify = FALSE) {
                            simplify = FALSE) %>% 
     map_dfr(.f = function(x){tibble(sample_id = x)},
             .id = "name") %>% 
-    right_join(defs,
+    inner_join(defs,
                by = "sample_id") %>% 
     rename(sample_label = label) %>% 
     group_by(name) %>% 
@@ -208,14 +208,14 @@ reduce_human_labels <- function(tree, labels, defs) {
 #'
 #' @return (data.frame)
 calc_cluster_region_fractions <- function(cluster, labels, defs, mask_type = "symmetric") {
-  if (mask_type == "positive") {
-    cluster[cluster < 0] <- 0
-  } else if (mask_type == "negative") {
-    cluster[cluster > 0] <- 0
-    cluster <- abs(cluster)
-  } else if (mask_type == "symmetric") {
-    cluster <- abs(cluster)
-  }
+  # if (mask_type == "positive") {
+  #   cluster[cluster < 0] <- 0
+  # } else if (mask_type == "negative") {
+  #   cluster[cluster > 0] <- 0
+  #   cluster <- abs(cluster)
+  # } else if (mask_type == "symmetric") {
+  #   cluster <- abs(cluster)
+  # }
   voxels_cluster <- cluster == 1
   voxels_nonzero <- labels != 0
   labels_cluster <- labels[voxels_cluster & voxels_nonzero]
@@ -268,15 +268,16 @@ import_cluster_masks <- function(files, df) {
 }
 
 
+
 prepare_spider_data <- function(mouse, human, homologues) {
-  ind_match <- match(human[["name"]], table = homologues[["Human"]])
-  human[["name"]] <- homologues[["Mouse"]][ind_match]
+  ind_match <- match(human[["name"]], table = homologues[["human"]])
+  human[["name"]] <- homologues[["mouse"]][ind_match]
   human <- human %>% 
-    mutate(name = factor(name, levels = homologues[["Mouse"]]),
-           species = "Human")
+    mutate(name = factor(name, levels = homologues[["mouse"]]),
+           species = "human")
   mouse <- mouse %>% 
-    mutate(name = factor(name, levels = homologues[["Mouse"]]),
-           species = "Mouse")
+    mutate(name = factor(name, levels = homologues[["mouse"]]),
+           species = "mouse")
   out <- bind_rows(human, mouse)
   out <- out %>% 
     unite(col = group_id, 
@@ -287,8 +288,9 @@ prepare_spider_data <- function(mouse, human, homologues) {
 
 plot_heatmap <- function(x, clustering = FALSE, cutree_rows = 1, cutree_cols = 1, 
                          gene_space, jacobians, mask_type, threshold_method,
-                         threshold, metric, padding = 0.2, save = FALSE, 
-                         outdir = "plots/", fig_width = 10, fig_height = 10) {
+                         threshold, metric, header = TRUE, padding = 0.2, 
+                         save = FALSE, outdir = "plots/", 
+                         fig_width = 10, fig_height = 10) {
   
   palette <- mako(n = 10, direction = -1, begin = 0.3)
   
@@ -361,16 +363,21 @@ plot_heatmap <- function(x, clustering = FALSE, cutree_rows = 1, cutree_cols = 1
     
   }
   
+  if (header) {
+    p_heatmap <- p_heatmap +
+      labs(title = "Cluster similarity",
+           subtitle = str_c("Gene space: ", gene_space, "\n",
+                            "Jacobians: ", jacobians, "\n",
+                            "Mask type: ", mask_type, "\n",
+                            "Thresholding method: ", threshold_method, "\n",
+                            "Threshold: ", threshold, "\n",
+                            "Metric: ", metric, "\n",
+                            "Rows: Human", "\n",
+                            "Columns: Mouse", "\n"))
+      
+  }
+    
   p_heatmap <- p_heatmap +
-    labs(title = "Cluster similarity",
-         subtitle = str_c("Gene space: ", gene_space, "\n",
-                          "Jacobians: ", jacobians, "\n",
-                          "Mask type: ", mask_type, "\n",
-                          "Thresholding method: ", threshold_method, "\n",
-                          "Threshold: ", threshold, "\n",
-                          "Metric: ", metric, "\n",
-                          "Rows: Human", "\n",
-                          "Columns: Mouse", "\n")) +
     theme(plot.margin = margin(t = padding, 
                                r = padding, 
                                b = padding, 
@@ -405,7 +412,7 @@ plot_heatmap <- function(x, clustering = FALSE, cutree_rows = 1, cutree_cols = 1
   
 }
 
-plot_cluster_maps <- function(x,species, kcut, meta_k, gene_space, jacobians,
+plot_cluster_maps <- function(x, species, kcut, meta_k, gene_space, jacobians,
                               mask_type, threshold_method, threshold, 
                               save = FALSE, outdir = "plots/",
                               fig_width = 10, fig_height = 10) {
