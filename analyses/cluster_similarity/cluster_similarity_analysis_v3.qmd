@@ -19,6 +19,7 @@ suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
 suppressPackageStartupMessages(library(pheatmap))
 suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(RColorBrewer))
 suppressPackageStartupMessages(library(ggplotify))
 suppressPackageStartupMessages(library(patchwork))
 ```
@@ -49,6 +50,9 @@ threshold_method <- "topn"
 
 #Threshold value
 threshold <- 0.2
+# threshold <- 0.1
+# threshold <- 0.05
+
 
 #Mask type
 # mask_type <- "positive"
@@ -75,7 +79,6 @@ df_parameters <- tibble(Parameter = c("Gene space",
 knitr::kable(df_parameters)
 ```
 
-
 ```{r output-directory}
 plot_dir_base <- "plots/signed_mask_analysis/"
 plot_dir <- str_c(gene_space,
@@ -89,8 +92,7 @@ if(!dir.exists(plot_dir)) {
 }
 ```
 
-Let's start by taking a look at the cluster similarity matrices for both the positive and negative masks. 
-
+Let's start by taking a look at the cluster similarity matrices for both the positive and negative masks.
 
 ```{r}
 mat_sim_pos <- import_similarity_matrix(gene_space = gene_space,
@@ -120,7 +122,7 @@ heatmap_neg <- plot_heatmap(x = mat_sim_neg,
 heatmap_pos | heatmap_neg
 ```
 
-We can combine these by taking the average, which should bring out clusters that are similar both in their positive and negative effect size maps. 
+We can combine these by taking the average, which should bring out clusters that are similar both in their positive and negative effect size maps.
 
 ```{r}
 mat_sim <- array(data = 0,
@@ -128,7 +130,7 @@ mat_sim <- array(data = 0,
 mat_sim[,,1] <- mat_sim_pos
 mat_sim[,,2] <- mat_sim_neg
 
-mat_sim <- rowMeans(mat_sim, dims = 2)
+mat_sim <- rowMeans(mat_sim, dims = 2, na.rm = TRUE)
 
 colnames(mat_sim) <- colnames(mat_sim_pos)
 rownames(mat_sim) <- rownames(mat_sim_pos)
@@ -141,10 +143,10 @@ plot_heatmap(x = mat_sim,
 ```
 
 ```{r}
-nk <- 6
+nk <- 5
 ```
 
-We can start by setting the number of clusters to a specific value. I've chosen nk = `r nk`. The reduced similarity matrix is as follows: 
+We can start by setting the number of clusters to a specific value. I've chosen nk = `r nk`. The reduced similarity matrix is as follows:
 
 ```{r fig.width = 8, fig.height = 6}
 col_selection <- str_detect(colnames(mat_sim), str_c("^", nk, "-"))
@@ -158,12 +160,41 @@ plot_heatmap(x = mat_sim_nk,
 ```
 
 ```{r}
+col_selection <- str_detect(colnames(mat_sim_pos), str_c("^", nk, "-"))
+row_selection <- str_detect(rownames(mat_sim_pos), str_c("^", nk, "-"))
+mat_sim_pos_nk <- mat_sim_pos[row_selection, col_selection]  
+
+col_selection <- str_detect(colnames(mat_sim_neg), str_c("^", nk, "-"))
+row_selection <- str_detect(rownames(mat_sim_neg), str_c("^", nk, "-"))
+mat_sim_neg_nk <- mat_sim_neg[row_selection, col_selection]  
+
+mat_sim_nk_tmp <- array(data = 0,
+                 dim = c(dim(mat_sim_pos_nk), 2))
+mat_sim_nk_tmp[,,1] <- mat_sim_pos_nk
+mat_sim_nk_tmp[,,2] <- mat_sim_neg_nk
+
+mat_sim_nk_tmp <- rowMeans(mat_sim_nk_tmp, dims = 2, na.rm = TRUE)
+
+colnames(mat_sim_nk_tmp) <- colnames(mat_sim_pos_nk)
+rownames(mat_sim_nk_tmp) <- rownames(mat_sim_pos_nk)
+
+plot_heatmap(x = mat_sim_nk,
+             clustering = FALSE,
+             annotations = "k")
+```
+
+```{r fig.width = 12, fig.height = 10}
+plot_heatmap(x = mat_sim, 
+             clustering = FALSE) +
+  labs(title = "Symmetric cluster similarity")
+```
+
+```{r}
 k_mouse <- 4
 k_human <- 4
 ```
 
 It looks like mouse cluster `r k_mouse` and human cluster `r k_human` are well matched. We can examine what these maps look like.
-
 
 ```{r fig.width = 10, fig.height = 8}
 plot_cluster_map(species = "mouse",
@@ -187,7 +218,6 @@ plot_cluster_map(species = "human",
 
 Another way to examine the cluster similarity is to use spider charts. The spokes correspond to non-controversial homologous broad regions. The numeric scale is the fraction of cluster voxels with expression data that belong to the region of interest. This is especially important on the human side, because not every voxel in the cluster has an associated microarray sample. Only those voxels that are both in the cluster and have a microarray sample are counted.
 
-
 ```{r fig.width = 10, fig.height = 10}
 nk_list <- list(mouse = nk, human = nk)
 k_list <- list(mouse = k_mouse, human = k_human)
@@ -201,6 +231,21 @@ plot_spider_chart(nk = nk_list, k = k_list,
                   fig_width = 10, fig_height = 10)
 ```
 
+```{r}
+nk <- nk_list
+k <- k_list
+spokes <- "neuro-coarse"
+i <- 1
+species <- "mouse"
+structs <- df_spokes[["mouse"]]
+mask <- "positive"
+remove <- FALSE
+# cluster <- cluster_mask_neg
+cluster <- cluster_mask
+labels <- atlas_reduced[["labels"]]
+defs = atlas_reduced[["defs"]]
+```
+
 ```{r fig.width = 10, fig.height = 10}
 plot_spider_chart(nk = nk_list, k = k_list,
                   spokes = "neuro-mid", 
@@ -212,9 +257,7 @@ plot_spider_chart(nk = nk_list, k = k_list,
                   fig_width = 10, fig_height = 10)
 ```
 
-
 How does the similarity between this mouse cluster and this human cluster compare to the similarity between different mouse and human brain regions?
-
 
 ```{r}
 #Mouse files
@@ -269,7 +312,6 @@ human_sample_ids <- data.table::fread(human_samplefile, header = TRUE) %>%
   pull(SampleID)
 ```
 
-
 ```{r}
 mouse_expr_dir <- "../../data/mouse/expression/latent_space/"
 human_expr_dir <- "../../data/human/expression/latent_space/"
@@ -285,10 +327,10 @@ nfiles <- length(mouse_expr_files)
 list_sim <- vector(mode = 'list', length = nfiles)
 for (i in 1:100){
   
-  # if (i %% 10 == 0){
-  #   message(i)
-  # }
-  
+  if (i %% 10 == 0){
+    message(i)
+  }
+
   mouse <- data.table::fread(mouse_expr_files[i], header = TRUE) %>%
     as_tibble()
   human <- data.table::fread(human_expr_files[i], header = TRUE) %>%
@@ -363,7 +405,6 @@ df_hist <- df_hist %>%
 cluster_sim <- mat_sim_nk[k_human, k_mouse]
 ```
 
-
 ```{r fig.width = 10, fig.height = 5}
 p_dist <- ggplot(df_hist, aes(x = similarity, 
                               y = ..density.., 
@@ -384,7 +425,7 @@ p_dist <- ggplot(df_hist, aes(x = similarity,
 p_dist
 ```
 
-Unfortunately mouse cluster 6-4 isn't annotated with a signalling pathway. Let's filter the similarity matrix for those clusters that have annotations. 
+Unfortunately mouse cluster 6-4 isn't annotated with a signalling pathway. Let's filter the similarity matrix for those clusters that have annotations.
 
 ```{r fig.width = 8, fig.height = 10}
 clusters_with_annotations <- c("2-1", "2-2", 
@@ -414,11 +455,11 @@ mouse_similarity_max <- apply(X = mat_sim_annotations,
 sort(mouse_similarity_max, decreasing = TRUE)[1:5]
 ```
 
-Mouse clusters 2-2, 4-3, and 5-2 appear to be the same cluster based on their similarity profiles to human clusters. Cluster 9-2 is standing on its own and is similar to multiple human clusters. We'll start by examining that one. It's annotated with "Transmission across synapses". This is what the average effect size map looks like: 
+Mouse clusters 2-2, 4-3, and 5-2 appear to be the same cluster based on their similarity profiles to human clusters. Cluster 9-2 is standing on its own and is similar to multiple human clusters. We'll start by examining that one. It's annotated with "Transmission across synapses". This is what the average effect size map looks like:
 
 ```{r}
 nk_mouse <- 9
-k_mouse <- 2
+k_mouse <- 1
 ```
 
 ```{r fig.width = 10, fig.height = 8}
@@ -454,14 +495,13 @@ ggplot(tmp, aes(x = cluster_id, y = similarity)) +
   theme_bw()
 ```
 
-Let's filter for those clusters with correlations greater than 0.9 and examine the spatial maps. 
-
+Let's filter for those clusters with correlations greater than 0.9 and examine the spatial maps.
 
 ```{r fig.width = 10, fig.height = 10}
-tmp_0.9 <- tmp %>% 
-  filter(similarity >= 0.9)
-nk_human <- tmp_0.9$nk
-k_human <- tmp_0.9$k
+tmp_top <- tmp %>% 
+  top_n(n = 6, wt = similarity)
+nk_human <- tmp_top$nk
+k_human <- tmp_top$k
 
 plot_cluster_map_array(species = "human", 
                        nk = nk_human,
@@ -475,15 +515,15 @@ plot_cluster_map_array(species = "human",
 We can also examine the spider plots. Let's pick human cluster 10-5 for this purpose. The mouse cluster is still 9-2.
 
 ```{r fig.width = 10, fig.height = 10}
-nk_list <- list(mouse = nk_mouse, human = 10)
-k_list <- list(mouse = k_mouse, human = 5)
+nk_list <- list(mouse = nk_mouse, human = 7)
+k_list <- list(mouse = k_mouse, human = 7)
 
 plot_spider_chart(nk = nk_list, k = k_list,
                   spokes = "neuro-coarse", 
                   jacobians = jacobians, 
                   threshold_method = threshold_method, 
                   threshold = threshold,
-                  save = TRUE, 
+                  save = TregisterRUE, 
                   fig_width = 10, fig_height = 10)
 ```
 
@@ -519,8 +559,7 @@ p_dist <- ggplot(df_hist, aes(x = similarity,
 p_dist
 ```
 
-
-Let's now take a look at mouse clusters 2-2, 4-3, and 5-2. 
+Let's now take a look at mouse clusters 2-2, 4-3, and 5-2.
 
 ```{r fig.width = 6, fig.height = 8}
 nk_mouse <- c(2,4,5)
@@ -535,12 +574,11 @@ plot_cluster_map_array(species = "mouse",
                        threshold = threshold)
 ```
 
-
 Indeed these are very similar. The annotations are:
 
-- 2-2: Signaling by Wnt
-- 4-3: Transmission across synapses, Signaling by Wnt, Chromatin organization
-- 5-2: Transmission across synapses, Signaling by Wnt, Chromatin organization, MAPK Family Signaling
+-   2-2: Signaling by Wnt
+-   4-3: Transmission across synapses, Signaling by Wnt, Chromatin organization
+-   5-2: Transmission across synapses, Signaling by Wnt, Chromatin organization, MAPK Family Signaling
 
 Let's examine mouse cluster 5-2 in more detail. Which human clusters are most similar?
 
@@ -568,7 +606,7 @@ ggplot(tmp, aes(x = cluster_id, y = similarity)) +
   theme_bw()
 ```
 
-The correlations are slightly lower this time. Let's examine the top 6 human clusters. 
+The correlations are slightly lower this time. Let's examine the top 6 human clusters.
 
 ```{r fig.width = 10, fig.height = 10}
 tmp_top <- tmp %>% 
@@ -588,8 +626,8 @@ plot_cluster_map_array(species = "human",
 Human clusters 5-4 and 6-4 are the most highly correlated to mouse cluster 5-2. Interestingly, we randomly examined human 6-4 at the start of this document. While mouse cluster 6-4 was not annotated, mouse 5-2 is annotated and highly similar to human 6-4. Let's examine the spider charts for human 5-4 and mouse 5-2.
 
 ```{r fig.width = 10, fig.height = 10}
-nk_list <- list(mouse = 5, human = 5)
-k_list <- list(mouse = 2, human = 4)
+nk_list <- list(mouse = 5, human = 8)
+k_list <- list(mouse = 2, human = 5)
 
 plot_spider_chart(nk = nk_list, k = k_list,
                   spokes = "neuro-coarse", 
@@ -610,4 +648,4 @@ plot_spider_chart(nk = nk_list, k = k_list,
                   fig_width = 10, fig_height = 10)
 ```
 
-These are basically identical to the spider charts for mouse 6-4 and human 6-4 that we examined at the start of this analysis. 
+These are basically identical to the spider charts for mouse 6-4 and human 6-4 that we examined at the start of this analysis.
