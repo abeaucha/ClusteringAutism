@@ -49,10 +49,6 @@ option_list <- list(
               type = 'numeric',
               default = 10,
               help = paste("[default %default]")),
-  make_option('--dataset',
-              type = 'character',
-              help = paste("Human data subset to use when computing effect",
-                           "sizes.")),
   make_option('--parallel',
               type = 'character',
               default = 'false',
@@ -228,7 +224,6 @@ maskfile <- args[['maskfile']]
 outdir <- args[['outdir']]
 ncontrols <- args[['ncontrols']]
 threshold <- args[['threshold']]
-dataset <- args[['dataset']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 
 #Create outdir if needed
@@ -240,13 +235,9 @@ if (!dir.exists(outdir)) {
 demographics <- data.table::fread(demofile, header = TRUE) %>% 
   as_tibble()
 
-#Filter for POND sample if desired
-if(!is.null(dataset)){
-  if (dataset == 'POND') {
-    demographics <- demographics %>% 
-      filter(Dataset == 'POND')
-  }
-}
+#Filter for POND and SickKids 
+demographics <- demographics %>% 
+  filter(Dataset %in% c("POND", "SickKids"))
 
 #Remove entries with missing diagnosis, age, or sex
 demographics <- demographics %>% 
