@@ -3,44 +3,38 @@
 #' @param cluster (mincSingleDim)
 #' @param labels (mincSingleDim)
 #' @param defs (data.frame)
-#' @param mask_type (character scalar)
 #'
 #' @return (data.frame)
-calc_cluster_region_fractions <- function(cluster, labels, defs, mask_type = "symmetric") {
-  # if (mask_type == "positive") {
-  #   cluster[cluster < 0] <- 0
-  # } else if (mask_type == "negative") {
-  #   cluster[cluster > 0] <- 0
-  #   cluster <- abs(cluster)
-  # } else if (mask_type == "symmetric") {
-  #   cluster <- abs(cluster)
-  # }
+calc_cluster_region_fractions <- function(cluster, labels, defs) {
   voxels_cluster <- cluster == 1
   voxels_nonzero <- labels != 0
   labels_cluster <- labels[voxels_cluster & voxels_nonzero]
   if (length(labels_cluster) == 0){
-    stop(paste("There are no voxels in the cluster with mask_type:",
-               mask_type))
+    out <- tibble(label = defs[["label"]],
+                  nvoxels = 0)
   } else {
     out <- table(labels_cluster) %>% 
       as_tibble() %>% 
       rename(label = labels_cluster,
              nvoxels = n) %>% 
-      mutate(label = as.integer(label)) %>% 
-      right_join(defs, by = "label") %>%
-      mutate(nvoxels = ifelse(is.na(nvoxels), 0, nvoxels),
-             nvoxels_cluster = sum(voxels_cluster),
-             nvoxels_expr = length(labels_cluster),
-             fvoxels_cluster = nvoxels/nvoxels_cluster,
-             fvoxels_expr = nvoxels/nvoxels_expr) %>% 
-      select(name,
-             label,
-             nvoxels,
-             nvoxels_cluster,
-             nvoxels_expr,
-             fvoxels_cluster,
-             fvoxels_expr)
+      mutate(label = as.integer(label))
   }
+  out <- out%>% 
+    right_join(defs, by = "label") %>%
+    mutate(nvoxels = ifelse(is.na(nvoxels), 0, nvoxels),
+           nvoxels_cluster = sum(voxels_cluster),
+           nvoxels_expr = length(labels_cluster),
+           fvoxels_cluster = nvoxels/nvoxels_cluster,
+           fvoxels_expr = nvoxels/nvoxels_expr,
+           fvoxels_cluster = ifelse(is.nan(fvoxels_cluster), 0, fvoxels_cluster),
+           fvoxels_expr = ifelse(is.nan(fvoxels_expr), 0, fvoxels_expr)) %>% 
+    select(name,
+           label,
+           nvoxels,
+           nvoxels_cluster,
+           nvoxels_expr,
+           fvoxels_cluster,
+           fvoxels_expr)
   return(out)
 }
 
@@ -62,7 +56,7 @@ calc_cluster_region_fractions <- function(cluster, labels, defs, mask_type = "sy
 #'
 #' @return (mincSingleDim) Cluster map
 import_cluster_map <- function(species, nk, k, jacobians = NULL, mask = NULL, 
-                               threshold_method = NULL, threshold = NULL) {
+                               threshold_method = NULL, threshold = NULL, datadir = "../../data/") {
   
   #Argument options: jacobians
   opts_jacobians <- c("absolute", "relative")
@@ -77,10 +71,10 @@ import_cluster_map <- function(species, nk, k, jacobians = NULL, mask = NULL,
   
   #Cluster directory
   if (species == "mouse") {
-    cluster_dir <- str_c("../../data/mouse/clustering/cluster_maps/", 
+    cluster_dir <- str_c(file.path(datadir, "mouse/clustering/cluster_maps/"), 
                          jacobians, "/resolution_200/mean/")
   } else if (species == "human") {
-    cluster_dir <- str_c("../../data/human/clustering/cluster_maps/", 
+    cluster_dir <- str_c(file.path(datadir, "human/clustering/cluster_maps/"), 
                          jacobians, "/resolution_1.0/mean/")
   } else {
     stop("species must be one of {mouse, human}")
@@ -94,7 +88,8 @@ import_cluster_map <- function(species, nk, k, jacobians = NULL, mask = NULL,
   
   #Option to apply mask
   if (!is.null(mask)) {
-    cluster_mask <- import_cluster_mask(species = species,
+    cluster_mask <- import_cluster_mask(datadir = datadir,
+                                        species = species,
                                         jacobians = jacobians,
                                         nk = nk, k = k,
                                         type = mask,
@@ -126,7 +121,7 @@ import_cluster_map <- function(species, nk, k, jacobians = NULL, mask = NULL,
 #' @return (mincSingleDim) Cluster mask
 import_cluster_mask <- function(species, nk, k, jacobians = NULL, 
                                 type = "symmetric", threshold_method = NULL, 
-                                threshold = NULL) {
+                                threshold = NULL, datadir = "../../data/") {
   
   #Argument options: jacobians
   opts_jacobians <- c("absolute", "relative")
@@ -152,12 +147,12 @@ import_cluster_mask <- function(species, nk, k, jacobians = NULL,
   
   #Cluster mask directory
   if (species == "mouse") {
-    maskdir <- str_c("../../data/mouse/clustering/cluster_masks/", 
+    maskdir <- str_c(file.path(datadir, "mouse/clustering/cluster_masks/"), 
                      jacobians, "/resolution_200/mean/threshold_", 
                      threshold_method, "/symmetric/")
     
   } else if (species == "human") {
-    maskdir <- str_c("../../data/human/clustering/cluster_masks/", jacobians,
+    maskdir <- str_c(file.path(datadir, "human/clustering/cluster_masks/"), jacobians,
                      "/resolution_1.0/mean/threshold_", threshold_method,
                      "/symmetric/")
   } else {
@@ -617,7 +612,7 @@ aggregate_data <- function(x, groupby, method = 'mean', output = 'tibble'){
 
 prepare_cluster_fractions <- function(species, structs, nk, k, jacobians, 
                                       mask, threshold_method, threshold, 
-                                      tree, labels, defs, remove = FALSE) {
+                                      tree, labels, defs, remove = FALSE, datadir = "../../data/") {
   
   atlas_reduced <- reduce_atlas(species = species,
                                 tree = tree,
@@ -626,7 +621,8 @@ prepare_cluster_fractions <- function(species, structs, nk, k, jacobians,
                                 structs = structs,
                                 remove = remove)
   
-  cluster_mask <- import_cluster_mask(species = species,
+  cluster_mask <- import_cluster_mask(datadir = datadir,
+                                      species = species,
                                       nk = nk, k = k,
                                       jacobians = jacobians,
                                       type = mask,
@@ -741,32 +737,32 @@ prepare_spider_data <- function(mouse, human, homologues) {
 
 plot_heatmap <- function(x, clustering = FALSE, cutree_rows = 1, 
                          cutree_cols = 1, annotations = "nk-k", 
-                         padding = 0.2) {
-
-
+                         padding = 0.2, color = NULL) {
+  
+  
   if (clustering) {
-
+    
     annotation_row <- generate_meta_clusters(x = x,
                                              kcut = cutree_rows,
                                              axis = "rows") %>%
       select(cluster_id, meta_k) %>%
       column_to_rownames("cluster_id") %>%
       mutate(meta_k = factor(meta_k))
-
+    
     annotation_col <- generate_meta_clusters(x = x,
                                              kcut = cutree_cols,
                                              axis = "columns") %>%
       select(cluster_id, meta_k = meta_k) %>%
       column_to_rownames("cluster_id") %>%
       mutate(meta_k = factor(meta_k))
-
+    
     if (cutree_rows != cutree_cols) {
       annotation_row <- annotation_row %>%
         rename(meta_k_row = meta_k)
       annotation_col <- annotation_col %>%
         rename(meta_k_col = meta_k)
     }
-
+    
     x <- remove_empty_cells(x = x)
     p_heatmap <- as.ggplot(pheatmap(mat = x,
                                     cutree_rows = cutree_rows,
@@ -776,31 +772,31 @@ plot_heatmap <- function(x, clustering = FALSE, cutree_rows = 1,
                                     annotation_names_row = F,
                                     annotation_names_col = F,
                                     silent = TRUE))
-
+    
   } else {
-
+    
     df_annotations <- tibble(cluster_ids = colnames(x)) %>%
       separate(cluster_ids, into = c('nk', 'k'), remove = FALSE) %>%
       mutate(nk = factor(nk, levels = 1:10),
              k = factor(k, levels = 1:10)) %>%
       column_to_rownames(var = 'cluster_ids')
-
+    
     palette <- mako(n = 10, direction = -1, begin = 0.3)
     df_colour_palette <- tibble(i = factor(1:10),
                                 colour = palette)
-
+    
     df_annotation_colours <- df_annotations %>%
       left_join(df_colour_palette, by = c('nk' = 'i')) %>%
       rename(nk_col = colour) %>%
       left_join(df_colour_palette, by = c('k' = 'i')) %>%
       rename(k_col = colour)
-
+    
     nk_colours <- df_annotation_colours$nk_col
     names(nk_colours) <- df_annotation_colours$nk
-
+    
     k_colours <- df_annotation_colours$k_col
     names(k_colours) <- df_annotation_colours$k
-
+    
     if (annotations == "nk") {
       df_annotations <- select(df_annotations, nk)
       annotation_colours <- list(nk = nk_colours)
@@ -811,17 +807,22 @@ plot_heatmap <- function(x, clustering = FALSE, cutree_rows = 1,
       annotation_colours <- list(nk = nk_colours,
                                  k = k_colours)
     }
-
+    
+    if(is.null(color)) {
+      color <- colorRampPalette(rev(brewer.pal(n = 7, name =
+                                                 "RdYlBu")))(100)
+    }
     p_heatmap <- as.ggplot(pheatmap(mat = x,
+                                    color = color,
                                     cluster_cols = F, cluster_rows = F,
                                     annotation_row = df_annotations,
                                     annotation_col = df_annotations,
                                     annotation_colors = annotation_colours,
                                     silent = TRUE,
                                     na_col = 'black'))
-
+    
   }
-
+  
   # header <- FALSE
   # if (header) {
   #   p_heatmap <- p_heatmap #+
@@ -867,19 +868,19 @@ plot_heatmap <- function(x, clustering = FALSE, cutree_rows = 1,
   #   print(p_heatmap)
   #   dev.off()
   # }
-
+  
   return(p_heatmap)
-
+  
 }
 
 
 
-plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, threshold, step = 0.2, save = FALSE, outdir = "./", fig_width = 10, fig_height = 10) {
+plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, threshold, step = 0.2, datadir = "../../data/", save = FALSE, outdir = "./", fig_width = 10, fig_height = 10) {
   
   if (spokes == "neuro-coarse") {
-    infile <- "../../data/MouseHumanMatches_H10M09.csv"
+    infile <- file.path(datadir, "MouseHumanMatches_H10M09.csv")
   } else if (spokes == "neuro-mid") {
-    infile <- "../../data/MouseHumanMatches_H23M23.csv"
+    infile <- file.path(datadir, "MouseHumanMatches_H23M23.csv")
   } else {
     stop("spokes must be one of {'neuro-coarse', 'neuro-mid'}")
   }
@@ -896,16 +897,16 @@ plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, thresh
     if (species[[i]] == "mouse") {
       
       #Mouse DSURQE labels
-      label_file <- "../../data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc"
+      label_file <- file.path(datadir, "mouse/atlas/DSURQE_CCFv3_labels_200um.mnc")
       labels <- mincGetVolume(label_file)
       
       #Mouse definitions for DSURQE labels
-      defs_file <- "../../data/mouse/atlas/DSURQE_40micron_R_mapping_long.csv"
+      defs_file <- file.path(datadir, "mouse/atlas/DSURQE_40micron_R_mapping_long.csv")
       defs <- read_csv(defs_file, show_col_types = FALSE) %>% 
         select(name = Structure, label = Label)
       
       #Mouse hierarchy
-      tree_file <- "../../data/mouse/expression/MouseExpressionTree_DSURQE.RData"
+      tree_file <- file.path(datadir, "mouse/expression/MouseExpressionTree_DSURQE.RData")
       load(tree_file)
       tree <- Clone(treeMouseExpr)
       rm(treeMouseExpr)
@@ -913,22 +914,23 @@ plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, thresh
     } else {
       
       #Human labels for microarray sample
-      label_file <- "../../data/human/expression/AHBA_microarray_labels_studyspace_1.0mm.mnc"
+      label_file <- file.path(datadir, "human/expression/AHBA_microarray_labels_studyspace_1.0mm.mnc")
       labels <- mincGetVolume(label_file)
       
       #Human definitions for microarray sample labels
-      defs_file <- "../../data/human/expression/AHBA_microarray_coordinates_mni_defs.csv"
+      defs_file <- file.path(datadir, "human/expression/AHBA_microarray_coordinates_mni_defs.csv")
       defs <- read_csv(defs_file, show_col_types = FALSE)
       
       #Human hierarchy
-      tree_file <- "../../data/human/expression/HumanExpressionTree.RData"
+      tree_file <- file.path(datadir, "human/expression/HumanExpressionTree.RData")
       load(tree_file)
       tree <- Clone(treeHumanExpr)
       rm(treeHumanExpr)
       
     }
     
-    df_species_frac_pos <- prepare_cluster_fractions(species = species[[i]],
+    df_species_frac_pos <- prepare_cluster_fractions(datadir = datadir, 
+                                                     species = species[[i]],
                                                      structs = df_spokes[[species[[i]]]],
                                                      nk = nk[[species[[i]]]],
                                                      k = k[[species[[i]]]],
@@ -941,7 +943,8 @@ plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, thresh
                                                      defs = defs) %>% 
       mutate(sign = "positive")
     
-    df_species_frac_neg <- prepare_cluster_fractions(species = species[[i]],
+    df_species_frac_neg <- prepare_cluster_fractions(datadir = datadir,
+                                                     species = species[[i]],
                                                      structs = df_spokes[[species[[i]]]],
                                                      nk = nk[[species[[i]]]],
                                                      k = k[[species[[i]]]],
@@ -983,7 +986,8 @@ plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, thresh
                                    y = fvoxels_expr, 
                                    col = group_id,
                                    group = group_id)) + 
-    geom_line(size = 1) + 
+    # geom_line(size = 1) + 
+    geom_line(size = 2.0) + 
     geom_hline(yintercept = 0,
                size = 1.2,
                linetype = "dashed") + 
@@ -992,7 +996,8 @@ plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, thresh
               mapping = aes(x = name, 
                             y = breaks,
                             label = breaks),
-              size = 4,
+              size = 6,
+              # size = 4,
               nudge_x = 0.5,
               nudge_y = 0.25*step) + 
     coord_polar() +
@@ -1002,8 +1007,7 @@ plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, thresh
                                   "Human -- positive", 
                                   "Mouse -- negative", 
                                   "Mouse -- positive")) + 
-    labs(title = "Neuroanatomical weighting of clusters",
-         x = NULL,
+    labs(x = NULL,
          y = "Fraction of expressing voxels in cluster",
          col = NULL) +
     theme_bw() +
@@ -1030,18 +1034,18 @@ plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, thresh
 
 plot_cluster_map_array <- function(species, nk, k, nrow = 8, jacobians = NULL,
                                    mask = NULL, threshold_method = NULL, threshold = NULL,
-                                   overlay_low = NULL, overlay_high = NULL) {
+                                   overlay_low = NULL, overlay_high = NULL, datadir = "../../data/") {
   
   if (species == "mouse") {
-    anat_file <- "../../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
+    anat_file <- file.path(datadir, "mouse/atlas/DSURQE_CCFv3_average_200um.mnc")
     slice_begin <- 10
     slice_end <- 60
     anat_low <- 700
     anat_high <- 1400 
   } else if (species == "human") {
-    anat_file <- "../../data/human/registration/reference_files/model_1.0mm.mnc"
+    anat_file <- file.path(datadir, "human/registration/reference_files/model_1.0mm.mnc")
     slice_begin <- 50
-    slice_end <- 200
+    slice_end <- 180
     anat_low <- 3
     anat_high <- 7
   } else {
@@ -1053,7 +1057,8 @@ plot_cluster_map_array <- function(species, nk, k, nrow = 8, jacobians = NULL,
   cluster_maps <- vector(mode = "list", length = length(nk))
   names(cluster_maps) <- str_c(nk, k, sep = "-")
   for (i in 1:length(cluster_maps)) {
-    cluster_maps[[i]] <- import_cluster_map(species = species,
+    cluster_maps[[i]] <- import_cluster_map(datadir = datadir,
+                                            species = species,
                                             nk = nk[i], 
                                             k = k[i],
                                             jacobians = jacobians,
