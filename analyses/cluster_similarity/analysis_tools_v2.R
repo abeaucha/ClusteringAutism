@@ -323,7 +323,7 @@ import_similarity_matrix <- function(gene_space = "average_latent_space",
 #' @return 
 plot_cluster_map <- function(species, nk, k, nrow = 5, ncol = 5, jacobians = NULL,
                              mask = NULL, threshold_method = NULL, threshold = NULL,
-                             overlay_low = NULL, overlay_high = NULL) {
+                             overlay_low = NULL, overlay_high = NULL, draw_plot = TRUE) {
   
   if (species == "mouse") {
     anat_file <- "../../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
@@ -375,7 +375,11 @@ plot_cluster_map <- function(species, nk, k, nrow = 5, ncol = 5, jacobians = NUL
             symmetric = TRUE) %>% 
     legend("Effect size") 
   
-  return(draw(ss_cluster_map))
+  if (draw_plot) {
+    return(draw(ss_cluster_map))
+  } else {
+    return(ss_cluster_map)
+  }
   
 }
 
@@ -875,7 +879,7 @@ plot_heatmap <- function(x, clustering = FALSE, cutree_rows = 1,
 
 
 
-plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, threshold, step = 0.2, datadir = "../../data/", save = FALSE, outdir = "./", fig_width = 10, fig_height = 10) {
+plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, threshold, plot_type = "spider", step = 0.2, datadir = "../../data/", save = FALSE, outdir = "./", fig_width = 10, fig_height = 10) {
   
   if (spokes == "neuro-coarse") {
     infile <- file.path(datadir, "MouseHumanMatches_H10M09.csv")
@@ -974,46 +978,75 @@ plot_spider_chart <- function(nk, k, spokes, jacobians, threshold_method, thresh
           sep = "-",
           remove = FALSE)
   
+  
   breaks_end <- round(max(abs(df_cluster_fractions$fvoxels_expr)), digits = 1)+0.1
   breaks_end <- ifelse(breaks_end > 1, 1, breaks_end)
   breaks_start <- -1*breaks_end
   radial_breaks <- seq(breaks_start, breaks_end, by = step)
   radial_labels <- tibble(name = levels(df_cluster_fractions$name)[length(levels(df_cluster_fractions$name))],
                           breaks = radial_breaks)
-  
-  p_spider <- ggplot(data = df_cluster_fractions, 
-                     mapping = aes(x = name,
-                                   y = fvoxels_expr, 
-                                   col = group_id,
-                                   group = group_id)) + 
-    # geom_line(size = 1) + 
-    geom_line(size = 2.0) + 
-    geom_hline(yintercept = 0,
-               size = 1.2,
-               linetype = "dashed") + 
-    geom_text(data = radial_labels,
-              inherit.aes = FALSE,
-              mapping = aes(x = name, 
-                            y = breaks,
-                            label = breaks),
-              size = 6,
-              # size = 4,
-              nudge_x = 0.5,
-              nudge_y = 0.25*step) + 
-    coord_polar() +
-    scale_y_continuous(breaks = radial_breaks) +
-    scale_color_manual(values = c("deepskyblue", "deepskyblue4", "darkorange", "orange4"), 
-                       labels = c("Human -- negative", 
-                                  "Human -- positive", 
-                                  "Mouse -- negative", 
-                                  "Mouse -- positive")) + 
-    labs(x = NULL,
-         y = "Fraction of expressing voxels in cluster",
-         col = NULL) +
-    theme_bw() +
-    theme(legend.position = "bottom",
-          axis.text.y = element_blank(),
-          axis.ticks.y = element_blank())
+  if (plot_type == "spider") {
+    p_spider <- ggplot(data = df_cluster_fractions, 
+                       mapping = aes(x = name,
+                                     y = fvoxels_expr, 
+                                     col = group_id,
+                                     group = group_id)) + 
+      # geom_line(size = 1) + 
+      geom_line(size = 1.0) + 
+      geom_hline(yintercept = 0,
+                 size = 1.2,
+                 linetype = "dashed") + 
+      geom_text(data = radial_labels,
+                inherit.aes = FALSE,
+                mapping = aes(x = name, 
+                              y = breaks,
+                              label = breaks),
+                # size = 6,
+                size = 3,
+                nudge_x = 0.5,
+                nudge_y = 0.25*step) + 
+      coord_polar() +
+      scale_y_continuous(breaks = radial_breaks) +
+      scale_color_manual(values = c("deepskyblue", "deepskyblue4", "darkorange", "orange4"), 
+                         labels = c("Human -- negative", 
+                                    "Human -- positive", 
+                                    "Mouse -- negative", 
+                                    "Mouse -- positive")) + 
+      labs(x = NULL,
+           y = "Fraction of expressing voxels in cluster",
+           col = NULL) +
+      theme_bw() +
+      theme(legend.position = "bottom",
+            legend.text = element_text(size = 8),
+            axis.text.x = element_text(size = 8),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank())
+  } else if (plot_type == "bar") {
+    p_spider <- ggplot(filter(df_cluster_fractions, sign == "positive"), 
+                       aes(x = fvoxels_expr, y = fct_rev(name), fill = species, col = species)) + 
+      geom_col(position = "dodge",
+               width = 0.5) + 
+      geom_col(data = filter(df_cluster_fractions, sign == "negative"),
+               position = "dodge",
+               width = 0.5) + 
+      geom_vline(xintercept = 0,
+                 linetype = "solid",
+                 col = "black") + 
+      coord_cartesian(xlim = c(breaks_start, breaks_end)) + 
+      scale_fill_manual(values = c("deepskyblue", "darkorange"),
+                        labels = c("Human", "Mouse")) + 
+      scale_color_manual(values = c("deepskyblue4", "orange4"),
+                         labels = c("Human", "Mouse")) + 
+      scale_x_continuous(breaks = radial_breaks) + 
+      labs(x = "Fraction of expressing cluster voxels",
+           y = "Region",
+           fill = "Species",
+           color = "Species") +
+      theme_bw() + 
+      theme(legend.position = "bottom",
+            legend.text = element_text(size = 8),
+            axis.text.x = element_text(size = 8))
+  }
   
   if (save) {
     outfile <- str_c("spider", spokes, sep = "_")

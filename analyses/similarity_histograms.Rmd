@@ -70,7 +70,7 @@ df_neuro_pairs
 
 
 ```{r}
-simfile <- "../data/similarity/anatomical_similarity.csv"
+simfile <- "../data/similarity_matrix//anatomical_similarity.csv"
 df_sim <- read_csv(simfile, show_col_types = FALSE)
 
 df_sim
@@ -188,6 +188,10 @@ df_sim_hist <- bind_rows(df_sim_homologous,
                          df_sim_non_homologous) %>% 
   select(Type, Similarity) %>% 
   mutate(Type = factor(Type, levels = c("Homologous", "Homologous-adjacent", "Non-homologous")))
+
+outfile <- "anatomical_similarity_histogram.csv"
+write_csv(x = df_sim_hist,
+          file = outfile)
 ```
 
 

@@ -15,3 +15,4 @@ analyses/*.pdf
 analyses/cluster_similarity/*.pdf
 analyses/cluster_similarity/*.html
 analyses/cluster_similarity/plots
+analyses/*.csv
