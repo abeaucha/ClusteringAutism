@@ -70,7 +70,7 @@ df_neuro_pairs
 
 
 ```{r}
-simfile <- "../data/similarity/anatomical_similarity.csv"
+simfile <- "../data/similarity_matrix//anatomical_similarity.csv"
 df_sim <- read_csv(simfile, show_col_types = FALSE)
 
 df_sim
@@ -148,7 +148,8 @@ df_adjacent <- tibble(Mouse = c("Hippocampal formation",
 ```{r}
 df_sim_homologous <- df_sim_long %>% 
   semi_join(df_neuro_pairs, by = c("Human", "Mouse")) %>% 
-  mutate(Type = "Homologous")
+  mutate(Type = "Homologous") %>% 
+  filter(!(Human %in% c("white matter", "sulci & spaces")))
 ```
 
 ```{r}
@@ -188,6 +189,10 @@ df_sim_hist <- bind_rows(df_sim_homologous,
                          df_sim_non_homologous) %>% 
   select(Type, Similarity) %>% 
   mutate(Type = factor(Type, levels = c("Homologous", "Homologous-adjacent", "Non-homologous")))
+
+outfile <- "anatomical_similarity_histogram.csv"
+write_csv(x = df_sim_hist,
+          file = outfile)
 ```
 
 
@@ -387,4 +392,17 @@ pdf(file = "anatomical_correlations_cdf.pdf",
 print(p_cdf)
 dev.off()
 ```
+
+
+```{r}
+df_sim_homologous %>% 
+  arrange(Similarity)
+```
+
+```{r}
+df_sim %>% 
+  select(Human, Pallidum) %>% 
+  arrange(desc(Pallidum))
+```
+
 

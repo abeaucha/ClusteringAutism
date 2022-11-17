@@ -160,38 +160,8 @@ plot_heatmap(x = mat_sim_nk,
 ```
 
 ```{r}
-col_selection <- str_detect(colnames(mat_sim_pos), str_c("^", nk, "-"))
-row_selection <- str_detect(rownames(mat_sim_pos), str_c("^", nk, "-"))
-mat_sim_pos_nk <- mat_sim_pos[row_selection, col_selection]  
-
-col_selection <- str_detect(colnames(mat_sim_neg), str_c("^", nk, "-"))
-row_selection <- str_detect(rownames(mat_sim_neg), str_c("^", nk, "-"))
-mat_sim_neg_nk <- mat_sim_neg[row_selection, col_selection]  
-
-mat_sim_nk_tmp <- array(data = 0,
-                 dim = c(dim(mat_sim_pos_nk), 2))
-mat_sim_nk_tmp[,,1] <- mat_sim_pos_nk
-mat_sim_nk_tmp[,,2] <- mat_sim_neg_nk
-
-mat_sim_nk_tmp <- rowMeans(mat_sim_nk_tmp, dims = 2, na.rm = TRUE)
-
-colnames(mat_sim_nk_tmp) <- colnames(mat_sim_pos_nk)
-rownames(mat_sim_nk_tmp) <- rownames(mat_sim_pos_nk)
-
-plot_heatmap(x = mat_sim_nk,
-             clustering = FALSE,
-             annotations = "k")
-```
-
-```{r fig.width = 12, fig.height = 10}
-plot_heatmap(x = mat_sim, 
-             clustering = FALSE) +
-  labs(title = "Symmetric cluster similarity")
-```
-
-```{r}
-k_mouse <- 4
-k_human <- 4
+k_mouse <- 2
+k_human <- 1
 ```
 
 It looks like mouse cluster `r k_mouse` and human cluster `r k_human` are well matched. We can examine what these maps look like.

@@ -1,0 +1,156 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r}
+#' Import expression data
+#'
+#' @param indir (character scalar) Path to directory containing
+#' expression data.
+#' @param latent_space (integer scalar) Latent space ID
+#'
+#' @return (matrix) Expression matrix
+import_expression_data <- function(indir, latent_space) {
+  
+  infiles <- list.files(indir, full.names = TRUE)
+  infile <- infiles %>% 
+    str_subset(str_c("transform_", latent_space, ".csv"))
+  
+  df_expr <- as_tibble(data.table::fread(infile, header = TRUE))
+  colnames(df_expr) <- str_c("h", 1:ncol(df_expr))
+  mat_expr <- as.matrix(df_expr)
+  return(mat_expr)
+}
+```
+
+```{r}
+human_anat_file <- "../../data/human/registration/reference_files/model_1.0mm.mnc"
+human_mask_file <- "../../data/human/registration/reference_files/mask_1.0mm.mnc"
+human_labels_file <- "../../data/human/atlas/annotation_full_studyspace.mnc"
+
+human_anat <- mincGetVolume(human_anat_file)
+human_mask <- mincGetVolume(human_mask_file)
+human_labels <- mincGetVolume(human_labels_file)
+
+#Import a pseudo-atlas image for the AHBA microarray samples
+microarray_mask_file <- "../../data/human/expression/AHBA_microarray_mask_studyspace_1.0mm.mnc"
+microarray_mask <- mincGetVolume(microarray_mask_file)
+
+microarray_labels_file <- "../../data/human/expression/AHBA_microarray_labels_studyspace_1.0mm.mnc"
+microarray_labels <- mincGetVolume(microarray_labels_file)
+
+microarray_labels_defs_file <- "../../data/human/expression/AHBA_microarray_coordinates_mni_defs.csv"
+microarray_labels_defs <- read_csv(microarray_labels_defs_file, show_col_types = F)
+
+human_expr_dir <- "../../data/human/expression/latent_space/"
+
+#Latent space ID
+latent_space_id <- 1
+
+#Import human expression matrix
+human_expr <- import_expression_data(indir = human_expr_dir,
+                                     latent_space = latent_space_id)
+
+#Some latent space variables are empty across all voxels
+#Let's remove those
+# empty_cols <- which(colSums(x = df_expr) == 0)
+# df_expr <- df_expr[,-empty_cols]
+```
+
+```{r}
+ind_match <- match(microarray_labels, microarray_labels_defs[["label"]])
+j <- 1
+print(str_c(j, " of ", ncol(human_expr)))
+
+#Create a vector to store human expression data
+human_expr_map <- numeric(length(human_anat))
+
+#Assign expression data based on microarray positions
+human_expr_map <- human_expr[ind_match, j]
+human_expr_map[is.na(human_expr_map)] <- 0
+
+#Extract unique atlas labels  
+human_labels_unique <- unique(human_labels)
+human_labels_unique <- human_labels_unique[human_labels_unique != 0]
+human_expr_labels <- numeric(length(human_labels))
+for (l in 1:length(human_labels_unique)) {
+  label <- human_labels_unique[l]  
+  ind_labels <- which(human_labels == label)
+  vals <- human_expr_map[ind_labels]
+  vals_nonzero <- vals[vals != 0]
+  if (length(vals_nonzero) == 0) {
+    human_expr_labels[ind_labels] <- 0
+  } else {
+    human_expr_labels[ind_labels] <- mean(vals_nonzero)  
+  }
+}
+attributes(human_expr_labels) <- attributes(human_expr_map)
+
+imgfile_base <- str_c("ls", latent_space_id, "_h", j)
+imgfile <- str_c(imgfile_base, "_1.0mm.mnc")
+imgfile_downsampled <- str_c(imgfile_base, "_3.0mm.mnc")
+
+mincWriteVolume(buffer = human_expr_labels,
+                output.filename = imgfile,
+                like.filename = human_anat_file,
+                clobber = TRUE)
+
+cmd <- str_c("autocrop",
+             "-quiet",
+             "-clobber",
+             "-isostep",
+             "3.0",
+             imgfile,
+             imgfile_downsampled,
+             sep = " ")
+
+system(cmd)
+
+human_expr_labels_3mm <- mincGetVolume(imgfile_downsampled)
+
+```
+
+
+```{r}
+hval <- 2
+
+expr_map <- numeric(length(anat))
+ind_match <- match(microarray_labels, microarray_labels_defs[["label"]])
+expr_map <- df_expr[ind_match,3]
+expr_map[is.na(expr_map)] <- 0
+attributes(expr_map) <- attributes(anat)
+```
+
+```{r}
+labels_unique <- unique(labels)
+labels_unique <- labels_unique[labels_unique != 0]
+expr_labels <- numeric(length(labels))
+for (i in 1:length(labels_unique)) {
+  label <- labels_unique[i]  
+  ind_labels <- which(labels == label)
+  expr <- expr_map[ind_labels]
+  expr_nonzero <- expr[expr != 0]
+  if (length(expr_nonzero) == 0) {
+    expr_labels[ind_labels] <- 0
+  } else {
+    expr_labels[ind_labels] <- mean(expr_nonzero)  
+  }
+}
+attributes(expr_labels) <- attributes(anat)
+```
+
+```{r fig.width = 7, fig.height = 20}
+sliceSeries(nrow = 8, ncol = 1, begin = 50, end = 180) %>% 
+  anatomy(mincArray(anat), low = 2, high = 7) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(expr_labels), low = 0, high = 20) %>% 
+  draw()
+```
