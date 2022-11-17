@@ -1,0 +1,731 @@
+---
+title: "Mouse-human cluster similarity using gene space decomposition"
+format: 
+  html:
+    embed-resources: true
+    self-contained: true
+    code-fold: true
+editor: visual
+---
+
+```{r packages}
+#| code-summary: "Packages"
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(data.tree))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(pheatmap))
+```
+
+```{r functions}
+#| code-summary: "Functions"
+source("../../functions/buildSimilarityMatrix.R")
+source("../../functions/tree_tools.R")
+source("../cluster_similarity/analysis_tools_v2.R")
+
+
+#' Import expression data
+#'
+#' @param indir (character scalar) Path to directory containing
+#' expression data.
+#' @param latent_space (integer scalar) Latent space ID
+#'
+#' @return (matrix) Expression matrix
+import_expression_data <- function(indir, latent_space) {
+  
+  infiles <- list.files(indir, full.names = TRUE)
+  infile <- infiles %>% 
+    str_subset(str_c("transform_", latent_space, ".csv"))
+  
+  df_expr <- as_tibble(data.table::fread(infile, header = TRUE))
+  colnames(df_expr) <- str_c("h", 1:ncol(df_expr))
+  mat_expr <- as.matrix(df_expr)
+  return(mat_expr)
+}
+
+
+#' Import MINC image
+#'
+#' @param imgfile (character scalar) Path to MINC file
+#' @param maskfile (character scalar) Path to MINC mask file
+#'
+#' @return (mincSingleDim) Masked image
+import_image <- function(imgfile, maskfile = NULL) {
+  
+  img <- mincGetVolume(imgfile)
+  if (!is.null(maskfile)) {
+    mask <- mincGetVolume(maskfile)
+    img <- img[mask == 1]
+  }
+  return(img)
+}
+
+
+#' Import all cluster maps
+#'
+#' @param indir (character scalar) Path to directory containing MINC 
+#' cluster maps
+#' @param maskfile (character scalar) Path to MINC mask file
+#'
+#' @return (matrix) Matrix of cluster maps
+import_cluster_maps <- function(indir, maskfile) {
+  
+  mask <- mincGetVolume(maskfile)
+  infiles <- list.files(indir, full.names = TRUE)
+  cluster_ids <- character(length(infiles))
+  mat_clusters <- matrix(data = 0,
+                         nrow = sum(mask),
+                         ncol = length(infiles))
+  for (j in 1:length(infiles)) {
+    infile <- infiles[j]
+    nk <- infile %>% 
+      str_extract("Clusternum_[0-9]+") %>%
+      str_extract("[0-9]+")
+    k <- infile %>% 
+      str_extract("Group_[0-9]+") %>%
+      str_extract("[0-9]+")
+    cluster_ids[j] <- str_c(nk, k, sep = "-")
+    mat_clusters[,j] <- import_image(imgfile = infile,
+                                     maskfile = maskfile)
+  }
+  colnames(mat_clusters) <- cluster_ids
+  return(mat_clusters)
+}
+
+
+#' Compute human-mouse cluster similarity matrix
+#'
+#' @param cluster_maps (list) List with named fields "Mouse" and "Human"
+#' containing matrices of cluster maps.
+#' @param expr_dirs (list) List with named field "Mouse" and "Human" 
+#' containing paths to expression directories. 
+#' @param latent_space (integer scalar) Latent space ID.
+#' @param metric  (character scalar) Similarity metric to use.
+#'
+#' @return (matrix) Compute a cluster similarity matrix with human
+#' clusters on the rows and mouse clusters on the columns.
+compute_cluster_similarity <- function(cluster_maps, expr_dirs, latent_space = 1, metric = "correlation") {
+  
+  mouse_expr <- import_expression_data(indir = expr_dirs[["Mouse"]],
+                                       latent_space = latent_space)
+  human_expr <- import_expression_data(indir = expr_dirs[["Human"]],
+                                       latent_space = latent_space)
+  empty_cols_mouse <- which(colSums(x = mouse_expr) == 0)
+  empty_cols_human <- which(colSums(x = human_expr) == 0)
+  empty_cols <- union(empty_cols_mouse, empty_cols_human)
+  
+  mouse_expr <- mouse_expr[,-empty_cols]
+  human_expr <- human_expr[,-empty_cols]
+  
+  microarray_labels_defs_file <- "../../data/human/expression/AHBA_microarray_coordinates_mni_defs.csv"
+  microarray_labels_defs <- read_csv(microarray_labels_defs_file, show_col_types = F)
+  ind_samples_in_labels <- microarray_labels_defs[["label"]] %in% microarray_labels_nonzero
+  human_expr <- human_expr[ind_samples_in_labels,] 
+  
+  mouse_gene_decomposition <- buildSimilarityMatrix(x1 = mouse_expr, 
+                                                    x2 = cluster_maps[["Mouse"]],
+                                                    method = "correlation")
+  
+  human_gene_decomposition <- buildSimilarityMatrix(x1 = human_expr, 
+                                                    x2 = cluster_maps[["Human"]],
+                                                    method = "correlation")
+  
+  similarity <- buildSimilarityMatrix(x1 = human_gene_decomposition,
+                                      x2 = mouse_gene_decomposition,
+                                      method = metric)
+  
+  cluster_ids_ordered <- tibble(cluster_id = colnames(mouse_gene_decomposition)) %>% 
+    separate(col = cluster_id, into = c("nk", "k"), remove = FALSE) %>% 
+    mutate(nk = as.numeric(nk),
+           k = as.numeric(k)) %>% 
+    arrange(nk, k) %>% 
+    pull(cluster_id)
+  
+  similarity <- similarity[,match(cluster_ids_ordered, colnames(similarity))]
+  similarity <- similarity[match(cluster_ids_ordered, rownames(similarity)),]
+  
+  return(similarity)
+}
+
+
+#' Extract cluster similarity for the nk solution
+#'
+#' @param x (matrix) Cluster similarity matrix
+#' @param nk (integer scalar) Number of clusters in the solution
+#'
+#' @return (matrix) Reduced similarity matrix
+subset_similarity_matrix <- function(x, nk) {
+  
+  cols_nk <- str_detect(colnames(x), str_c("^", nk, "-"))
+  rows_nk <- str_detect(rownames(x), str_c("^", nk, "-"))
+  x_nk <- x[rows_nk, cols_nk]
+  return(x_nk)
+}
+```
+
+# Importing the cluster maps
+
+We start by importing the relative effect size representative cluster maps for all mouse and human clusters. The voxel-wise cluster maps are stored in the columns of a matrix.
+
+```{r import-clusters}
+#| code-summary: Import cluster maps
+
+#Import mouse clusters
+mouse_mask_file <- "../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
+mouse_cluster_dir <- "../../data/mouse/clustering/cluster_maps/relative/resolution_200/mean/"
+mat_mouse_clusters <- import_cluster_maps(indir = mouse_cluster_dir,
+                                          maskfile = mouse_mask_file)
+
+#Import human clusters
+human_mask_file <- "../../data/human/registration/reference_files/mask_1.0mm.mnc"
+human_cluster_dir <- "../../data/human/clustering/cluster_maps/relative/resolution_1.0/mean/"
+mat_human_clusters <- import_cluster_maps(indir = human_cluster_dir,
+                                          maskfile = human_mask_file)
+
+#Example rows and columns
+mat_mouse_clusters[1:5, 1:5]
+```
+
+Before decomposing these maps into gene space, we have to do a bit of wrangling on the human data. The human cluster maps are full voxel-wise images. However, only some of the voxels in these maps have associated expression data since the human expression data set is sparsely sampled. We want to extract only those voxels that have expression data.
+
+```{r}
+#| code-fold: show
+#| code-summary: Human voxels with microarray data
+
+#Import the human mask
+human_mask <- mincGetVolume(human_mask_file)
+
+#Import a pseudo-atlas image for the AHBA microarray samples
+microarray_labels_file <- "../../data/human/expression/AHBA_microarray_labels_studyspace_1.0mm.mnc"
+microarray_labels <- mincGetVolume(microarray_labels_file)
+
+#Mask the pseudo atlas so that the number of voxels matches the human cluster maps
+microarray_labels <- microarray_labels[human_mask == 1]
+
+#Create a filter for those voxels with microarray samples
+microarray_labels_nonzero <- microarray_labels[microarray_labels != 0]
+
+#Subset the human cluster map matrix for only those voxels with expression data
+mat_human_clusters_microarray <- mat_human_clusters[microarray_labels != 0,]
+
+print(dim(mat_human_clusters_microarray))
+```
+
+We see that only 3,616 voxels have associated microarray data.
+
+# Mapping the cluster maps to gene expression space
+
+Now that the cluster map images are aligned with the expression data in each species, we can decompose the maps in terms of the expression of each gene space variable. In this case, we will be using the latent space variables for a given latent space.
+
+First we import the mouse and human expression data in the given latent space.
+
+```{r}
+#| code-summary: Import expression data
+
+
+#Paths to mouse and human expression data
+mouse_expr_dir <- "../../data/mouse/expression/latent_space/"
+human_expr_dir <- "../../data/human/expression/latent_space/"
+
+#Latent space ID
+latent_space_id <- 1
+
+#Import mouse expression matrix
+mouse_expr <- import_expression_data(indir = mouse_expr_dir,
+                                     latent_space = latent_space_id)
+
+#Import human expression matrix
+human_expr <- import_expression_data(indir = human_expr_dir,
+                                     latent_space = latent_space_id)
+
+#Some latent space variables are empty across all voxels
+#Let's remove those
+empty_cols_mouse <- which(colSums(x = mouse_expr) == 0)
+empty_cols_human <- which(colSums(x = human_expr) == 0)
+empty_cols <- union(empty_cols_mouse, empty_cols_human)
+mouse_expr <- mouse_expr[,-empty_cols]
+human_expr <- human_expr[,-empty_cols]
+
+#On the human side, there are sometimes multiple microarray samples per voxel location
+#We will keep only one sample at each voxel location
+microarray_labels_defs_file <- "../../data/human/expression/AHBA_microarray_coordinates_mni_defs.csv"
+microarray_labels_defs <- read_csv(microarray_labels_defs_file, show_col_types = F)
+ind_samples_in_labels <- microarray_labels_defs[["label"]] %in% microarray_labels_nonzero
+human_expr <- human_expr[ind_samples_in_labels,] 
+```
+
+We can now decompose every mouse and human cluster map into the gene expression latent space. A simple way to do this is to compute the correlation of every cluster map with every latent space variable. For example, let's consider the mouse cluster 2-1. How does this cluster map correlate with the maps of different latent space variables?
+
+```{r}
+#| code-summary: Mouse scatter plots
+
+cluster_id <- "2-1"
+nvars <- 3
+mouse_cluster_vals <- mat_mouse_clusters[,colnames(mat_mouse_clusters) == cluster_id]
+mouse_expr_subset <- mouse_expr[,1:nvars]
+
+  df_decomposition_example <- mouse_expr_subset %>% 
+  as_tibble() %>% 
+  mutate(cluster = mouse_cluster_vals) 
+
+cluster_correlations_example <- cor(x = df_decomposition_example$cluster,
+                                    y = mouse_expr_subset)
+df_cluster_correlations_example <- tibble(variable = colnames(cluster_correlations_example),
+                                          correlation = as.numeric(cluster_correlations_example)) %>% 
+  mutate(correlation = round(correlation, 2),
+         label = str_c("r = ", correlation))
+
+
+df_decomposition_example <- df_decomposition_example %>% 
+  pivot_longer(cols = -cluster, names_to = "variable", values_to = "expression")
+
+ggplot(df_decomposition_example, aes(x = expression, y = cluster)) + 
+  geom_point(size = 0.01,
+             alpha = 0.1) + 
+  geom_smooth(method = "lm",
+              formula = "y~x",
+              col = "red", 
+              fullrange = TRUE) + 
+  geom_text(data = df_cluster_correlations_example,
+            mapping = aes(label = label),
+            x = 20, y = -0.9) + 
+  facet_wrap(~variable) + 
+  labs(title = "Correlation between mouse cluster 2-1 and latent space variables",
+       y = "Cluster map",
+       x = "Latent space variable map") + 
+  theme_bw()
+```
+
+We find that the representative map of relative effect sizes for mouse cluster 2-1 correlates negatively with the latent space variable $h_1$, is mostly uncorrelated with $h_2$, and is positively correlated with $h_3$. We can examine the spatial patterns of these variables to garner further insight:
+
+```{r}
+#| code-summary: Mouse slice series
+
+#Extract the "expression" for the latent space variables
+h1 <- mouse_expr[,1]
+h2 <- mouse_expr[,2]
+h3 <- mouse_expr[,3]
+
+#Import mouse anatomy and mask
+mouse_anat_file <- "../../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
+mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_mask <- mincGetVolume(mouse_mask_file)
+
+#Format the cluster map for visualization
+mouse_cluster_map <- numeric(length(mouse_anat))
+mouse_cluster_map[mouse_mask == 1] <- mouse_cluster_vals
+attributes(mouse_cluster_map) <- attributes(mouse_anat)
+
+#Format h1 for visualization
+h1_map <- numeric(length(mouse_anat))
+h1_map[mouse_mask == 1] <- h1
+attributes(h1_map) <- attributes(mouse_anat)
+
+#Format h2 for visualization
+h2_map <- numeric(length(mouse_anat))
+h2_map[mouse_mask == 1] <- h2
+attributes(h2_map) <- attributes(mouse_anat)
+
+#Format h3 for visualization
+h3_map <- numeric(length(mouse_anat))
+h3_map[mouse_mask == 1] <- h3
+attributes(h3_map) <- attributes(mouse_anat)
+
+#Visualize
+sliceSeries(nrow = 8, ncol = 1, begin = 10, end = 60) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  addtitle("Anatomy") %>% 
+  overlay(mincArray(mouse_cluster_map), low = 0, high = 0.5, symmetric = T) %>% 
+  legend("Effect size") %>% 
+  addtitle("Cluster map") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(h1_map), low = 0, high = 20) %>% 
+  addtitle("h1") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(h2_map), low = 0, high = 20) %>% 
+  addtitle("h2") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(h3_map), low = 0, high = 20) %>% 
+  addtitle("h3") %>% 
+  legend("'Expression'") %>% 
+  draw()
+```
+
+This framework allows us to decompose any cluster map into a gene expression latent space. Specifically, **the correlations between the map of interest and every variable are the coordinates of that map in the gene space**.
+
+```{r}
+#| code-summary: Mouse cluster coordinates
+
+df_coordinates <- df_cluster_correlations_example %>% 
+  select(variable, correlation) %>% 
+  column_to_rownames("variable") %>% 
+  as.matrix() %>% 
+  t() %>% 
+  as_tibble()
+
+ggplot(df_coordinates,
+       aes(x = h1, y = h3)) + 
+  geom_segment(aes(xend = 0, yend = 0),
+               arrow = arrow(ends = "first", 
+                             type = "closed", 
+                             angle = 30,
+                             length = unit(0.02, 'npc')),
+               col = "grey70") + 
+  geom_point() + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 0) + 
+  annotate(geom = "text",
+           label = str_c("(", df_coordinates$h1, ", ", df_coordinates$h3, ")"),
+           x = df_coordinates$h1, y = df_coordinates$h3+0.05) + 
+  coord_equal(xlim = c(-1, 1),
+                  ylim = c(-1, 1)) + 
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.2)) + 
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.2)) + 
+  labs(title = "Location of mouse cluster 2-1 in gene space") + 
+  theme_bw()
+```
+
+Let's compute the correlations between each map and each latent space variable for both species.
+
+```{r}
+#| code-summary: Gene space decomposition
+#| code-fold: show
+
+#Decompose mouse cluster maps into gene space
+mouse_gene_decomposition <- buildSimilarityMatrix(x1 = mouse_expr,
+                                                  x2 = mat_mouse_clusters,
+                                                  method = "correlation")
+
+#Decompose human cluster maps into gene space
+human_gene_decomposition <- buildSimilarityMatrix(x1 = human_expr,
+                                                  x2 = mat_human_clusters_microarray,
+                                                  method = "correlation")
+```
+
+We can take a look at the distribution of clusters in the sub-space corresonding to the axes $h_1$ and $h_3$.
+
+```{r}
+#| code-summary: Gene space coordinates
+
+df_decomposition_example_mouse <- mouse_gene_decomposition[c(1,3),] %>% 
+  t() %>% 
+  as_tibble(rownames = "cluster_id") %>% 
+  mutate(species = "Mouse")
+
+df_decomposition_example_human <- human_gene_decomposition[c(1,3),] %>% 
+  t() %>% 
+  as_tibble(rownames = "cluster_id") %>% 
+  mutate(species = "Human")
+
+df_decomposition_example <- bind_rows(df_decomposition_example_mouse,
+                                      df_decomposition_example_human)
+
+ggplot(df_decomposition_example,
+       aes(x = h1, y = h3, col = species)) + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 0) + 
+  geom_point() + 
+  coord_equal(xlim = c(-1, 1),
+              ylim = c(-1, 1)) + 
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.2)) + 
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.2)) + 
+  labs(title = "Cluster locations in a gene expression sub-space",
+       col = "Species") +
+  theme_bw()
+```
+
+It looks like something weird is happening, with human clusters returning very small correlation values to these latent space variables. What do the distributions of correlations look like across all variables?
+
+```{r}
+#| code-summary: Correlation histograms
+
+df_correlation_hist <- bind_rows(tibble(correlation = as.numeric(mouse_gene_decomposition),
+                                        species = "Mouse"),
+                                 tibble(correlation = as.numeric(human_gene_decomposition),
+                                        species = "Human"))
+
+ggplot(df_correlation_hist, aes(x = correlation, fill = species, col = species)) + 
+  geom_density(alpha = 0.3, bw = 0.01) + 
+  coord_cartesian(xlim = c(-1, 1)) + 
+  labs(x = "Correlation",
+       fill = "Species",
+       col = "Species",
+       y = NULL) + 
+  theme_bw()
+```
+
+The small correlation values aren't just an artefact of $h_1$ and $h_3$. The correlations between all human clusters and all latent space variables are basically null. We can further confirm this by examining the scatterplots:
+
+```{r}
+#| code-summary: Human scatter plots
+
+cluster_id <- "2-1"
+nvars <- 3
+human_cluster_vals <- mat_human_clusters_microarray[,colnames(mat_human_clusters_microarray) == cluster_id]
+human_expr_subset <- human_expr[,1:nvars]
+
+  df_decomposition_example <- human_expr_subset %>% 
+  as_tibble() %>% 
+  mutate(cluster = human_cluster_vals) 
+
+cluster_correlations_example <- cor(x = df_decomposition_example$cluster,
+                                    y = human_expr_subset)
+df_cluster_correlations_example <- tibble(variable = colnames(cluster_correlations_example),
+                                          correlation = as.numeric(cluster_correlations_example)) %>% 
+  mutate(correlation = round(correlation, 2),
+         label = str_c("r = ", correlation))
+
+
+df_decomposition_example <- df_decomposition_example %>% 
+  pivot_longer(cols = -cluster, names_to = "variable", values_to = "expression")
+
+ggplot(df_decomposition_example, aes(x = expression, y = cluster)) + 
+  geom_point(size = 0.5,
+             alpha = 0.1) + 
+  geom_smooth(method = "lm",
+              formula = "y~x",
+              col = "red", 
+              fullrange = TRUE) + 
+  geom_text(data = df_cluster_correlations_example,
+            mapping = aes(label = label),
+            x = 20, y = -0.3) + 
+  facet_wrap(~variable) + 
+  labs(title = "Correlation between human cluster 2-1 and latent space variables",
+       y = "Cluster map",
+       x = "Latent space variable map") + 
+  theme_bw()
+```
+
+Either something strange is going on or the human cluster maps are truly uncorrelated with any of the latent space variables.
+
+Let's ignore this for now and move on to illustrate how the rest of this analysis would look.
+
+# Evaluating cluster similarity in gene space
+
+With our mouse and human clusters now living in gene space, we can evaluate the similarity between all pairs of clusters. We'll use the correlation as our similarity metric.
+
+```{r fig.width = 12, fig.height = 10}
+#| code-summary: Cluster similarity
+#| code-fold: show
+
+#Calculate the similarity between mouse and human clusters
+mat_sim <- buildSimilarityMatrix(x1 = human_gene_decomposition,
+                                    x2 = mouse_gene_decomposition,
+                                    method = "correlation")
+
+#Re-order the clusters
+cluster_ids_ordered <- tibble(cluster_id = colnames(mouse_gene_decomposition)) %>%
+  separate(col = cluster_id, into = c("nk", "k"), remove = FALSE) %>%
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k)) %>%
+  arrange(nk, k) %>%
+  pull(cluster_id)
+
+mat_sim <- mat_sim[,match(cluster_ids_ordered, colnames(mat_sim))]
+mat_sim <- mat_sim[match(cluster_ids_ordered, rownames(mat_sim)),]
+
+pheatmap(mat_sim, cluster_cols = F, cluster_rows = F)
+```
+
+This is overwhelming as usual, so we can examine the patterns of similarity for the 5-cluster solutions.
+
+```{r}
+#| code-summary: 5-cluster similarity
+
+nk <- 5
+mat_sim_nk <- subset_similarity_matrix(x = mat_sim, nk = nk)
+pheatmap(mat_sim_nk, cluster_cols = F, cluster_rows = F)
+```
+
+A number of clusters exhibit relatively high correlations. We can examine their spatial maps.
+
+```{r}
+k_mouse <- 5
+mouse_cluster_id <- str_c(nk, k_mouse, sep = "-")
+mouse_cluster_vals <- mat_mouse_clusters[,colnames(mat_mouse_clusters) == mouse_cluster_id]
+mouse_cluster_map <- numeric(length(mouse_anat))
+mouse_cluster_map[mouse_mask == 1] <- mouse_cluster_vals
+attributes(mouse_cluster_map) <- attributes(mouse_anat)
+
+sliceSeries(nrow = 5, ncol = 5, begin = 3, end = 58) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(mouse_cluster_map), low = 0, high = 1, symmetric = T) %>% 
+  legend("Effect size") %>% 
+  addtitle(str_c("Mouse cluster ", nk, "-", k_mouse)) %>% 
+  draw()
+```
+
+```{r}
+#Import mouse anatomy and mask
+human_anat_file <- "../../data/human/registration/reference_files/model_1.0mm.mnc"
+human_anat <- mincGetVolume(human_anat_file)
+human_mask <- mincGetVolume(human_mask_file)
+
+k_human <- 2
+human_cluster_id <- str_c(nk, k_human, sep = "-")
+human_cluster_vals <- mat_human_clusters[,colnames(mat_human_clusters) == human_cluster_id]
+human_cluster_map <- numeric(length(human_anat))
+human_cluster_map[human_mask == 1] <- human_cluster_vals
+attributes(human_cluster_map) <- attributes(human_anat)
+
+sliceSeries(nrow = 5, ncol = 5, begin = 50, end = 190) %>% 
+  anatomy(mincArray(human_anat), low = 2, high = 7) %>% 
+  overlay(mincArray(human_cluster_map), low = 0, high = 0.5, symmetric = T) %>% 
+  legend("Effect size") %>% 
+  addtitle(str_c("Human cluster ", nk, "-", k_human)) %>% 
+  draw()
+```
+
+```{r}
+# cluster_maps <- list(Mouse=mat_mouse_clusters,
+#                      Human=mat_human_clusters)
+# expr_dirs <- list(Mouse="../../data/mouse/expression/latent_space/",
+#                   Human="../../data/human/expression/latent_space/")
+# latent_space_id <- 1
+# 
+# mat_sim <- compute_cluster_similarity(cluster_maps = cluster_maps,
+#                                       expr_dirs = expr_dirs,
+#                                       latent_space = latent_space_id,
+#                                       metric = "correlation")
+```
+
+```{r}
+# pheatmap(mat_sim, cluster_cols = F, cluster_rows = F)
+```
+
+```{r}
+# nk <- 5
+# mat_sim_nk <- subset_similarity_matrix(x = mat_sim, nk = nk)
+# pheatmap(mat_sim_nk, cluster_cols = F, cluster_rows = F)
+```
+
+```{r}
+# library(umap)
+# species <- c(rep("Mouse", ncol(mat_mouse_gene_space)),
+#              rep("Human", ncol(mat_human_gene_space)))
+# mat_gene_space <- cbind(mat_mouse_gene_space,
+#                         mat_human_gene_space)
+# 
+# umap_output <- umap(t(mat_gene_space))
+# mat_umap <- umap_output[["layout"]]
+# colnames(mat_umap) <- c("u1", "u2")
+# df_umap <- mat_umap %>% 
+#   as_tibble(rownames = "cluster_id") %>% 
+#   separate(col = cluster_id, into = c("nk", "k"), remove = FALSE) %>% 
+#   mutate(species = species)
+# 
+# ggplot(df_umap, aes(x = u1, y = u2, shape = species, col = nk)) + 
+#   geom_point() 
+```
+
+```{r}
+# nspaces <- 50
+# nk <- 5
+# latent_space_ids <- 1:nspaces
+# list_sim_nk <- vector(mode = "list", length = nspaces)
+# for (l in latent_space_ids) {
+#   mat_sim <- compute_cluster_similarity(cluster_maps = cluster_maps,
+#                                         expr_dirs = expr_dirs,
+#                                         latent_space = l,
+#                                         metric = "correlation")
+#   list_sim_nk[[l]] <- subset_similarity_matrix(x = mat_sim, nk = nk)
+# }
+# 
+# length(list_sim_nk)
+```
+
+```{r}
+# list_sim_nk_averages <- vector(mode = "list", length = nspaces-1)
+# for (l in 2:nspaces) {
+#   sim_to_avg <- list_sim_nk[1:l]  
+#   sim_array <- array(unlist(sim_to_avg),
+#                      dim = c(nk, nk, length(sim_to_avg)))
+#   sim_avg <- rowMeans(sim_array, dims = 2)
+#   rownames(sim_avg) <- rownames(list_sim_nk[[1]])
+#   colnames(sim_avg) <- colnames(list_sim_nk[[1]])
+#   list_sim_nk_averages[[l-1]] <- sim_avg
+# }
+```
+
+```{r}
+# mat_sim_avg <- list_sim_nk_averages[[length(list_sim_nk_averages)]]
+# pheatmap(mat_sim_avg, cluster_cols = F, cluster_rows = F)
+```
+
+```{r}
+# plotdir <- "plots"
+# dir.create()
+# for (i in 1:length(list_sim_nk_averages)) {
+#   navgs <- i+1
+#   outfile <- str_c("ClusterSimilarity_nk_", nk, "_navgs_", navgs, ".png")
+# pheatmap(mat = list_sim_nk_averages[[1]],
+#          cluster_cols = F, cluster_rows = F,
+#          filename = outfile,
+#          width = 6, height = 6)
+# }
+```
+
+```{r}
+# list_sim_df <- vector(mode = "list", length = length(list_sim_nk_averages))
+# for (i in 1:length(list_sim_df)) {
+#   list_sim_df[[i]] <- list_sim_nk_averages[[i]] %>% 
+#   as_tibble(rownames = "human_cluster") %>% 
+#   pivot_longer(cols = -human_cluster, 
+#                names_to = "mouse_cluster", 
+#                values_to = "correlation") %>% 
+#   mutate(naverages = i+1)
+# }
+# df_sim_averages <- reduce(list_sim_df, bind_rows)
+# 
+# df_sim_averages <- df_sim_averages %>% 
+#   mutate(human_cluster = factor(human_cluster, levels = str_c(nk, 1:nk, sep = "-")),
+#          mouse_cluster = factor(mouse_cluster, levels = str_c(nk, 1:nk, sep = "-")))
+```
+
+```{r}
+# library(gganimate)
+```
+
+```{r}
+# ggplot(df_sim_averages, 
+#       aes(x = mouse_cluster, y = human_cluster, fill = correlation)) + 
+#  geom_tile(col = "grey50") + 
+#  scale_x_discrete(expand = expansion(mult = 0)) + 
+#  scale_y_discrete(expand = expansion(mult = 0)) + 
+#  scale_fill_distiller(palette = "RdYlBu") + 
+#  labs(x = "Mouse cluster",
+#       y = "Human cluster",
+#       fill = "Correlation",
+#       title = str_c("Number of latent spaces in average: {frame_time}")) + 
+#  theme_bw() 
+```
+
+```{r}
+# similarity_heatmap_anim <- ggplot(df_sim_averages, 
+#        aes(x = mouse_cluster, y = human_cluster, fill = correlation)) + 
+#   geom_tile() + 
+#   scale_x_discrete(expand = expansion(mult = 0)) + 
+#   scale_y_discrete(expand = expansion(mult = 0)) + 
+#   scale_fill_distiller(palette = "RdYlBu") + 
+#   labs(x = "Mouse cluster",
+#        y = "Human cluster",
+#        fill = "Correlation",
+#        title = str_c("Number of latent spaces in average: {frame_time}")) + 
+#   theme_bw() +
+#   transition_time(time = as.integer(naverages)) +
+#   ease_aes('linear')
+# 
+# animate(similarity_heatmap_anim, 
+#         device = "png", 
+#         renderer = file_renderer(str_c("./heatmap_animation_nk_", nk), 
+#                                  prefix = str_c("ClusterSimilarity_nk_", nk, "_"),
+#                                  overwrite = TRUE))
+```
+
+On macbook
+
+```{r}
+# png_files <- list.files("heatmap_animation_nk_5/", full.names = T)
+# gifski(png_files, gif_file, delay = 0.1)
+```

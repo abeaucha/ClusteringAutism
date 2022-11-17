@@ -148,7 +148,8 @@ df_adjacent <- tibble(Mouse = c("Hippocampal formation",
 ```{r}
 df_sim_homologous <- df_sim_long %>% 
   semi_join(df_neuro_pairs, by = c("Human", "Mouse")) %>% 
-  mutate(Type = "Homologous")
+  mutate(Type = "Homologous") %>% 
+  filter(!(Human %in% c("white matter", "sulci & spaces")))
 ```
 
 ```{r}
@@ -391,4 +392,17 @@ pdf(file = "anatomical_correlations_cdf.pdf",
 print(p_cdf)
 dev.off()
 ```
+
+
+```{r}
+df_sim_homologous %>% 
+  arrange(Similarity)
+```
+
+```{r}
+df_sim %>% 
+  select(Human, Pallidum) %>% 
+  arrange(desc(Pallidum))
+```
+
 
