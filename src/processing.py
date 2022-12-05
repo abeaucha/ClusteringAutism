@@ -6,6 +6,10 @@ from tqdm                   import tqdm
 import multiprocessing      as mp
 from functools              import partial
 from src.utils import execute_R
+from pyminc.volumes.factory import volumeFromFile
+import numpy as np
+from warnings import warn
+import pandas as pd
 
 def gunzip_file(gzfile, keep = True, outdir = None):
     
@@ -335,3 +339,165 @@ def resample_images(infiles, isostep, outdir = None, parallel = False, nproc = N
         
     return outfiles
         
+
+def import_image(img, mask = None, flatten = True):
+    
+    """
+    Import a MINC image.
+    
+    Arguments
+    ---------
+    img: str
+        Path to the MINC image to import.
+    mask: str
+        Optional path to the MINC mask. 
+    flatten: bool
+        Option to flatten image into a 1-dimensional array. 
+        If True and a mask is provided, only the voxels in the mask will be returned.
+    
+    Returns
+    -------
+    img: numpy.ndarray
+        A NumPy array containing the (masked) image.
+    """
+    
+    img_vol = volumeFromFile(img)
+    img_dims = img_vol.getSizes()
+    img_seps = img_vol.getSeparations()
+    img = np.array(img_vol.data)
+    img_vol.closeVolume()
+
+    if flatten:
+        img = img.flatten()
+
+    if mask is not None:
+
+        mask_vol = volumeFromFile(mask)
+        mask_dims = mask_vol.getSizes()
+        mask_seps = mask_vol.getSeparations()
+        mask = np.array(mask_vol.data)
+        mask_vol.closeVolume()
+
+        if mask_seps != img_seps:
+            raise Exception("Input image and mask have different resolutions.")
+        if mask_dims != img_dims:
+            raise Exception("Input image and mask have different dimensions.")
+
+        if flatten:
+            mask = mask.flatten()
+            img = img[mask == 1]
+        else:
+            img[mask == 0] = 0
+    
+    return img
+
+
+def import_images(infiles, mask = None, output_format = 'list', flatten = True, parallel = False, nproc = None):
+
+    """
+    Import a set of MINC images.
+    
+    Arguments
+    ---------
+    infiles: list
+        List of paths to images to import.
+    mask: str
+        Optional path to a mask image. 
+    output_format: str
+        One of {'list', 'numpy', 'pandas'} indicating what format to return.
+    flatten: bool
+        Option to flatten images into a 1-dimensional array. 
+        If True and a mask is provided, only the voxels in the mask will be returned.
+        If False and output_format is not 'list', images will be flattened regardless.
+    parallel: bool
+        Option to run in parallel.
+    nproc: int
+        Number of processors to use in parallel.
+    
+    Returns
+    -------
+    imgs
+        A list, NumPy array, or Pandas DataFrame containing the (masked) images.
+    """
+
+    format_opts = ['list', 'numpy', 'pandas']
+    format_test = sum([output_format == opt for opt in format_opts])
+    format_err = ("Argument output_format must be one of {}: {}"
+                   .format(format_opts, output_format))
+    if format_test != 1:
+        raise ValueError(format_err)
+
+    if not flatten:
+        if output_format != 'list':
+            msg_warn = ("flatten = False is only valid when output_format = 'list'. "
+                        "Proceeding with flattened images.")
+            warn(msg_warn)
+            flatten = True
+
+    importer = partial(import_image,
+                       mask = mask,
+                       flatten = flatten)
+
+    if parallel:
+        if nproc is None:
+            raise ValueError("Set the nproc argument to specify the number of processors to use in parallel.")
+        pool = mp.Pool(nproc)
+        imgs = []
+        for img in tqdm(pool.imap(importer, infiles), total = len(infiles)):
+            imgs.append(img)
+        pool.close()
+        pool.join()
+    else:
+        imgs = list(map(importer, tqdm(infiles)))
+
+    imgsize_test = [len(img) for img in imgs]
+    imgsize_err = "Images provided contain different numbers of voxels."
+    if len(set(imgsize_test)) != 1:
+        raise Exception(imgsize_err)
+
+    if output_format == 'numpy':
+        return np.asarray(imgs)
+    elif output_format == 'pandas':
+        return pd.DataFrame(np.asarray(imgs))
+    else: 
+        return imgs
+    
+    
+def build_voxel_matrix(infiles, mask = None, save = False, outfile = 'voxel_matrix.csv', parallel = False, nproc = None):
+    
+    """
+    Create a data frame of voxels from a set of images.
+    
+    Arguments
+    ---------
+    infiles: list
+        List of paths to images.
+    mask: str
+        Optional path to a mask image. 
+    save: bool
+        Option to save to CSV.
+    outfile: str
+        Path to the output CSV file. Ignored if save = False.
+    parallel: bool
+        Option to run in parallel.
+    nproc: int
+        Number of processors to use in parallel.
+    
+    Returns
+    -------
+    df_imgs
+        A Pandas DataFrame containing the (masked) images.
+    """
+    
+    df_imgs = import_images(infiles = infiles,
+                           mask = mask,
+                           output_format = 'pandas',
+                           flatten = True,
+                           parallel = parallel,
+                           nproc = nproc)
+    df_imgs['file'] = infiles
+    
+    if save:
+        df_imgs.to_csv(outfile, index = False)
+    
+    return df_imgs
