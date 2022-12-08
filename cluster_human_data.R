@@ -34,7 +34,7 @@ option_list <- list(
                            "[default %default]")),
   make_option('--metric',
               type = 'character',
-              default = 'cor',
+              default = 'correlation',
               help = paste("Distance metric used to compute the SNF affinity",
                            "matrices. [default %default]")),
   make_option('--K',
@@ -85,15 +85,17 @@ option_list <- list(
 #' affinity matrix.
 #'
 #' @return (matrix) SNF affinity matrix.
-SNF_combine <- function(x1, x2, metric = 'cor', K = 10, 
+SNF_combine <- function(x1, x2, metric = "correlation", K = 10, 
                         sigma = 0.5, t = 20, outfile = NULL){
   
-  if(metric == 'cor'){
+  if (metric == "correlation") { 
     d1 <- (1-cor(t(x1)))
     d2 <- (1-cor(t(x2)))
-  } else {
+  } else if (metric == "euclidean") {
     d1 <- (dist2(as.matrix(x1), as.matrix(x1)))^(1/2)
     d2 <- (dist2(as.matrix(x2), as.matrix(x2)))^(1/2)
+  } else {
+    stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
   }
   
   W1 <- affinityMatrix(d1, K = K, sigma = sigma)
@@ -126,7 +128,12 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
     group_name <- paste0('Group', k)
     assign(group_name, group)
     if (k == 2) {
-      all_clusters <- data.frame(rownames(W), group, stringsAsFactors = F)
+      if (is.null(rownames(W))) {
+        ids <- as.character(1:nrow(W))
+      } else {
+        ids <- rownames(W)
+      }
+      all_clusters <- data.frame(ids, group, stringsAsFactors = F)
       colnames(all_clusters) <- c('ID', group_name)
     } else {
       group <- data.frame(group)
@@ -163,23 +170,44 @@ if (!dir.exists(outdir)) {
 
 if (verbose) {message("Importing data...")}
 
-x1 <- data.table::fread(file1, header = TRUE) %>% 
-  as_tibble() %>% 
-  column_to_rownames(row_names) %>% 
-  as.matrix() 
-colnames(x1) <- NULL
-rownames(x1) <- basename(rownames(x1)) %>% 
-  str_extract('.*extracted') %>% 
-  str_remove('\\.extracted')
+x1 <- as_tibble(data.table::fread(file1, header = TRUE))
+x2 <- as_tibble(data.table::fread(file2, header = TRUE))
 
-x2 <- data.table::fread(file2, header = TRUE) %>% 
-  as_tibble() %>% 
-  column_to_rownames(row_names) %>% 
-  as.matrix() 
+if (nrow(x1) != nrow(x2)) {
+  stop("Input matrices have different numbers of rows.")
+}
+
+if (!is.null(row_names)) {
+  if (!(row_names %in% colnames(x1))) {
+    stop(paste0("Row names column '", row_names, "' not found in input file ", file1))
+  } else if (!(row_names %in% colnames(x2))) {
+    stop(paste0("Row names column '", row_names, "' not found in input file ", file2))
+  } else {
+    x1 <- column_to_rownames(x1, var = row_names)
+    x2 <- column_to_rownames(x2, var = row_names)
+    if (sum(rownames(x1) != rownames(x2)) != 0) {
+      stop("Input matrix row names don't match.")
+    }
+  }
+}
+
+colnames(x1) <- NULL
 colnames(x2) <- NULL
-rownames(x2) <- basename(rownames(x2)) %>% 
-  str_extract('.*extracted') %>% 
-  str_remove('\\.extracted')
+
+numeric_test_1 <- any(!purrr::map_lgl(.x = x1, .f = is.numeric))
+if (numeric_test_1) {
+  stop(paste0("Input data contains non-numeric columns: ", file1, ".\n",
+              "A single column containing row names can be specified using the rownames argument."))
+}
+
+numeric_test_2 <- any(!purrr::map_lgl(.x = x2, .f = is.numeric))
+if (numeric_test_2) {
+  stop(paste0("Input data contains non-numeric columns: ", file2, ".\n",
+              "A single column containing row names can be specified using the rownames argument."))
+}
+
+x1 <- as.matrix(x1)
+x2 <- as.matrix(x2)
 
 if (verbose) {message("Running similarity network fusion...")}
 
@@ -190,5 +218,6 @@ W <- SNF_combine(x1 = x1, x2 = x2,
 
 if (verbose) {message("Assigning clusters...")}
 
-clusters <- create_clusters(W = W, nk = args[['nclusters']], 
+clusters <- create_clusters(W = W, nk = args[['nclusters']],
                             outfile = outfile)
+

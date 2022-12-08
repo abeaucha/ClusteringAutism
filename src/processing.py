@@ -463,7 +463,8 @@ def import_images(infiles, mask = None, output_format = 'list', flatten = True, 
         return imgs
     
     
-def build_voxel_matrix(infiles, mask = None, save = False, outfile = 'voxel_matrix.csv', parallel = False, nproc = None):
+
+def build_voxel_matrix(infiles, mask = None, file_col = False, sort = False, save = False, outfile = 'voxel_matrix.csv', parallel = False, nproc = None):
     
     """
     Create a data frame of voxels from a set of images.
@@ -474,6 +475,10 @@ def build_voxel_matrix(infiles, mask = None, save = False, outfile = 'voxel_matr
         List of paths to images.
     mask: str
         Optional path to a mask image. 
+    file_col: bool
+        Option to store input files in a column. If true, the paths in infiles are stored in a column called 'file'.
+    sort: bool
+        Option to sort rows based on file names.
     save: bool
         Option to save to CSV.
     outfile: str
@@ -496,8 +501,75 @@ def build_voxel_matrix(infiles, mask = None, save = False, outfile = 'voxel_matr
                            parallel = parallel,
                            nproc = nproc)
     df_imgs['file'] = infiles
+
+    if sort:
+        df_imgs = df_imgs.sort_values(by = 'file')
+
+    if not file_col:
+        df_imgs = df_imgs.drop('file', axis = 1)
     
     if save:
         df_imgs.to_csv(outfile, index = False)
     
     return df_imgs
+
+
+def cluster_human_data(infiles, rownames = None, nk_max = 10, metric = 'correlation', K = 10, sigma = 0.5, t = 20, outfile = 'clusters.csv'):
+
+    """
+    Cluster human effect size images using similarity network fusion.
+    
+    Arguments
+    ---------
+    infiles: list
+        List of paths to the CSV files containing effect size data.
+    rownames: str
+        Column in CSV files containing row names.
+    nk_max: int
+        Maximum number of clusters to identify. Solutions will be obtained for nk = 2 to nk = nk_max.
+    metric: str
+        Distance metric used to compute the SNF affinity matrices.
+    K: int
+        Number of nearest-neighbours used to compute the SNF affinity matrices.
+    sigma: float
+        Variance for the local model in the SNF affinity matrices.
+    t: int
+        Number of iterations for the diffusion process in SNF.
+    outfile: str
+        Path to the CSV file in which to write the cluster assignments.
+        
+    Returns
+    -------
+    A Pandas DataFrame containing cluster assignments.
+    """
+    
+    # TO-DO
+    # - Make this function more general so that it can run SNF on any set of voxel matrices
+    #   rather than just the specific human effect sizes. 
+    # - Option to run SNF on more than two matrices? 
+    # Make it so that this function exits if an error happens in the R script
+    
+    
+    if type(infiles) is not list:
+        raise ValueError("Argument infiles must be a list.")
+    
+    if len(infiles) != 2:
+        raise Exception("Argument infiles must have length 2.")
+    
+    script = 'cluster_human_data.R'
+    script_args = {'file1':infiles[0],
+                   'file2':infiles[1],
+                   'rownames':rownames,
+                   'nclusters':nk_max,
+                   'metric':metric,
+                   'K':K,
+                   'sigma':sigma,
+                   't':t,
+                   'outfile':outfile}
+    
+    if rownames is None:
+        del script_args['rownames']
+    
+    execute_R(script = script, args = script_args)
+    
+    return pd.read_csv(outfile)
