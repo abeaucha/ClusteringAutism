@@ -22,27 +22,23 @@ suppressPackageStartupMessages(library(RMINC))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option('--clusterfile',
-              type = 'character',
+  make_option("--clusterfile",
+              type = "character",
               help = "Path to .csv file containing cluster assignment data."),
-  make_option('--imgdir',
-              type = 'character',
+  make_option("--imgdir",
+              type = "character",
               help = "Path to directory containing images to use."),
-  make_option('--method',
-              type = 'character',
-              default = 'mean',
+  make_option("--method",
+              type = "character",
+              default = "mean",
               help = paste("Method used to create the representative cluster",
                            "maps. [default %default]")),
-  make_option('--jacobians',
-              type = 'character',
-              help = paste("Optional flag to indicate type of jacobians",
-                           "used in outfile.")),
-  make_option('--outdir',
-              type = 'character',
+  make_option("--outdir",
+              type = "character",
               help = paste("Path to output directory.")),
-  make_option('--verbose',
-              type = 'character',
-              default = 'true',
+  make_option("--verbose",
+              type = "character",
+              default = "true",
               help = paste("Verbosity option. [default %default]"))
 ) 
 
@@ -51,11 +47,11 @@ option_list <- list(
 
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-clusterfile <- args[['clusterfile']]
-imgdir <- args[['imgdir']]
-method <- args[['method']]
-outdir <- args[['outdir']]
-verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
+clusterfile <- args[["clusterfile"]]
+imgdir <- args[["imgdir"]]
+method <- args[["method"]]
+outdir <- args[["outdir"]]
+verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
 #Create outdir if needed
 if (!dir.exists(outdir)) {
@@ -67,12 +63,12 @@ if (verbose) {message("Importing cluster information...")}
 
 df_clusters <- data.table::fread(clusterfile, header = TRUE) %>% 
   as_tibble() %>% 
-  column_to_rownames('ID')
+  column_to_rownames("ID")
 
 #Create cluster maps
 if (verbose) {message("Creating cluster maps...")}
 
-sink(file = 'tmp.log', type = 'output')
+sink(file = "tmp.log", type = "output")
 imgfiles <- list.files(imgdir, full.names = T)
 for (j in 1:ncol(df_clusters)) {
   
@@ -81,7 +77,7 @@ for (j in 1:ncol(df_clusters)) {
   for (k in krange) {
     
     if (verbose) {
-      message(paste('nk =', max(krange), ':', 'k =', k))
+      message(paste("nk =", max(krange), ":", "k =", k))
     }
     
     rows_k <- df_clusters[,j] == k
@@ -97,9 +93,9 @@ for (j in 1:ncol(df_clusters)) {
                                method = method,
                                grouping = NULL)
     
-    if (method == 'mean') {
+    if (method == "mean") {
       cluster_map <- cluster_map[,1]
-    } else if (method == 'median') {
+    } else if (method == "median") {
       cluster_map <- cluster_map
     } else {
       stop()
@@ -108,17 +104,8 @@ for (j in 1:ncol(df_clusters)) {
     class(cluster_map) <- class(mincGetVolume(files_k[1]))
     attributes(cluster_map) <- attributes(mincGetVolume(files_k[1]))
     
-    res <- max(minc.separation.sizes(files_k[1]))
-    
-    outfile <- paste0('Group_', k,
-                      '_Clusternum_', max(krange), '_ES')
-    
-    if (!is.null(args[['jacobians']])) {
-      outfile <- paste0(outfile, '_', args[['jacobians']])
-    }
-    
-    outfile <- paste0(outfile, '_', res,
-                      '_', method, '.mnc')
+    outfile <- paste0("cluster_map_nk_", max(krange), 
+                      "_k_", k, "_", method, ".mnc")
     
     outfile <- file.path(outdir, outfile)
     
@@ -128,4 +115,4 @@ for (j in 1:ncol(df_clusters)) {
   }
 }
 sink(file = NULL)
-system('rm tmp.log')
+system("rm tmp.log")

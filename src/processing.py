@@ -551,7 +551,7 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10, metric = 'correlat
     
     
     if type(infiles) is not list:
-        raise ValueError("Argument infiles must be a list.")
+        raise TypeError("Argument infiles must be a list.")
     
     if len(infiles) != 2:
         raise Exception("Argument infiles must have length 2.")
@@ -573,3 +573,41 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10, metric = 'correlat
     execute_R(script = script, args = script_args)
     
     return pd.read_csv(outfile)
+
+
+def create_cluster_maps(clusters, imgdir, outdir, method = 'mean', verbose = True):
+
+    """
+    Create representative voxel-wise maps for clustered images.
+    
+    Arguments
+    ---------
+    clusters: str
+        Path to the CSV file containing cluster assignments.
+    imgdir: str
+        Path to the directory containing images to use.
+    outdir: str
+        Path to the output directory.
+    method: str
+        Method used to create the representative cluster maps.
+    verbose: bool
+        Verbosity option.
+        
+    Returns
+    -------
+    outfiles: list
+        List of paths to the cluster maps.
+    """
+    
+    if not os.path.exists(clusters):
+        raise OSError("Cluster file not found: {}".format(clusters))
+    verbose = 'true' if verbose else 'false'
+    script = 'create_cluster_maps.R'
+    script_args = {'clusterfile':clusters,
+                   'imgdir':imgdir,
+                   'outdir':outdir,
+                   'method':method,
+                   'verbose':verbose}
+    execute_R(script = script, args = script_args)
+    outfiles = glob(outdir+'*.mnc')
+    return outfiles
