@@ -1,5 +1,6 @@
 ---
 title: "Mouse-human cluster similarity using gene space decomposition"
+subtitle: "Part 1: Using sparse human expression data"
 format: 
   html:
     embed-resources: true
@@ -163,12 +164,17 @@ subset_similarity_matrix <- function(x, nk) {
 }
 ```
 
+# Introduction
+
+In this document I explore the possibility of evaluating the similarity between mouse and human neuroanatomical clusters of NDDs by first decomposing each cluster into a common gene expression space and then computing the similarity in that space. 
+
 # Importing the cluster maps
 
-We start by importing the relative effect size representative cluster maps for all mouse and human clusters. The voxel-wise cluster maps are stored in the columns of a matrix.
+We begin by importing the **relative effect size representative cluster maps** for all mouse and human clusters.
 
 ```{r import-clusters}
 #| code-summary: Import cluster maps
+#| code-fold: show
 
 #Import mouse clusters
 mouse_mask_file <- "../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
@@ -181,12 +187,16 @@ human_mask_file <- "../../data/human/registration/reference_files/mask_1.0mm.mnc
 human_cluster_dir <- "../../data/human/clustering/cluster_maps/relative/resolution_1.0/mean/"
 mat_human_clusters <- import_cluster_maps(indir = human_cluster_dir,
                                           maskfile = human_mask_file)
+```
 
+The voxel-wise cluster maps are stored in the columns of a matrix. Here is an example for the mouse clusters: 
+
+```{r mouse-cluster-mat}
 #Example rows and columns
 mat_mouse_clusters[1:5, 1:5]
 ```
 
-Before decomposing these maps into gene space, we have to do a bit of wrangling on the human data. The human cluster maps are full voxel-wise images. However, only some of the voxels in these maps have associated expression data since the human expression data set is sparsely sampled. We want to extract only those voxels that have expression data.
+Before decomposing these maps into gene space, we have to do a bit of wrangling on the human data. The human cluster maps are full voxel-wise images, with values for 1,442,744 voxels. However, only some of the voxels in these maps have associated expression data since the human expression data set only contains 3,702 unique samples. Additionally, some of those samples were taken at the same location, further reducing the number of voxels that have expression data. We want to extract only those voxels.
 
 ```{r}
 #| code-fold: show
@@ -208,20 +218,21 @@ microarray_labels_nonzero <- microarray_labels[microarray_labels != 0]
 #Subset the human cluster map matrix for only those voxels with expression data
 mat_human_clusters_microarray <- mat_human_clusters[microarray_labels != 0,]
 
-print(dim(mat_human_clusters_microarray))
+#Number of voxels with microarray data
+print(nrow(mat_human_clusters_microarray))
 ```
 
 We see that only 3,616 voxels have associated microarray data.
 
+
 # Mapping the cluster maps to gene expression space
 
-Now that the cluster map images are aligned with the expression data in each species, we can decompose the maps in terms of the expression of each gene space variable. In this case, we will be using the latent space variables for a given latent space.
+Now that the cluster map images are aligned with the expression data in each species, we can decompose the maps in terms of the expression of each gene space variable. In this analysis, we will be using the latent space variables for the latent space generated using random seed 1.
 
 First we import the mouse and human expression data in the given latent space.
 
 ```{r}
 #| code-summary: Import expression data
-
 
 #Paths to mouse and human expression data
 mouse_expr_dir <- "../../data/mouse/expression/latent_space/"
@@ -254,7 +265,7 @@ ind_samples_in_labels <- microarray_labels_defs[["label"]] %in% microarray_label
 human_expr <- human_expr[ind_samples_in_labels,] 
 ```
 
-We can now decompose every mouse and human cluster map into the gene expression latent space. A simple way to do this is to compute the correlation of every cluster map with every latent space variable. For example, let's consider the mouse cluster 2-1. How does this cluster map correlate with the maps of different latent space variables?
+A simple way to decompose each cluster map into the gene expression latent space is to compute the correlation of every cluster map with every latent space variable. For example, let's consider the mouse cluster 2-1. How does this cluster map correlate with the maps of different latent space variables?
 
 ```{r}
 #| code-summary: Mouse scatter plots
@@ -403,7 +414,7 @@ human_gene_decomposition <- buildSimilarityMatrix(x1 = human_expr,
                                                   method = "correlation")
 ```
 
-We can take a look at the distribution of clusters in the sub-space corresonding to the axes $h_1$ and $h_3$.
+We can take a look at the distribution of clusters in the two-dimensional sub-space spanned by the variables $h_1$ and $h_3$.
 
 ```{r}
 #| code-summary: Gene space coordinates
@@ -435,7 +446,7 @@ ggplot(df_decomposition_example,
   theme_bw()
 ```
 
-It looks like something weird is happening, with human clusters returning very small correlation values to these latent space variables. What do the distributions of correlations look like across all variables?
+It looks like something weird is happening, with human clusters returning very small correlation values to these latent space variables. What do the distributions of correlations look like across all variables? Is the case for all variables? 
 
 ```{r}
 #| code-summary: Correlation histograms
@@ -455,7 +466,9 @@ ggplot(df_correlation_hist, aes(x = correlation, fill = species, col = species))
   theme_bw()
 ```
 
-The small correlation values aren't just an artefact of $h_1$ and $h_3$. The correlations between all human clusters and all latent space variables are basically null. We can further confirm this by examining the scatterplots:
+It looks like the small correlation values aren't just an artefact of $h_1$ and $h_3$. The correlations between all human clusters and all latent space variables are basically null. 
+
+Here are the scatter plots for the first three latent space variables: 
 
 ```{r}
 #| code-summary: Human scatter plots
@@ -497,9 +510,7 @@ ggplot(df_decomposition_example, aes(x = expression, y = cluster)) +
   theme_bw()
 ```
 
-Either something strange is going on or the human cluster maps are truly uncorrelated with any of the latent space variables.
-
-Let's ignore this for now and move on to illustrate how the rest of this analysis would look.
+The human cluster maps seem to be uncorrelated with any of the latent space variables. There's the possibility that this might be due to the small number of microarray samples. Let's ignore this for now and move on to illustrate how the rest of this analysis would look.
 
 # Evaluating cluster similarity in gene space
 
@@ -538,9 +549,13 @@ mat_sim_nk <- subset_similarity_matrix(x = mat_sim, nk = nk)
 pheatmap(mat_sim_nk, cluster_cols = F, cluster_rows = F)
 ```
 
-A number of clusters exhibit relatively high correlations. We can examine their spatial maps.
+A number of clusters exhibit relatively high correlations. In particular we see that mouse 5-5 is highly correlated to human 5-2. Note that these correspondences are different than what we found using the cluster mask averaging approach. 
+
+We can examine the spatial maps of these clusters in the usual way: 
 
 ```{r}
+#| code-summary: Mouse cluster map
+
 k_mouse <- 5
 mouse_cluster_id <- str_c(nk, k_mouse, sep = "-")
 mouse_cluster_vals <- mat_mouse_clusters[,colnames(mat_mouse_clusters) == mouse_cluster_id]
@@ -557,6 +572,8 @@ sliceSeries(nrow = 5, ncol = 5, begin = 3, end = 58) %>%
 ```
 
 ```{r}
+#| code-summary: Human cluster map
+
 #Import mouse anatomy and mask
 human_anat_file <- "../../data/human/registration/reference_files/model_1.0mm.mnc"
 human_anat <- mincGetVolume(human_anat_file)
@@ -576,6 +593,8 @@ sliceSeries(nrow = 5, ncol = 5, begin = 50, end = 190) %>%
   addtitle(str_c("Human cluster ", nk, "-", k_human)) %>% 
   draw()
 ```
+
+
 
 ```{r}
 # cluster_maps <- list(Mouse=mat_mouse_clusters,

@@ -132,9 +132,17 @@ rownames(mat_sim) <- rownames(mat_sim_pos)
 ```
 
 ```{r fig.width = 12, fig.height = 10}
-plot_heatmap(x = mat_sim, 
-             clustering = FALSE) +
+p_similarity <- plot_heatmap(x = mat_sim, 
+                             clustering = FALSE) +
   labs(title = "Symmetric cluster similarity")
+
+pdf(file = "cluster_similarity.pdf",
+    width = 12,
+    height = 10)
+print(p_similarity)
+dev.off()
+
+p_similarity
 ```
 
 # Similarity analysis for 5 clusters
@@ -172,7 +180,7 @@ dev.off()
 ### Slice series
 
 ```{r}
-k_mouse <- 1
+k_mouse <- 2
 k_human <- 1
 ```
 
@@ -187,6 +195,13 @@ mouse_map <- plot_cluster_map(species = "mouse",
                               draw_plot = FALSE)
 
 mouse_map_grob <- grobify(mouse_map)
+
+outfile <- str_c("MouseClusterMap_nk_", nk, "_k_", k_mouse, ".pdf")
+pdf(file = outfile,
+    width = 10,
+    height = 6)
+draw(mouse_map)
+dev.off()
 ```
 
 ```{r fig.width = 10, fig.height = 8}
@@ -199,6 +214,13 @@ human_map <- plot_cluster_map(species = "human",
                               threshold = threshold,
                               draw_plot = FALSE)
 human_map_grob <- grobify(human_map)
+
+outfile <- str_c("HumanClusterMap_nk_", nk, "_k_", k_human, ".pdf")
+pdf(file = outfile,
+    width = 6,
+    height = 6)
+draw(human_map)
+dev.off()
 ```
 
 ### Spider plots
@@ -212,11 +234,18 @@ spider_coarse <- plot_spider_chart(nk = nk_list, k = k_list,
                                    jacobians = jacobians, 
                                    threshold_method = threshold_method, 
                                    threshold = threshold,
-                                   plot_type = "bar",
+                                   plot_type = "spider",
                                    save = FALSE, 
                                    fig_width = 10, fig_height = 10)
 
 spider_coarse_grob <- ggplotGrob(spider_coarse) %>% grid.force()
+
+outfile <- str_c("SpiderPlotCoarse_nk_", nk, "_kmouse_", k_mouse, "_khuman_", k_human, ".pdf")
+pdf(file = outfile,
+    width = 8,
+    height = 8)
+print(spider_coarse)
+dev.off()
 ```
 
 ```{r fig.width = 10, fig.height = 10}
@@ -226,11 +255,18 @@ spider_mid <- plot_spider_chart(nk = nk_list, k = k_list,
                                 threshold_method = threshold_method, 
                                 threshold = threshold,
                                 step = 0.1,
-                                plot_type = "bar",
+                                plot_type = "spider",
                                 save = FALSE, 
                                 fig_width = 10, fig_height = 10)
 
 spider_mid_grob <- ggplotGrob(spider_mid) %>% grid.force()
+
+outfile <- str_c("SpiderPlotMid_nk_", nk, "_kmouse_", k_mouse, "_khuman_", k_human, ".pdf")
+pdf(file = outfile,
+    width = 8,
+    height = 8)
+print(spider_mid)
+dev.off()
 ```
 
 ### Anatomical histograms
@@ -260,6 +296,13 @@ p_density <- ggplot(df_sim_hist, aes(x = Similarity,
 ```
 
 ```{r fig.width = 10, fig.height = 5}
+outfile <- str_c("AnatomicalDistributions_nk_", nk, "_kmouse_", k_mouse, "_khuman_", k_human, ".pdf")
+pdf(file = outfile,
+    width = 10,
+    height = 5)
+print(p_density)
+dev.off()
+
 p_density
 ```
 

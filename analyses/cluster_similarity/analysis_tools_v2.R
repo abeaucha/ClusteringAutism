@@ -334,7 +334,7 @@ plot_cluster_map <- function(species, nk, k, nrow = 5, ncol = 5, jacobians = NUL
   } else if (species == "human") {
     anat_file <- "../../data/human/registration/reference_files/model_1.0mm.mnc"
     slice_begin <- 50
-    slice_end <- 200
+    slice_end <- 180
     anat_low <- 3
     anat_high <- 7
   } else {
