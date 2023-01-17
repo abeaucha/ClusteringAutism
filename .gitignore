@@ -18,3 +18,4 @@ analyses/cluster_similarity/plots
 analyses/*.csv
 analyses/gene_space_decomposition/heatmap_animation_nk_5/
 analyses/gene_space_decomposition/*.html
+figures/figure1
