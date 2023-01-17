@@ -1,0 +1,835 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Okay let's start this thing from scratch
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(data.tree))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(pheatmap))
+# suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(ggplotify))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+```
+
+```{r functions}
+source("../functions/buildSimilarityMatrix.R")
+source("../functions/tree_tools.R")
+source("analysis_tools.R")
+```
+
+```{r parameters-general}
+#Path to data directory
+datadir <- "../data/"
+
+#Gene space
+gene_space <- "average_latent_space"
+# gene_space <- "input_space"
+# gene_space<- "latent_space"
+
+#Latent space ID
+#Only used if gene_space == "latent_space"
+latent_space_id <- 1
+
+#Jacobians
+# jacobians <- "absolute"
+jacobians <- "relative"
+
+#Thresholding method
+# threshold_method <- "intensity"
+threshold_method <- "topn"
+
+#Threshold value
+threshold <- 0.2
+# threshold <- 0.1
+# threshold <- 0.05
+
+
+#Mask type
+# mask_type <- "positive"
+# mask_type <- "negative"
+
+#Metric
+metric <- "correlation"
+```
+
+
+
+# Heatmap
+
+```{r}
+mat_sim_pos <- import_similarity_matrix(gene_space = gene_space,
+                                        jacobians = jacobians,
+                                        threshold_method = threshold_method,
+                                        threshold = threshold,
+                                        mask = "positive")
+
+mat_sim_neg <- import_similarity_matrix(gene_space = gene_space,
+                                        jacobians = jacobians,
+                                        threshold_method = threshold_method,
+                                        threshold = threshold,
+                                        mask = "negative")
+```
+
+Implement a tool to modify how we're computing the average similarity matrix (e.g. weighted average)?
+
+```{r}
+mat_sim <- array(data = 0,
+                 dim = c(dim(mat_sim_pos), 2))
+mat_sim[,,1] <- mat_sim_pos
+mat_sim[,,2] <- mat_sim_neg
+
+mat_sim <- rowMeans(mat_sim, dims = 2, na.rm = TRUE)
+
+colnames(mat_sim) <- colnames(mat_sim_pos)
+rownames(mat_sim) <- rownames(mat_sim_pos)
+```
+
+```{r}
+nk_mouse <- 6
+nk_human <- 5
+```
+
+```{r}
+col_selection <- str_detect(colnames(mat_sim), str_c("^", nk_mouse, "-"))
+row_selection <- str_detect(rownames(mat_sim), str_c("^", nk_human, "-"))
+mat_sim_nk <- mat_sim[row_selection, col_selection]  
+mat_sim_nk <- t(mat_sim_nk)
+```
+
+```{r}
+palette_length <- 255
+heatmap_range <- c(min(mat_sim_nk), max(mat_sim_nk))
+heatmap_range_dist <- heatmap_range[2] - heatmap_range[1]
+
+heatmap_colours <- rev(brewer.pal(n = 7, name = "RdYlBu"))
+heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
+
+heatmap_breaks <- seq(heatmap_range[1], heatmap_range[2], length.out = palette_length)
+
+fig_heatmap_ggplot <- as.ggplot(pheatmap(mat = mat_sim_nk,
+                                         color = heatmap_palette,
+                                         breaks = heatmap_breaks,
+                                         cluster_rows = F, 
+                                         cluster_cols = F, 
+                                         legend = T,
+                                         silent = TRUE))
+
+fig_heatmap_main_grob <- grid.force(ggplotGrob(fig_heatmap_ggplot))
+fig_heatmap_matrix_grob <- getGrob(fig_heatmap_main_grob, "matrix.4-3-4-3")
+fig_heatmap_colnames_grob <- getGrob(fig_heatmap_main_grob, "col_names.5-3-5-3")
+fig_heatmap_colnames_grob[["rot"]] <- 0
+fig_heatmap_colnames_grob[["y"]] <- unit(0.8, "npc")
+fig_heatmap_colnames_grob[["hjust"]] <- 0.5
+fig_heatmap_colnames_grob[["vjust"]] <- 1
+fig_heatmap_rownames_grob <- getGrob(fig_heatmap_main_grob, "row_names.4-4-4-4")
+fig_heatmap_rownames_grob[["x"]] <- unit(0.8, "npc")
+fig_heatmap_rownames_grob[["hjust"]] <- 1
+
+fig_heatmap_coltitle_grob <- textGrob("Human clusters",
+                                      x = 0.5, y = 0.8,
+                                      just = "top",
+                                      gp = gpar(fontsize = 11))
+
+fig_heatmap_rowtitle_grob <- textGrob("Mouse clusters",
+                                      x = 0.8, y = 0.5,
+                                      rot = 90,
+                                      just = "bottom",
+                                      gp = gpar(fontsize = 11))
+```
+
+```{r}
+fig_heatmap_legend_palette <- matrix(rev(heatmap_palette), nrow = palette_length, ncol = 1)
+
+fig_heatmap_legend_scale_width <- 0.3
+fig_heatmap_legend_scale_height <- 1
+fig_heatmap_legend_scale_x <- 0.05
+fig_heatmap_legend_scale_y <- 0
+
+fig_heatmap_legend_scale_grob <- rasterGrob(fig_heatmap_legend_palette,
+                                            x = fig_heatmap_legend_scale_x,
+                                            y = fig_heatmap_legend_scale_y,
+                                            width = fig_heatmap_legend_scale_width,
+                                            height = fig_heatmap_legend_scale_height,
+                                            just = c("left", "bottom"))
+
+fig_heatmap_legend_text <- seq(0.4, heatmap_range[2], by = 0.1)
+fig_heatmap_legend_text_x <- fig_heatmap_legend_scale_x + fig_heatmap_legend_scale_width + 0.05
+fig_heatmap_legend_text_y <- (fig_heatmap_legend_text - heatmap_range[1])/heatmap_range_dist
+
+fig_heatmap_legend_text_grob <- textGrob(fig_heatmap_legend_text,
+                                         x = fig_heatmap_legend_text_x,
+                                         y = fig_heatmap_legend_text_y,
+                                         just = c("left", "center"),
+                                         gp = gpar(fontsize = 9))
+
+fig_heatmap_legend_title <- "Correlation"
+fig_heatmap_legend_title_x <- fig_heatmap_legend_text_x + 0.3
+fig_heatmap_legend_title_y <- (fig_heatmap_legend_scale_y + fig_heatmap_legend_scale_height)/2
+fig_heatmap_legend_title_grob <- textGrob(fig_heatmap_legend_title,
+                                          x = fig_heatmap_legend_title_x,
+                                          y = fig_heatmap_legend_title_y,
+                                          just = c("center", "top"),
+                                          rot = 90,
+                                          gp = gpar(fontsize = 11))
+
+fig_heatmap_legend_grob <- gTree(children = gList(fig_heatmap_legend_scale_grob,
+                                                  fig_heatmap_legend_text_grob,
+                                                  fig_heatmap_legend_title_grob))
+```
+
+```{r}
+fig_heatmap_title <- "Mouse-human cluster correlation matrix"
+fig_heatmap_title_grob <- textGrob(label = fig_heatmap_title,
+                                   x = 0, y = 0.5, 
+                                   just = c("left", "center"),
+                                   gp = gpar(fontsize = 11))
+```
+
+
+# Cluster maps
+
+```{r}
+mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
+mouse_anat <- mincGetVolume(mouse_anat_file)
+
+human_anat_file <- "../data/human/registration/reference_files/model_1.0mm.mnc"
+human_anat <- mincGetVolume(human_anat_file)
+human_anat_vol <- mincArray(human_anat)
+
+human_slices_dim_1 <- 25:160
+human_slices_dim_3 <- 35:167
+
+human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
+```
+
+```{r}
+k_mouse <- c(4, 6)
+df_mouse_clusters <- tibble(nk = rep(nk_mouse, length(k_mouse)),
+                            k  = k_mouse) %>% 
+  unite(col = "cluster_id", nk, k, 
+        sep = "-", remove = FALSE)
+list_mouse_clusters <- vector(mode = "list", length = nrow(df_mouse_clusters))
+names(list_mouse_clusters) <- df_mouse_clusters[["cluster_id"]]
+for (i in 1:nrow(df_mouse_clusters)) {
+  list_mouse_clusters[[i]] <- import_cluster_map(datadir = datadir,
+                                                 species = "mouse",
+                                                 nk = df_mouse_clusters[[i, "nk"]],
+                                                 k = df_mouse_clusters[[i, "k"]],
+                                                 jacobians = jacobians,
+                                                 mask = "symmetric",
+                                                 threshold_method = threshold_method, 
+                                                 threshold = threshold)
+}
+```
+
+```{r}
+k_human <- c(1, 4)
+df_human_clusters <- tibble(nk = rep(nk_human, length(k_human)),
+                            k = k_human) %>% 
+  unite(col = "cluster_id", nk, k, 
+        sep = "-", remove = FALSE)
+list_human_clusters <- vector(mode = "list", length = nrow(df_human_clusters))
+names(list_human_clusters) <- df_human_clusters[["cluster_id"]]
+for (i in 1:nrow(df_human_clusters)) {
+  list_human_clusters[[i]] <- import_cluster_map(datadir = datadir,
+                                                 species = "human",
+                                                 nk = df_human_clusters[[i, "nk"]],
+                                                 k = df_human_clusters[[i, "k"]],
+                                                 jacobians = jacobians,
+                                                 mask = "symmetric",
+                                                 threshold_method = threshold_method,
+                                                 threshold = threshold)
+}
+```
+
+```{r}
+fig_ss_1_base <- sliceSeries(nrow = 5, ncol = 1, begin = 10, end = 50) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(list_mouse_clusters[[1]]), low = 0.3, high = 0.7, symmetric = TRUE) %>% 
+  sliceSeries(nrow = 5, ncol = 1, begin = 50, end = 180) %>% 
+  anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
+  overlay(mincArray(list_human_clusters[[1]])[human_slices_dim_1,,human_slices_dim_3],
+          low = 0.3, high = 0.7, symmetric = TRUE)
+
+fig_ss_1_base_grob <- grobify(fig_ss_1_base)
+
+fig_ss_1_legend_grob <- fig_ss_1_base %>% 
+  legend("Effect size") %>% 
+  grobify()
+
+fig_ss_1_legend_grob <- fig_ss_1_legend_grob[["children"]][[3]][["children"]][[1]][["children"]][[1]][["children"]][[1]]
+
+fig_ss_1_labels <- c(names(list_mouse_clusters)[1],
+                     names(list_human_clusters)[1])
+fig_ss_1_labels_grob <- textGrob(label = fig_ss_1_labels,
+                                 x = c(0.25, 0.75),
+                                 just = "center")
+```
+
+
+```{r}
+fig_ss_2_base <- sliceSeries(nrow = 5, ncol = 1, begin = 10, end = 50) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(list_mouse_clusters[[2]]), low = 0.3, high = 0.7, symmetric = TRUE) %>% 
+  sliceSeries(nrow = 5, ncol = 1, begin = 50, end = 180) %>% 
+  anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
+  overlay(mincArray(list_human_clusters[[2]])[human_slices_dim_1,,human_slices_dim_3],
+          low = 0.3, high = 0.7, symmetric = TRUE) 
+
+fig_ss_2_base_grob <- grobify(fig_ss_2_base)
+
+fig_ss_2_legend_grob <- fig_ss_2_base %>% 
+  legend() %>% 
+  grobify()
+
+fig_ss_2_legend_grob <- fig_ss_2_legend_grob[["children"]][[3]][["children"]][[1]][["children"]][[1]][["children"]][[1]]
+
+fig_ss_2_labels <- c(names(list_mouse_clusters)[2],
+                     names(list_human_clusters)[2])
+fig_ss_2_labels_grob <- textGrob(label = fig_ss_2_labels,
+                                 x = c(0.25, 0.75),
+                                 just = "center")
+```
+
+```{r}
+fig_ss_title <- "Average cluster effect size maps"
+fig_ss_title_grob <- textGrob(label = fig_ss_title,
+                                   x = 0, y = 0.5, 
+                                   just = c("left", "center"),
+                                   gp = gpar(fontsize = 11))
+```
+
+
+# Radar plots
+
+
+```{r}
+mouse_labels_file <- "../data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc"
+mouse_labels <- mincGetVolume(mouse_labels_file)
+
+mouse_defs_file <- "../data/mouse/atlas/DSURQE_40micron_R_mapping_long.csv"
+mouse_defs <- read_csv(mouse_defs_file, show_col_types = FALSE) %>% 
+  select(name = Structure, label = Label)
+
+mouse_tree_file <- "../data/mouse/expression/MouseExpressionTree_DSURQE.RData"
+load(mouse_tree_file)
+mouse_tree <- Clone(treeMouseExpr)
+rm(treeMouseExpr)
+
+human_labels_file <- "../data/human/expression/AHBA_microarray_labels_studyspace_1.0mm.mnc"
+human_labels <- mincGetVolume(human_labels_file)
+
+human_defs_file <- "../data/human/expression/AHBA_microarray_coordinates_mni_defs.csv"
+human_defs <- read_csv(human_defs_file, show_col_types = FALSE)
+
+human_tree_file <- "../data/human/expression/HumanExpressionTree.RData"
+load(human_tree_file)
+human_tree <- Clone(treeHumanExpr)
+rm(treeHumanExpr)
+
+neuro_file <- "../data/MouseHumanMatches_H10M09.csv"
+df_spokes <- read_csv(neuro_file, show_col_types = FALSE)
+colnames(df_spokes) <- str_to_lower(colnames(df_spokes))
+df_spokes <- df_spokes %>% 
+  filter(!(name %in% c("White matter", "Ventricles")))
+```
+
+```{r}
+nk_list <- list("mouse" = 6,
+                "human" = 5)
+
+k_list <- list("mouse" = 4,
+               "human" = 1)
+
+labels <- list("mouse" = mouse_labels,
+               "human" = human_labels)
+
+defs <- list("mouse" = mouse_defs,
+             "human" = human_defs)
+
+trees <- list("mouse" = mouse_tree,
+              "human" = human_tree)
+
+radar_data <- prepare_radar_chart(datadir = "../data/",
+                                  spokes = df_spokes,
+                                  nk = nk_list, 
+                                  k = k_list,
+                                  labels = labels,
+                                  defs = defs,
+                                  trees = trees,
+                                  jacobians = jacobians,
+                                  threshold_method = threshold_method,
+                                  threshold = threshold)
+
+radar_line <- tibble(name = unique(radar_data$name),
+                     y = 0)
+
+nspokes <- length(unique(radar_data$name))-1
+radar_start <- -(2*pi)/nspokes
+breaks_start <- -1
+breaks_end <- 1
+breaks_step <- 0.5
+radar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+radar_labels <- tibble(name = levels(radar_data$name)[6],
+                       breaks = radar_breaks)
+
+fig_radar_1 <- ggplot(radar_data, aes(x = name, ymin = negative, ymax = positive, group = species, fill = species, col = species)) + 
+  geom_ribbon(alpha = 0.2) +
+  geom_line(data = radar_line,
+            inherit.aes = FALSE,
+            mapping = aes(x = name, y = y, group = 1),
+            linetype = "dashed",
+            size = 0.5) + 
+  geom_text(data = radar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = name,
+                          y = breaks,
+                          label = breaks),
+            size = 2.5,
+            nudge_y = 0.1) + 
+  coord_radar(start = radar_start) +
+  scale_x_discrete(expand = expansion(),
+                   labels = c("CbN", "Cx", "CxN", "IB", "MB", "P", "MY", "CbCx", "CbN")) + 
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.5), limits = c(-1, 1.2)) + 
+  scale_fill_discrete(labels = c("Human", "Mouse")) + 
+  scale_color_discrete(labels = c("Human", "Mouse")) + 
+  labs(x = NULL,
+       fill = NULL, 
+       col = NULL) + 
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        axis.text.x = element_text(size = 6, face = "bold"),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
+
+fig_radar_1_grob <- grid.force(ggplotGrob(fig_radar_1))
+fig_radar_1_panel_grob <- getGrob(fig_radar_1_grob, "panel.7-5-7-5")
+
+fig_radar_legend_grob <- getGrob(fig_radar_1_grob, "guides.3-3-3-3")
+
+fig_radar_1_annotation_text <- str_c(str_c("Mouse ", str_c(nk_list[["mouse"]], 
+                                                           k_list[["mouse"]], sep = "-")), 
+                                     "and",
+                                     str_c("human ", str_c(nk_list[["human"]], 
+                                                           k_list[["human"]], sep = "-")),
+                                     sep = " ")
+fig_radar_1_annotation_grob <- textGrob(fig_radar_1_annotation_text,
+                                        gp = gpar(fontsize = 10))
+```
+
+
+
+
+```{r}
+# radar_background <- tibble(name = unique(radar_data$name),
+#                            negative = -1,
+#                            positive = 0)
+# 
+# ggplot(radar_background, aes(x = name, ymin = negative, ymax = positive, group = 1)) + 
+#   geom_ribbon(fill = "black",
+#               alpha = 0.2) + 
+#   geom_ribbon(data = radar_data,
+#               mapping = aes(group = species, fill = species, col = species),
+#               alpha = 0.5) +
+#   coord_radar(start = radar_start) +
+#   scale_x_discrete(expand = expansion()) + 
+#   scale_y_continuous(breaks = seq(-1, 1, by = 0.5), limits = c(-1, 1)) + 
+#   labs(x = NULL) + 
+#   theme_bw() +
+#   theme(axis.ticks.x = element_blank(),
+#         axis.line.x = element_blank())
+```
+
+```{r}
+k_list <- list("mouse" = 6,
+               "human" = 4)
+
+radar_data <- prepare_radar_chart(datadir = "../data/",
+                                  spokes = df_spokes,
+                                  nk = nk_list,
+                                  k = k_list,
+                                  labels = labels,
+                                  defs = defs,
+                                  trees = trees,
+                                  jacobians = jacobians,
+                                  threshold_method = threshold_method,
+                                  threshold = threshold)
+
+radar_line <- tibble(name = unique(radar_data$name),
+                     y = 0)
+
+nspokes <- length(unique(radar_data$name))-1
+radar_start <- -(2*pi)/nspokes
+breaks_start <- -1
+breaks_end <- 1
+breaks_step <- 0.5
+radar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+radar_labels <- tibble(name = levels(radar_data$name)[6],
+                       breaks = radar_breaks)
+
+fig_radar_2 <- ggplot(radar_data, aes(x = name, ymin = negative, ymax = positive, group = species, fill = species, col = species)) + 
+  geom_ribbon(alpha = 0.2) +
+  geom_line(data = radar_line,
+            inherit.aes = FALSE,
+            mapping = aes(x = name, y = y, group = 1),
+            linetype = "dashed",
+            size = 0.5) + 
+  geom_text(data = radar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = name,
+                          y = breaks,
+                          label = breaks),
+            size = 2.5,
+            nudge_y = 0.1) + 
+  coord_radar(start = radar_start) +
+  scale_x_discrete(expand = expansion(),
+                   labels = c("CbN", "Cx", "CxN", "IB", "MB", "P", "MY", "CbCx", "CbN")) + 
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.5), limits = c(-1, 1.2)) + 
+  scale_fill_discrete(labels = c("Human", "Mouse")) + 
+  scale_color_discrete(labels = c("Human", "Mouse")) + 
+  labs(x = NULL,
+       fill = NULL, 
+       col = NULL) + 
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(size = 6, face = "bold"),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
+
+fig_radar_2_grob <- grid.force(ggplotGrob(fig_radar_2))
+fig_radar_2_panel_grob <- getGrob(fig_radar_2_grob, "panel.7-5-7-5")
+
+fig_radar_2_annotation_text <- str_c(str_c("Mouse ", str_c(nk_list[["mouse"]], 
+                                                           k_list[["mouse"]], sep = "-")), 
+                                     "and",
+                                     str_c("human ", str_c(nk_list[["human"]], 
+                                                           k_list[["human"]], sep = "-")),
+                                     sep = " ")
+fig_radar_2_annotation_grob <- textGrob(fig_radar_2_annotation_text,
+                                        gp = gpar(fontsize = 10))
+```
+
+```{r}
+fig_radar_title <- "Representation of neuroanatomical areas in cluster pairs"
+fig_radar_title_grob <- textGrob(label = fig_radar_title,
+                                   x = 0, y = 0.5, 
+                                   just = c("left", "center"),
+                                   gp = gpar(fontsize = 11))
+```
+
+# Histogram
+
+Last plot for this figure I think. Where is this plot? It's in cluster_similarity_analysis_v4.qmd. 
+Seems straightforward. 
+
+```{r}
+#Import neuroanatomical similarity distributions
+df_sim_hist <- read_csv("../analyses/anatomical_similarity_histogram.csv", 
+                        show_col_types = FALSE)
+
+#Get cluster pair correlations
+cluster_correlations <- numeric(nrow(df_mouse_clusters))
+for (i in 1:nrow(df_mouse_clusters)) {
+  k_mouse <- df_mouse_clusters[[i, "k"]]
+  k_human <- df_human_clusters[[i, "k"]]
+  cluster_correlations[i] <- mat_sim_nk[k_mouse, k_human]
+}
+```
+
+
+```{r}
+fig_density <- ggplot(df_sim_hist, aes(x = Similarity, 
+                                       y = ..density..,
+                                       fill = Type,
+                                       col = Type)) + 
+  geom_density(alpha = 0.1,
+               bw = 0.05) + 
+  geom_vline(xintercept = cluster_correlations,
+             linetype = "dashed") +
+  scale_x_continuous(breaks = seq(-0.1, 0.9, by = 0.2),
+                     expand = expansion(mult = 0)) + 
+  labs(x = "Correlation",
+       y = "Density",
+       col = NULL,
+       fill = NULL) + 
+  theme_bw() + 
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(6, 'pt'),
+        plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
+
+fig_density
+```
+
+
+```{r}
+fig_density_grob <- grid.force(ggplotGrob(fig_density))
+fig_density_panel_grob <- getGrob(fig_density_grob, "panel.7-5-7-5")
+fig_density_xtitle_grob <- getGrob(fig_density_grob, "xlab-b.9-5-9-5")
+fig_density_xtext_grob <- getGrob(fig_density_grob, "axis-b.8-5-8-5")
+fig_density_ytitle_grob <- textGrob("Density",
+                                    x = 0.8, y = 0.5, 
+                                    rot = 90,
+                                    just = "bottom",
+                                    gp = gpar(fontsize = 11))
+fig_density_ytext_grob <- getGrob(fig_density_grob, "axis-l.7-4-7-4")
+fig_density_legend_grob <- getGrob(fig_density_grob, "guides.3-3-3-3")
+```
+
+```{r}
+fig_density_title <- "Similarity of neuroanatomical regions"
+fig_density_title_grob <- textGrob(label = fig_density_title,
+                                   x = 0, y = 0.5, 
+                                   just = c("left", "center"),
+                                   gp = gpar(fontsize = 11))
+```
+
+
+
+# Diagnostics
+
+```{r}
+cluster_groups <- "../data/human/clustering/human_clusters_groups10_3.0mm.csv"
+cluster_groups <- read_csv(cluster_groups, show_col_types = FALSE)
+cluster_groups <- cluster_groups %>% 
+  select(ID, Group5)
+
+demographics <- "../data/human/registration/DBM_input_demo_passedqc.csv"
+demographics <- read_csv(demographics, show_col_types = FALSE)
+demographics <- demographics %>% 
+  select(Extract_ID, DX) %>% 
+  mutate(ID = str_remove(Extract_ID, ".extracted.mnc"))
+
+cluster_dx <- inner_join(cluster_groups, demographics, by = "ID")
+
+dx_relabel <- tibble(DX = unique(cluster_dx$DX),
+                     DX_new = c("ASD", "OCD", "ADHD", "OCD", "ADHD", "ID", "Anxiety", "Other", "Other"))
+
+cluster_dx <- inner_join(cluster_dx, dx_relabel, by = "DX")
+
+df_combinations <- expand_grid(Group5 = unique(cluster_dx$Group5),
+                               DX_new = unique(cluster_dx$DX_new))
+
+cluster_dx_summary <- cluster_dx %>% 
+  group_by(Group5, DX_new) %>% 
+  summarise(num = n()) %>% 
+  ungroup() %>% 
+  right_join(df_combinations, by = c("Group5", "DX_new")) %>% 
+  mutate(num = ifelse(is.na(num), 0, num))
+```
+
+
+```{r}
+fig_cluster_dx <- ggplot(cluster_dx_summary, 
+                       aes(x = factor(Group5), 
+                           y = num, 
+                           fill = DX_new,
+                           col = DX_new)) + 
+  geom_col(position = "dodge", 
+           width = 0.8,
+           alpha = 0.7) + 
+  labs(x = "Cluster ID",
+       y = "Number of participants",
+       fill = NULL,
+       col = NULL,
+       title = "Diagnostic breakdown of human clusters") + 
+  scale_y_continuous(breaks = seq(0, 100, by = 20)) + 
+  theme_bw() + 
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal") + 
+  guides(color = guide_legend(nrow = 1),
+         fill = guide_legend(nrow = 1)) 
+
+fig_cluster_dx_grob <- grid.force(ggplotGrob(fig_cluster_dx))
+```
+
+
+
+
+# Figure 
+
+
+```{r fig.width = 10, fig.height = 10}
+fig_layout <- rbind(c(NA,  1,  1,  1,  1,  1,  1,  1,  1,  1, NA),
+                    c( 2, NA,  3,  3,  3, NA,  4,  4,  4, NA,  5),
+                    c( 2,  6,  7,  8,  9, 10, 11, 12, 13, 14,  5),
+                    c( 2, NA, NA, 15, NA, NA, 16, NA, 17, NA,  5),
+                    c( 2, NA, NA, 18, NA, NA, NA, NA, NA, NA,  5),
+                    c( 2, 19, 19, 19, 19, 19, 19, 19, 19, 19,  5),
+                    c( 2, NA, 20, 20, 20, NA, 21, 21, 21, NA,  5),
+                    c( 2, 22, 23, 24, 24, 25, 26, NA, 27, NA,  5),
+                    c( 2, NA, NA, 28, 28, NA, 29, NA, 30, NA,  5),
+                    c( 2, NA, NA, 31, 31, NA, 29, NA, 30, NA,  5),
+                    c( 2, NA, NA, 32, 32, NA, 33, 33, 33, NA,  5),
+                    c( 2, 34, 34, 34, 34, 34, 34, 34, 34, 34,  5),
+                    c(NA, 35, 35, 35, 35, 35, 35, 35, 35, 35, NA),
+                    c(NA, 36, 36, 36, 36, 36, 36, 36, 36, 36, NA))
+fig_widths <- c(0.1, 0.3, 0.3, 1.9, 0.8, 0.1, 2.1, 0.1, 2.1, 0.6, 0.1)
+fig_widths_in <- unit(fig_widths, "inch")
+
+fig_heights <- c(0.1, 0.3, 2.5, 0.3, 0.3, 0.1, 0.3, 2.1, 0.2, 0.2, 0.4, 0.1, 2.4, 0.1)
+fig_heights_in <- unit(fig_heights, "inch")
+
+# gTree(children = gList(rectGrob(),
+fig_plots_grob <- arrangeGrob(gTree(children = gList(rectGrob(), zeroGrob())), #1
+                              gTree(children = gList(rectGrob(), zeroGrob())), #2
+                              gTree(children = gList(rectGrob(), fig_heatmap_title_grob)), #3
+                              gTree(children = gList(rectGrob(), fig_ss_title_grob)), #4
+                              gTree(children = gList(rectGrob(), zeroGrob())), #5
+                              gTree(children = gList(rectGrob(),fig_heatmap_rowtitle_grob)), #6
+                              gTree(children = gList(rectGrob(),fig_heatmap_rownames_grob)), #7
+                              fig_heatmap_matrix_grob, #8
+                              gTree(children = gList(rectGrob(), fig_heatmap_legend_grob)), #9
+                              gTree(children = gList(rectGrob(), zeroGrob())), #10
+                              fig_ss_1_base_grob, #11
+                              gTree(children = gList(rectGrob(), zeroGrob())), #12
+                              fig_ss_2_base_grob, #13
+                              gTree(children = gList(rectGrob(), fig_ss_2_legend_grob)), #14
+                              gTree(children = gList(rectGrob(),fig_heatmap_colnames_grob)), #15
+                              gTree(children = gList(rectGrob(),fig_ss_1_labels_grob)), #16
+                              gTree(children = gList(rectGrob(),fig_ss_2_labels_grob)), #17
+                              gTree(children = gList(rectGrob(),fig_heatmap_coltitle_grob)), #18
+                              gTree(children = gList(rectGrob(), zeroGrob())), #19
+                              gTree(children = gList(rectGrob(), fig_density_title_grob)), #20
+                              gTree(children = gList(rectGrob(), fig_radar_title_grob)), #21
+                              gTree(children = gList(rectGrob(),fig_density_ytitle_grob)), #22
+                              gTree(children = gList(rectGrob(),fig_density_ytext_grob)), #23
+                              fig_density_panel_grob, #24
+                              gTree(children = gList(rectGrob(), zeroGrob())), #25
+                              fig_radar_1_panel_grob, #26
+                              fig_radar_2_panel_grob, #27
+                              gTree(children = gList(rectGrob(), fig_density_xtext_grob)), #28
+                              gTree(children = gList(rectGrob(), fig_radar_1_annotation_grob)), #29
+                              gTree(children = gList(rectGrob(), fig_radar_2_annotation_grob)), #30
+                              gTree(children = gList(rectGrob(), fig_density_xtitle_grob)), #31
+                              gTree(children = gList(rectGrob(), fig_density_legend_grob)), #32
+                              gTree(children = gList(rectGrob(), fig_radar_legend_grob)), #33
+                              gTree(children = gList(rectGrob(), zeroGrob())), #34
+                              gTree(children = gList(rectGrob(), fig_cluster_dx_grob)), #35
+                              gTree(children = gList(rectGrob(), zeroGrob())), #36
+                              layout_matrix = fig_layout,
+                              widths = fig_widths_in,
+                              heights = fig_heights_in)
+
+fig_border_grob <- rectGrob(gp = gpar(fill = NA))
+
+fig_grob <- gTree(children = gList(fig_plots_grob,
+                                   fig_border_grob))
+
+fig_width <- 8.5
+fig_height <- 9.5
+
+fig_outfile <- "fig.pdf"
+pdf(file = fig_outfile,
+    width = fig_width,
+    height = fig_height)
+grid.draw(fig_grob)
+dev.off()
+
+grid.newpage()
+grid.draw(fig_grob)
+
+```
+
+```{r fig.width = 10, fig.height = 10}
+fig_layout <- rbind(c(NA,  1,  1,  1,  1,  1,  1,  1,  1,  1, NA),
+                    c( 2, NA,  3,  3,  3, NA,  4,  4,  4, NA,  5),
+                    c( 2,  6,  7,  8,  9, 10, 11, 12, 13, 14,  5),
+                    c( 2, NA, NA, 15, NA, NA, 16, NA, 17, NA,  5),
+                    c( 2, NA, NA, 18, NA, NA, NA, NA, NA, NA,  5),
+                    c( 2, 19, 19, 19, 19, 19, 19, 19, 19, 19,  5),
+                    c( 2, NA, 20, 20, 20, NA, 21, 21, 21, NA,  5),
+                    c( 2, 22, 23, 24, 24, 25, 26, NA, 27, NA,  5),
+                    c( 2, NA, NA, 28, 28, NA, 29, NA, 30, NA,  5),
+                    c( 2, NA, NA, 31, 31, NA, 29, NA, 30, NA,  5),
+                    c( 2, NA, NA, 32, 32, NA, 33, 33, 33, NA,  5),
+                    c( 2, 34, 34, 34, 34, 34, 34, 34, 34, 34,  5),
+                    c(NA, 35, 35, 35, 35, 35, 35, 35, 35, 35, NA),
+                    c(NA, 36, 36, 36, 36, 36, 36, 36, 36, 36, NA))
+fig_widths <- c(0.1, 0.3, 0.3, 1.9, 0.8, 0.1, 2.1, 0.1, 2.1, 0.6, 0.1)
+fig_widths_in <- unit(fig_widths, "inch")
+
+fig_heights <- c(0.1, 0.3, 2.5, 0.3, 0.3, 0.1, 0.3, 2.1, 0.2, 0.2, 0.4, 0.1, 2.4, 0.1)
+fig_heights_in <- unit(fig_heights, "inch")
+
+# gTree(children = gList(rectGrob(),
+fig_plots_grob <- arrangeGrob(zeroGrob(), #1
+                              zeroGrob(), #2
+                              fig_heatmap_title_grob, #3
+                              fig_ss_title_grob, #4
+                              zeroGrob(), #5
+                              fig_heatmap_rowtitle_grob, #6
+                              fig_heatmap_rownames_grob, #7
+                              fig_heatmap_matrix_grob, #8
+                              fig_heatmap_legend_grob, #9
+                              zeroGrob(), #10
+                              fig_ss_1_base_grob, #11
+                              zeroGrob(), #12
+                              fig_ss_2_base_grob, #13
+                              fig_ss_2_legend_grob, #14
+                              fig_heatmap_colnames_grob, #15
+                              fig_ss_1_labels_grob, #16
+                              fig_ss_2_labels_grob, #17
+                              fig_heatmap_coltitle_grob, #18
+                              zeroGrob(), #19
+                              fig_density_title_grob, #20
+                              fig_radar_title_grob, #21
+                              fig_density_ytitle_grob, #22
+                              fig_density_ytext_grob, #23
+                              fig_density_panel_grob, #24
+                              zeroGrob(), #25
+                              fig_radar_1_panel_grob, #26
+                              fig_radar_2_panel_grob, #27
+                              fig_density_xtext_grob, #28
+                              fig_radar_1_annotation_grob, #29
+                              fig_radar_2_annotation_grob, #30
+                              fig_density_xtitle_grob, #31
+                              fig_density_legend_grob, #32
+                              fig_radar_legend_grob, #33
+                              zeroGrob(), #34
+                              fig_cluster_dx_grob, #35
+                              zeroGrob(), #36
+                              layout_matrix = fig_layout,
+                              widths = fig_widths_in,
+                              heights = fig_heights_in)
+
+fig_border_grob <- rectGrob(gp = gpar(fill = NA))
+
+fig_grob <- gTree(children = gList(fig_plots_grob,
+                                   fig_border_grob))
+
+fig_width <- 8.5
+fig_height <- 9.5
+
+fig_outfile <- "fig.pdf"
+pdf(file = fig_outfile,
+    width = fig_width,
+    height = fig_height)
+grid.draw(fig_grob)
+dev.off()
+
+grid.newpage()
+grid.draw(fig_grob)
+
+```

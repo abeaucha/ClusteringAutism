@@ -1,0 +1,1375 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: '2023-01-09'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(RMINC)
+library(MRIcrotome)
+library(grid)
+library(gridExtra)
+```
+
+```{r}
+outdir <- "figure1"
+if (!dir.exists(outdir)) {
+  dir.create(outdir)
+}
+```
+
+
+# Bottom panel
+
+## Participant anatomy
+
+```{r}
+demofile <- "../data/human/registration/DBM_input_demo_passedqc.csv"
+demographics <- as_tibble(data.table::fread(demofile, header = TRUE))
+
+demographics <- demographics %>% 
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner))
+```
+
+```{r}
+#Extract control demographics 
+controls <- demographics %>% 
+  filter(DX == "Control")
+
+#Extract participant demographics
+participants <- demographics %>% 
+  filter(DX != "Control")
+
+participants <- participants[1:3,]
+
+participant_ids <- participants %>% 
+  pull(Extract_ID) %>% 
+  str_subset("sub-[0-9]+") %>% 
+  str_remove(".extracted.mnc")
+```
+
+```{r}
+# imgdir <- "../data/human/images/"
+# imgfiles <- list.files(imgdir, full.names = TRUE)
+# participant_grobs <- vector(mode = "list", length = length(participant_ids))
+# slices <- c(78, 107, 95)
+# low <- c(0.2, 0.2, 0.12)
+# high <- c(0.8, 0.8, 0.8)
+# for (i in 1:length(participant_grobs)) {
+#   imgfile <- str_subset(imgfiles, participant_ids[i])
+#   img <- mincGetVolume(imgfile)
+#   img <- img/max(img)
+#   img <- mincArray(img)
+#   participant_grobs[[i]] <- sliceSeries(nrow = 1, ncol = 1,
+#                                         dimension = 3, slice = slices[i]) %>% 
+#     anatomy(imgs[[i]], low = low[i], high = high[i]) %>% 
+#     grobify()
+# }
+```
+
+```{r}
+plt_width <- 5
+plt_height <- 5
+imgdir <- "../data/human/images/"
+imgfiles <- list.files(imgdir, full.names = TRUE)
+slices <- c(78, 107, 95)
+low <- c(0.2, 0.2, 0.12)
+high <- c(0.8, 0.8, 0.8)
+for (i in 1:length(participant_ids)) {
+  imgfile <- str_subset(imgfiles, participant_ids[i])
+  img <- mincGetVolume(imgfile)
+  img <- img/max(img)
+  img <- mincArray(img)
+  outfile <- str_c("participant_anat_", i, ".pdf")
+  outfile <- file.path(outdir, outfile)
+  pdf(file = outfile,
+      width = plt_width,
+      height = plt_height)
+  sliceSeries(nrow = 1, ncol = 1,dimension = 3, slice = slices[i]) %>% 
+    anatomy(img, low = low[i], high = high[i]) %>% 
+    draw()
+  dev.off()
+}
+```
+
+
+## Consensus average
+
+```{r}
+anatfile <- "../data/human/registration/reference_files/model.mnc"
+anat <- mincGetVolume(anatfile)
+anat_vol <- mincArray(anat)
+
+outfile <- "consensus_avg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5, height = 5) 
+sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = 206) %>% 
+  anatomy(anat_vol, low = 3, high = 7) %>% 
+  draw()
+dev.off()
+```
+
+
+## Jacobians
+
+```{r}
+maskfile <- "../data/human/registration/reference_files/mask.mnc"
+mask <- mincGetVolume(maskfile)
+```
+
+```{r}
+jacobians <- c("absolute", "relative")
+dir_jacobians <- str_c("../data/human/registration/jacobians/", jacobians, "/smooth_minc/")
+for (i in 1:length(jacobians)) {
+  imgfiles <- list.files(dir_jacobians[i], full.names = TRUE)
+  imgfile <- str_subset(imgfiles, participant_ids[2])
+  img <- mincGetVolume(imgfile)
+  img[mask == 0] <- 0
+  
+  outfile <- str_c("participant_", jacobians[i], ".pdf")
+  outfile <- file.path(outdir, outfile)
+  pdf(file = outfile,
+      width = 5, height = 5)
+  sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = 206) %>% 
+    anatomy(anat_vol, low = 3, high = 7) %>% 
+    overlay(mincArray(img), low = 0.1, high = 1, symmetric = TRUE) %>% 
+    draw()
+  dev.off()
+}
+```
+
+
+## Propensity matching
+
+```{r}
+participant <- participants[2,]
+participant_age <- pull(participant, 'Age')
+participant_sex <- pull(participant, 'Sex')
+participant_site <- pull(participant, 'Site')
+participant_scanner <- pull(participant, 'Scanner')
+
+controls_tmp <- controls %>% 
+  filter(Sex == participant_sex,
+         Site == participant_site,
+         Scanner == participant_scanner)
+
+ncontrols_test <- nrow(controls_tmp)
+
+threshold <- 10
+if (ncontrols_test < threshold) {
+  
+  controls_tmp <- controls %>% 
+    filter(Sex == participant_sex,
+           Site == participant_site)
+  
+  ncontrols_test <- nrow(controls_tmp)
+  
+  if (ncontrols_test < threshold) {
+    
+    controls_tmp <- controls %>% 
+      filter(Sex == participant_sex)
+    
+  }
+}
+
+controls_match <- controls_tmp
+
+set.seed(123)
+ncontrols <- 4
+controls_match <- controls_match %>%
+  mutate(AgeDiff = abs(Age - participant_age)) %>% 
+  top_n(n = -1*ncontrols, wt = AgeDiff) %>% 
+  sample_n(size = ncontrols, replace = FALSE)
+
+control_ids <- controls_match %>% 
+  pull(Extract_ID) %>% 
+  str_remove(".extracted.mnc")
+
+imgfiles <- list.files(dir_jacobians[[2]], full.names = TRUE)
+for (i in 1:length(control_ids)) {
+  imgfile <- str_subset(imgfiles, control_ids[i])
+  img <- mincGetVolume(imgfile)
+  img[mask == 0] <- 0
+  outfile <- str_c("control_relative_", i, ".pdf")
+  outfile <- file.path(outdir, outfile)
+  pdf(file = outfile,
+      width = 5, height = 5)
+  sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = 206) %>% 
+    anatomy(anat_vol, low = 3, high = 7) %>% 
+    overlay(mincArray(img), low = 0.1, high = 1, symmetric = TRUE) %>% 
+    draw()
+  dev.off()
+}
+```
+
+## Effect sizes
+
+```{r}
+dir_es <- str_c("../data/human/effect_sizes/", jacobians, "/resolution_0.5/")
+effectsizes <- vector(mode = "list", length = length(dir_es))
+for (i in 1:length(effectsizes)) {
+  imgfiles <- list.files(dir_es[i], full.names = TRUE)
+  imgfile <- str_subset(imgfiles, participant_ids[2])
+  img <- mincGetVolume(imgfile)
+  img[mask == 0] <- 0
+  effectsizes[[i]] <- img
+}
+```
+
+```{r}
+outfile <- "effect_sizes.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 3, 
+    height = 5)
+sliceSeries(nrow = 5, ncol = 1, begin = 100, end = 380) %>% 
+  anatomy(anat_vol, low = 3, high = 7) %>% 
+  overlay(mincArray(effectsizes[[1]]), low = 0.1, high = 2, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(effectsizes[[2]]), low = 0.1, high = 2, symmetric = TRUE) %>% 
+  legend("Effect size") %>% 
+  draw()
+dev.off()
+```
+
+
+## Clustering
+
+```{r}
+nparticipants <- 5
+nvoxels <- 1000
+list_df <- vector(mode = "list", length = length(dir_es))
+for (i in 1:length(list_df)) {
+  files_es <- list.files(dir_es[i], full.names = TRUE)
+  mat_voxels <- matrix(data = 0, nrow = nvoxels, ncol = nparticipants)
+  for (j in 1:nparticipants) {
+    img <- mincGetVolume(files_es[j])
+    img <- img[mask == 1]
+    mat_voxels[,j] <- img[1:nvoxels]
+  }
+  colnames(mat_voxels) <- str_c("p", 1:nparticipants)
+  rownames(mat_voxels) <- str_c("v", 1:nvoxels)
+  
+  df_voxels <- as_tibble(mat_voxels, rownames = "voxel") %>% 
+    pivot_longer(cols = -voxel, 
+                 names_to = "participant", 
+                 values_to = "effect")
+  
+  list_df[[i]] <- df_voxels
+}
+```
+
+```{r}
+p_absolute <- ggplot(list_df[[1]], aes(x = voxel,
+                                       y = fct_rev(participant),
+                                       fill = effect)) + 
+  geom_tile(show.legend = FALSE) +
+  scale_fill_distiller(type = "div",
+                       palette = "RdBu", 
+                       limit = c(-1, 1)*max(list_df[[1]][["effect"]])) +
+  theme_void() + 
+  theme(plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
+
+outfile <- "matrix_es_absolute.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 5)
+print(p_absolute)
+dev.off()
+```
+
+```{r}
+p_relative <- ggplot(list_df[[2]], aes(x = voxel,
+                                       y = fct_rev(participant),
+                                       fill = effect)) + 
+  geom_tile(show.legend = FALSE) +
+  scale_fill_distiller(type = "div",
+                       palette = "RdBu", 
+                       limit = c(-1, 1)*max(list_df[[2]][["effect"]])) +
+  theme_void() + 
+  theme(plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
+
+outfile <- "matrix_es_relative.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 5)
+print(p_relative)
+dev.off()
+```
+
+```{r}
+wfile <- "../data/human/clustering/wmatrix.RData"
+load(wfile)
+
+# SNFtool::estimateNumberOfClustersGivenGraph(W = W, NUMC = 2:10)
+# SNFtool::estimateNumberOfClustersGivenGraph(W = W, NUMC = 4:10)
+
+threshold <- 0.01
+W[W > threshold] <- threshold
+
+W_subset <- W[1:5,1:125]
+
+df_affinity <- W_subset %>% 
+  as_tibble(rownames = "participant1") %>% 
+  pivot_longer(cols = -participant1, 
+               names_to = "participant2",
+               values_to = "affinity") %>% 
+  mutate(participant1 = factor(participant1, levels = rownames(W_subset)),
+         participant2 = factor(participant2, levels = colnames(W_subset)))
+
+p_affinity <- ggplot(df_affinity, aes(x = participant2, y = fct_rev(participant1), fill = affinity)) + 
+  geom_tile(show.legend = FALSE) +
+  scale_fill_gradient(low = "white", high = "red") + 
+  theme_void()
+
+outfile <- "matrix_snf_affinity.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 2)
+print(p_affinity)
+dev.off()
+```
+
+
+```{r}
+W_subset_5x5 <- W[1:5,1:5]
+
+df_affinity_5x5 <- W_subset_5x5 %>% 
+  as_tibble(rownames = "participant1") %>% 
+  pivot_longer(cols = -participant1, 
+               names_to = "participant2",
+               values_to = "affinity") %>% 
+  mutate(participant1 = factor(participant1, levels = rownames(W_subset_5x5)),
+         participant2 = factor(participant2, levels = colnames(W_subset_5x5)))
+
+p_affinity_5x5 <- ggplot(df_affinity_5x5, aes(x = participant2, y = fct_rev(participant1), fill = affinity)) + 
+  geom_tile(col = "grey30",
+            show.legend = FALSE) +
+  scale_fill_gradient(low = "white", high = "red") + 
+  theme_void()
+
+outfile <- "matrix_snf_affinity_5x5.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 10)
+print(p_affinity_5x5)
+dev.off()
+```
+
+
+```{r}
+W_subset_5x5
+```
+
+
+```{r}
+maskfile <- "../data/human/registration/reference_files/mask.mnc"
+mask <- mincGetVolume(maskfile)
+
+participant_ind <- 1:5
+participant_ids <- colnames(W_subset_5x5)[participant_ind]
+dir_es <- "../data/human/effect_sizes/relative/resolution_0.5/"
+for (i in 1:length(participant_ids)) {
+  imgfiles <- list.files(dir_es, full.names = TRUE)
+  imgfile <- str_subset(imgfiles, participant_ids[i])
+  print(imgfile)
+  img <- mincGetVolume(imgfile)
+  img[mask == 0] <- 0
+  
+  outfile <- str_c("affinity_participant_", participant_ind[i], ".pdf")
+  outfile <- file.path(outdir, outfile)
+  pdf(file = outfile,
+      width = 5, height = 5)
+  sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = 206) %>% 
+    anatomy(anat_vol, low = 3, high = 7) %>% 
+    overlay(mincArray(img), low = 0.5, high = 5, symmetric = TRUE) %>% 
+    draw()
+  dev.off()
+}
+```
+
+```{r}
+list_img <- vector(mode = "list", length = length(participant_ids))
+imgfiles <- list.files(dir_es, full.names = TRUE)
+for (i in 1:length(participant_ids)) {
+  imgfile <- str_subset(imgfiles, participant_ids[i])
+  img <- mincGetVolume(imgfile)
+  img[mask == 0] <- 0
+  list_img[[i]] <- img
+}
+```
+
+
+```{r}
+outfile <- str_c("affinity_participants.pdf")
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 2, height = 1.32)
+sliceSeries(nrow = 4, ncol = 1, dimension = 2, begin = 100, end = 350) %>% 
+  anatomy(anat_vol, low = 3, high = 7) %>% 
+  overlay(mincArray(list_img[[1]]), low = 0.5, high = 5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(list_img[[3]]), low = 0.5, high = 5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(list_img[[4]]), low = 0.5, high = 5, symmetric = TRUE) %>% 
+  draw()
+dev.off()
+```
+
+```{r}
+anat_file_1mm <- "../data/human/registration/reference_files/model_1.0mm.mnc"
+anat_1mm <- mincGetVolume(anat_file_1mm)
+anat_vol_1mm <- mincArray(anat_1mm)
+
+mask_file_1mm <- "../data/human/registration/reference_files/mask_1.0mm.mnc"
+mask_1mm <- mincGetVolume(mask_file_1mm)
+mask_vol_1mm <- mincArray(mask_1mm)
+
+nk <- 5
+cluster_dir <- "../data/human/clustering/cluster_maps/relative/resolution_1.0/mean/"
+cluster_files <- list.files(cluster_dir, full.names = TRUE)
+cluster_files_nk <- cluster_files %>% 
+  str_subset(str_c("Clusternum_", nk)) %>% 
+  sort()
+
+cluster_maps <- vector(mode = "list", length = length(cluster_files_nk))
+for (k in 1:nk) {
+  imgfile <- str_subset(cluster_files_nk, str_c("Group_", k))
+  img <- mincGetVolume(imgfile)
+  img[mask_1mm == 0] <- 0
+  cluster_maps[[k]] <- img
+}
+
+outfile <- str_c("human_cluster_maps.pdf")
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 4, height = 4*(3.57/4.29))
+sliceSeries(nrow = 5, ncol = 1, begin = 50, end = 180) %>% 
+  anatomy(anat_vol_1mm, low = 3, high = 7) %>% 
+  overlay(mincArray(cluster_maps[[1]]), low = 0.3, high = 0.7, symmetric = TRUE) %>% 
+  addtitle("k = 1") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(cluster_maps[[2]]), low = 0.3, high = 0.7, symmetric = TRUE) %>% 
+  addtitle("k = 2") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(cluster_maps[[3]]), low = 0.3, high = 0.7, symmetric = TRUE) %>% 
+  addtitle("k = 3") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(cluster_maps[[4]]), low = 0.3, high = 0.7, symmetric = TRUE) %>% 
+  addtitle("k = 4") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(mincArray(cluster_maps[[5]]), low = 0.3, high = 0.7, symmetric = TRUE) %>% 
+  addtitle("k = 5") %>% 
+  legend("Effect size") %>% 
+  draw()
+dev.off()
+
+```
+
+
+```{r}
+for(i in 1:nk) {
+  print(min(abs(cluster_maps[[i]])))
+}
+```
+
+
+
+# Middle panel
+
+## Mouse side
+
+```{r}
+mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
+mouse_anat <- mincGetVolume(mouse_anat_file)
+```
+
+```{r}
+nk_mouse <- 5
+k_mouse <- 2
+
+mouse_cluster_dir <- "../data/mouse/clustering/cluster_maps/relative/resolution_200/mean/"
+mouse_cluster_files <- list.files(mouse_cluster_dir, full.names = TRUE)
+
+mouse_cluster_file <- mouse_cluster_files %>% 
+  str_subset(str_c("Group", k_mouse, "Clusternum", nk_mouse, sep = "_"))
+
+mouse_cluster_map <- mincGetVolume(mouse_cluster_file)
+
+mouse_cluster_mask_dir <- "../data/mouse/clustering/cluster_masks/relative/resolution_200/mean/threshold_topn/symmetric/threshold_0.2/"
+mouse_cluster_mask_files <- list.files(mouse_cluster_mask_dir, full.names = TRUE)
+
+mouse_cluster_mask_file <- mouse_cluster_mask_files %>% 
+  str_subset(str_c("Group", k_mouse, "Clusternum", nk_mouse, sep = "_"))
+
+mouse_cluster_mask <- mincGetVolume(mouse_cluster_mask_file)
+mouse_cluster_mask <- floor(mouse_cluster_mask)
+
+mouse_cluster_mask_pos <- mouse_cluster_mask
+mouse_cluster_mask_pos[mouse_cluster_mask_pos == -1] <- 0
+
+mouse_cluster_mask_neg <- mouse_cluster_mask
+mouse_cluster_mask_neg[mouse_cluster_mask_neg == 1] <- 0
+mouse_cluster_mask_neg <- abs(mouse_cluster_mask_neg)
+```
+
+
+```{r}
+mouse_slice <- 21
+mouse_low <- min(abs(mouse_cluster_map[abs(mouse_cluster_mask) == 1]))
+
+p_mouse_cluster_map <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(mouse_cluster_map), low = mouse_low, high = 1.0, symmetric = TRUE)
+
+outfile <- "mouse_cluster_map.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_cluster_map)
+dev.off()
+```
+
+```{r}
+p_mouse_cluster_mask_pos <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(mouse_cluster_mask_pos), low = 0, high = 1, col = "red")
+
+outfile <- "mouse_cluster_mask_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_cluster_mask_pos)
+dev.off()
+```
+
+```{r}
+p_mouse_cluster_mask_neg <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(mouse_cluster_mask_neg), low = 0, high = 1, col = "blue")
+
+outfile <- "mouse_cluster_mask_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_cluster_mask_neg)
+dev.off()
+```
+
+```{r}
+latent_space_file <- "../data/mouse/expression/latent_space/MLP_labels67_layers3_units200_L20.0_mousetransform_100.csv"
+
+df_mouse_latent_space <- as_tibble(data.table::fread(latent_space_file, header = TRUE))
+
+mouse_mask_file <- "../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
+mouse_mask <- mincGetVolume(mouse_mask_file)
+```
+
+```{r}
+latent_space_vol <- numeric(length(mouse_anat))
+latent_space_vol[mouse_mask == 1] <- df_mouse_latent_space[[1]] #1 and 4 are good
+latent_space_vol[mouse_mask != 1] <- NA
+attributes(latent_space_vol) <- attributes(mouse_mask)
+
+p_mouse_latent_space <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(latent_space_vol), low = -0.1, high = 12) 
+
+outfile <- "mouse_latent_space_hu1.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_latent_space)
+dev.off()
+```
+
+```{r}
+latent_space_vol_pos <- latent_space_vol
+latent_space_vol_pos[mouse_cluster_mask_pos != 1] <- NA
+
+p_mouse_latent_space_pos <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(latent_space_vol_pos), low = -0.1, high = 12)
+
+outfile <- "mouse_latent_space_hu1_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_latent_space_pos)
+dev.off()
+```
+
+```{r}
+latent_space_vol_neg<- latent_space_vol
+latent_space_vol_neg[mouse_cluster_mask_neg != 1] <- NA
+
+p_mouse_latent_space_neg <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(latent_space_vol_neg), low = -0.1, high = 12)
+
+outfile <- "mouse_latent_space_hu1_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_latent_space_neg)
+dev.off()
+```
+
+```{r}
+latent_space_vol <- numeric(length(mouse_anat))
+latent_space_vol[mouse_mask == 1] <- df_mouse_latent_space[[4]] #1 and 4 are good
+latent_space_vol[mouse_mask != 1] <- NA
+attributes(latent_space_vol) <- attributes(mouse_mask)
+
+p_mouse_latent_space <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(latent_space_vol), low = -0.1, high = 12) 
+
+outfile <- "mouse_latent_space_hu4.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_latent_space)
+dev.off()
+```
+
+```{r}
+latent_space_vol_pos <- latent_space_vol
+latent_space_vol_pos[mouse_cluster_mask_pos != 1] <- NA
+
+p_mouse_latent_space_pos <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(latent_space_vol_pos), low = -0.1, high = 12)
+
+outfile <- "mouse_latent_space_hu4_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_latent_space_pos)
+dev.off()
+```
+
+```{r}
+latent_space_vol_neg<- latent_space_vol
+latent_space_vol_neg[mouse_cluster_mask_neg != 1] <- NA
+
+p_mouse_latent_space_neg <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = mouse_slice) %>% 
+  anatomy(mincArray(mouse_anat), low = 700, high = 1400) %>% 
+  overlay(mincArray(latent_space_vol_neg), low = -0.1, high = 12)
+
+outfile <- "mouse_latent_space_hu4_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_mouse_latent_space_neg)
+dev.off()
+```
+
+```{r}
+mouse_cluster_signature_pos <- "../data/mouse/cluster_signatures/latent_space_100/mouse_cluster_signatures_rel_mean_threshold_topn_0.2_positive_latentspace100.csv"
+mouse_cluster_signature_pos <- as_tibble(data.table::fread(mouse_cluster_signature_pos, header = TRUE))
+
+mat_mouse_cluster_signature_pos <- mouse_cluster_signature_pos %>% 
+  filter(expr_file == basename(latent_space_file),
+         cluster_file == basename(mouse_cluster_mask_file)) %>% 
+  select(-cluster_file, 
+         -expr_file,
+         -mask_sign) %>% 
+  as.matrix() %>% 
+  t() 
+colnames(mat_mouse_cluster_signature_pos) <- "expression"
+
+df_mouse_cluster_signature_pos <- mat_mouse_cluster_signature_pos %>% 
+  as_tibble(rownames = "hidden_unit") %>% 
+  mutate(hidden_unit = as.numeric(hidden_unit),
+         x = "tmp")
+
+df_mouse_cluster_signature_pos <- df_mouse_cluster_signature_pos[1:10,] 
+
+p_mouse_signature_pos <- ggplot(df_mouse_cluster_signature_pos, 
+                                aes(x = x, y = hidden_unit, fill = expression)) + 
+  geom_tile(show.legend = FALSE) + 
+  scale_y_reverse(expand = expansion()) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_fill_gradient(low = 0, high = "red") + 
+  theme_void()
+
+outfile <- "mouse_cluster_signature_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 1,
+    height = 5)
+print(p_mouse_signature_pos)
+dev.off()
+```
+
+
+```{r}
+mouse_cluster_signature_neg <- "../data/mouse/cluster_signatures/latent_space_100/mouse_cluster_signatures_rel_mean_threshold_topn_0.2_negative_latentspace100.csv"
+mouse_cluster_signature_neg <- as_tibble(data.table::fread(mouse_cluster_signature_neg, header = TRUE))
+
+mat_mouse_cluster_signature_neg <- mouse_cluster_signature_neg %>% 
+  filter(expr_file == basename(latent_space_file),
+         cluster_file == basename(mouse_cluster_mask_file)) %>% 
+  select(-cluster_file, 
+         -expr_file,
+         -mask_sign) %>% 
+  as.matrix() %>% 
+  t() 
+
+colnames(mat_mouse_cluster_signature_neg) <- "expression"
+
+df_mouse_cluster_signature_neg <- mat_mouse_cluster_signature_neg %>% 
+  as_tibble(rownames = "hidden_unit") %>% 
+  mutate(hidden_unit = as.numeric(hidden_unit),
+         x = "tmp")
+
+df_mouse_cluster_signature_neg <- df_mouse_cluster_signature_neg[1:10,] 
+
+p_mouse_signature_neg <- ggplot(df_mouse_cluster_signature_neg, 
+                                aes(x = x, y = hidden_unit, fill = expression)) + 
+  geom_tile(show.legend = FALSE) + 
+  scale_y_reverse(expand = expansion()) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_fill_gradient(low = 0, high = "red") + 
+  theme_void()
+
+outfile <- "mouse_cluster_signature_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 1,
+    height = 5)
+print(p_mouse_signature_neg)
+dev.off()
+```
+
+## Human side
+
+```{r}
+human_anat_file <- "../data/human/registration/reference_files/model_1.0mm.mnc"
+human_anat <- mincGetVolume(human_anat_file)
+
+human_mask_file <- "../data/human/registration/reference_files/mask_1.0mm.mnc"
+human_mask <- mincGetVolume(human_mask_file)
+```
+
+```{r}
+nk_human <- 5
+k_human <- 2
+
+human_cluster_dir <- "../data/human/clustering/cluster_maps/relative/resolution_1.0/mean/"
+human_cluster_files <- list.files(human_cluster_dir, full.names = TRUE)
+
+human_cluster_file <- human_cluster_files %>% 
+  str_subset(str_c("Group", k_human, "Clusternum", nk_human, sep = "_"))
+
+human_cluster_map <- mincGetVolume(human_cluster_file)
+
+human_cluster_mask_dir <- "../data/human/clustering/cluster_masks/relative/resolution_1.0/mean/threshold_topn/symmetric/threshold_0.2/"
+human_cluster_mask_files <- list.files(human_cluster_mask_dir, full.names = TRUE)
+
+human_cluster_mask_file <- human_cluster_mask_files %>% 
+  str_subset(str_c("Group", k_human, "Clusternum", nk_human, sep = "_"))
+
+human_cluster_mask <- mincGetVolume(human_cluster_mask_file)
+human_cluster_mask <- floor(human_cluster_mask)
+
+human_cluster_mask_pos <- human_cluster_mask
+human_cluster_mask_pos[human_cluster_mask_pos == -1] <- 0
+
+human_cluster_mask_neg <- human_cluster_mask
+human_cluster_mask_neg[human_cluster_mask_neg == 1] <- 0
+human_cluster_mask_neg <- abs(human_cluster_mask_neg)
+```
+
+```{r}
+human_slice <- 100
+human_low <- min(abs(human_cluster_map[abs(human_cluster_mask) == 1]))
+
+p_human_cluster_map <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(mincArray(human_cluster_map), low = human_low, high = 1.0, symmetric = TRUE)
+
+outfile <- "human_cluster_map.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_cluster_map)
+dev.off()
+```
+
+```{r}
+p_human_cluster_mask_pos <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(mincArray(human_cluster_mask_pos), low = 0, high = 1, col = "red")
+
+outfile <- "human_cluster_mask_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_cluster_mask_pos)
+dev.off()
+```
+
+```{r}
+p_human_cluster_mask_neg <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(mincArray(human_cluster_mask_neg), low = 0, high = 1, col = "blue")
+
+outfile <- "human_cluster_mask_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_cluster_mask_neg)
+dev.off()
+```
+
+```{r}
+human_latent_space_file <- "../data/human/expression/latent_space/MLP_labels67_layers3_units200_L20.0_humantransform_100.csv"
+df_human_latent_space <- as_tibble(data.table::fread(human_latent_space_file, header = TRUE))
+
+human_microarray_labels_file <- "../data/human/expression/AHBA_microarray_labels_studyspace_1.0mm.mnc"
+human_microarray_labels <- mincGetVolume(human_microarray_labels_file)
+
+human_microarray_defs_file <- "../data/human/expression/AHBA_microarray_coordinates_mni_defs.csv"
+human_microarray_defs <- read_csv(human_microarray_defs_file)
+```
+
+```{r}
+human_latent_space_vol_hu1 <- numeric(length(human_anat))
+hu <- 1
+
+for (i in 1:nrow(human_microarray_defs)) {
+  label <- human_microarray_defs[[i, "label"]]
+  ind_label <- which(human_microarray_labels == label)
+  human_latent_space_vol_hu1[ind_label] <- df_human_latent_space[[i, hu]]
+}
+
+human_latent_space_vol_hu1[human_mask != 1] <- NA
+attributes(human_latent_space_vol_hu1) <- attributes(human_mask)
+```
+
+```{r}
+human_latent_space_vol_hu1_interpolated <- mincArray(human_latent_space_vol_hu1)
+slice_tmp <- human_latent_space_vol_hu1_interpolated[,,human_slice]
+slice_tmp[is.na(slice_tmp)] <- 0
+coords <- which(slice_tmp != 0, arr.ind = TRUE)
+
+nneighbours <- 3
+for (p in 1:nrow(coords)) {
+  x <- coords[[p,1]]
+  y <- coords[[p,2]]
+  val <- slice_tmp[x,y]
+  for (i in -nneighbours:nneighbours) {
+    for (j in -nneighbours:nneighbours) {
+      slice_tmp[x+i, y+j] <- val
+    }
+  }
+}
+
+human_latent_space_vol_hu1_interpolated[,,human_slice] <- slice_tmp
+```
+
+```{r}
+p_human_latent_space_hu1 <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(human_latent_space_vol_hu1_interpolated, low = 0, high = 19)
+
+outfile <- "human_latent_space_hu1.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_latent_space_hu1)
+dev.off()
+```
+
+
+```{r}
+human_latent_space_vol_hu1_pos <- human_latent_space_vol_hu1
+human_latent_space_vol_hu1_pos[human_cluster_mask_pos == 0] <- 0
+human_latent_space_vol_hu1_pos <- mincArray(human_latent_space_vol_hu1_pos) 
+
+slice_tmp <- human_latent_space_vol_hu1_pos[,,human_slice]
+slice_tmp[is.na(slice_tmp)] <- 0
+coords <- which(slice_tmp != 0, arr.ind = TRUE)
+
+nneighbours <- 3
+for (p in 1:nrow(coords)) {
+  x <- coords[[p,1]]
+  y <- coords[[p,2]]
+  val <- slice_tmp[x,y]
+  for (i in -nneighbours:nneighbours) {
+    for (j in -nneighbours:nneighbours) {
+      slice_tmp[x+i, y+j] <- val
+    }
+  }
+}
+
+human_latent_space_vol_hu1_pos[,,human_slice] <- slice_tmp
+
+p_human_latent_space_hu1_pos <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(human_latent_space_vol_hu1_pos, low = 0, high = 19)
+
+outfile <- "human_latent_space_hu1_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_latent_space_hu1_pos)
+dev.off()
+```
+
+
+```{r}
+human_latent_space_vol_hu1_neg <- human_latent_space_vol_hu1
+human_latent_space_vol_hu1_neg[human_cluster_mask_neg == 0] <- 0
+human_latent_space_vol_hu1_neg <- mincArray(human_latent_space_vol_hu1_neg) 
+
+slice_tmp <- human_latent_space_vol_hu1_neg[,,human_slice]
+slice_tmp[is.na(slice_tmp)] <- 0
+coords <- which(slice_tmp != 0, arr.ind = TRUE)
+
+nneighbours <- 3
+for (p in 1:nrow(coords)) {
+  x <- coords[[p,1]]
+  y <- coords[[p,2]]
+  val <- slice_tmp[x,y]
+  for (i in -nneighbours:nneighbours) {
+    for (j in -nneighbours:nneighbours) {
+      slice_tmp[x+i, y+j] <- val
+    }
+  }
+}
+
+human_latent_space_vol_hu1_neg[,,human_slice] <- slice_tmp
+
+p_human_latent_space_hu1_neg <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(human_latent_space_vol_hu1_neg, low = 0, high = 19)
+
+outfile <- "human_latent_space_hu1_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_latent_space_hu1_neg)
+dev.off()
+```
+
+```{r}
+human_latent_space_vol_hu4 <- numeric(length(human_anat))
+hu <- 4
+
+for (i in 1:nrow(human_microarray_defs)) {
+  label <- human_microarray_defs[[i, "label"]]
+  ind_label <- which(human_microarray_labels == label)
+  human_latent_space_vol_hu4[ind_label] <- df_human_latent_space[[i, hu]]
+}
+
+human_latent_space_vol_hu4[human_mask != 1] <- NA
+attributes(human_latent_space_vol_hu4) <- attributes(human_mask)
+```
+
+```{r}
+human_latent_space_vol_hu4_interpolated <- mincArray(human_latent_space_vol_hu4)
+slice_tmp <- human_latent_space_vol_hu4_interpolated[,,human_slice]
+slice_tmp[is.na(slice_tmp)] <- 0
+coords <- which(slice_tmp != 0, arr.ind = TRUE)
+
+nneighbours <- 3
+for (p in 1:nrow(coords)) {
+  x <- coords[[p,1]]
+  y <- coords[[p,2]]
+  val <- slice_tmp[x,y]
+  for (i in -nneighbours:nneighbours) {
+    for (j in -nneighbours:nneighbours) {
+      slice_tmp[x+i, y+j] <- val
+    }
+  }
+}
+
+human_latent_space_vol_hu4_interpolated[,,human_slice] <- slice_tmp
+```
+
+```{r}
+p_human_latent_space_hu4 <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(human_latent_space_vol_hu4_interpolated, low = 0, high = 19)
+
+outfile <- "human_latent_space_hu4.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_latent_space_hu4)
+dev.off()
+```
+
+
+```{r}
+human_latent_space_vol_hu4_pos <- human_latent_space_vol_hu4
+human_latent_space_vol_hu4_pos[human_cluster_mask_pos == 0] <- 0
+human_latent_space_vol_hu4_pos <- mincArray(human_latent_space_vol_hu4_pos) 
+
+slice_tmp <- human_latent_space_vol_hu4_pos[,,human_slice]
+slice_tmp[is.na(slice_tmp)] <- 0
+coords <- which(slice_tmp != 0, arr.ind = TRUE)
+
+nneighbours <- 3
+for (p in 1:nrow(coords)) {
+  x <- coords[[p,1]]
+  y <- coords[[p,2]]
+  val <- slice_tmp[x,y]
+  for (i in -nneighbours:nneighbours) {
+    for (j in -nneighbours:nneighbours) {
+      slice_tmp[x+i, y+j] <- val
+    }
+  }
+}
+
+human_latent_space_vol_hu4_pos[,,human_slice] <- slice_tmp
+
+p_human_latent_space_hu4_pos <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(human_latent_space_vol_hu4_pos, low = 0, high = 19)
+
+outfile <- "human_latent_space_hu4_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_latent_space_hu4_pos)
+dev.off()
+```
+
+
+```{r}
+human_latent_space_vol_hu4_neg <- human_latent_space_vol_hu4
+human_latent_space_vol_hu4_neg[human_cluster_mask_neg == 0] <- 0
+human_latent_space_vol_hu4_neg <- mincArray(human_latent_space_vol_hu4_neg) 
+
+slice_tmp <- human_latent_space_vol_hu4_neg[,,human_slice]
+slice_tmp[is.na(slice_tmp)] <- 0
+coords <- which(slice_tmp != 0, arr.ind = TRUE)
+
+nneighbours <- 3
+for (p in 1:nrow(coords)) {
+  x <- coords[[p,1]]
+  y <- coords[[p,2]]
+  val <- slice_tmp[x,y]
+  for (i in -nneighbours:nneighbours) {
+    for (j in -nneighbours:nneighbours) {
+      slice_tmp[x+i, y+j] <- val
+    }
+  }
+}
+
+human_latent_space_vol_hu4_neg[,,human_slice] <- slice_tmp
+
+p_human_latent_space_hu4_neg <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = human_slice) %>% 
+  anatomy(mincArray(human_anat), low = 3, high = 7) %>% 
+  overlay(human_latent_space_vol_hu4_neg, low = 0, high = 19)
+
+outfile <- "human_latent_space_hu4_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 5,
+    height = 5)
+draw(p_human_latent_space_hu4_neg)
+dev.off()
+```
+
+```{r}
+human_cluster_signature_pos <- "../data/human/cluster_signatures/latent_space_100/human_cluster_signatures_rel_mean_threshold_topn_0.2_positive_latentspace100.csv"
+human_cluster_signature_pos <- as_tibble(data.table::fread(human_cluster_signature_pos, header = TRUE))
+
+mat_human_cluster_signature_pos <- human_cluster_signature_pos %>% 
+  filter(basename(expr_file) == basename(human_latent_space_file),
+         basename(cluster_file) == basename(human_cluster_mask_file)) %>% 
+  select(-cluster_file, 
+         -expr_file,
+         -sign) %>% 
+  as.matrix() %>% 
+  t() 
+
+colnames(mat_human_cluster_signature_pos) <- "expression"
+
+df_human_cluster_signature_pos <- mat_human_cluster_signature_pos %>% 
+  as_tibble(rownames = "hidden_unit") %>% 
+  mutate(hidden_unit = as.numeric(hidden_unit),
+         x = "tmp")
+
+df_human_cluster_signature_pos <- df_human_cluster_signature_pos[1:10,]
+
+p_human_signature_pos <- ggplot(df_human_cluster_signature_pos, 
+                                aes(x = x, y = hidden_unit, fill = expression)) + 
+  geom_tile(show.legend = FALSE) + 
+  scale_y_reverse(expand = expansion()) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_fill_gradient(low = 0, high = "red") + 
+  theme_void()
+
+outfile <- "human_cluster_signature_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 1,
+    height = 5)
+print(p_human_signature_pos)
+dev.off()
+```
+
+```{r}
+human_cluster_signature_neg <- "../data/human/cluster_signatures/latent_space_100/human_cluster_signatures_rel_mean_threshold_topn_0.2_negative_latentspace100.csv"
+human_cluster_signature_neg <- as_tibble(data.table::fread(human_cluster_signature_neg, header = TRUE))
+
+mat_human_cluster_signature_neg <- human_cluster_signature_neg %>% 
+  filter(basename(expr_file) == basename(human_latent_space_file),
+         basename(cluster_file) == basename(human_cluster_mask_file)) %>% 
+  select(-cluster_file, 
+         -expr_file,
+         -sign) %>% 
+  as.matrix() %>% 
+  t() 
+
+colnames(mat_human_cluster_signature_neg) <- "expression"
+
+df_human_cluster_signature_neg <- mat_human_cluster_signature_neg %>% 
+  as_tibble(rownames = "hidden_unit") %>% 
+  mutate(hidden_unit = as.numeric(hidden_unit),
+         x = "tmp")
+
+df_human_cluster_signature_neg <- df_human_cluster_signature_neg[1:10,]
+
+p_human_signature_neg <- ggplot(df_human_cluster_signature_neg, 
+                                aes(x = x, y = hidden_unit, fill = expression)) + 
+  geom_tile(show.legend = FALSE) + 
+  scale_y_reverse(expand = expansion()) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_fill_gradient(low = 0, high = "red") + 
+  theme_void()
+
+outfile <- "human_cluster_signature_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 1,
+    height = 5)
+print(p_human_signature_neg)
+dev.off()
+```
+
+## Cross-species
+
+
+```{r}
+cor_pos <- cor(mat_mouse_cluster_signature_pos[,1],
+               mat_human_cluster_signature_pos[,1])
+cor_pos_label <- round(cor_pos, digits = 3)
+cor_pos_label <- str_c("r = ", cor_pos_label)
+
+df_mouse_human_pos <- tibble(mouse = mat_mouse_cluster_signature_pos[,1],
+                             human = mat_human_cluster_signature_pos[,1])
+
+p_cluster_scatter_pos <- ggplot(df_mouse_human_pos, 
+                                aes(x = mouse, y = human)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  annotate(geom = "label", 
+           label = cor_pos_label,
+           x = 12, y = 2) + 
+  coord_cartesian(xlim = c(0, 15),
+                  ylim = c(0, 13)) + 
+  theme_bw()
+
+outfile <- "cluster_scatterplot_pos.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 5)
+print(p_cluster_scatter_pos)
+dev.off()
+```
+
+
+
+```{r}
+cor_neg <- cor(mat_mouse_cluster_signature_neg[,1],
+               mat_human_cluster_signature_neg[,1])
+cor_neg_label <- round(cor_neg, digits = 3)
+cor_neg_label <- str_c("r = ", cor_neg_label)
+
+df_mouse_human_neg <- tibble(mouse = mat_mouse_cluster_signature_neg[,1],
+                             human = mat_human_cluster_signature_neg[,1])
+
+p_cluster_scatter_neg <- ggplot(df_mouse_human_neg, 
+                                aes(x = mouse, y = human)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  annotate(geom = "label", 
+           label = cor_neg_label,
+           x = 12, y = 2) + 
+  coord_cartesian(xlim = c(0, 15),
+                  ylim = c(0, 13)) + 
+  theme_bw()
+
+outfile <- "cluster_scatterplot_neg.pdf"
+outfile <- file.path(outdir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 5)
+print(p_cluster_scatter_neg)
+dev.off()
+```
+
+```{r}
+mean(c(cor_pos, cor_neg))
+```
+
+
+
+# Figure
+
+```{r}
+8.5
+11/3
+3.666667
+```
+
+
+```{r}
+fig_layout <- rbind(c(1, 6, 1, 1, 1, 2),
+                    c(1, 7, 1, 5, 1, 3),
+                    c(1, 8, 1, 1, 1, 4))
+
+fig_widths <- c(3.5, 2, 0.5, 1, 0.5, 1)
+fig_widths_in <- unit(fig_widths, "inch")
+
+fig_heights <- c(1.23, 1.23, 1.23)
+fig_heights_in <- unit(fig_heights, "inch")
+
+fig_plots_grob <- arrangeGrob(gTree(children = gList(rectGrob(), zeroGrob())),
+                              gTree(children = gList(rectGrob(), participant_grobs[[1]])),
+                              gTree(children = gList(rectGrob(), participant_grobs[[2]])),
+                              gTree(children = gList(rectGrob(), participant_grobs[[3]])),
+                              gTree(children = gList(rectGrob(), anat_grob)),
+                              gTree(children = gList(rectGrob(), jacobians_grobs[[1]])),
+                              gTree(children = gList(rectGrob(), jacobians_grobs[[2]])),
+                              gTree(children = gList(rectGrob(), jacobians_grobs[[3]])),
+                              layout_matrix = fig_layout,
+                              widths = fig_widths_in,
+                              heights = fig_heights_in)
+
+fig_border_grob <- rectGrob(gp = gpar(fill = NA))
+
+fig_grob <- gTree(children = gList(fig_plots_grob,
+                                   fig_border_grob))
+
+fig_width <- 8.5
+fig_height <- 3.7
+
+fig_outfile <- "figure1.pdf"
+pdf(file = fig_outfile,
+    width = fig_width,
+    height = fig_height)
+grid.draw(fig_grob)
+dev.off()
+
+grid.newpage()
+grid.draw(fig_grob)
+```
+
+
+```{r fig.width = 10, fig.height = 10}
+fig_layout <- rbind(c(NA,  1,  1,  1,  1,  1,  1,  1, NA),
+                    c( 2,  3,  3,  3,  3,  4,  4,  5,  6),
+                    c( 2,  7,  8,  9, 10, 11, 12, 13,  6),
+                    c( 2, NA, NA, 14, NA, NA, NA, NA,  6),
+                    c( 2, NA, NA, 15, NA, NA, NA, NA,  6),
+                    c( 2, 16, 16, 16, 16, 16, 16, 16,  6),
+                    c( 2, 17, 18, 19, 20, 21, 21, 22,  6),
+                    c( 2, 23, 23, 23, 23, 23, 23, 23,  6),
+                    c(NA, 24, 24, 24, 24, 24, 24, 24, NA))
+fig_widths <- c(0.1, 0.3, 0.3, 3, 0.1, 1.1, 1.0, 2.1, 0.1)
+fig_widths_in <- unit(fig_widths, "inch")
+
+fig_heights <- c(0.1, 0.2, 2.5, 0.3, 0.3, 0.1, 2.5, 2.5, 0.1)
+fig_heights_in <- unit(fig_heights, "inch")
+
+# gTree(children = gList(rectGrob(),
+fig_plots_grob <- arrangeGrob(gTree(children = gList(rectGrob(), zeroGrob())), #1
+                              gTree(children = gList(rectGrob(), zeroGrob())), #2
+                              gTree(children = gList(rectGrob(), textGrob("title"))), #3
+                              gTree(children = gList(rectGrob(), textGrob("title"))), #4
+                              gTree(children = gList(rectGrob(), textGrob("title"))), #5
+                              gTree(children = gList(rectGrob(), zeroGrob())), #6
+                              gTree(children = gList(rectGrob(),fig_heatmap_rowtitle_grob)), #7,
+                              gTree(children = gList(rectGrob(),fig_heatmap_rownames_grob)), #8
+                              fig_heatmap_matrix_grob, #9
+                              gTree(children = gList(rectGrob(), zeroGrob())), #10
+                              fig_ss_1_base_grob, #11
+                              # rectGrob(),
+                              fig_ss_1_legend_grob, #12
+                              fig_ss_2_grob, #13
+                              gTree(children = gList(rectGrob(),fig_heatmap_colnames_grob)), #14
+                              gTree(children = gList(rectGrob(),fig_heatmap_coltitle_grob)), #15
+                              gTree(children = gList(rectGrob(), zeroGrob())), #16
+                              gTree(children = gList(rectGrob(),fig_density_ytitle_grob)), #17
+                              gTree(children = gList(rectGrob(),fig_density_ytext_grob)), #18
+                              fig_density_panel_grob, #19
+                              gTree(children = gList(rectGrob(), zeroGrob())), #20
+                              fig_radar_1_grob, #21
+                              fig_radar_2_grob, #22
+                              gTree(children = gList(textGrob("Human cluster clinical scores etc."), rectGrob())), #23
+                              gTree(children = gList(rectGrob(), zeroGrob())), #24
+                              layout_matrix = fig_layout,
+                              widths = fig_widths_in,
+                              heights = fig_heights_in)
+
+fig_border_grob <- rectGrob(gp = gpar(fill = NA))
+
+fig_grob <- gTree(children = gList(fig_plots_grob,
+                                   fig_border_grob))
+
+fig_width <- 9
+fig_height <- 9
+
+fig_outfile <- "fig.pdf"
+pdf(file = fig_outfile,
+    width = fig_width,
+    height = fig_height)
+grid.draw(fig_grob)
+dev.off()
+
+grid.newpage()
+grid.draw(fig_grob)
+
+```
