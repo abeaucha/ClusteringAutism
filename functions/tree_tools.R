@@ -185,3 +185,102 @@ hanatToAtlasDefs <- function(anatTree){
                     row.names = NULL,
                     stringsAsFactors = FALSE))
 }
+
+
+hanatToAtlasDefs_new <- function(anatTree){
+  
+  require(data.tree)
+  
+  if(is.null(anatTree[["label.new"]])){
+    anatTree$Do(function(node){
+      node$label.new <- min(node$label)
+    }, traversal = "post-order")
+  }
+  
+  labelsNew <- anatTree$Get("label.new", filterFun = isLeaf)
+  
+  return(data.frame(name = names(labelsNew),
+                    label = labelsNew,
+                    row.names = NULL,
+                    stringsAsFactors = FALSE))
+}
+
+
+#' Prune a data tree at the node
+#'
+#' @param node (Node, R6) A data tree node to prune.
+#' @param cuts (character vector) Nodes at which to prune.
+#'
+#' @return (logical scalar)
+prune_at_node <- function(node, cuts) {
+  return(!(node$name %in% cuts))
+}
+
+
+#' Prune a data tree below the node
+#'
+#' @param node (Node, R6) A data tree node to prune.
+#' @param cuts (character vector) Nodes at which to prune.
+#'
+#' @return (logical scalar) 
+prune_below_node <- function(node, cuts) {
+  return(!any(cuts %in% node$path[-length(node$path)]))
+}
+
+
+#' Prune a data tree
+#'
+#' @param tree (data.tree) The tree to prune.
+#' @param nodes (character vector) Nodes at which to prune the tree.
+#' @param method (character scalar) Method used to prune the tree.
+#' Options: {"at", "below"}.
+#' @param remove (logical scalar) Option to remove nodes not specified 
+#' in argument nodes when method = "below". 
+#' @param inplace (logical scalar) Option to prune the tree in place. 
+#' @param verbose (logical scalar)
+#'
+#' @return (data.tree) The pruned tree when inplace = FALSE.
+prune_tree <- function(tree, nodes, method = "below", remove = FALSE, 
+                       inplace = FALSE, verbose = FALSE) {
+  
+  #Pruning method
+  if (method == "at") {
+    pruner <- purrr::partial(prune_at_node, cuts = nodes)
+  } else if (method == "below") {
+    pruner <- purrr::partial(prune_below_node, cuts = nodes)
+  } else {
+    msg_method <- "Argument method must be one of {\"at\", \"below\"}"
+    stop(msg_method)
+  }
+  
+  #Prune the tree
+  if (!inplace) {tree <- Clone(tree)}
+  Prune(tree, pruner)
+  
+  if (verbose) {
+    msg <- paste("Tree pruned", method, "nodes:", 
+                 paste(nodes, collapse = ", "))
+    message(msg)
+  }
+  
+  #Remove extra nodes not specified in nodes argument
+  if (method == "below") {
+    if (remove) {
+      flag <- TRUE
+      leafs <- tree$Get("name", filterFun = isLeaf)
+      while (flag) {
+        leafs_to_prune <- leafs[!(leafs %in% nodes)]
+        pruner <- purrr::partial(prune_at_node, cuts = leafs_to_prune)
+        Prune(tree, pruner)
+        leafs <- tree$Get("name", filterFun = isLeaf)
+        if (all(leafs %in% nodes)) {
+          flag <- FALSE
+        }
+      }
+    }
+  }
+  
+  if (!inplace) {return(tree)}
+  
+}
+
