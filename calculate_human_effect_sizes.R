@@ -45,10 +45,6 @@ option_list <- list(
               default = 10,
               help = paste("Number of controls to use when computing effect",
                            "sizes. [default %default]")),
-  make_option('--threshold',
-              type = 'numeric',
-              default = 10,
-              help = paste("[default %default]")),
   make_option('--parallel',
               type = 'character',
               default = 'false',
@@ -71,13 +67,12 @@ option_list <- list(
 #' include (but are not limited to) all control images.
 #' @param ncontrols (numeric scalar) Number of controls to use for propensity
 #' matching
-#' @param threshold (numeric scalar) 
 #' @param seed (numeric scalar) Random seed to use for control sampling.
 #'
 #' @return (character vector) The paths to the images of the propensity-
 #' matched controls.
 get_control_files <- function(participant, controls, imgfiles,
-                              ncontrols = 10, threshold = 10, seed = NULL){
+                              ncontrols = 10, seed = NULL){
   
   if (!is.null(seed)){set.seed(seed)}
   
@@ -93,7 +88,7 @@ get_control_files <- function(participant, controls, imgfiles,
   
   ncontrols_test <- nrow(controls_tmp)
   
-  if (ncontrols_test < threshold) {
+  if (ncontrols_test < ncontrols) {
     
     controls_tmp <- controls %>% 
       filter(Sex == participant_sex,
@@ -101,7 +96,7 @@ get_control_files <- function(participant, controls, imgfiles,
     
     ncontrols_test <- nrow(controls_tmp)
     
-    if (ncontrols_test < threshold) {
+    if (ncontrols_test < ncontrols) {
       
       controls_tmp <- controls %>% 
         filter(Sex == participant_sex)
@@ -175,7 +170,6 @@ compute_effect_size <- function(participant, controls, imgfiles, mask) {
 #' @param controls (data.frame) Demographic information for the controls.
 #' @param ncontrols (numeric scalar) Number of controls to use for propensity
 #' matching
-#' @param threshold (numeric scalar) 
 #' @param mask (character scalar) Path to mask image MINC file. 
 #' @param imgdir (character vector) Paths to image MINC files.
 #' @param outdir (character scalar) Path to directory in which to save effect 
@@ -183,8 +177,8 @@ compute_effect_size <- function(participant, controls, imgfiles, mask) {
 #' @param seed (numeric scalar) Random seed to use for control sampling.
 #'
 #' @return (numeric scalar) Value of 1 if function succeeds.
-executor <- function(participant, controls, ncontrols = 10, 
-                     threshold = 10, mask, imgdir, outdir, seed = NULL) {
+executor <- function(participant, controls, ncontrols = 10,
+                     mask, imgdir, outdir, seed = NULL) {
   
   imgfiles <- list.files(imgdir, full.names = TRUE) %>% 
     str_subset('.mnc')
@@ -193,19 +187,18 @@ executor <- function(participant, controls, ncontrols = 10,
                                      controls = controls,
                                      imgfiles = imgfiles,
                                      ncontrols = ncontrols,
-                                     threshold = threshold,
                                      seed = seed)
   
   effect_size <- compute_effect_size(participant = participant,
                                      controls = control_files,
                                      imgfiles = imgfiles,
                                      mask = mask)
-  
+
   outfile <- attributes(effect_size)[['filename']] %>%
     basename() %>%
     str_replace('.mnc', str_c('_effectsize_ncontrols', ncontrols, '.mnc'))
   outfile <- file.path(outdir, outfile)
-  
+
   mincWriteVolume(effect_size,
                   output.filename = outfile,
                   clobber = TRUE)
@@ -223,7 +216,6 @@ imgdir <- args[['imgdir']]
 maskfile <- args[['maskfile']]
 outdir <- args[['outdir']]
 ncontrols <- args[['ncontrols']]
-threshold <- args[['threshold']]
 inparallel <- ifelse(args[['parallel']] == 'true', TRUE, FALSE)
 
 #Create outdir if needed
@@ -236,7 +228,7 @@ demographics <- data.table::fread(demofile, header = TRUE) %>%
   as_tibble()
 
 #Filter for POND and SickKids 
-demographics <- demographics %>% 
+demographics <- demographics %>%
   filter(Dataset %in% c("POND", "SickKids"))
 
 #Remove entries with missing diagnosis, age, or sex
@@ -255,6 +247,8 @@ controls <- demographics %>%
 participants <- demographics %>% 
   filter(DX != 'Control')
 
+participants <- participants[1:5,]
+
 #Compute effect sizes
 pb <- txtProgressBar(max = nrow(participants), style = 3)
 progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
@@ -269,7 +263,6 @@ if (inparallel) {
                    executor(participant = participants[i,],
                             controls = controls,
                             ncontrols = ncontrols,
-                            threshold = threshold,
                             mask = maskfile,
                             imgdir = imgdir,
                             outdir = outdir,
@@ -284,7 +277,6 @@ if (inparallel) {
                    executor(participant = participants[i,],
                             controls = controls,
                             ncontrols = ncontrols,
-                            threshold = threshold,
                             mask = maskfile,
                             imgdir = imgdir,
                             outdir = outdir,
@@ -292,3 +284,4 @@ if (inparallel) {
                  }
   close(pb)
 }
+
