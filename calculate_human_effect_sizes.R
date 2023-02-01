@@ -247,8 +247,6 @@ controls <- demographics %>%
 participants <- demographics %>% 
   filter(DX != 'Control')
 
-participants <- participants[1:5,]
-
 #Compute effect sizes
 pb <- txtProgressBar(max = nrow(participants), style = 3)
 progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
