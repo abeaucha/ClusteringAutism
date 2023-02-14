@@ -45,16 +45,6 @@ option_list <- list(
               default = 10,
               help = paste("Number of controls to use when computing effect",
                            "sizes. [default %default]")),
-  make_option("--threshold",
-              type = "numeric",
-              default = 10,
-              help = paste("[default %default]")),
-  make_option("--dataset",
-              type = "numeric",
-              default = 1,
-              help = paste("A numeric flag indicating which data to use.", 
-                           "Set to 1 for all data. Set to 2 for POND and",
-                           "SickKids. Set to 3 for POND only. [default %default]")),
   make_option("--parallel",
               type = "character",
               default = 'false',
@@ -75,13 +65,12 @@ option_list <- list(
 #' @param controls (data.frame) Demographic information for the controls.
 #' @param ncontrols (numeric scalar) Number of controls to use for propensity
 #' matching
-#' @param threshold (numeric scalar) 
 #' @param seed (numeric scalar) Random seed to use for control sampling.
 #'
 #' @return (data.frame) Demographic information for the propensity-matched 
 #' controls.
-get_matched_controls <- function(participant, controls, ncontrols = 10, 
-                                 threshold = 10, seed = NULL){
+get_matched_controls <- function(participant, controls, 
+                                 ncontrols = 10, seed = NULL){
   
   if (!is.null(seed)){set.seed(seed)}
   
@@ -97,7 +86,7 @@ get_matched_controls <- function(participant, controls, ncontrols = 10,
   
   ncontrols_test <- nrow(controls_tmp)
   
-  if (ncontrols_test < threshold) {
+  if (ncontrols_test < ncontrols) {
     
     controls_tmp <- controls %>% 
       filter(Sex == participant_sex,
@@ -105,7 +94,7 @@ get_matched_controls <- function(participant, controls, ncontrols = 10,
     
     ncontrols_test <- nrow(controls_tmp)
     
-    if (ncontrols_test < threshold) {
+    if (ncontrols_test < ncontrols) {
       
       controls_tmp <- controls %>% 
         filter(Sex == participant_sex)
@@ -165,7 +154,6 @@ compute_effect_size <- function(participant, controls, mask) {
 #' @param controls (data.frame) Demographic information for the controls.
 #' @param ncontrols (numeric scalar) Number of controls to use for propensity
 #' matching.
-#' @param threshold (numeric scalar) 
 #' @param mask (character scalar) Path to mask volume. 
 #' @param imgdir (character scalar) Path to the directory containing the 
 #' image files.
@@ -175,52 +163,32 @@ compute_effect_size <- function(participant, controls, mask) {
 #'
 #' @return (numeric scalar) Value of 1 if function succeeds.
 executor <- function(participant, controls, ncontrols = 10, 
-                     threshold = 10, mask, imgdir, outdir,
+                     mask, imgdir, outdir,
                      dataset = NULL, seed = NULL) {
   
   #Get propensity-matched controls
   controls_matched <- get_matched_controls(participant = participant,
                                            controls = controls,
                                            ncontrols = ncontrols,
-                                           threshold = threshold,
                                            seed = seed)
   
-  #Extract image files
-  imgfiles <- str_subset(list.files(imgdir, full.names = TRUE), ".mnc")
-  
   #Image files for the controls
-  control_ids = str_remove(controls_matched[["Extract_ID"]], ".mnc")
-  control_files <- character(length(control_ids))
-  for (j in 1:length(control_ids)){
-    control_files[j] <- str_subset(imgfiles, control_ids[j])
-  }
+  control_files <- file.path(imgdir, controls_matched[["File"]])
   
   #Image file for the participant
-  participant_id <- str_remove(participant[[1, "Extract_ID"]], ".mnc")
-  participant_file <- str_subset(imgfiles, participant_id)
+  participant_file <- file.path(imgdir, participant[[1, "File"]])
   
   #Compute the effect size volume
   effect_size <- compute_effect_size(participant = participant_file,
                                      controls = control_files,
                                      mask = mask)
   
-  #Get the resolution
-  res <- max(minc.separation.sizes(participant_file))
-  
   #Output file
-  outfile <- participant_id %>% 
-    basename() %>% 
-    str_c("ES", 
-          "res", res,
-          "data", dataset, 
-          "nc", ncontrols, 
-          "thresh", threshold, sep = "_") %>% 
-    str_c(".mnc")
-  outfile <- file.path(outdir, outfile)
+  outfile <- file.path(outdir, basename(participant_file))
   mincWriteVolume(effect_size,
                   output.filename = outfile,
                   clobber = TRUE)
-
+  
   return(1)
 } 
 
@@ -234,8 +202,6 @@ imgdir <- args[["imgdir"]]
 maskfile <- args[["maskfile"]]
 outdir <- args[["outdir"]]
 ncontrols <- args[["ncontrols"]]
-threshold <- args[["threshold"]]
-dataset <- args[["dataset"]]
 inparallel <- ifelse(args[["parallel"]] == "true", TRUE, FALSE)
 
 #Create outdir if needed
@@ -245,23 +211,6 @@ if (!dir.exists(outdir)) {
 
 #Import demographics data
 demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
-
-#Filter data if desired
-if (is.numeric(dataset)) {
-  if (dataset != 1) {
-    if (dataset == 2){
-      demographics <- demographics %>% 
-        filter(Dataset %in% c("POND", "SickKids"))
-    } else if (dataset == 3) {
-      demographics <- demographics %>% 
-        filter(Dataset == "POND")
-    } else {
-      stop(str_c("Argument --dataset must be one of {1, 2, 3}: ", dataset))
-    }
-  }
-} else {
-  stop(str_c("Argument --dataset must be one of {1, 2, 3}: ", dataset))
-}
 
 #Remove entries with missing diagnosis, age, or sex
 demographics <- demographics %>% 
@@ -293,7 +242,6 @@ if (inparallel) {
                    executor(participant = participants[i,],
                             controls = controls,
                             ncontrols = ncontrols,
-                            threshold = threshold,
                             mask = maskfile,
                             imgdir = imgdir,
                             outdir = outdir,
@@ -309,7 +257,6 @@ if (inparallel) {
                    executor(participant = participants[i,],
                             controls = controls,
                             ncontrols = ncontrols,
-                            threshold = threshold,
                             mask = maskfile,
                             imgdir = imgdir,
                             outdir = outdir,
