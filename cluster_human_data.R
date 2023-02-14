@@ -27,7 +27,7 @@ option_list <- list(
   make_option('--rownames',
               type = 'character',
               help = "Name of column in .csv file containing row names."),
-  make_option('--nclusters',
+  make_option('--nk-max',
               type = 'numeric',
               default = 10,
               help = paste("Maximum number of clusters to identify.", 
@@ -52,11 +52,11 @@ option_list <- list(
               default = 20,
               help = paste("Number of iterations for the diffusion",
                            "process in SNF. [default %default]")),
-  make_option('--outfile',
+  make_option('--cluster-file',
               type = 'character',
               help = paste("Path to .csv file in which to save the cluster", 
                            "assignments.")),
-  make_option('--wfile',
+  make_option('--affinity-file',
               type = 'character',
               help = paste("Path to .csv file in which to save the SNF",
                            "affinity matrix [default %default]")),
@@ -111,7 +111,6 @@ SNF_combine <- function(x1, x2, metric = "correlation", K = 10,
   
 }
 
-
 #' Create clusters from SNF affinity matrix
 #'
 #' @param W (matrix) SNF affinity matrix.
@@ -125,7 +124,7 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
   
   for(k in 2:nk) {
     group <- spectralClustering(affinity = W, K = k)
-    group_name <- paste0('Group', k)
+    group_name <- paste0('nk', k)
     assign(group_name, group)
     if (k == 2) {
       if (is.null(rownames(W))) {
@@ -158,12 +157,21 @@ args <- parse_args(OptionParser(option_list = option_list))
 file1 <- args[['file1']]
 file2 <- args[['file2']]
 row_names <- args[['rownames']]
-outfile <- args[['outfile']]
-wfile <- args[['wfile']]
+SNF_K <- args[['K']]
+SNF_sigma <- args[['sigma']]
+SNF_t <- args[['t']]
+SNF_metric <- args[['metric']]
+nk_max <- args[['nk-max']]
+cluster_file <- args[['cluster-file']]
+affinity_file <- args[['affinity-file']]
 verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
 
+if (nk_max < 2) {
+  stop("Argument nk-max must be greater than 1")
+}
+
 #Create outdir if needed
-outdir <- dirname(outfile)
+outdir <- dirname(cluster_file)
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 }
@@ -175,6 +183,10 @@ x2 <- as_tibble(data.table::fread(file2, header = TRUE))
 
 if (nrow(x1) != nrow(x2)) {
   stop("Input matrices have different numbers of rows.")
+}
+
+if (nrow(x1) < SNF_K + 1) {
+  stop("Argument K must be less than the number of input matrix rows.")
 }
 
 if (!is.null(row_names)) {
@@ -212,12 +224,11 @@ x2 <- as.matrix(x2)
 if (verbose) {message("Running similarity network fusion...")}
 
 W <- SNF_combine(x1 = x1, x2 = x2,
-                 K = args[['K']], sigma = args[['sigma']],
-                 t = args[['t']], metric = args[['metric']],
-                 outfile = wfile)
+                 K = SNF_K, sigma = SNF_sigma,
+                 t = SNF_t, metric = SNF_metric,
+                 outfile = affinity_file)
 
 if (verbose) {message("Assigning clusters...")}
 
-clusters <- create_clusters(W = W, nk = args[['nclusters']],
-                            outfile = outfile)
-
+clusters <- create_clusters(W = W, nk = nk_max,
+                            outfile = cluster_file)
