@@ -211,7 +211,7 @@ def convert_images(infiles, input_format = 'nifty', output_format = 'minc', keep
     return outfiles
     
     
-def calculate_human_effect_sizes(demographics, imgdir, maskfile, outdir, ncontrols = 10, threshold = 10, dataset = 1, parallel = False, nproc = None):
+def calculate_human_effect_sizes(demographics, imgdir, maskfile, outdir, ncontrols = 10, parallel = False, nproc = None):
 
     """
     Calculate human effect size images.
@@ -228,9 +228,6 @@ def calculate_human_effect_sizes(demographics, imgdir, maskfile, outdir, ncontro
         Path to the directory in which to save the effect size MINC images.
     ncontrols: int
         Number of propensity-matched controls to use when computing the effect sizes.
-    threshold: int
-    dataset: int
-        A numeric flag indicating which data to use. Set to 1 for all data. Set to 2 for POND and SickKids. Set to 3 for POND only.
     parallel: bool
         Option to run in parallel.
     nproc: int
@@ -254,16 +251,14 @@ def calculate_human_effect_sizes(demographics, imgdir, maskfile, outdir, ncontro
                    'maskfile':maskfile,
                    'outdir':outdir,
                    'ncontrols':ncontrols,
-                   'threshold':threshold,
-                   'dataset':dataset,
                    'parallel':parallel,
                    'nproc':nproc}
     execute_R(script = script, args = script_args)
-    outfiles = os.listdir(outdir)
+    outfiles = [os.path.join(outdir, file) for file in os.listdir(outdir)]
     return outfiles
 
 
-def resample_image(infile, isostep, outdir = None):
+def resample_image(infile, isostep, outdir = None, suffix = None):
     
     """
     Resample a MINC image
@@ -276,7 +271,8 @@ def resample_image(infile, isostep, outdir = None):
         Isotropic dimension of voxels in the resampled image (millimeters).
     outdir: str
         Path to the directory in which to save the resampled image. If None, resampled image will be written to the directory of the input file.
-    
+    suffix: str
+        Suffix to append to output filename before the file extension.
     
     Returns
     -------
@@ -284,13 +280,20 @@ def resample_image(infile, isostep, outdir = None):
         Path to the resampled image. 
     """
     
-    outfile = sub(r'.mnc', '_resampled_{}.mnc'.format(isostep), infile)
+    if suffix is not None:
+        outfile = os.path.splitext(infile)[0]+suffix+os.path.splitext(infile)[1]
+    else: 
+        outfile = infile
+
     if outdir is not None:
         outdir = os.path.join(outdir, '')
         if not os.path.exists(outdir):
             os.makedirs(outdir)
         outfile = os.path.basename(outfile)
         outfile = os.path.join(outdir, outfile)
+    else:
+        if suffix is None:
+            raise Exception("Arguments outdir and suffix cannot both be None.")
     cmd_autocrop = ('autocrop -quiet -clobber -isostep {} {} {}'
                     .format(isostep, infile, outfile))
     os.system(cmd_autocrop)
@@ -298,7 +301,7 @@ def resample_image(infile, isostep, outdir = None):
     return outfile
 
 
-def resample_images(infiles, isostep, outdir = None, parallel = False, nproc = None):
+def resample_images(infiles, isostep, outdir = None, suffix = None, parallel = False, nproc = None):
     
     """
     Resample a set of MINC images.
@@ -307,9 +310,13 @@ def resample_images(infiles, isostep, outdir = None, parallel = False, nproc = N
     ---------
     infiles: list
         List of paths to images to resample.
+    isostep: float
+        Isotropic dimension of voxels in the resampled image (millimeters).
     outdir: str
         Path to the output directory. If None, the resampled 
         images will be stored in the native directory.
+    suffix: str
+        Suffix to append to output filename before the file extension.
     parallel: bool
         Option to run in parallel.
     nproc: int
@@ -321,9 +328,15 @@ def resample_images(infiles, isostep, outdir = None, parallel = False, nproc = N
         List of paths to the resampled images.
     """
 
+    if outdir is not None:
+        outdir = os.path.join(outdir, '')
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+    
     resampler = partial(resample_image,
                         isostep = isostep,
-                        outdir = outdir)
+                        outdir = outdir,
+                        suffix = suffix)
     
     if parallel:
         if nproc is None:
@@ -463,7 +476,6 @@ def import_images(infiles, mask = None, output_format = 'list', flatten = True, 
         return imgs
     
     
-
 def build_voxel_matrix(infiles, mask = None, file_col = False, sort = False, save = False, outfile = 'voxel_matrix.csv', parallel = False, nproc = None):
     
     """
@@ -514,7 +526,7 @@ def build_voxel_matrix(infiles, mask = None, file_col = False, sort = False, sav
     return df_imgs
 
 
-def cluster_human_data(infiles, rownames = None, nk_max = 10, metric = 'correlation', K = 10, sigma = 0.5, t = 20, outfile = 'clusters.csv'):
+def cluster_human_data(infiles, rownames = None, nk_max = 10, metric = 'correlation', K = 10, sigma = 0.5, t = 20, cluster_file = 'clusters.csv', affinity_file = None):
 
     """
     Cluster human effect size images using similarity network fusion.
@@ -560,22 +572,26 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10, metric = 'correlat
     script_args = {'file1':infiles[0],
                    'file2':infiles[1],
                    'rownames':rownames,
-                   'nclusters':nk_max,
+                   'nk-max':nk_max,
                    'metric':metric,
                    'K':K,
                    'sigma':sigma,
                    't':t,
-                   'outfile':outfile}
+                   'cluster-file':cluster_file,
+                   'affinity-file':affinity_file}
     
     if rownames is None:
         del script_args['rownames']
+        
+    if affinity_file is None:
+        del script_args['affinity-file']
     
     execute_R(script = script, args = script_args)
     
-    return pd.read_csv(outfile)
+    return pd.read_csv(cluster_file)
 
 
-def create_cluster_maps(clusters, imgdir, outdir, method = 'mean', verbose = True):
+def create_cluster_maps(clusters, imgdir, outdir, mask = None, method = 'mean', verbose = True):
 
     """
     Create representative voxel-wise maps for clustered images.
@@ -586,6 +602,8 @@ def create_cluster_maps(clusters, imgdir, outdir, method = 'mean', verbose = Tru
         Path to the CSV file containing cluster assignments.
     imgdir: str
         Path to the directory containing images to use.
+    mask: str
+        Path to the mask file to use.
     outdir: str
         Path to the output directory.
     method: str
@@ -603,11 +621,14 @@ def create_cluster_maps(clusters, imgdir, outdir, method = 'mean', verbose = Tru
         raise OSError("Cluster file not found: {}".format(clusters))
     verbose = 'true' if verbose else 'false'
     script = 'create_cluster_maps.R'
-    script_args = {'clusterfile':clusters,
+    script_args = {'cluster-file':clusters,
                    'imgdir':imgdir,
                    'outdir':outdir,
+                   'mask':mask,
                    'method':method,
                    'verbose':verbose}
+    if mask is None:
+        del script_args['mask']
     execute_R(script = script, args = script_args)
     outfiles = glob(outdir+'*.mnc')
     return outfiles
