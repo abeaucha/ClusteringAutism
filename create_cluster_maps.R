@@ -22,12 +22,15 @@ suppressPackageStartupMessages(library(RMINC))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option("--clusterfile",
+  make_option("--cluster-file",
               type = "character",
               help = "Path to .csv file containing cluster assignment data."),
   make_option("--imgdir",
               type = "character",
               help = "Path to directory containing images to use."),
+  make_option("--mask",
+              type = "character",
+              help = "Path to the mask file to use."),
   make_option("--method",
               type = "character",
               default = "mean",
@@ -47,8 +50,9 @@ option_list <- list(
 
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-clusterfile <- args[["clusterfile"]]
+clusterfile <- args[["cluster-file"]]
 imgdir <- args[["imgdir"]]
+mask <- args[["mask"]]
 method <- args[["method"]]
 outdir <- args[["outdir"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
@@ -82,23 +86,24 @@ for (j in 1:ncol(df_clusters)) {
     
     rows_k <- df_clusters[,j] == k
     id_k <- rownames(df_clusters)[rows_k]
-    
-    files_k <- character(length(id_k))
-    for (f in 1:length(id_k)) {
-      files_k[f] <- str_subset(imgfiles, id_k[f])
-      
+    files_k <- file.path(imgdir, id_k)
+    file_exists <- files_k %in% imgfiles
+    if (sum(!file_exists) != 0) {
+      warning(paste(sum(!(file_exists)), "files not found in directory", 
+                    imgdir, "\nThese files will be ommitted from",
+                    "the calculation."))
     }
     
-    cluster_map <- mincSummary(filenames = files_k,
-                               method = method,
-                               grouping = NULL)
-    
     if (method == "mean") {
+      cluster_map <- mincMean(filenames = files_k,
+                              mask = mask)
       cluster_map <- cluster_map[,1]
     } else if (method == "median") {
-      cluster_map <- cluster_map
+      cluster_map <- mincApply(filenames = files_k,
+                               function.string = quote(median(x)),
+                               mask = mask)
     } else {
-      stop()
+      stop("Argument method must be one of {mean, median}.")
     }
     
     class(cluster_map) <- class(mincGetVolume(files_k[1]))
