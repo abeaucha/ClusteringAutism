@@ -136,9 +136,10 @@ heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
 heatmap_breaks <- seq(heatmap_range[1], heatmap_range[2], length.out = palette_length)
 
 mat_labels <- matrix("", nrow = nrow(mat_sim_nk), ncol = ncol(mat_sim_nk))
+mat_labels_vals <- c("A", "B", "C", "D", "E")
 for(j in 1:ncol(mat_sim_nk)) {
   i <- which(mat_sim_nk[,j] == max(mat_sim_nk[,j]))
-  mat_labels[i,j] <- as.character(j)
+  mat_labels[i,j] <- mat_labels_vals[j]
 }
 
 #Generate heatmap
@@ -232,10 +233,59 @@ fig4_heatmap_title_grob <- textGrob(label = fig4_heatmap_title,
 
 # Panel B: Neuroanatomy correlation distributions
 
+
+```{r}
+permutation_dir <- "../data/human/permutation/"
+permutation_ids <- list.files(permutation_dir) %>% 
+  str_subset("permutation_[0-9]+") %>% 
+  str_extract("[0-9]+") %>% 
+  as.numeric()
+
+signs <- c("positive", "negative")
+
+np <- 200
+list_permutations <- vector(mode = "list", length = np)
+for (p in 1:np) {
+  
+  indir <- list.files(permutation_dir, full.names = TRUE) %>% 
+    str_subset(str_c("permutation_", p, "$")) %>% 
+    file.path("similarity_matrix")
+  
+  infiles <- list.files(indir, full.names = TRUE) %>% 
+    str_subset("rel")
+  
+  df_sim <- tibble()
+  for (s in 1:length(signs)) {
+    df_sim_tmp <- infiles %>% 
+      str_subset(signs[s]) %>% 
+      read_csv(show_col_types = FALSE) %>%
+      select(human_cluster = cluster_id, contains("6-")) %>% 
+      pivot_longer(cols = -human_cluster, 
+                   names_to = "mouse_cluster", 
+                   values_to = "correlation") %>% 
+      mutate(sign = signs[s],
+             permutation = p) 
+    df_sim <- bind_rows(df_sim_tmp, df_sim)
+  }
+  
+  list_permutations[[p]] <- df_sim %>% 
+    mutate(correlation = ifelse(is.na(correlation), 0, correlation)) %>% 
+    group_by(permutation,
+             human_cluster, 
+             mouse_cluster) %>% 
+    summarise(correlation = mean(correlation), 
+              .groups = "drop")
+}
+
+df_permutations <- reduce(.x = list_permutations,
+                          .f = bind_rows)
+```
+
+
 ```{r fig4-panelB-dist-import}
-#Import neuroanatomical similarity distributions
-df_sim_hist <- read_csv("../analyses/anatomical_similarity_histogram.csv", 
-                        show_col_types = FALSE)
+# #Import neuroanatomical similarity distributions
+# df_sim_hist <- read_csv("../analyses/anatomical_similarity_histogram.csv", 
+#                         show_col_types = FALSE)
 
 #Get cluster pair correlations
 # cluster_correlations <- numeric(nrow(df_mouse_clusters))
@@ -263,36 +313,60 @@ df_top_correlations <- df_top_correlations %>%
          mouse_y = 4.5) 
 ```
 
+
+```{r}
+df_cdf <- tibble(correlation = seq(0, 1, by = 0.01),
+                 cdf = 0)
+for (i in 1:nrow(df_cdf)) {
+  correlation <- df_cdf[[i, "correlation"]]
+  nlower <- sum(correlation >= df_permutations[["correlation"]])
+  df_cdf[[i, "cdf"]] <- nlower/nrow(df_permutations)
+}
+
+ggplot(df_cdf, aes(x = correlation, y = cdf)) + 
+  geom_line() + 
+  coord_cartesian(xlim = c(0, 1),
+                  ylim = c(0,1))
+```
+
+
+
 ```{r fig4-panelB-dist-plot}
-#Create the distribution KDE plot
-fig4_density <- ggplot(df_sim_hist, aes(x = Similarity, 
-                                        y = ..density..,
-                                        fill = Type,
-                                        col = Type)) + 
-  geom_density(alpha = 0.1,
-               bw = 0.05) + 
-  # geom_vline(xintercept = unique(df_top_correlations[["correlation"]]),
-  #            linetype = "dashed") +
+annotation_ymax <- 4.1
+annotation_labels_y <- annotation_ymax + c(0, -0.25, 0, -0.25, 0)
+annotation_segments_yend <- annotation_labels_y + c(-0.2, -0.1, -0.2, -0.1, -0.2)
+
+fig4_density <- ggplot(df_permutations, 
+                       aes(x = correlation,
+                           y = ..density..)) + 
+  # geom_density(alpha = 0.1,
+  #              bw = 0.02,
+  #              fill = "grey50",
+  #              outline.type = "full") + 
+  geom_histogram(alpha = 1,
+                 binwidth = 0.025,
+                 fill = "grey90",
+                 col = "grey50",
+                 size = 0.2) + 
   annotate(geom = "segment",
            x = df_top_correlations[["correlation"]],
            xend = df_top_correlations[["correlation"]],
-           y = 0, yend = c(4.65, 4.4, 4.65, 4.4, 4.65),
+           y = 0, yend = annotation_segments_yend,
            linetype = "dotted",
-           size = 0.3) + 
+           col = "red",
+           size = 0.6) + 
   annotate(geom = "text", 
            x = df_top_correlations[["correlation"]],
-           y = c(4.75, 4.5, 4.75, 4.5, 4.75),
-           label = df_top_correlations[["k"]], 
+           y = annotation_labels_y,
+           label = mat_labels_vals, 
            size = 2) +
-  coord_cartesian(ylim = c(0, 5)) + 
-  scale_x_continuous(breaks = seq(-0.1, 0.9, by = 0.2),
-                     expand = expansion(mult = 0)) + 
-  scale_fill_discrete(labels = c("Homologous", "Homologous-\n adjacent", "Non-homologous")) + 
-  scale_color_discrete(labels = c("Homologous", "Homologous-\n adjacent", "Non-homologous")) + 
+  coord_cartesian(xlim = c(0.3, 1),
+                  ylim = c(0, annotation_ymax + 0.3)) + 
+  scale_x_continuous(breaks = seq(0, 1, by = 0.1),
+                     expand = expansion(mult = 0)) +
+  scale_y_continuous(expand = expansion(mult = 0)) +
   labs(x = "Correlation",
-       y = "Density",
-       col = NULL,
-       fill = NULL) + 
+       y = "Density") + 
   theme_bw() + 
   theme(legend.position = "bottom",
         legend.text = element_text(size = 8),
@@ -310,11 +384,62 @@ fig4_density_ytitle_grob <- textGrob("Density",
                                      just = "bottom",
                                      gp = gpar(fontsize = 11))
 fig4_density_ytext_grob <- getGrob(fig4_density_grob, "axis-l.7-4-7-4")
-fig4_density_legend_grob <- getGrob(fig4_density_grob, "guides.3-3-3-3")
+
+fig4_density
+```
+
+```{r}
+# #Create the distribution KDE plot
+# fig4_density <- ggplot(df_sim_hist, aes(x = Similarity, 
+#                                         y = ..density..,
+#                                         fill = Type,
+#                                         col = Type)) + 
+#   geom_density(alpha = 0.1,
+#                bw = 0.05) + 
+#   # geom_vline(xintercept = unique(df_top_correlations[["correlation"]]),
+#   #            linetype = "dashed") +
+#   annotate(geom = "segment",
+#            x = df_top_correlations[["correlation"]],
+#            xend = df_top_correlations[["correlation"]],
+#            y = 0, yend = c(4.65, 4.4, 4.65, 4.4, 4.65),
+#            linetype = "dotted",
+#            size = 0.3) + 
+#   annotate(geom = "text", 
+#            x = df_top_correlations[["correlation"]],
+#            y = c(4.75, 4.5, 4.75, 4.5, 4.75),
+#            label = df_top_correlations[["k"]], 
+#            size = 2) +
+#   coord_cartesian(ylim = c(0, 5)) + 
+#   scale_x_continuous(breaks = seq(-0.1, 0.9, by = 0.2),
+#                      expand = expansion(mult = 0)) + 
+#   scale_fill_discrete(labels = c("Homologous", "Homologous-\n adjacent", "Non-homologous")) + 
+#   scale_color_discrete(labels = c("Homologous", "Homologous-\n adjacent", "Non-homologous")) + 
+#   labs(x = "Correlation",
+#        y = "Density",
+#        col = NULL,
+#        fill = NULL) + 
+#   theme_bw() + 
+#   theme(legend.position = "bottom",
+#         legend.text = element_text(size = 8),
+#         legend.key.size = unit(8, 'pt'),
+#         plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
+# 
+# #Extract grobs from the plot
+# fig4_density_grob <- grid.force(ggplotGrob(fig4_density))
+# fig4_density_panel_grob <- getGrob(fig4_density_grob, "panel.7-5-7-5")
+# fig4_density_xtitle_grob <- getGrob(fig4_density_grob, "xlab-b.9-5-9-5")
+# fig4_density_xtext_grob <- getGrob(fig4_density_grob, "axis-b.8-5-8-5")
+# fig4_density_ytitle_grob <- textGrob("Density",
+#                                      x = 0.8, y = 0.5, 
+#                                      rot = 90,
+#                                      just = "bottom",
+#                                      gp = gpar(fontsize = 11))
+# fig4_density_ytext_grob <- getGrob(fig4_density_grob, "axis-l.7-4-7-4")
+# fig4_density_legend_grob <- getGrob(fig4_density_grob, "guides.3-3-3-3")
 ```
 
 ```{r fig4-panelB-dist-title}
-fig4_density_title <- "Similarity of neuroanatomical regions"
+fig4_density_title <- "Null distribution of cluster correlations"
 fig4_density_title_grob <- textGrob(label = fig4_density_title,
                                     x = 0, y = 0.5, 
                                     just = c("left", "center"),
@@ -768,100 +893,7 @@ fig4_cluster_dx_title_grob <- textGrob(label = fig4_cluster_dx_title,
 # Figure 
 
 
-## Figure layout v1
-
-
-```{r fig.width = 10, fig.height = 10}
-fig4_layout <- rbind(c(NA, 1,  1,  1,  1,  1,  1,  1,  1,  1, NA),
-                     c( 2,  3,  4,  4,  4,  5, NA,  6, NA, NA,  7),
-                     c( 2,  8,  9, 10, 11, 12, 13, 14, 15, 16,  7),
-                     c( 2, NA, NA, 17, NA, NA, 18, NA, 19, NA,  7),
-                     c( 2, NA, NA, 20, NA, NA, NA, NA, NA, NA,  7),
-                     c( 2, 21, 21, 21, 21, 21, 21, 21, 21, 21,  7),
-                     c( 2, 22, 23, 23, 23, NA, 24, 24, 24, NA,  7),
-                     c( 2, 25, 26, 27, 27, 28, 29, NA, 30, NA,  7),
-                     c( 2, NA, NA, 31, 31, NA, 32, NA, 33, NA,  7),
-                     c( 2, NA, NA, 34, 34, NA, 32, NA, 33, NA,  7),
-                     c( 2, NA, NA, 35, 35, NA, 36, 36, 36, NA,  7),
-                     c( 2, 37, 37, 37, 37, 37, 37, 37, 37, 37,  7),
-                     c( 2, 38, 39, 39, 39, 39, 39, 39, 39, 39,  7),
-                     c(NA, 40, 40, 40, 40, 40, 40, 40, 40, 40, NA),
-                     c(NA, 41, 41, 41, 41, 41, 41, 41, 41, 41, NA))
-fig4_widths <- c(0.1, 0.3, 0.3, 1.9, 0.8, 0.3, 1.9, 0.3, 1.9, 0.6, 0.1)
-fig4_widths_in <- unit(fig4_widths, "inch")
-
-fig4_heights <- c(0.1, 0.3, 2.5, 0.3, 0.3, 0.1, 0.3, 2.1, 0.2, 0.2, 0.4, 0.1, 0.3, 2.4, 0.1)
-fig4_heights_in <- unit(fig4_heights, "inch")
-
-# gTree(children = gList(rectGrob(),
-fig4_plots_grob <- arrangeGrob(gTree(children = gList(rectGrob(), zeroGrob())), #1
-                               gTree(children = gList(rectGrob(), zeroGrob())), #2
-                               textGrob("A.", gp = gpar(fontsize = 14, fontface = "bold")), #3
-                               gTree(children = gList(rectGrob(), fig4_heatmap_title_grob)), #4
-                               # gTree(children = gList(rectGrob(), fig4_ss_title_grob)), #5
-                               textGrob("C.", gp = gpar(fontsize = 14, fontface = "bold")), #5
-                               textGrob("D.", gp = gpar(fontsize = 14, fontface = "bold")), #6
-                               gTree(children = gList(rectGrob(), zeroGrob())), #7
-                               gTree(children = gList(rectGrob(),fig4_heatmap_rowtitle_grob)), #8
-                               gTree(children = gList(rectGrob(),fig4_heatmap_rownames_grob)), #9
-                               fig4_heatmap_matrix_grob, #10
-                               gTree(children = gList(rectGrob(), fig4_heatmap_legend_grob)), #11
-                               gTree(children = gList(rectGrob(), zeroGrob())), #12
-                               fig4_ss_1_base_grob, #13
-                               gTree(children = gList(rectGrob(), zeroGrob())), #14
-                               fig4_ss_2_base_grob, #15
-                               gTree(children = gList(rectGrob(), fig4_ss_2_legend_grob)), #16
-                               gTree(children = gList(rectGrob(),fig4_heatmap_colnames_grob)), #17
-                               gTree(children = gList(rectGrob(),fig4_ss_1_labels_grob)), #18
-                               gTree(children = gList(rectGrob(),fig4_ss_2_labels_grob)), #19
-                               gTree(children = gList(rectGrob(),fig4_heatmap_coltitle_grob)), #20
-                               gTree(children = gList(rectGrob(), zeroGrob())), #21
-                               textGrob("B.", gp = gpar(fontsize = 14, fontface = "bold")), #22
-                               gTree(children = gList(rectGrob(), fig4_density_title_grob)), #23
-                               gTree(children = gList(rectGrob(), fig4_radar_title_grob)), #24
-                               gTree(children = gList(rectGrob(),fig4_density_ytitle_grob)), #25
-                               gTree(children = gList(rectGrob(),fig4_density_ytext_grob)), #26
-                               fig4_density_panel_grob, #27
-                               gTree(children = gList(rectGrob(), zeroGrob())), #28
-                               fig4_radar_1_panel_grob, #29
-                               fig4_radar_2_panel_grob, #30
-                               gTree(children = gList(rectGrob(), fig4_density_xtext_grob)), #31
-                               gTree(children = gList(rectGrob(), fig4_radar_1_annotation_grob)), #32
-                               gTree(children = gList(rectGrob(), fig4_radar_2_annotation_grob)), #33
-                               gTree(children = gList(rectGrob(), fig4_density_xtitle_grob)), #34
-                               gTree(children = gList(rectGrob(), fig4_density_legend_grob)), #35
-                               gTree(children = gList(rectGrob(), fig4_radar_legend_grob)), #36
-                               gTree(children = gList(rectGrob(), zeroGrob())), #37
-                               textGrob("E.", gp = gpar(fontsize = 14, fontface = "bold")), #38
-                               gTree(children = gList(rectGrob(), fig4_cluster_dx_title_grob)), #39
-                               gTree(children = gList(rectGrob(), fig4_cluster_dx_grob)), #40
-                               gTree(children = gList(rectGrob(), zeroGrob())), #41
-                               layout_matrix = fig4_layout,
-                               widths = fig4_widths_in,
-                               heights = fig4_heights_in)
-
-fig4_border_grob <- rectGrob(gp = gpar(fill = NA))
-
-fig4_grob <- gTree(children = gList(fig4_plots_grob,
-                                    fig4_border_grob))
-
-fig4_width <- 8.5
-fig4_height <- 10
-
-fig4_outfile <- "fig.pdf"
-pdf(file = fig4_outfile,
-    width = fig4_width,
-    height = fig4_height)
-grid.draw(fig4_grob)
-dev.off()
-
-grid.newpage()
-grid.draw(fig4_grob)
-
-```
-
-
-## Figure layout v2
+## Figure layout
 
 
 ```{r}
@@ -880,10 +912,34 @@ for (r in 1:nrow(df_indices)) {
 
 fig4_guide_layout <- matrix(data = 1:nrow(df_indices), nrow = nrows, ncol = ncols, byrow = TRUE)
 
-fig4_widths <- c(0.1, 0.3, 0.3, 1.9, 0.8, 0.3, 1.9, 0.3, 1.9, 0.6, 0.1)
+fig4_widths <- c(0.1, 
+                 0.3, 
+                 0.3, 
+                 1.9, 
+                 0.8, 
+                 0.3, 
+                 2.0, 
+                 0.1, 
+                 2.0, 
+                 0.6, 
+                 0.1)
 fig4_widths_in <- unit(fig4_widths, "inch")
 
-fig4_heights <- c(0.1, 0.3, 0.3, 0.3, 2.5, 0.1, 0.3, 2.1, 0.2, 0.2, 0.4, 0.1, 0.3, 2.4, 0.1)
+fig4_heights <- c(0.1, #1
+                  0.3, #2
+                  0.3, #3
+                  0.3, #4
+                  2.5, #5
+                  0.1, #6
+                  0.3, #7
+                  2.1, #8
+                  0.2, #9
+                  0.2, #10
+                  0.05, #11
+                  0.05, #12
+                  0.3, #13
+                  2.4, #14
+                  0.1) #15
 fig4_heights_in <- unit(fig4_heights, "inch")
 
 fig4_guide_plots_grob <- arrangeGrob(grobs = list_indices,
@@ -898,199 +954,10 @@ fig4_guide_grob <- gTree(children = gList(fig4_guide_plots_grob,
                                           fig4_guide_border_grob))
 
 fig4_width <- 8.5
-fig4_height <- 10
+fig4_height <- 9.3
 
 fig4_guide_outfile <- "Figure4_guide.pdf"
-pdf(file = guide_outfile ,
-    width = fig4_width,
-    height = fig4_height)
-grid.draw(fig4_guide_grob)
-dev.off()
-
-fig4_layout <- matrix(data = NA, 
-                      nrow = nrow(fig4_guide_layout),
-                      ncol = ncol(fig4_guide_layout))
-
-#Row 1
-fig4_layout[1, 2:10] <- 1
-
-#Row 2
-fig4_layout[2:14, 1] <- 2
-fig4_layout[2, 2] <- 3
-fig4_layout[2, 3:5] <- 4
-fig4_layout[2, 6] <- 5
-fig4_layout[2, 7:10] <- 6
-fig4_layout[2:14, 11] <- 7
-
-#Row 3
-fig4_layout[3, 4] <- 8
-fig4_layout[3, 7] <- 9
-fig4_layout[3, 9] <- 10
-
-#Row 4
-fig4_layout[4, 4] <- 11
-fig4_layout[4, 7] <- 12
-fig4_layout[4, 9] <- 13
-
-#Row 5
-fig4_layout[5, 2] <- 14
-fig4_layout[5, 3] <- 15
-fig4_layout[5, 4] <- 16
-fig4_layout[5, 5] <- 17
-fig4_layout[5, 6] <- 18
-fig4_layout[5, 7] <- 19
-fig4_layout[5, 8] <- 20
-fig4_layout[5, 9] <- 21
-fig4_layout[5, 10] <- 22
-
-#Row 6
-fig4_layout[6, 1:11] <- 23
-
-#Row 7
-fig4_layout[7, 2] <-  24
-fig4_layout[7, 3:5] <-  25
-fig4_layout[7, 6] <-  26
-fig4_layout[7, 7:9] <-  27
-
-#Row 8
-fig4_layout[8, 2] <- 28
-fig4_layout[8, 3] <- 29
-fig4_layout[8, 4:5] <- 30
-fig4_layout[8, 6] <- 31
-fig4_layout[8, 7] <- 32
-fig4_layout[8, 9] <- 33
-
-#Row 9
-fig4_layout[9, 4:5] <- 34
-fig4_layout[9, 7] <- 35
-fig4_layout[9, 9] <- 36
-
-#Row 10
-fig4_layout[10, 4:5] <- 37
-fig4_layout[10, 7] <- 35
-fig4_layout[10, 9] <- 36
-
-#Row 11
-fig4_layout[11, 4:5] <- 38
-fig4_layout[11, 7:9] <- 39
-
-#Row 12
-fig4_layout[12, 2:10] <- 40
-
-#Row 13
-fig4_layout[13, 2] <- 41
-fig4_layout[13, 3:10] <- 42
-
-#Row 14
-fig4_layout[14, 2:10] <- 43
-
-#Row 15 
-fig4_layout[15, 2:10] <- 44
-
-
-fig4_plots_grob <- arrangeGrob(gTree(children = gList(rectGrob(), zeroGrob())), #1
-                               gTree(children = gList(rectGrob(), zeroGrob())), #2
-                               textGrob("A.", gp = gpar(fontsize = 14, fontface = "bold")), #3
-                               gTree(children = gList(rectGrob(), fig4_heatmap_title_grob)), #4
-                               textGrob("C.", gp = gpar(fontsize = 14, fontface = "bold")), #5
-                               gTree(children = gList(rectGrob(), fig4_ss_title_grob)), #6
-                               gTree(children = gList(rectGrob(), zeroGrob())), #7
-                               gTree(children = gList(rectGrob(),fig4_heatmap_coltitle_grob)), #8
-                               gTree(children = gList(rectGrob(),textGrob("Best match"))), #9
-                               gTree(children = gList(rectGrob(),textGrob("Second best match"))), #10
-                               gTree(children = gList(rectGrob(),fig4_heatmap_colnames_grob)), #11
-                               gTree(children = gList(rectGrob(),fig4_ss_1_labels_grob)), #12
-                               gTree(children = gList(rectGrob(),fig4_ss_2_labels_grob)), #13
-                               gTree(children = gList(rectGrob(),fig4_heatmap_rowtitle_grob)), #14
-                               gTree(children = gList(rectGrob(),fig4_heatmap_rownames_grob)), #15
-                               fig4_heatmap_matrix_grob, #16
-                               gTree(children = gList(rectGrob(), fig4_heatmap_legend_grob)), #17
-                               gTree(children = gList(rectGrob(), zeroGrob())), #18
-                               fig4_ss_1_base_grob, #19
-                               gTree(children = gList(rectGrob(), zeroGrob())), #20
-                               fig4_ss_2_base_grob, #21
-                               gTree(children = gList(rectGrob(), fig4_ss_2_legend_grob)), #22
-                               gTree(children = gList(rectGrob(), zeroGrob())), #23
-                               textGrob("B.", gp = gpar(fontsize = 14, fontface = "bold")), #24
-                               gTree(children = gList(rectGrob(), fig4_density_title_grob)), #25
-                               textGrob("D.", gp = gpar(fontsize = 14, fontface = "bold")), #26
-                               gTree(children = gList(rectGrob(), fig4_radar_title_grob)), #27
-                               gTree(children = gList(rectGrob(),fig4_density_ytitle_grob)), #28
-                               gTree(children = gList(rectGrob(),fig4_density_ytext_grob)), #29
-                               fig4_density_panel_grob, #30
-                               gTree(children = gList(rectGrob(), zeroGrob())), #31
-                               fig4_radar_1_panel_grob, #32
-                               fig4_radar_2_panel_grob, #33
-                               gTree(children = gList(rectGrob(), fig4_density_xtext_grob)), #34
-                               gTree(children = gList(rectGrob(), fig4_radar_1_annotation_grob)), #35
-                               gTree(children = gList(rectGrob(), fig4_radar_2_annotation_grob)), #36
-                               gTree(children = gList(rectGrob(), fig4_density_xtitle_grob)), #37
-                               gTree(children = gList(rectGrob(), fig4_density_legend_grob)), #38
-                               gTree(children = gList(rectGrob(), fig4_radar_legend_grob)), #39
-                               gTree(children = gList(rectGrob(), zeroGrob())), #40
-                               textGrob("E.", gp = gpar(fontsize = 14, fontface = "bold")), #41
-                               gTree(children = gList(rectGrob(), fig4_cluster_dx_title_grob)), #42
-                               gTree(children = gList(rectGrob(), fig4_cluster_dx_grob)), #43
-                               gTree(children = gList(rectGrob(), zeroGrob())), #44
-                               layout_matrix = fig4_layout,
-                               widths = fig4_widths_in,
-                               heights = fig4_heights_in)
-
-fig4_border_grob <- rectGrob(gp = gpar(fill = NA))
-
-fig4_grob <- gTree(children = gList(fig4_plots_grob,
-                                    fig4_border_grob))
-
-fig4_outfile <- "Figure4.pdf"
-pdf(file = fig4_outfile,
-    width = fig4_width,
-    height = fig4_height)
-grid.draw(fig4_grob)
-dev.off()
-
-grid.newpage()
-grid.draw(fig4_grob)
-```
-
-
-```{r}
-nrows <- 15
-ncols <- 11
-df_indices <- expand_grid(i = 1:nrows,
-                          j = 1:ncols)
-list_indices <- vector(mode = "list", length = nrow(df_indices))
-for (r in 1:nrow(df_indices)) {
-  i <- df_indices[[r, "i"]]
-  j <- df_indices[[r, "j"]]
-  list_indices[[r]] <- gTree(children = gList(rectGrob(), 
-                                              textGrob(label = str_c("(", i, ", ", j, ")"),
-                                                       gp = gpar(fontsize = 4))))
-}
-
-fig4_guide_layout <- matrix(data = 1:nrow(df_indices), nrow = nrows, ncol = ncols, byrow = TRUE)
-
-fig4_widths <- c(0.1, 0.3, 0.3, 1.9, 0.8, 0.3, 2.0, 0.1, 2.0, 0.6, 0.1)
-fig4_widths_in <- unit(fig4_widths, "inch")
-
-fig4_heights <- c(0.1, 0.3, 0.3, 0.3, 2.5, 0.1, 0.3, 2.1, 0.2, 0.2, 0.4, 0.1, 0.3, 2.4, 0.1)
-fig4_heights_in <- unit(fig4_heights, "inch")
-
-fig4_guide_plots_grob <- arrangeGrob(grobs = list_indices,
-                                     layout_matrix = fig4_guide_layout,
-                                     widths = fig4_widths_in,
-                                     heights = fig4_heights_in)
-
-
-fig4_guide_border_grob <- rectGrob(gp = gpar(fill = NA))
-
-fig4_guide_grob <- gTree(children = gList(fig4_guide_plots_grob,
-                                          fig4_guide_border_grob))
-
-fig4_width <- 8.5
-fig4_height <- 10
-
-fig4_guide_outfile <- "Figure4_guide.pdf"
-pdf(file = guide_outfile ,
+pdf(file = fig4_guide_outfile ,
     width = fig4_width,
     height = fig4_height)
 grid.draw(fig4_guide_grob)
@@ -1164,11 +1031,14 @@ fig4_layout[11, 2:6] <- 38
 fig4_layout[11, 7:9] <- 39
 
 #Row 12
-fig4_layout[12, 2:10] <- 40
+fig4_layout[12, 2:6] <- 40
+fig4_layout[12, 7:9] <- 39
 
 #Row 13
 fig4_layout[13, 2] <- 41
-fig4_layout[13, 3:10] <- 42
+# fig4_layout[13, 3:10] <- 42
+fig4_layout[13, 3:6] <- 42
+fig4_layout[13, 7:9] <- 39
 
 #Row 14
 fig4_layout[14, 2:10] <- 43
@@ -1176,7 +1046,7 @@ fig4_layout[14, 2:10] <- 43
 #Row 15 
 fig4_layout[15, 2:10] <- 44
 
-
+# gTree(children = gList(rectGrob(), 
 fig4_plots_grob <- arrangeGrob(zeroGrob(), #1
                                zeroGrob(), #2
                                textGrob("A.", gp = gpar(fontsize = 14, fontface = "bold")), #3
@@ -1214,7 +1084,8 @@ fig4_plots_grob <- arrangeGrob(zeroGrob(), #1
                                fig4_radar_1_annotation_grob, #35
                                fig4_radar_2_annotation_grob, #36
                                fig4_density_xtitle_grob, #37
-                               fig4_density_legend_grob, #38
+                               # fig4_density_legend_grob, #38
+                               zeroGrob(), #38
                                fig4_radar_legend_grob, #39
                                zeroGrob(), #40
                                textGrob("E.", gp = gpar(fontsize = 14, fontface = "bold")), #41
