@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------------
-# template.R
+# combat_normalization.R
 # Author: Antoine Beauchamp
-# Created:
+# Created: February 15th, 2023
 #
 # Brief description
 #
@@ -42,29 +42,35 @@ template <- function(x){
 # Main -----------------------------------------------------------------------
 
 #Parse command line args
-# args <- parse_args(OptionParser(option_list = option_list))
-# arg <- args[['arg']]
-# verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
+args <- parse_args(OptionParser(option_list = option_list))
+demographics <- args[["demographics"]]
+infile <- args[["infile"]]
+outfile <- args[["outfile"]]
 
 # if (verbose) {message("")}
 
 demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc.csv"
-infile <- "data/human/derivatives/POND_SickKids/jacobians_3mm/absolute/jacobians.csv"
+voxels <- "data/human/derivatives/POND_SickKids/jacobians_3mm/absolute/jacobians.csv"
 outfile <- "data/human/derivatives/POND_SickKids/combat/jacobians_normalized.csv"
+key <- "file"
 
 outdir <- dirname(outfile)
 if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 }
 
-#Import demographics data
+#Import data
 demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
+demographics <- demographics %>% rename(file = File) #REMOVE THIS LINE ONCE FIXED
+voxels <- as_tibble(data.table::fread(voxels, header = TRUE))
 
-ind_file_col <- str_detect(colnames(demographics), "(f|F)ile")
-if (any(ind_file_col)) {
-  colnames(demographics)[ind_file_col] <- str_to_lower(colnames(demographics)[ind_file_col])
-} else {
-  stop()
+#Check existence of key column
+if (!(key %in% colnames(demographics))) {
+  stop(paste("demographics data is missing key column:", key))
+}
+
+if (!(key %in% colnames(voxels))) {
+  stop(paste("voxels data is missing key column:", key))
 }
 
 #Remove entries with missing diagnosis, age, or sex
@@ -75,15 +81,7 @@ demographics <- demographics %>%
          !is.na(Site),
          !is.na(Scanner))
 
-
-dat <- as_tibble(data.table::fread(infile, header = TRUE))
-ind_file_col <- str_detect(colnames(dat), "(f|F)ile")
-if (any(ind_file_col)) {
-  colnames(dat)[ind_file_col] <- str_to_lower(colnames(dat)[ind_file_col])
-} else {
-  stop()
-}
-
+#Align voxels and demographics rows
 dat <- semi_join(dat, demographics, by = "file")
 
 ind_match <- match(dat[["file"]], demographics[["file"]])
@@ -104,6 +102,5 @@ dat_norm <- t(dat_norm)
 
 df_dat_norm <- as_tibble(dat_norm, rownames = "file")
 
-outfile <- file.path(outdir, outfile)
 data.table::fwrite(x = df_dat_norm, file = outfile)
 
