@@ -28,7 +28,7 @@ fi
 #Load necessary modules 
 #NOTE: minc-stuffs module break python virtual environment
 module load \
-	minc-toolkit/1.9.18.1 \
+	minc-toolkit \
 	r/3.6.3 \
 	r-packages \
 	ants
