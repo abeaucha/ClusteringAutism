@@ -1,15 +1,16 @@
 import os
 import subprocess
-from re import sub
-from glob import glob
-from tqdm                   import tqdm
+import tempfile
+import numpy                as np
+import pandas               as pd
 import multiprocessing      as mp
+from src.utils              import execute_R
+from re                     import sub
+from glob                   import glob
+from tqdm                   import tqdm
 from functools              import partial
-from src.utils import execute_R
-from pyminc.volumes.factory import volumeFromFile
-import numpy as np
-from warnings import warn
-import pandas as pd
+from pyminc.volumes.factory import volumeFromFile, volumeLikeFile
+from warnings               import warn
 
 def gunzip_file(gzfile, keep = True, outdir = None):
     
@@ -211,18 +212,80 @@ def convert_images(infiles, input_format = 'nifty', output_format = 'minc', keep
     return outfiles
     
     
-def calculate_human_effect_sizes(demographics, imgdir, maskfile, outdir, ncontrols = 10, parallel = False, nproc = None):
-
+def normative_growth_norm(voxels, demographics, outfile, key = 'file', df = 5, combat = False, combat_batch = None, parallel = False, nproc = None):
+    
     """
-    Calculate human effect size images.
+    Calculate human effect sizes using normative growth modelling.
     
     Arguments
     ---------
+    voxels: str
+        Path to the CSV file containing the voxelwise data.
     demographics: str
         Path to the CSV file containing the human demographics data.
+    outfile: str
+        Path to the CSV file in which to write the effect size data.
+    key: str
+        Primary key between voxels and demographics data.
+    df: int
+        Degrees of freedom to use in natural splines.
+    combat: bool
+        Option to run ComBat normalization on batch variables prior to normative growth modelling.
+    combat_batch: list
+        Variables to use in ComBat normalization.
+    parallel: bool
+        Option to run in parallel.
+    nproc: int
+        Number of processors to use in parallel.
+    
+    Returns
+    -------
+    
+    """
+  
+    #Unpack function args into dictionary
+    script_args = locals().copy()
+  
+    #ComBat normalization options
+    if combat:
+        script_args['combat'] = 'true'
+        if combat_batch is None:
+            raise Exception("Argument combat_batch must be specified when combat is True")
+        else:
+            if type(combat_batch) is str:
+                 combat_batch = [combat_batch]
+            script_args['combat_batch'] = '-'.join(combat_batch)
+            script_args['combat-batch'] = script_args.pop('combat_batch')
+    else:
+        script_args['combat'] = 'false'
+        del script_args['combat_batch']
+
+    #Parallel options
+    if parallel:
+        script_args['parallel'] = 'true'
+        if nproc is None:
+            raise ValueError("Set the nproc argument to specify the number of processors to use")
+    else:
+        script_args['parallel'] = 'false'
+    
+    #Execute script
+    script = 'normative_growth_normalization.R'
+    execute_R(script = script, args = script_args)
+    return outfile
+    
+    
+def propensity_matching_norm(imgdir, demographics, mask, outdir, ncontrols = 10, parallel = False, nproc = None):
+    
+    """
+    Calculate human effect size images using propensity-matching.
+    
+    Arguments
+    ---------
     imgdir: str
         Path to the directory containing the MINC images to use to compute the effect sizes.
-    maskfile: str
+    demographics: str
+        Path to the CSV file containing the human demographics data.
+    mask: str
         Path to the mask MINC file for the images.
     outdir: str
         Path to the directory in which to save the effect size MINC images.
@@ -238,24 +301,160 @@ def calculate_human_effect_sizes(demographics, imgdir, maskfile, outdir, ncontro
     outfiles: list
         List of paths to the effect size images.
     """
-
-    script = 'calculate_human_effect_sizes.R'
+    
+    #Unpack function args into dictionary
+    script_args = locals().copy()
+    
+    #Parallel options
     if parallel:
+        script_args['parallel'] = 'true'
         if nproc is None:
             raise ValueError("Set the nproc argument to specify the number of processors to use")
-    else: 
-        nproc = 1
-    parallel = 'true' if parallel else 'false'
-    script_args = {'demographics':demographics,
-                   'imgdir':imgdir,
-                   'maskfile':maskfile,
-                   'outdir':outdir,
-                   'ncontrols':ncontrols,
-                   'parallel':parallel,
-                   'nproc':nproc}
+    else:
+        script_args['parallel'] = 'false'
+
+    script = 'propensity_matching_normalization.R'
     execute_R(script = script, args = script_args)
     outfiles = [os.path.join(outdir, file) for file in os.listdir(outdir)]
     return outfiles
+    
+    
+def vector_to_image(x, outfile, maskfile):
+    
+    mask_vol = volumeFromFile(maskfile)
+    mask = np.array(mask_vol.data)
+    mask_vol.closeVolume()
+
+    img = np.zeros_like(mask.flatten())
+    img[(mask == 1).flatten()] = x
+    img = img.reshape(mask.shape)
+
+    img_vol = volumeLikeFile(likeFilename = maskfile,
+                             outputFilename = outfile,
+                             labels = False)
+    img_vol.data = img
+    img_vol.writeFile()
+    img_vol.closeVolume()
+    
+
+def matrix_to_images(x, outfiles, maskfile):
+
+    #Function to export image
+    exporter = lambda i : vector_to_image(x = x[i,], 
+                                          outfile = outfiles[i], 
+                                          maskfile = maskfile)
+    #Error checking
+    if type(x) is not np.ndarray:
+        raise ValueError("Argument x must have type numpy.ndarray.")
+    else:
+        if len(x.shape) != 2:
+            raise Exception("Argument x must be a 2-dimensional NumPy array.")
+    
+    if x.shape[0] != len(outfiles):
+        raise Exception("Number of rows in x must be equal to the number of entries in outfiles")
+    
+    #Iterate over number of files
+    irange = range(len(outfiles))
+    out = list(map(exporter, tqdm(irange)))
+        
+    return outfiles
+
+
+    
+def calculate_human_effect_sizes(imgdir, demographics, outdir, method, mask, parallel = False, nproc = None, **kwargs):
+    
+    """
+    Calculate human effect size images.
+    
+    Arguments
+    ---------
+    imgdir: str
+        Path to the directory containing the MINC images to use to compute the effect sizes.
+    demographics: str
+        Path to the CSV file containing the human demographics data.
+    outdir: str
+        Path to the directory in which to save the effect size MINC images.
+    mask: str
+        Path to the mask MINC file for the images.
+    method: str
+        Method to use to compute effect sizes. 
+    parallel: bool
+        Option to run in parallel.
+    nproc: int
+        Number of processors to use in parallel.
+        
+    Returns
+    -------
+    outfiles: list
+        List of paths to the effect size images.
+    """
+    
+    imgdir = os.path.join(imgdir, '')
+    outdir = os.path.join(outdir, '')
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    
+    if method == "propensity-matching":
+        
+        kwargs.update({'imgdir':imgdir,
+                       'demographics':demographics,
+                       'mask':mask,
+                       'outdir':outdir,
+                       'parallel':parallel,
+                       'nproc':nproc})
+        outfiles = propensity_matching_norm(**kwargs)
+        
+    elif method == "normative-growth":
+        
+        print("Building voxel matrix...")
+  
+        imgfiles = glob(imgdir+'*.mnc')
+        imgfiles = imgfiles[:50]
+        tmpfile = tempfile.mkstemp(dir = outdir, suffix = '.csv')[1]
+        df_voxels = processing.build_voxel_matrix(infiles = imgfiles,
+                                                  mask = mask,
+                                                  sort = True,
+                                                  file_col = True,
+                                                  parallel = parallel,
+                                                  nproc = nproc)
+        if 'key' in kwargs.keys():
+            key = kwargs['key']
+        else:
+            key = 'file'
+        df_voxels[key] = [os.path.basename(file) for file in df_voxels['file']]
+        
+        print("Writing out voxel matrix...")
+        df_voxels.to_csv(tmpfile, index = False)
+        
+        
+        print("Executive normative growth...")
+        outfile = tempfile.mkstemp(dir = outdir, suffix = '.csv')[1]
+        kwargs.update({'voxels':tmpfile,
+                       'demographics':demographics,
+                       'outfile':outfile,
+                       'parallel':parallel,
+                       'nproc':nproc})
+        outfile = normative_growth_norm(**kwargs)
+        
+        x = fread(outfile, header = True).to_pandas()
+        outfiles = x[key].to_list()
+        outfiles = [os.path.join(outdir, outfile) for outfile in outfiles]
+        x = x.drop(key, axis=1).to_numpy()
+        outfiles = matrix_to_images(x = x, 
+                                    outfiles = outfiles,
+                                    maskfile = maskfile)
+        
+        os.remove(tmpfile)
+        os.remove(outfile)
+        
+    else:
+        raise ValueError("Argument method must be one of ['propensity-matching', 'normative-growth']: {}".format(method))
+    
+    return outfiles
+    
+
+
+
 
 
 def resample_image(infile, isostep, outdir = None, suffix = None):
