@@ -24,7 +24,7 @@ option_list <- list(
   make_option("--demographics",
               type = "character",
               help = paste("Help message")),
-  make_option("--voxels",
+  make_option("--infile",
               type = "character",
               help = paste("Help message")),
   make_option("--key",
@@ -118,7 +118,7 @@ compute_normative_zscore <- function(y, demographics, df) {
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
 demographics <- args[["demographics"]]
-voxels <- args[["voxels"]]
+infile <- args[["infile"]]
 key <- args[["key"]]
 df <- args[["df"]]
 combat <- ifelse(args[["combat"]] == "true", TRUE, FALSE)
@@ -127,20 +127,10 @@ outfile <- args[["outfile"]]
 inparallel <- ifelse(args[["parallel"]] == "true", TRUE, FALSE)
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
-# demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc.csv"
-# voxels <- "data/human/derivatives/POND_SickKids/jacobians_3mm/absolute/jacobians.csv"
-# outfile <- "data/human/derivatives/POND_SickKids/effect_sizes/ES_normative.csv"
-# key <- "file"
-# df <- 5
-# combat <- TRUE
-# combat_batch <- "Site-Scanner"
-# inparallel <- FALSE
-
 #Import data
 if (verbose) {message("Importing data...")}
 demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
-demographics <- demographics %>% rename(file = File) #REMOVE THIS LINE ONCE FIXED
-voxels <- as_tibble(data.table::fread(voxels, header = TRUE))
+voxels <- as_tibble(data.table::fread(infile, header = TRUE))
 
 #Check existence of key column
 if (!(key %in% colnames(demographics))) {
