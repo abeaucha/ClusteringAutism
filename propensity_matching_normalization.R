@@ -172,10 +172,10 @@ executor <- function(participant, controls, ncontrols = 10,
                                            seed = seed)
   
   #Image files for the controls
-  control_files <- file.path(imgdir, controls_matched[["File"]])
+  control_files <- file.path(imgdir, controls_matched[["file"]])
   
   #Image file for the participant
-  participant_file <- file.path(imgdir, participant[[1, "File"]])
+  participant_file <- file.path(imgdir, participant[[1, "file"]])
   
   #Compute the effect size volume
   effect_size <- compute_effect_size(participant = participant_file,
