@@ -28,9 +28,9 @@ fi
 #Load necessary modules 
 #NOTE: minc-stuffs module break python virtual environment
 module load \
-	minc-toolkit/1.9.18.1-mp7vcse \
-	r/3.6.3-zlk4uk6 \
-	r-packages/2022-01-26 \
+	minc-toolkit/1.9.18.1 \
+	r/3.6.3 \
+	r-packages \
 	ants
 
 #Activate the python venv
