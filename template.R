@@ -16,12 +16,12 @@ suppressPackageStartupMessages(library(optparse))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option('--arg',
-              type = 'character',
+  make_option("--arg",
+              type = "character",
               help = paste("Help message")),
-  make_option('--verbose',
-              type = 'character',
-              default = 'true',
+  make_option("--verbose",
+              type = "character",
+              default = "true",
               help = paste("Verbosity option. [default %default]"))
 ) 
 
@@ -42,8 +42,8 @@ template <- function(x){
 
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-arg <- args[['arg']]
-verbose <- ifelse(args[['verbose']] == 'true', TRUE, FALSE)
+arg <- args[["arg"]]
+verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
 if (verbose) {message("")}
 
