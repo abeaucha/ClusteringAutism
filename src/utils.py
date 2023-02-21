@@ -1,9 +1,9 @@
 import subprocess
 import os
+import numpy  as np
 import pandas as pd
-import numpy as np
+from random   import randint
 from warnings import warn
-from random import randint
 
 def execute_R(script, args):
     
