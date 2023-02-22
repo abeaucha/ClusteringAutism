@@ -845,39 +845,41 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10,
     """
     
     # TO-DO
-    # - Implement locals dictionary() instead of creating it manually.
     # - Make this function more general so that it can run SNF on any set of voxel matrices
     #   rather than just the specific human effect sizes. 
     # - Option to run SNF on more than two matrices? 
     # Make it so that this function exits if an error happens in the R script
     
-    if type(infiles) is not list:
+    #Unpack function args into dictionary
+    script_args = locals().copy()
+    
+    #Input files options
+    if type(script_args['infiles']) is not list:
         raise TypeError("Argument infiles must be a list.")
-    
-    if len(infiles) != 2:
-        raise Exception("Argument infiles must have length 2.")
-    
-    script = 'cluster_human_data.R'
-    script_args = {'file1':infiles[0],
-                   'file2':infiles[1],
-                   'rownames':rownames,
-                   'nk-max':nk_max,
-                   'metric':metric,
-                   'K':K,
-                   'sigma':sigma,
-                   't':t,
-                   'cluster-file':cluster_file,
-                   'affinity-file':affinity_file}
-    
+    else:
+        if len(script_args['infiles']) != 2:
+            raise Exception("Argument infiles must have length 2.")
+
+        script_args['file1'] = script_args['infiles'][0]
+        script_args['file2'] = script_args['infiles'][1]
+        del script_args['infiles']
+
+    #Update dictionary keys to match R command line args
+    script_args['nk-max'] = script_args.pop('nk_max')
+    script_args['cluster-file'] = script_args.pop('cluster_file')
+    script_args['affinity-file'] = script_args.pop('affinity_file')
+            
+    #Remove command line args if None
     if rownames is None:
         del script_args['rownames']
         
     if affinity_file is None:
         del script_args['affinity-file']
-    
+
+    script = 'cluster_human_data.R'
     execute_R(script = script, args = script_args)
-    
-    return pd.read_csv(cluster_file)
+    return cluster_file
+
 
 
 def create_cluster_maps(clusters, imgdir, outdir, mask = None, 
@@ -906,19 +908,25 @@ def create_cluster_maps(clusters, imgdir, outdir, mask = None,
     outfiles: list
         List of paths to the cluster maps.
     """
+        
+    #Unpack function args into dictionary
+    script_args = locals().copy()
     
-    if not os.path.exists(clusters):
-        raise OSError("Cluster file not found: {}".format(clusters))
-    verbose = 'true' if verbose else 'false'
-    script = 'create_cluster_maps.R'
-    script_args = {'cluster-file':clusters,
-                   'imgdir':imgdir,
-                   'outdir':outdir,
-                   'mask':mask,
-                   'method':method,
-                   'verbose':verbose}
+    #Check existence of cluster file
+    if not os.path.exists(script_args['clusters']):
+        raise OSError("Cluster file not found: {}".format(script_args['clusters']))
+        
+    #Convert bools to str
+    script_args['verbose'] = 'true' if script_args['verbose'] else 'false'
+    
+    #Update dictionary keys to match R command line args
+    script_args['cluster-file'] = script_args.pop('clusters')
+
+    #Remove command line args if None
     if mask is None:
         del script_args['mask']
+        
+    script = 'create_cluster_maps.R'
     execute_R(script = script, args = script_args)
     outfiles = glob(outdir+'*.mnc')
     return outfiles
