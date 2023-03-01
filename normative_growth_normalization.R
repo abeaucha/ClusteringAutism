@@ -82,21 +82,26 @@ fit_predict_model <- function(y, demographics, df) {
     mutate(y = y[ind_pred])
   
   model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
-  model_pred <- predict(model_fit, df_pred, se = TRUE)
+  model_pred <- predict(model_fit, 
+                        newdata = df_pred, 
+                        interval = "prediction",
+                        level = pnorm(q = 1) - pnorm(q = -1))
   
   df_pred <- df_pred %>% 
-    mutate(y_pred = model_pred[["fit"]],
-           y_se = model_pred[["se.fit"]])
+    mutate(y_pred = model_pred[["fit"]][,"fit"],
+           y_lwr = model_pred[["fit"]][,"lwr"],
+           y_upr = model_pred[["fit"]][,"upr"],
+           y_sd = y_pred - y_lwr)
   
   return(df_pred)
 }
 
 zscore <- function(x){
-  cols_check <- c("y", "y_pred", "y_se")
+  cols_check <- c("y", "y_pred", "y_sd")
   if (any(!(cols_check %in% colnames(x)))){
     stop()
   }
-  x <- mutate(x, z = (y - y_pred)/y_se)
+  x <- mutate(x, z = (y - y_pred)/y_sd)
   return(x)  
 }
 
