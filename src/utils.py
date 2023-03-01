@@ -61,93 +61,68 @@ def mkdir_from_list(inlist, basedir = './', sep = '_'):
     return outdir
 
 
-def mkdir_from_params(params, basedir = './', metadata = 'metadata.csv', 
-                      params_id = None, ndigits = 3, return_metadata = False):
+def get_params_id(params, metadata):
 
-    """
-    Create a random directory based on a parameter set.
-    
-    Arguments
-    ---------
-    params: dict
-        Dictionary of key-value pairs containing the parameter set.
-    basedir: str
-        Path to the base directory in which to create the directory
-        for the parameter set.
-    metadata: str
-        Name of the CSV file in which to store the parameter set 
-        metadata.
-    params_id: str
-        Option to specify the ID associated with the parameter set.
-    ndigits: int
-        Number of digits to use when creating the random ID of the 
-        parameter directory.
-    return_metadata: bool
-        Option to return the path to the metadata file.
-    
-    Returns
-    -------
-    params_dir: str
-        Path to the random directory associated with the parameter set.
-    metadata: str (optional)
-        Path to the metadata file. 
-    """
-    
-    params_cp = params.copy()
-    
-    #Create base directory if needed
-    basedir = os.path.join(basedir, '')
-    if not os.path.exists(basedir):
-        os.makedirs(basedir)
-
-    #If metadata file already exists, import it. 
-    metadata = os.path.join(basedir, metadata)
+    df_params = pd.DataFrame(params, index = [0], dtype = str)
     if os.path.exists(metadata):
-        
-        #Check existence of parameter set in metadata
-        df_metadata = pd.read_csv(metadata, dtype = 'str')
-        df_match = pd.merge(df_metadata, 
-                            pd.DataFrame(params_cp, index = [0], dtype = 'str'),
-                            how = 'inner')
-        
-        #If parameter set doesn't exist, add it to the metadata
-        if df_match.shape[0] == 0:
+        df_metadata = pd.read_csv(metadata, dtype = str)
+        df_match = pd.merge(df_metadata, df_params, how = 'inner')
+        nmatch = df_match.shape[0]
+        if nmatch == 1:
+            return df_match['id'].values[0]
+        else:
+            return None
+    else:
+        return None
 
-            params_cp['id'] = random_id(ndigits) if params_id is None else params_id
-            flag = 1
-            while flag == 1:
-                id_exists = np.isin(params_cp['id'], df_metadata['id'])
-                if id_exists:
-                    warn("Parameter ID exists: {}. Randomly generating a new ", 
-                         "one.".format(params_id))
-                    params_cp['id'] = random_id(ndigits)
-                else: 
-                    flag = 0
-            df_metadata = pd.concat([df_metadata, 
-                                     pd.DataFrame(params_cp, index = [0])])
+
+def set_params_id(params, metadata, params_id = None):
+    
+    df_params = pd.DataFrame(params, index = [0], dtype = str)
+    if os.path.exists(metadata):
+        df_metadata = pd.read_csv(metadata, dtype = str)
+        df_match = pd.merge(df_metadata, df_params, how = 'inner')
+        nmatch = df_match.shape[0]
+        if nmatch == 1:
+            df_params['id'] = df_match['id'].values[0]
+        elif nmatch == 0:
+            df_params['id'] = random_id(3) if params_id is None else str(params_id)
+            df_metadata = pd.concat([df_metadata, df_params])
             df_metadata.to_csv(metadata, index = False)
-            
-        elif df_match.shape[0] == 1:
-            params_cp['id'] = df_match['id'].values[0]
-            
         else:
             raise Exception
-            
-    else: 
-        #If metadata file doesn't exist, create it with the parameter set
-        params_cp['id'] = random_id(ndigits) if params_id is None else params_id
-        pd.DataFrame(params_cp, index = [0]).to_csv(metadata, index = False)
-
-    #Create parameter directory if needed
-    params_dir = os.path.join(basedir, params_cp['id'], '')
-    if not os.path.exists(params_dir):
-        os.makedirs(params_dir)
-
-    #Return path to parameter directory and metadata file as desired
-    if return_metadata: 
-        return params_dir, metadata
     else:
-        return params_dir
+        df_params['id'] = random_id(3) if params_id is None else str(params_id)
+        df_params.to_csv(metadata, index = False)
+
+    return(df_params['id'].values[0])
+
+    
+def mkdir_from_params(params, outdir, metadata = None, params_id = None):
+
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+        
+    if metadata is None:
+        metadata = os.path.join(outdir, 'metadata.csv')
+
+    params_id_check = get_params_id(params = params,
+                                    metadata = metadata)
+
+    if params_id_check is None:
+        params_id = set_params_id(params = params,
+                                 metadata = metadata,
+                                 params_id = params_id)
+    else: 
+        if params_id is not None:
+            print("Parameters already identified: {}".format(params_id_check))
+        params_id = params_id_check
+
+    outdir = os.path.join(outdir, params_id, '')
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    
+    return outdir
 
     
 def mk_symlinks(src, dst):
