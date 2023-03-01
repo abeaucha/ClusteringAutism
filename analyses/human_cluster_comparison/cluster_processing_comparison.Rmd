@@ -1,0 +1,417 @@
+---
+title: "Comparison of human clusters across processing parameters"
+author: "Antoine Beauchamp"
+date: '2023-02-24'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE)
+```
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(RColorBrewer))
+```
+
+# Parameters
+
+```{r}
+# params_1 = list("es_method" = "propensity-matching",
+#                 "es_df" = NA,
+#                 "es_combat" = FALSE,
+#                 "es_combat_batch" = NA,
+#                 "es_ncontrols" = 20)
+
+params_1 = list("es_method" = "normative-growth",
+                "es_df" = 5,
+                "es_combat" = TRUE,
+                "es_combat_batch" = "Site-Scanner",
+                "es_ncontrols" = NA)
+
+# params_2 = list("es_method" = "propensity-matching",
+#                 "es_df" = NA,
+#                 "es_combat" = FALSE,
+#                 "es_combat_batch" = NA,
+#                 "es_ncontrols" = 5)
+
+params_2 = list("es_method" = "normative-growth",
+                "es_df" = 7,
+                "es_combat" = TRUE,
+                "es_combat_batch" = "Site-Scanner",
+                "es_ncontrols" = NA)
+
+df_params <- bind_rows(as_tibble(params_1),
+                       as_tibble(params_2))
+
+df_params %>% 
+  mutate(`Parameter set` = c(1,2)) %>% 
+  select(`Parameter set`,
+         `Effect size method` = es_method,
+         `Effect size df` = es_df,
+         `Effect size ComBat` = es_combat,
+         `Effect size ComBat batch` = es_combat_batch,
+         `Effect size number of controls` = es_ncontrols) %>% 
+  knitr::kable()
+```
+
+Clustering parameters were fixed at:
+
+```{r}
+knitr::kable(tibble(Metric = "correlation",
+                    K = 10,
+                    sigma = 0.5,
+                    t = 20))
+```
+
+
+# Clusters
+
+```{r}
+path_clusters <- "../../data/human/test/POND_SickKids/clusters/"
+clusters_metadata <- file.path(path_clusters, "metadata.csv")
+df_clusters_metadata <- read_csv(clusters_metadata, show_col_types = FALSE)
+
+id_cluster_1 <- inner_join(as_tibble(params_1), 
+                           df_clusters_metadata) %>% 
+  pull(id)
+
+id_cluster_2 <- inner_join(as_tibble(params_2), 
+                           df_clusters_metadata) %>% 
+  pull(id)
+
+file_clusters_1 <- file.path(path_clusters, id_cluster_1, "resolution_3.0", "clusters.csv")
+file_clusters_2 <- file.path(path_clusters, id_cluster_2, "resolution_3.0", "clusters.csv")
+
+df_clusters_1 <- read_csv(file_clusters_1, show_col_types = FALSE)
+df_clusters_2 <- read_csv(file_clusters_2, show_col_types = FALSE)
+
+df_clusters_1_long <- df_clusters_1 %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_extract(nk_name, "[0-9]+"),
+         nk = as.numeric(nk),
+         nk = factor(nk, levels = 2:10),
+         k = factor(k, levels = 1:10))
+
+df_clusters_2_long <- df_clusters_2 %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_extract(nk_name, "[0-9]+"),
+         nk = as.numeric(nk),
+         nk = factor(nk, levels = 2:10),
+         k = factor(k, levels = 1:10))
+```
+
+```{r fig.width = 10, fig.height = 10}
+p_alluvial_1 <- ggplot(df_clusters_1_long,
+                       aes(x = nk,
+                           stratum = k,
+                           alluvium = ID,
+                           fill = k, 
+                           label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 0.5) + 
+  labs(x = 'Number of clusters',
+       y = 'Number of patients',
+       title = "Clusters for parameter set 1") + 
+  theme_bw() + 
+  theme(axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank())
+
+p_alluvial_2 <- ggplot(df_clusters_2_long,
+                       aes(x = nk,
+                           stratum = k,
+                           alluvium = ID,
+                           fill = k, 
+                           label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 0.5) + 
+  labs(x = 'Number of clusters',
+       y = 'Number of patients',
+       title = "Clusters for parameter set 2") + 
+  theme_bw() + 
+  theme(axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank())
+
+p_alluvial_1 / p_alluvial_2
+```
+
+
+```{r}
+nk <- 2
+
+df_clusters_1_nk <- df_clusters_1 %>% 
+  select(ID, kclust = contains(as.character(nk)))
+
+df_clusters_2_nk <- df_clusters_2 %>% 
+  select(ID, kclust = contains(as.character(nk)))
+
+df_intersections <- tibble()
+for (nk in 2:10) {
+  df_intersections <- bind_rows(df_intersections,
+                                expand_grid(k1 = 1:nk,
+                                            k2 = 1:nk) %>% 
+                                  mutate(nk = nk))
+}
+df_intersections <- mutate(df_intersections, jaccard = 0)
+
+
+for (i in 1:nrow(df_intersections)) {
+  
+  k1 <- df_intersections[[i, "k1"]]
+  k2 <- df_intersections[[i, "k2"]]
+  nk <- df_intersections[[i, "nk"]]
+  
+  ind_k1 <- df_clusters_1[[paste0("nk", nk)]] == k1
+  IDs_1 <- df_clusters_1[ind_k1,][["ID"]]
+  
+  ind_k2 <- df_clusters_2[[paste0("nk", nk)]] == k2
+  IDs_2 <- df_clusters_2[ind_k2,][["ID"]]
+  
+  df_intersections[[i, "jaccard"]] <- length(intersect(IDs_1, IDs_2))/length(union(IDs_1, IDs_2))
+}
+
+lvls <- character()
+for (nk in 2:10) {
+  for (k in 1:nk) {
+    lvls <- c(lvls, str_c(nk, k, sep = "-"))
+  }
+}
+
+df_intersections <- df_intersections %>% 
+  mutate(label1 = str_c(nk, k1, sep = "-"),
+         label1 = factor(label1, levels = lvls),
+         label2 = str_c(nk, k2, sep = "-"),
+         label2 = factor(label2, levels = lvls))
+```
+
+```{r fig.height = 10, fig.width = 10}
+ggplot(df_intersections, 
+       aes(x = label1, y = fct_rev(label2), fill = jaccard)) + 
+  geom_tile(col = "grey50") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds"), na.value = "white") + 
+  labs(x = "Clusters for parameter set 1",
+       y = "Clusters for parameter set 2",
+       fill = "Jaccard distance",
+       title = "Cluster overlap between parameter sets") + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(),
+        axis.text = element_text(size = 8),
+        axis.text.x = element_text(angle = 90),
+        legend.position = "bottom")
+```
+
+
+
+# Effect sizes
+
+
+```{r}
+path_es <- "../../data/human/test/POND_SickKids/effect_sizes/"
+es_metadata <- file.path(path_es, "metadata.csv")
+df_es_metadata <- read_csv(es_metadata, show_col_types = FALSE)
+
+id_es_1 <- inner_join(as_tibble(params_1), 
+                      df_es_metadata) %>% 
+  pull(id)
+
+id_es_2 <- inner_join(as_tibble(params_2), 
+                      df_es_metadata) %>% 
+  pull(id)
+
+jacobians <- c("absolute", "relative")
+ids <- c("params_1" = id_es_1, "params_2" = id_es_2)
+list_es_files <- vector(mode = "list", length = length(jacobians))
+names(list_es_files) <- jacobians
+for (j in 1:length(jacobians)) {
+  es_dirs <- file.path(path_es, ids, "resolution_3.0", jacobians[j])
+  list_es_files[[j]] <- vector(mode = "list", length = length(ids))
+  names(list_es_files[[j]]) <- names(ids)
+  for (i in 1:length(ids)) {
+    list_es_files[[j]][[i]] <- list.files(es_dirs[i], full.names = TRUE) %>% 
+      str_subset(".csv", negate = TRUE) %>% 
+      sort()
+  }
+}
+```
+
+```{r}
+maskfile <- "../../data/human/registration/reference_files/mask_3.0mm.mnc"
+mask <- mincGetVolume(maskfile)
+
+list_correlations <- vector(mode = "list", length = length(jacobians))
+list_euclidean <- vector(mode = "list", length = length(jacobians))
+names(list_correlations) <- jacobians
+names(list_euclidean) <- jacobians
+for (j in jacobians) {
+  list_correlations[[j]] <- numeric(length(list_es_files[[j]][[1]]))
+  list_euclidean[[j]] <- numeric(length(list_es_files[[j]][[1]]))
+  for (k in 1:length(list_correlations[[j]])) {
+    
+    img_params_1 <- mincGetVolume(list_es_files[[j]][[1]][k])
+    img_params_1 <- img_params_1[mask == 1]
+    
+    img_params_2 <- mincGetVolume(list_es_files[[j]][[2]][k])
+    img_params_2 <- img_params_2[mask == 1]
+    
+    list_correlations[[j]][k] <- cor(img_params_1, img_params_2)
+    list_euclidean[[j]][k] <- sqrt(sum((img_params_1 - img_params_2)^2))
+    
+  }
+}
+```
+
+```{r}
+imgfiles <- list_es_files[["relative"]][["params_1"]]
+imgfiles_sample <- character(length(imgfiles))
+
+nsim <- 1
+list_correlations_sample <- vector(mode = "list", length = nsim)
+list_euclidean_sample <- vector(mode = "list", length = nsim)
+for (s in 1:nsim) {
+  
+  list_correlations_sample[[s]] <- numeric(length(imgfiles))
+  list_euclidean_sample[[s]] <- numeric(length(imgfiles))
+  
+  for (i in 1:length(imgfiles)) {
+    
+    imgfile_1 <- imgfiles[i]
+    imgfile_2 <- sample(x = imgfiles[imgfiles != imgfile_1], size = 1)
+    imgfiles_sample[i] <- imgfile_2
+    
+    img_1 <- mincGetVolume(imgfile_1)
+    img_1 <- img_1[mask == 1]
+    
+    img_2 <- mincGetVolume(imgfile_2)
+    img_2 <- img_2[mask == 1]
+    
+    list_correlations_sample[[s]][i] <- cor(img_1, img_2)
+    list_euclidean_sample[[s]][i] <- sqrt(sum((img_1 - img_2)^2))
+  }
+}
+
+```
+
+```{r fig.width = 10, fig.height = 5}
+df_correlations <- reduce(list_correlations, .f = bind_cols)
+colnames(df_correlations) <- jacobians
+
+correlations_sample <- reduce(list_correlations_sample, .f = c)
+df_correlations_sample <- tibble(correlation = correlations_sample,
+                                 data = "Parameter set 1 resampling")
+
+df_correlations_dist <- bind_rows(df_correlations %>% 
+                                   select(correlation = relative) %>% 
+                                   mutate(data = "Parameter set comparison"),
+                                 df_correlations_sample)
+
+p_es_compare_cor <- ggplot(df_correlations_dist,
+       aes(x = correlation,
+           fill = data, col = data)) + 
+  geom_histogram(binwidth = 0.01) + 
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Correlation",
+       y = "Count",
+       fill = "Data",
+       col = "Data") + 
+  theme_bw()
+```
+
+
+```{r fig.width = 10, fig.height = 5}
+df_euclidean <- reduce(list_euclidean, .f = bind_cols)
+colnames(df_euclidean) <- jacobians
+
+euclidean_sample <- reduce(list_euclidean_sample, .f = c)
+df_euclidean_sample <- tibble(euclidean = euclidean_sample,
+                                 data = "Parameter set 1 resampling")
+
+df_euclidean_dist <- bind_rows(df_euclidean %>% 
+                                   select(euclidean = relative) %>% 
+                                   mutate(data = "Parameter set comparison"),
+                                 df_euclidean_sample)
+
+p_es_compare_euc <- ggplot(df_euclidean_dist,
+       aes(x = euclidean,
+           fill = data, col = data)) + 
+  geom_histogram(binwidth = 50) + 
+  # scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Euclidean distance",
+       y = "Count",
+       fill = "Data",
+       col = "Data") + 
+  theme_bw()
+```
+
+```{r fig.width = 10, fig.height = 10}
+(p_es_compare_cor / p_es_compare_euc) +
+  plot_layout(guides = "collect") +
+  plot_annotation(title = "Comparison of patient relative effect sizes between parameter sets")
+```
+
+For "resampling", the effect size image of each patient was compared to the image of a randomly select patient from the same parameter set. This should give some sense of the distribution of the similarity metrics for unrelated images. 
+Absolute effect sizes follow the same pattern.
+
+
+```{r}
+ind_cor_compare <- list_correlations[["relative"]] >= 0.9
+ind_cor_sample <- abs(list_correlations_sample[[1]]) <= 0.05
+ind_cor <- ind_cor_compare & ind_cor_sample
+
+ind_euc_sample_min <- which(list_euclidean_sample[[1]][ind_cor_compare] == min(list_euclidean_sample[[1]][ind_cor_compare]))
+
+imgfile_params_1 <- list_es_files[["relative"]][["params_1"]][ind_cor_compare][ind_euc_sample_min]
+imgfile_params_2 <- list_es_files[["relative"]][["params_2"]][ind_cor_compare][ind_euc_sample_min]
+imgfile_sample <- imgfiles_sample[ind_cor_compare][ind_euc_sample_min]
+
+img_params_1 <- mincGetVolume(imgfile_params_1)
+img_params_2 <- mincGetVolume(imgfile_params_2)
+img_sample <- mincGetVolume(imgfile_sample)
+
+img_params_1 <- img_params_1[mask == 1]
+img_params_2 <- img_params_2[mask == 1]
+img_sample <- img_sample[mask == 1]
+
+cor_compare <- round(list_correlations[["relative"]][ind_cor][ind_euc_sample_min],2)
+euc_compare <- round(list_euclidean[["relative"]][ind_cor][ind_euc_sample_min],2)
+cor_sample <- round(list_correlations_sample[[1]][ind_cor][ind_euc_sample_min],2)
+euc_sample <- round(list_euclidean_sample[[1]][ind_cor][ind_euc_sample_min],2)
+```
+
+
+```{r fig.width = 10, fig.height = 10}
+df_imgs <- tibble(x_params_1 = img_params_1, 
+                  x_params_2 = img_params_2,
+                  x_params_1_sampled = img_sample)
+
+p_imgscat_compare <- ggplot(df_imgs,
+       aes(x = x_params_1, y = x_params_2)) + 
+  geom_point(size = 0.5,
+             alpha = 0.2) + 
+  labs(x = "Image of patient A in parameter set 1",
+       y = "Image of patient A in parameter set 2",
+       title = "Image comparison across parameter sets for one patient",
+       caption = str_c("Correlation: ", cor_compare, "\nEuclidean: ", euc_compare))
+
+p_imgscat_sample <- ggplot(df_imgs,
+       aes(x = x_params_1, y = x_params_1_sampled)) + 
+  geom_point(size = 0.5,
+             alpha = 0.2) + 
+  labs(x = "Image of patient A in parameter set 1",
+       y = "Image of patient B in parameter set 1",
+       title = "Image comparison across patients within a parameter set",
+       caption = str_c("Correlation: ", cor_sample, "\nEuclidean: ", euc_sample))
+
+(p_imgscat_compare / p_imgscat_sample) &
+  theme_bw()
+```
+
+
+
+
+

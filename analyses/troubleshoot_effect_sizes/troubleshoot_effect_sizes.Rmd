@@ -1,0 +1,236 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: '2023-02-27'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(splines))
+suppressPackageStartupMessages(library(sva))
+```
+
+```{r}
+demographics <- "../../data/human/test/POND_SickKids/DBM_input_demo_passedqc.csv"
+demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
+demographics <- demographics %>% 
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner)) 
+```
+
+```{r}
+maskfile <- "../../data/human/registration/reference_files/mask_3.0mm.mnc"
+mask <- mincGetVolume(maskfile)
+
+imgdir <- "../../data/human/test/POND_SickKids/jacobians/resolution_3.0/relative/"
+imgfiles <- list.files(imgdir, full.names = TRUE)
+mat_voxels <- matrix(data = 0, nrow = length(imgfiles), ncol = sum(mask))
+for (i in 1:length(imgfiles)) {
+  img <- mincGetVolume(imgfiles[i])
+  mat_voxels[i,] <- img[mask == 1]
+}
+
+df_voxels <- mat_voxels %>% 
+  as_tibble() %>% 
+  mutate(file = basename(imgfiles))
+```
+
+```{r}
+voxels <- semi_join(df_voxels, demographics, by = "file")
+row_match <- match(voxels[["file"]], demographics[["file"]])
+demographics <- demographics[row_match,]
+voxels <- select(voxels, -file)
+```
+
+
+```{r}
+combat <- TRUE
+combat_batch <- "Site-Scanner"
+verbose <- FALSE
+
+if (combat) {
+  if (verbose) {message("Running ComBat normalization...")}
+  if (is.null(combat_batch)) {
+    stop("Argument --combat-batch must be specified for ComBat normalization.")
+  }
+  combat_batch <- str_split(combat_batch, pattern = "-")[[1]]
+  batches_exist <- all(combat_batch %in% colnames(demographics))
+  if (!batches_exist) {
+    stop(paste("ComBat batch variables not found in --demographics:", str_flatten(combat_batch, collapse = ", ")))
+  }
+  for (i in 1:length(combat_batch)) {
+    message(paste("Normalizing using batch variable:", combat_batch[i]))
+    batch <- demographics[[combat_batch[i]]]
+    voxels <- t(as.matrix(voxels))
+    voxels <- sva::ComBat(dat = voxels, batch = batch)
+    voxels <- as_tibble(t(voxels))
+  }
+}
+```
+
+
+```{r}
+voxel_id <- sample(ncol(voxels), size = 1)
+y <- voxels[[voxel_id]]
+
+ind_fit <- demographics[["DX"]] == "Control"
+ind_pred <- !ind_fit
+
+controls <- demographics[ind_fit, c("Age", "Sex", "Site", "Scanner")] %>% 
+  mutate(y = y[ind_fit])
+
+participants <- demographics[ind_pred, c("Age", "Sex", "Site", "Scanner")] %>% 
+  mutate(y = y[ind_pred])
+
+df_fit <- controls
+df_es_normative <- participants
+
+df_template <- expand_grid(Age = seq(floor(min(demographics[["Age"]])),
+                                     max(demographics[["Age"]]), 
+                                     by = 1),
+                           Sex = c("Female", "Male"))
+
+df <- 3
+model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
+model_pred <- predict(model_fit, df_es_normative, interval = "prediction", level = 0.68, se.fit = TRUE)
+
+df_es_normative <- df_es_normative %>% 
+  mutate(ctrl_mean = model_pred[["fit"]][,"fit"],
+         ctrl_lwr = model_pred[["fit"]][,"lwr"],
+         ctrl_sd = ctrl_mean - ctrl_lwr,
+         z = (y - ctrl_mean)/ctrl_sd)
+
+model_template <- predict(model_fit, df_template, interval = "prediction", level = 0.68, se.fit = TRUE)
+
+df_template <- df_template %>% 
+  mutate(y_pred = model_template[["fit"]][,"fit"],
+         y_lower = model_template[["fit"]][,"lwr"],
+         y_upper = model_template[["fit"]][,"upr"])
+```
+
+```{r}
+get_matched_controls <- function(participant, controls, 
+                                 ncontrols = 10, seed = NULL){
+  
+  if (!is.null(seed)){set.seed(seed)}
+  
+  participant_age <- pull(participant, "Age")
+  participant_sex <- pull(participant, "Sex")
+  participant_site <- pull(participant, "Site")
+  participant_scanner <- pull(participant, "Scanner")
+  
+  controls_tmp <- controls %>% 
+    filter(Sex == participant_sex,
+           Site == participant_site,
+           Scanner == participant_scanner)
+  
+  ncontrols_test <- nrow(controls_tmp)
+  
+  if (ncontrols_test < ncontrols) {
+    
+    controls_tmp <- controls %>% 
+      filter(Sex == participant_sex,
+             Site == participant_site)
+    
+    ncontrols_test <- nrow(controls_tmp)
+    
+    if (ncontrols_test < ncontrols) {
+      
+      controls_tmp <- controls %>% 
+        filter(Sex == participant_sex)
+      
+    }
+  }
+  
+  controls <- controls_tmp %>%
+    mutate(AgeDiff = abs(Age - participant_age)) %>% 
+    top_n(n = -1*ncontrols, wt = AgeDiff) %>% 
+    sample_n(size = ncontrols, replace = FALSE) 
+  
+  return(controls)
+  
+}
+```
+
+
+```{r}
+df_es_propensity <- participants %>% 
+  mutate(ctrl_mean = 0,
+         ctrl_sd = 0)
+
+for (i in 1:nrow(participants)) {
+  controls_matched <- get_matched_controls(participant = participants[i,],
+                                           controls = controls,
+                                           ncontrols = 20,
+                                           seed = i)
+  df_es_propensity[[i, "ctrl_mean"]] <- mean(controls_matched[["y"]])
+  df_es_propensity[[i, "ctrl_sd"]] <- sd(controls_matched[["y"]])
+}
+
+df_es_propensity <- df_es_propensity %>% 
+  mutate(z = (y - ctrl_mean)/ctrl_sd)
+```
+
+```{r}
+df_es_compare <- bind_cols(df_es_propensity %>% 
+                             select(z_propensity = z,
+                                    mean_propensity = ctrl_mean,
+                                    sd_propensity = ctrl_sd),
+                           df_es_normative %>% 
+                             select(z_normative = z,
+                                    mean_normative = ctrl_mean,
+                                    sd_normative = ctrl_sd))
+
+ggplot(df_es_compare, aes(x = z_propensity, y = z_normative)) + 
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, col = "red")
+```
+
+```{r}
+df_es_normative <- df_es_normative %>% 
+  mutate(ctrl_min = ctrl_mean - ctrl_sd,
+         ctrl_max = ctrl_mean + ctrl_sd)
+
+ggplot(df_es_normative,
+       aes(x = Age, y = y)) + 
+  geom_point() + 
+  geom_ribbon(mapping = aes(y = ctrl_mean, 
+                            ymin = ctrl_min, 
+                            ymax = ctrl_max, 
+                            group = Sex, 
+                            fill = Sex),
+              alpha = 0.2) + 
+  geom_line(mapping = aes(y = ctrl_mean, 
+                          group = Sex, 
+                          col = Sex)) 
+```
+```{r}
+df_es_propensity <- df_es_propensity %>% 
+  mutate(ctrl_min = ctrl_mean - ctrl_sd,
+         ctrl_max = ctrl_mean + ctrl_sd)
+
+ggplot(df_es_propensity,
+       aes(x = Age, y = y)) + 
+  geom_point() + 
+  geom_ribbon(mapping = aes(y = ctrl_mean, 
+                            ymin = ctrl_min, 
+                            ymax = ctrl_max, 
+                            group = Sex, 
+                            fill = Sex),
+              alpha = 0.2) + 
+  geom_line(mapping = aes(y = ctrl_mean, 
+                          group = Sex, 
+                          col = Sex)) +
+  coord_cartesian(xlim = c(0, 20))
+```
+
+
