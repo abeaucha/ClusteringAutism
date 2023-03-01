@@ -12,8 +12,6 @@ Description
 
 # Packages -------------------------------------------------------------------
 
-import sys
-
 import argparse
 import os
 import pandas as pd
@@ -36,7 +34,7 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/human/test2/',
+        default = 'data/human/derivatives/',
         help = ("Path to pipeline directory.")
     )
     
