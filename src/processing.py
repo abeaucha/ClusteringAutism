@@ -128,7 +128,7 @@ def propensity_matching_norm(imgdir, demographics, mask, outdir,
 
     script = 'propensity_matching_normalization.R'
     execute_R(script = script, args = script_args)
-    outfiles = [os.path.join(outdir, file) for file in os.listdir(outdir)]
+    outfiles = glob(outdir+'*.mnc')
     return outfiles
     
     
@@ -249,7 +249,7 @@ def calculate_human_effect_sizes(imgdir, demographics, outdir, method, mask,
     outdir = os.path.join(outdir, '')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    
+        
     #Compute effect sizes using propensity matching
     if method == "propensity-matching":
         
