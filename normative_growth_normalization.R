@@ -134,14 +134,6 @@ outfile <- args[["outfile"]]
 inparallel <- ifelse(args[["parallel"]] == "true", TRUE, FALSE)
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
-demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc.csv"
-infile <- "data/human/derivatives/POND_SickKids/effect_sizes/606/resolution_3.0/absolute/tmp.csv"
-key <- "file"
-df <- 3
-combat <- TRUE
-combat_batch <- "Site-Scanner"
-verbose <- TRUE
-
 #Import data
 if (verbose) {message("Importing data...")}
 demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
