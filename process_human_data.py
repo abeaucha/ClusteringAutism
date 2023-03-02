@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/human/test/',
+        default = 'data/human/derivatives/',
         help = ("Path to pipeline directory.")
     )
     
