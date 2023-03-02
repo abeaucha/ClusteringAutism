@@ -205,4 +205,5 @@ def parse_args():
 
 
 # Pipeline --------------------------------------------------------------------
-process_human_data(**parse_args())
+if __name__ == '__main__':
+    process_human_data(**parse_args())
