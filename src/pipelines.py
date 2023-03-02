@@ -27,7 +27,7 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
     if parallel:
         if nproc is None:
             raise Exception("Argument --nproc must be specified when --parallel true")
-
+            
     if es_method == 'normative-growth':
         if not es_combat:
             es_combat_batch = None

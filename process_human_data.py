@@ -13,8 +13,11 @@ Description
 
 # Packages -------------------------------------------------------------------
 
+import sys
 import argparse
 from src.pipelines import process_human_data
+from itertools import product
+from functools import reduce
 
 
 # Command line arguments -----------------------------------------------------
@@ -96,24 +99,26 @@ def parse_args():
     # Effect size arguments ---------------------------------------------------
     parser.add_argument(
         '--es-method',
+        nargs = 1,
         type = str,
-        default = 'normative-growth',
+        default = ['normative-growth'],
         choices = ['normative-growth', 'propensity-matching'],
         help = ("Method to use to compute effect sizes.")
     )
         
     parser.add_argument(
         '--es-df',
+        nargs = '*',
         type = int,
-        default = 3,
+        default = [3],
         help = ("Degrees of freedom hyperparameter in normative growth modelling.")
     )
         
     parser.add_argument(
         '--es-combat',
+        nargs = '*',
         type = str,
-        default = 'true',
-        choices = ['true', 'false'],
+        default = ['true'],
         help = ("Option to run ComBat normalization prior to normative growth modelling.")
     )
         
@@ -121,14 +126,15 @@ def parse_args():
         '--es-combat-batch',
         nargs = '*',
         type = str,
-        default = ['Site', 'Scanner'],
+        default = ['Site-Scanner'],
         help = ("Batch variables to use in ComBat normalization.")
     )
         
     parser.add_argument(
         '--es-ncontrols',
+        nargs = '*',
         type = int,
-        default = 10,
+        default = [10],
         help = ("Number of controls to use for propensity-matching.")
     )
         
@@ -143,37 +149,41 @@ def parse_args():
     # Clustering arguments ---------------------------------------------------
     parser.add_argument(
         '--cluster-nk-max',
+        nargs = 1,
         type = int,
-        default = 10,
+        default = [10],
         help = ("Maximum number of clusters to identify in cluster solutions.")
     )
         
     parser.add_argument(
         '--cluster-metric',
+        nargs = '*',
         type = str,
-        default = 'correlation',
-        choices = ['correlation'],
+        default = ['correlation'],
         help = ("Distance metric to use in similarity network fusion.")
     )
         
     parser.add_argument(
         '--cluster-K',
+        nargs = '*',
         type = int,
-        default = 10,
+        default = [10],
         help = ("Number of nearest-neighbours to use in similarity network fusion.")
     )
         
     parser.add_argument(
         '--cluster-sigma',
+        nargs = '*',
         type = float,
-        default = 0.5,
+        default = [0.5],
         help = ("Variance for the local model in similarity network fusion.")
     )
         
     parser.add_argument(
         '--cluster-t',
+        nargs = '*',
         type = int,
-        default = 20,
+        default = [20],
         help = ("Number of iterations for the diffusion process in similarity network fusion.")
     )
         
@@ -193,9 +203,9 @@ def parse_args():
     # Cluster maps arguments ---------------------------------------------------
     parser.add_argument(
         '--cluster-map-method',
+        nargs = '*',
         type = str,
-        default = 'mean',
-        choices = ['mean', 'median'],
+        default = ['mean'],
         help = ("Method to use to aggregate images within each cluster.")
     )
     
@@ -206,4 +216,24 @@ def parse_args():
 
 # Pipeline --------------------------------------------------------------------
 if __name__ == '__main__':
-    process_human_data(**parse_args())
+    
+    args = parse_args()
+    args['parallel'] = bool(args['parallel'])
+    args['verbose'] = bool(args['verbose'])
+    params = {key:val for key, val in args.items()
+              if 'es_' in key or 'cluster_' in key}
+    del params['es_matrix_file']
+    del params['cluster_file']
+    del params['cluster_affinity_file']
+    param_keys = [key for key in params.keys()]
+    for param_vals in product(*params.values()):
+        param_set = dict(list(zip(param_keys, param_vals)))
+        param_set['es_combat'] = bool(param_set['es_combat'])
+        param_set['es_combat_batch'] = param_set['es_combat_batch'].split('-')
+        param_msg = [': '.join([str(key), str(val)]) for key, val in param_set.items()]
+        param_msg = reduce(lambda x, y: x+'\n\t'+y, param_msg)
+        param_msg = "Running parameter set:\n\t{}\n".format(param_msg)
+        print(param_msg)
+        args.update(param_set)
+        process_human_data(**args)        
+    
