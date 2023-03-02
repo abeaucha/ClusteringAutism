@@ -61,6 +61,7 @@ option_list <- list(
 
 # Functions ------------------------------------------------------------------
 
+
 #' Function description
 #'
 #' @param x (class) Parameter description.
@@ -88,13 +89,14 @@ fit_predict_model <- function(y, demographics, df) {
                         level = pnorm(q = 1) - pnorm(q = -1))
   
   df_pred <- df_pred %>% 
-    mutate(y_pred = model_pred[["fit"]][,"fit"],
-           y_lwr = model_pred[["fit"]][,"lwr"],
-           y_upr = model_pred[["fit"]][,"upr"],
+    mutate(y_pred = model_pred[,"fit"],
+           y_lwr = model_pred[,"lwr"],
+           y_upr = model_pred[,"upr"],
            y_sd = y_pred - y_lwr)
   
   return(df_pred)
 }
+
 
 zscore <- function(x){
   cols_check <- c("y", "y_pred", "y_sd")
@@ -131,6 +133,14 @@ combat_batch <- args[["combat-batch"]]
 outfile <- args[["outfile"]]
 inparallel <- ifelse(args[["parallel"]] == "true", TRUE, FALSE)
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
+
+demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc.csv"
+infile <- "data/human/derivatives/POND_SickKids/effect_sizes/606/resolution_3.0/absolute/tmp.csv"
+key <- "file"
+df <- 3
+combat <- TRUE
+combat_batch <- "Site-Scanner"
+verbose <- TRUE
 
 #Import data
 if (verbose) {message("Importing data...")}
