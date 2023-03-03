@@ -20,8 +20,7 @@ analyses/gene_space_decomposition/heatmap_animation_nk_5/
 analyses/gene_space_decomposition/*.html
 analyses/cluster_permutations/*.pdf
 analyses/cluster_permutations/*.html
-analyses/human_cluster_comparison/*.pdf
-analyses/human_cluster_comparison/*.html
+analyses/human_processing_comparison/outputs
 analyses/troubleshoot_effect_sizes/*.pdf
 figures/figure1
 figures/*.pdf
