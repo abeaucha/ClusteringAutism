@@ -85,7 +85,7 @@ option_list <- list(
 #' affinity matrix.
 #'
 #' @return (matrix) SNF affinity matrix.
-SNF_combine <- function(x1, x2, metric = "correlation", K = 10, 
+similarity_network <- function(x1, x2, metric = "correlation", K = 10,
                         sigma = 0.5, t = 20, outfile = NULL){
   
   if (metric == "correlation") { 
@@ -104,7 +104,7 @@ SNF_combine <- function(x1, x2, metric = "correlation", K = 10,
   W <- SNF(list(W1, W2), K = K, t = t)
   
   if (!is.null(outfile)){
-    save(W, file = outfile)
+    data.table::fwrite(x = as_tibble(W), file = outfile)
   }
   
   return(W)
@@ -223,10 +223,10 @@ x2 <- as.matrix(x2)
 
 if (verbose) {message("Running similarity network fusion...")}
 
-W <- SNF_combine(x1 = x1, x2 = x2,
-                 K = SNF_K, sigma = SNF_sigma,
-                 t = SNF_t, metric = SNF_metric,
-                 outfile = affinity_file)
+W <- similarity_network(x1 = x1, x2 = x2,
+                        K = SNF_K, sigma = SNF_sigma,
+                        t = SNF_t, metric = SNF_metric,
+                        outfile = affinity_file)
 
 if (verbose) {message("Assigning clusters...")}
 
