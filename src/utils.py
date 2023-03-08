@@ -1,12 +1,13 @@
 import os
 import subprocess
-import numpy   as np
-import pandas  as pd
-from functools import partial
-from random    import randint
-from re        import sub
-from tqdm      import tqdm
-from warnings  import warn
+import multiprocessing as mp
+import numpy           as np
+import pandas          as pd
+from functools         import partial
+from random            import randint
+from re                import sub
+from tqdm              import tqdm
+from warnings          import warn
 
 
 def execute_R(script, args):
@@ -202,15 +203,15 @@ def gunzip_file(gzfile, keep = True, outdir = None):
         Path to the unzipped file.
     """
     
-    os.system('gunzip -f -k {}'.format(gzfile))
+    subprocess.run(['gunzip', '-f', '-k', gzfile])
     outfile = sub(r'.gz', '', gzfile)
     if not keep:
-        os.system('rm {}'.format(gzfile))
+        subprocess.run(['rm', gzfile])
     if outdir is not None:
         outdir = os.path.join(outdir, '')
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-        os.system('mv {} {}'.format(outfile, outdir))
+        subprocess.run(['mv', outfile, outdir])
         outfile = os.path.join(outdir, os.path.basename(outfile))
 
     return outfile
@@ -282,15 +283,15 @@ def nii_to_mnc(infile, keep = True, outdir = None):
         Path to the converted MINC file.
     """
     
-    os.system('nii2mnc -quiet -clobber {}'.format(infile))
+    subprocess.run(['nii2mnc', '-quiet', 'clobber', infile])
     outfile = sub(r'.nii', '.mnc', infile)
     if not keep:
-        os.system('rm {}'.format(infile))
+        subprocess.run(['rm', infile])
     if outdir is not None:
         outdir = os.path.join(outdir, '')
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-        os.system('mv {} {}'.format(outfile, outdir))
+        subprocess.run(['mv', outfile, outdir])
         outfile = os.path.join(outdir, os.path.basename(outfile))
         
     return outfile
@@ -317,15 +318,15 @@ def mnc_to_nii(infile, keep = True, outdir = None):
         Path to the converted NIFTY file.
     """
     
-    os.system('mnc2nii -quiet {}'.format(infile))
+    subprocess.run(['mnc2nii', '-quiet', infile])
     outfile = sub(r'.mnc', '.nii', infile)
     if not keep:
-        os.system('rm {}'.format(infile))
+        subprocess.run(['rm', infile])
     if outdir is not None:
         outdir = os.path.join(outdir, '')
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-        os.system('mv {} {}'.format(outfile, outdir))
+        subprocess.run(['mv', outfile, outdir])
         outfile = os.path.join(outdir, os.path.basename(outfile))
         
     return outfile
@@ -383,3 +384,175 @@ def convert_images(infiles, input_format = 'nifty', output_format = 'minc',
         outfiles = list(map(converter, tqdm(infiles)))
         
     return outfiles
+
+
+def transform_image(infile, like, transform, outdir = None, suffix = None):
+    
+    #Append suffix if specified
+    if suffix is not None:
+        outfile = (os.path.splitext(infile)[0]+
+                   suffix+
+                   os.path.splitext(infile)[1])
+    else: 
+        outfile = infile
+        
+    #Create output directory if needed
+    if outdir is not None:
+        outdir = os.path.join(outdir, '')
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        outfile = os.path.basename(outfile)
+        outfile = os.path.join(outdir, outfile)
+    else:
+        if suffix is None:
+            raise Exception("Arguments outdir and suffix "
+                            "cannot both be None.")
+
+    #Command line mincresample command
+    cmd_mincresample = ['mincresample', '-quiet', '-clobber',
+                       '-like', like, '-transform', transform, 
+                       infile, outfile]
+    log = subprocess.run(cmd_mincresample, stdout = subprocess.PIPE)
+    
+    return outfile
+
+
+def transform_images(infiles, like, transform, outdir = None, suffix = None, parallel = False, nproc = None):
+    
+    #Create output directory if needed
+    if outdir is not None:
+        outdir = os.path.join(outdir, '')
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+    
+    #Partial transforming function
+    transformer = partial(transform_image,
+                          like = like,
+                          transform = transform,
+                          outdir = outdir,
+                          suffix = suffix)
+    
+    if parallel:
+        if nproc is None:
+            raise ValueError("Set the nproc argument to specify the "
+                             "number of processors to use in parallel.")
+        pool = mp.Pool(nproc)
+        outfiles = []
+        for outfile in tqdm(pool.imap(transformer, infiles), total = len(infiles)):
+            outfiles.append(outfile)
+        pool.close()
+        pool.join()
+    else:
+        outfiles = list(map(transformer, tqdm(infiles)))
+        
+    return outfiles
+
+
+def resample_image(infile, isostep, outdir = None, suffix = None):
+    
+    """
+    Resample a MINC image
+    
+    Arguments
+    ---------
+    infile: str
+        Path to the image file to resample.
+    isostep: float
+        Isotropic dimension of voxels in the resampled image (mm).
+    outdir: str
+        Path to the directory in which to save the resampled image. 
+        If None, resampled image will be written to the directory 
+        of the input file.
+    suffix: str
+        Suffix to append to output filename before the file extension.
+    
+    Returns
+    -------
+    outfile: str
+        Path to the resampled image. 
+    """
+    
+    #Append suffix if specified
+    if suffix is not None:
+        outfile = (os.path.splitext(infile)[0]+
+                   suffix+
+                   os.path.splitext(infile)[1])
+    else: 
+        outfile = infile
+
+    #Create output directory if needed
+    if outdir is not None:
+        outdir = os.path.join(outdir, '')
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        outfile = os.path.basename(outfile)
+        outfile = os.path.join(outdir, outfile)
+    else:
+        if suffix is None:
+            raise Exception("Arguments outdir and suffix "
+                            "cannot both be None.")
+
+    #Autocrop command
+    cmd_autocrop = ['autocrop', '-quiet', '-clobber',
+                    '-isostep', isostep, infile, outfile]
+    log = subprocess.run(cmd_autocrop, stdout = subprocess.PIPE)
+
+    return outfile
+
+
+def resample_images(infiles, isostep, outdir = None, suffix = None, 
+                    parallel = False, nproc = None):
+    
+    """
+    Resample a set of MINC images.
+     
+    Arguments
+    ---------
+    infiles: list
+        List of paths to images to resample.
+    isostep: float
+        Isotropic dimension of voxels in the resampled image (mm).
+    outdir: str
+        Path to the output directory. If None, the resampled 
+        images will be stored in the native directory.
+    suffix: str
+        Suffix to append to output filename before the file extension.
+    parallel: bool
+        Option to run in parallel.
+    nproc: int
+        Number of processors to use in parallel.
+        
+    Returns
+    -------
+    outfiles: list
+        List of paths to the resampled images.
+    """
+
+    #Create output directory if needed
+    if outdir is not None:
+        outdir = os.path.join(outdir, '')
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+    
+    #Partial resampling function
+    resampler = partial(resample_image,
+                        isostep = isostep,
+                        outdir = outdir,
+                        suffix = suffix)
+    
+    if parallel:
+        if nproc is None:
+            raise ValueError("Set the nproc argument to specify the "
+                             "number of processors to use in parallel.")
+        pool = mp.Pool(nproc)
+        outfiles = []
+        for outfile in tqdm(pool.imap(resampler, infiles), total = len(infiles)):
+            outfiles.append(outfile)
+        pool.close()
+        pool.join()
+    else:
+        outfiles = list(map(resampler, tqdm(infiles)))
+        
+    return outfiles
+
+    
