@@ -1,42 +1,39 @@
 import os
 import subprocess
 import multiprocessing as mp
-import numpy           as np
-import pandas          as pd
-from functools         import partial
-from random            import randint
-from re                import sub
-from tqdm              import tqdm
-from warnings          import warn
+import pandas as pd
+from functools import partial
+from random import randint
+from re import sub
+from tqdm import tqdm
 
 
 def execute_R(script, args):
-    
+
     """
     Execute an R script.
     
     Arguments
     ---------
-    script: str
+    :param script: str
         String containing the name of the R script to execute.
-    args: dict
+    :param args: dict
         Dictionary of key-value pairs containing command line arguments 
         to pass to the script.
     
     Returns
     -------
-    None
+    :return: None
     """
-    
-    args = [['--'+str(key), str(val)] for key, val in args.items()]
+
+    args = [['--' + str(key), str(val)] for key, val in args.items()]
     args = sum(args, [])
-    cmd = ['Rscript']+[script]+args
+    cmd = ['Rscript'] + [script] + args
     subprocess.run(cmd)
     return
 
 
-def mkdir_from_list(inlist, basedir = './', sep = '_'):
-    
+def mkdir_from_list(inlist, basedir='./', sep='_'):
     """
     Create a directory from a list of strings.
     
@@ -54,7 +51,7 @@ def mkdir_from_list(inlist, basedir = './', sep = '_'):
     outdir: str
         Path to the new directory.
     """
-    
+
     inlist = sep.join(inlist)
     outdir = os.path.join(basedir, inlist)
     if not os.path.exists(outdir):
@@ -63,11 +60,10 @@ def mkdir_from_list(inlist, basedir = './', sep = '_'):
 
 
 def get_params_id(params, metadata):
-
-    df_params = pd.DataFrame(params, index = [0], dtype = str)
+    df_params = pd.DataFrame(params, index=[0], dtype=str)
     if os.path.exists(metadata):
-        df_metadata = pd.read_csv(metadata, dtype = str)
-        df_match = pd.merge(df_metadata, df_params, how = 'inner')
+        df_metadata = pd.read_csv(metadata, dtype=str)
+        df_match = pd.merge(df_metadata, df_params, how='inner')
         nmatch = df_match.shape[0]
         if nmatch == 1:
             return df_match['id'].values[0]
@@ -77,44 +73,42 @@ def get_params_id(params, metadata):
         return None
 
 
-def set_params_id(params, metadata, params_id = None):
-    
-    df_params = pd.DataFrame(params, index = [0], dtype = str)
+def set_params_id(params, metadata, params_id=None):
+    df_params = pd.DataFrame(params, index=[0], dtype=str)
     if os.path.exists(metadata):
-        df_metadata = pd.read_csv(metadata, dtype = str)
-        df_match = pd.merge(df_metadata, df_params, how = 'inner')
+        df_metadata = pd.read_csv(metadata, dtype=str)
+        df_match = pd.merge(df_metadata, df_params, how='inner')
         nmatch = df_match.shape[0]
         if nmatch == 1:
             df_params['id'] = df_match['id'].values[0]
         elif nmatch == 0:
             df_params['id'] = random_id(3) if params_id is None else str(params_id)
             df_metadata = pd.concat([df_metadata, df_params])
-            df_metadata.to_csv(metadata, index = False)
+            df_metadata.to_csv(metadata, index=False)
         else:
             raise Exception
     else:
         df_params['id'] = random_id(3) if params_id is None else str(params_id)
-        df_params.to_csv(metadata, index = False)
+        df_params.to_csv(metadata, index=False)
 
-    return(df_params['id'].values[0])
+    return df_params['id'].values[0]
 
-    
-def mkdir_from_params(params, outdir, metadata = None, params_id = None):
 
+def mkdir_from_params(params, outdir, metadata=None, params_id=None):
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-        
+
     if metadata is None:
         metadata = os.path.join(outdir, 'metadata.csv')
 
-    params_id_check = get_params_id(params = params,
-                                    metadata = metadata)
+    params_id_check = get_params_id(params=params,
+                                    metadata=metadata)
 
     if params_id_check is None:
-        params_id = set_params_id(params = params,
-                                 metadata = metadata,
-                                 params_id = params_id)
-    else: 
+        params_id = set_params_id(params=params,
+                                  metadata=metadata,
+                                  params_id=params_id)
+    else:
         if params_id is not None:
             print("Parameters already identified: {}".format(params_id_check))
         params_id = params_id_check
@@ -122,12 +116,11 @@ def mkdir_from_params(params, outdir, metadata = None, params_id = None):
     outdir = os.path.join(outdir, params_id, '')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    
+
     return outdir
 
-    
-def mk_symlinks(src, dst):
 
+def mk_symlinks(src, dst):
     """
     Create a set of symbolic links.
     
@@ -143,25 +136,24 @@ def mk_symlinks(src, dst):
     dstfiles: list
         List of paths to the symbolic links. 
     """
-    
-    #Create output dir if needed
+
+    # Create output dir if needed
     dst = os.path.join(dst, '')
     if not os.path.exists(dst):
         os.makedirs(dst)
-    
-    #Create symlinks
+
+    # Create symlinks
     dstfiles = []
     for i, srcfile in enumerate(src):
         dstfile = os.path.join(dst, os.path.basename(srcfile))
         if not os.path.exists(dstfile):
             os.symlink(os.path.relpath(srcfile, dst), dstfile)
         dstfiles.append(dstfile)
-            
+
     return dstfiles
 
 
 def random_id(n):
-    
     """
     Create a random ID with a specific number of digits.
     
@@ -175,15 +167,14 @@ def random_id(n):
     randid: str
         Random ID as string.
     """
-    
-    num = randint(0, (10**n)-1)
-    fstring = '{:0'+str(n)+'}'
+
+    num = randint(0, (10 ** n) - 1)
+    fstring = '{:0' + str(n) + '}'
     randid = fstring.format(num)
     return randid
 
 
-def gunzip_file(gzfile, keep = True, outdir = None):
-    
+def gunzip_file(gzfile, keep=True, outdir=None):
     """
     Unzip a compressed file.
     
@@ -202,7 +193,7 @@ def gunzip_file(gzfile, keep = True, outdir = None):
     outfile: str
         Path to the unzipped file.
     """
-    
+
     subprocess.run(['gunzip', '-f', '-k', gzfile])
     outfile = sub(r'.gz', '', gzfile)
     if not keep:
@@ -217,9 +208,8 @@ def gunzip_file(gzfile, keep = True, outdir = None):
     return outfile
 
 
-def gunzip_files(infiles, keep = True, outdir = None, 
-                 parallel = False, nproc = None):
-    
+def gunzip_files(infiles, keep=True, outdir=None,
+                 parallel=False, nproc=None):
     """
     Unzip a set of compressed files.
     
@@ -234,7 +224,7 @@ def gunzip_files(infiles, keep = True, outdir = None,
         unzipped in their native directories.
     parallel: bool
         Option to run in parallel.
-    nprpc: int
+    nproc: int
         Number of processors to use in parallel.
         
     Returns
@@ -242,28 +232,27 @@ def gunzip_files(infiles, keep = True, outdir = None,
     outfiles: list
         List of paths to the unzipped files.
     """
-    
-    gunzip_file_partial = partial(gunzip_file, 
-                                  keep = keep,
-                                  outdir = outdir)
+
+    gunzip_file_partial = partial(gunzip_file,
+                                  keep=keep,
+                                  outdir=outdir)
     if parallel:
         if nproc is None:
             raise ValueError("Set the nproc argument to specify the number ",
                              "of processors to use")
         pool = mp.Pool(nproc)
         outfiles = []
-        for outfile in tqdm(pool.imap(gunzip_file_partial, infiles), total = len(infiles)):
+        for outfile in tqdm(pool.imap(gunzip_file_partial, infiles), total=len(infiles)):
             outfiles.append(outfile)
         pool.close()
         pool.join()
     else:
         outfiles = list(map(gunzip_file_partial, tqdm(infiles)))
-        
+
     return outfiles
 
 
-def nii_to_mnc(infile, keep = True, outdir = None):
-    
+def nii_to_mnc(infile, keep=True, outdir=None):
     """
     Convert a NIFTY file to MINC format.
     
@@ -282,7 +271,7 @@ def nii_to_mnc(infile, keep = True, outdir = None):
     outfile: str
         Path to the converted MINC file.
     """
-    
+
     subprocess.run(['nii2mnc', '-quiet', 'clobber', infile])
     outfile = sub(r'.nii', '.mnc', infile)
     if not keep:
@@ -293,12 +282,11 @@ def nii_to_mnc(infile, keep = True, outdir = None):
             os.makedirs(outdir)
         subprocess.run(['mv', outfile, outdir])
         outfile = os.path.join(outdir, os.path.basename(outfile))
-        
+
     return outfile
 
 
-def mnc_to_nii(infile, keep = True, outdir = None):
-    
+def mnc_to_nii(infile, keep=True, outdir=None):
     """
     Convert a MINC file to NIFTY format.
     
@@ -317,7 +305,7 @@ def mnc_to_nii(infile, keep = True, outdir = None):
     outfile: str
         Path to the converted NIFTY file.
     """
-    
+
     subprocess.run(['mnc2nii', '-quiet', infile])
     outfile = sub(r'.mnc', '.nii', infile)
     if not keep:
@@ -328,13 +316,12 @@ def mnc_to_nii(infile, keep = True, outdir = None):
             os.makedirs(outdir)
         subprocess.run(['mv', outfile, outdir])
         outfile = os.path.join(outdir, os.path.basename(outfile))
-        
+
     return outfile
-    
-    
-def convert_images(infiles, input_format = 'nifty', output_format = 'minc', 
-                   keep = True, outdir = None, parallel = False, nproc = None):
-    
+
+
+def convert_images(infiles, input_format='nifty', output_format='minc',
+                   keep=True, outdir=None, parallel=False, nproc=None):
     """
     Convert a set of images between NIFTY and MINC formats.
     
@@ -354,7 +341,7 @@ def convert_images(infiles, input_format = 'nifty', output_format = 'minc',
         images will be stored in the native directory.
     parallel: bool
         Option to run in parallel.
-    nprpc: int
+    nproc: int
         Number of processors to use in parallel.
         
     Returns
@@ -362,41 +349,40 @@ def convert_images(infiles, input_format = 'nifty', output_format = 'minc',
     outfiles: list
         List of paths to the converted images.
     """
-        
+
     if (input_format == 'nifty') & (output_format == 'minc'):
-        converter = partial(nii_to_mnc, keep = keep, outdir = outdir)
+        converter = partial(nii_to_mnc, keep=keep, outdir=outdir)
     elif (input_format == 'minc') & (output_format == 'nifty'):
-        converter = partial(mnc_to_nii, keep = keep, outdir = outdir)
+        converter = partial(mnc_to_nii, keep=keep, outdir=outdir)
     else:
-        raise ValueError 
-        
+        raise ValueError
+
     if parallel:
         if nproc is None:
             raise ValueError("Set the nproc argument to specify the number ",
                              "of processors to use")
         pool = mp.Pool(nproc)
         outfiles = []
-        for outfile in tqdm(pool.imap(converter, infiles), total = len(infiles)):
+        for outfile in tqdm(pool.imap(converter, infiles), total=len(infiles)):
             outfiles.append(outfile)
         pool.close()
         pool.join()
     else:
         outfiles = list(map(converter, tqdm(infiles)))
-        
+
     return outfiles
 
 
-def transform_image(infile, like, transform, outdir = None, suffix = None):
-    
-    #Append suffix if specified
+def transform_image(infile, like, transform, outdir=None, suffix=None):
+    # Append suffix if specified
     if suffix is not None:
-        outfile = (os.path.splitext(infile)[0]+
-                   suffix+
+        outfile = (os.path.splitext(infile)[0] +
+                   suffix +
                    os.path.splitext(infile)[1])
-    else: 
+    else:
         outfile = infile
-        
-    #Create output directory if needed
+
+    # Create output directory if needed
     if outdir is not None:
         outdir = os.path.join(outdir, '')
         if not os.path.exists(outdir):
@@ -408,48 +394,46 @@ def transform_image(infile, like, transform, outdir = None, suffix = None):
             raise Exception("Arguments outdir and suffix "
                             "cannot both be None.")
 
-    #Command line mincresample command
+    # Command line mincresample command
     cmd_mincresample = ['mincresample', '-quiet', '-clobber',
-                       '-like', like, '-transform', transform, 
-                       infile, outfile]
-    log = subprocess.run(cmd_mincresample, stdout = subprocess.PIPE)
-    
+                        '-like', like, '-transform', transform,
+                        infile, outfile]
+    log = subprocess.run(cmd_mincresample, stdout=subprocess.PIPE)
+
     return outfile
 
 
-def transform_images(infiles, like, transform, outdir = None, suffix = None, parallel = False, nproc = None):
-    
-    #Create output directory if needed
+def transform_images(infiles, like, transform, outdir=None, suffix=None, parallel=False, nproc=None):
+    # Create output directory if needed
     if outdir is not None:
         outdir = os.path.join(outdir, '')
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-    
-    #Partial transforming function
+
+    # Partial transforming function
     transformer = partial(transform_image,
-                          like = like,
-                          transform = transform,
-                          outdir = outdir,
-                          suffix = suffix)
-    
+                          like=like,
+                          transform=transform,
+                          outdir=outdir,
+                          suffix=suffix)
+
     if parallel:
         if nproc is None:
             raise ValueError("Set the nproc argument to specify the "
                              "number of processors to use in parallel.")
         pool = mp.Pool(nproc)
         outfiles = []
-        for outfile in tqdm(pool.imap(transformer, infiles), total = len(infiles)):
+        for outfile in tqdm(pool.imap(transformer, infiles), total=len(infiles)):
             outfiles.append(outfile)
         pool.close()
         pool.join()
     else:
         outfiles = list(map(transformer, tqdm(infiles)))
-        
+
     return outfiles
 
 
-def resample_image(infile, isostep, outdir = None, suffix = None):
-    
+def resample_image(infile, isostep, outdir=None, suffix=None):
     """
     Resample a MINC image
     
@@ -471,16 +455,16 @@ def resample_image(infile, isostep, outdir = None, suffix = None):
     outfile: str
         Path to the resampled image. 
     """
-    
-    #Append suffix if specified
+
+    # Append suffix if specified
     if suffix is not None:
-        outfile = (os.path.splitext(infile)[0]+
-                   suffix+
+        outfile = (os.path.splitext(infile)[0] +
+                   suffix +
                    os.path.splitext(infile)[1])
-    else: 
+    else:
         outfile = infile
 
-    #Create output directory if needed
+    # Create output directory if needed
     if outdir is not None:
         outdir = os.path.join(outdir, '')
         if not os.path.exists(outdir):
@@ -492,17 +476,16 @@ def resample_image(infile, isostep, outdir = None, suffix = None):
             raise Exception("Arguments outdir and suffix "
                             "cannot both be None.")
 
-    #Autocrop command
+    # Autocrop command
     cmd_autocrop = ['autocrop', '-quiet', '-clobber',
                     '-isostep', isostep, infile, outfile]
-    log = subprocess.run(cmd_autocrop, stdout = subprocess.PIPE)
+    log = subprocess.run(cmd_autocrop, stdout=subprocess.PIPE)
 
     return outfile
 
 
-def resample_images(infiles, isostep, outdir = None, suffix = None, 
-                    parallel = False, nproc = None):
-    
+def resample_images(infiles, isostep, outdir=None, suffix=None,
+                    parallel=False, nproc=None):
     """
     Resample a set of MINC images.
      
@@ -528,31 +511,29 @@ def resample_images(infiles, isostep, outdir = None, suffix = None,
         List of paths to the resampled images.
     """
 
-    #Create output directory if needed
+    # Create output directory if needed
     if outdir is not None:
         outdir = os.path.join(outdir, '')
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-    
-    #Partial resampling function
+
+    # Partial resampling function
     resampler = partial(resample_image,
-                        isostep = isostep,
-                        outdir = outdir,
-                        suffix = suffix)
-    
+                        isostep=isostep,
+                        outdir=outdir,
+                        suffix=suffix)
+
     if parallel:
         if nproc is None:
             raise ValueError("Set the nproc argument to specify the "
                              "number of processors to use in parallel.")
         pool = mp.Pool(nproc)
         outfiles = []
-        for outfile in tqdm(pool.imap(resampler, infiles), total = len(infiles)):
+        for outfile in tqdm(pool.imap(resampler, infiles), total=len(infiles)):
             outfiles.append(outfile)
         pool.close()
         pool.join()
     else:
         outfiles = list(map(resampler, tqdm(infiles)))
-        
-    return outfiles
 
-    
+    return outfiles
