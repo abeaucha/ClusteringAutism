@@ -313,112 +313,6 @@ def calculate_human_effect_sizes(imgdir, demographics, outdir, method, mask,
                          .format(method))
     
     return outfiles
-
-
-def resample_image(infile, isostep, outdir = None, suffix = None):
-    
-    """
-    Resample a MINC image
-    
-    Arguments
-    ---------
-    infile: str
-        Path to the image file to resample.
-    isostep: float
-        Isotropic dimension of voxels in the resampled image (mm).
-    outdir: str
-        Path to the directory in which to save the resampled image. 
-        If None, resampled image will be written to the directory 
-        of the input file.
-    suffix: str
-        Suffix to append to output filename before the file extension.
-    
-    Returns
-    -------
-    outfile: str
-        Path to the resampled image. 
-    """
-    
-    #Append suffix if specified
-    if suffix is not None:
-        outfile = (os.path.splitext(infile)[0]+
-                   suffix+
-                   os.path.splitext(infile)[1])
-    else: 
-        outfile = infile
-
-    #Create output directory if needed
-    if outdir is not None:
-        outdir = os.path.join(outdir, '')
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-        outfile = os.path.basename(outfile)
-        outfile = os.path.join(outdir, outfile)
-    else:
-        if suffix is None:
-            raise Exception("Arguments outdir and suffix ",
-                            "cannot both be None.")
-    cmd_autocrop = ('autocrop -quiet -clobber -isostep {} {} {}'
-                    .format(isostep, infile, outfile))
-    os.system(cmd_autocrop)
-
-    return outfile
-
-
-def resample_images(infiles, isostep, outdir = None, suffix = None, 
-                    parallel = False, nproc = None):
-    
-    """
-    Resample a set of MINC images.
-     
-    Arguments
-    ---------
-    infiles: list
-        List of paths to images to resample.
-    isostep: float
-        Isotropic dimension of voxels in the resampled image (mm).
-    outdir: str
-        Path to the output directory. If None, the resampled 
-        images will be stored in the native directory.
-    suffix: str
-        Suffix to append to output filename before the file extension.
-    parallel: bool
-        Option to run in parallel.
-    nproc: int
-        Number of processors to use in parallel.
-        
-    Returns
-    -------
-    outfiles: list
-        List of paths to the resampled images.
-    """
-
-    #Create output directory if needed
-    if outdir is not None:
-        outdir = os.path.join(outdir, '')
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-    
-    #Partial resampling function
-    resampler = partial(resample_image,
-                        isostep = isostep,
-                        outdir = outdir,
-                        suffix = suffix)
-    
-    if parallel:
-        if nproc is None:
-            raise ValueError("Set the nproc argument to specify the ",
-                             "number of processors to use in parallel.")
-        pool = mp.Pool(nproc)
-        outfiles = []
-        for outfile in tqdm(pool.imap(resampler, infiles), total = len(infiles)):
-            outfiles.append(outfile)
-        pool.close()
-        pool.join()
-    else:
-        outfiles = list(map(resampler, tqdm(infiles)))
-        
-    return outfiles
         
 
 def import_image(img, mask = None, flatten = True):
@@ -530,7 +424,7 @@ def import_images(infiles, mask = None, output_format = 'list', flatten = True,
 
     if parallel:
         if nproc is None:
-            raise ValueError("Set the nproc argument to specify the ",
+            raise ValueError("Set the nproc argument to specify the "
                              "number of processors to use in parallel.")
         pool = mp.Pool(nproc)
         imgs = []
