@@ -60,25 +60,6 @@ def parse_args():
     
     return args
 
-
-# Functions ------------------------------------------------------------------
-
-def template(x):
-    
-    """
-    Template
-    
-    Arguments
-    ---------
-    x: dtype
-        Argument description.
-        
-    Returns
-    -------
-    None
-    """
-    
-    return
     
 
 # Main -----------------------------------------------------------------------
