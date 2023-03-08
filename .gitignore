@@ -25,3 +25,4 @@ analyses/troubleshoot_effect_sizes/*.pdf
 figures/figure1
 figures/*.pdf
 .idea
+/.Rprofile
