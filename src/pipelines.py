@@ -2,7 +2,103 @@ import os
 import pandas as pd
 from src import utils, processing
 from glob import glob
-from re import sub
+
+
+def get_mouse_clustering_outputs(input_dir, output_dir, resolution = 200, method = 'mean', transform = None, like = None, parallel = False, nproc = None):
+
+    """
+    Get mouse clustering outputs from Jacob's directory.
+    
+    Arguments
+    ---------
+    input_dir:
+        Path to input directory.
+    output_dir: str
+        Path to output directory.
+    resolution: float
+        Resolution (um) of images to link.
+    method: str
+        Method used to aggregate cluster maps.
+    transform: str
+        Path to transform file (.xfm) to use.
+    like: str
+        Path to transform likefile (.mnc).
+    parallel: bool
+        Option to run in parallel.
+    nproc: int
+        Number of processors to use in parallel.
+    
+    Returns
+    -------
+    None
+    """
+
+    #Check existence of input directory
+    if not os.path.exists(input_dir):
+        raise OSError("Input directory not found: {}".format(input_dir))
+
+    #Path to clustering directory
+    cluster_dir = os.path.join(output_dir, 'clusters', '')
+
+    #Make link to cluster file
+    cluster_file = os.path.join(input_dir, 'Clusters.csv')
+    utils.mk_symlinks(src = [cluster_file],
+                      dst = cluster_dir)
+    os.rename(os.path.join(cluster_dir, os.path.basename(cluster_file)),
+              os.path.join(cluster_dir, 'cluster.csv'))
+
+    #Path to cluster maps directory
+    cluster_map_dir = os.path.join(output_dir, 
+                                   'cluster_maps',
+                                   method, 
+                                   'resolution_{}'.format(resolution))
+
+    #Iterate over jacobians
+    jacobians = ['absolute', 'relative']
+    for jac in jacobians:
+
+        print("Getting {} Jacobian cluster_maps...".format(jac))
+        
+        #Cluster map directory
+        cluster_map_dir_jac = os.path.join(cluster_map_dir, jac, '')
+
+        #Get input files
+        jac_short = jac[:3]
+        input_files = os.listdir(input_dir)
+        input_files = [os.path.join(input_dir, file) for file in input_files]
+        input_files = [file for file in input_files if '.mnc' in file]
+        input_files = [file for file in input_files if str(resolution) in file]
+        input_files = [file for file in input_files if jac_short in file]
+        input_files = [file for file in input_files if method in file]
+        if len(input_files) == 0:
+            raise OSError("Input files not found for specified parameters.")
+
+        #Option to transform images
+        if transform is None:
+            outfiles = utils.mk_symlinks(src = input_files,
+                                        dst = cluster_map_dir_jac)
+        else:
+            if like is None:
+                raise Exception("Argument like must be specified when using transform.")
+            outfiles = utils.transform_images(infiles = input_files,
+                                              outdir = cluster_map_dir_jac,
+                                              like = like,
+                                              transform = transform,
+                                              parallel = parallel,
+                                              nproc = nproc)
+
+        #Update file names
+        for file in outfiles:
+            file_split = os.path.basename(file).split('_')
+            nk = file_split[3]
+            k = file_split[1]
+            file_new = 'cluster_map_nk_{}_k_{}.mnc'.format(nk, k)
+            file_new = os.path.join(cluster_map_dir_jac, file_new)
+            os.rename(file, file_new)
+    
+    return
+
+
 
 def process_human_data(pipeline_dir = 'data/human/derivatives/', 
                        input_dir = 'data/human/registration/jacobians_resampled/', 
