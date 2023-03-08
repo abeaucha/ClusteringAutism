@@ -12,7 +12,7 @@ params_1 = list("es_method" = "normative-growth",
                 "es_ncontrols" = NA,
                 "cluster_nk_max" = 10,
                 "cluster_metric" = "correlation",
-                "cluster_K" = 10,
+                "cluster_K" = 30,
                 "cluster_sigma" = 2.0,
                 "cluster_t" = 20,
                 "cluster_map_method" = "mean")
@@ -30,16 +30,16 @@ params_1 = list("es_method" = "normative-growth",
 
 #Parameter set 2
 # params_2 = list("es_method" = "normative-growth",
-                # "es_df" = 5,
-                # "es_combat" = TRUE,
-                # "es_combat_batch" = "Site-Scanner",
-                # "es_ncontrols" = NA,
-                # "cluster_nk_max" = 10,
-                # "cluster_metric" = "correlation",
-                # "cluster_K" = 10,
-                # "cluster_sigma" = 0.5,
-                # "cluster_t" = 20,
-                # "cluster_map_method" = "mean")
+#                 "es_df" = 3,
+#                 "es_combat" = TRUE,
+#                 "es_combat_batch" = "Site-Scanner",
+#                 "es_ncontrols" = NA,
+#                 "cluster_nk_max" = 10,
+#                 "cluster_metric" = "correlation",
+#                 "cluster_K" = 20,
+#                 "cluster_sigma" = 2.0,
+#                 "cluster_t" = 20,
+#                 "cluster_map_method" = "mean")
 params_2 = list("es_method" = "propensity-matching",
                 "es_df" = NA,
                 "es_combat" = FALSE,
@@ -47,7 +47,7 @@ params_2 = list("es_method" = "propensity-matching",
                 "es_ncontrols" = 20,
                 "cluster_nk_max" = 10,
                 "cluster_metric" = "correlation",
-                "cluster_K" = 10,
+                "cluster_K" = 30,
                 "cluster_sigma" = 2.0,
                 "cluster_t" = 20,
                 "cluster_map_method" = "mean")
@@ -59,7 +59,7 @@ pipeline_dir <- file.path(pipeline_dir, str_flatten(datasets, collapse = "_"), "
 #Path to complete parameter metadata
 metadata <- file.path(pipeline_dir, "cluster_maps", "metadata.csv")
 df_metadata <- read_csv(metadata, show_col_types = FALSE)
-View(df_metadata)
+# View(df_metadata)
 
 #ID for parameter set 1
 id_params_1 <- inner_join(as_tibble(params_1),
