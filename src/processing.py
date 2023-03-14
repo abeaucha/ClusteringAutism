@@ -622,79 +622,75 @@ def create_cluster_maps(clusters, imgdir, outdir, mask = None,
     return outfiles
 
 
+
 def threshold_intensity(img, threshold = 0.5, symmetric = True,
-                        comparison = 'gt', signed = False):
+                        comparison = 'gt'):
+    
     """
-    Create a mask using an intensity threshold.
+    Threshold an image using an intensity threshold.
 
     Arguments
     --------
     img: numpy.ndarray
-        Data to threshold
+        Image to threshold.
     threshold: float
         Intensity value at which to threshold.
     symmetric: bool
-        Option to apply threshold symmetrically to negative and
+        Apply threshold symmetrically to negative and
         positive values.
     comparison: str
         One of 'gt' or 'lt' indicating whether the mask should
         return values greater than or lesser than the threshold.
-    signed: bool
-        If True, the output mask will contain -1 where data < 0
-        and 1 where data > 0
 
     Returns
     -------
     out: numpy.ndarray
-        Mask corresponding to thresholded data.
+        Thresholded image.
     """
 
+    out = img.copy()
     if symmetric:
         if comparison == 'gt':
-            ind = np.abs(img) > threshold
+            ind = np.abs(img) > np.abs(threshold)
+        elif comparison == 'lt':
+            ind = np.abs(img) < np.abs(threshold)
         else:
-            ind = np.abs(img) < threshold
+            raise ValueError("Argument comparison must be one of {'gt', 'lt'}: {}".format(comparison))
     else:
         if comparison == 'gt':
             ind = img > threshold
-        else:
+        elif comparison == 'lt':
             ind = img < threshold
-    out = np.zeros_like(img)
-    if signed:
-        ind_pos = img > 0
-        ind_neg = img < 0
-        out[ind & ind_pos] = 1
-        out[ind & ind_neg] = -1
-    else:
-        out[ind] = 1
+        else:
+            raise ValueError("Argument comparison must be one of {'gt', 'lt'}: {}".format(comparison))
+    if np.sum(ind) == 0:
+        raise Exception("No voxels survive the threshold. Select another threshold.")
+    out[~ind] = 0
     return out
 
 
-def threshold_top_n(img, n = 0.2, symmetric = True, tolerance = 1e-5,
-                    signed = False):
+def threshold_top_n(img, n = 0.2, symmetric = True, tolerance = 1e-5):
+
     """
-    Create a mask using the top n values.
+    Threshold an image using the top n values.
 
     Arguments
     ---------
     img: numpy.ndarray
-        Image array to threshold
+        Image to threshold.
     n: int or float
         If |n| > 1, the top n values will be used.
         If 0 < |n| < 1, the top fraction of values will be used.
         If n < 0, the top negative values will be used.
     symmetric: bool
-        Option to apply the threshold symmetrically.
+        Apply the threshold symmetrically.
     tolerance: float
         Absolute values below this threshold will be excluded.
-    signed: bool
-        If True, the output mask will contain -1 where data < 0
-        and 1 where data > 0
 
     Returns
     -------
     out: numpy.ndarray
-        Mask corresponding to thresholded data.
+        Thresholded image.
     """
 
     # Raise error if symmetric is True and n < 0
@@ -704,9 +700,6 @@ def threshold_top_n(img, n = 0.2, symmetric = True, tolerance = 1e-5,
 
     # Flatten image and mask
     values = img.flatten()
-
-    # Extract value signs
-    signs = np.sign(values)
 
     # If symmetric, use absolute values
     if symmetric:
@@ -726,7 +719,6 @@ def threshold_top_n(img, n = 0.2, symmetric = True, tolerance = 1e-5,
         sorted_index = sorted_index[positive_filter & tolerance_filter]
         if n < 1:
             n = int(np.floor(n * len(sorted_values)))
-        top_n_values = sorted_values[-n:]
         top_n_index = sorted_index[-n:]
     elif n < 0:
         negative_filter = sorted_values < 0
@@ -735,125 +727,152 @@ def threshold_top_n(img, n = 0.2, symmetric = True, tolerance = 1e-5,
         n = abs(n)
         if n < 1:
             n = int(np.floor(n * len(sorted_values)))
-        top_n_values = sorted_values[:n]
         top_n_index = sorted_index[:n]
     else:
-        raise ValueError("n cannot be 0")
+        raise ValueError("Argument n cannot be 0")
 
-    # Generate top n mask
-    out = np.zeros_like(values)
-    if signed:
-        out[top_n_index] = signs[top_n_index]
-    else:
-        out[top_n_index] = 1
-
-    # Reshape output mask into 3D
+    #Threshold the image
+    out = img.flatten().copy()
+    index = np.arange(len(out))
+    out[~np.isin(index, top_n_index)] = 0
     out = out.reshape(img.shape)
 
     return out
 
 
-def create_image_mask(infile, outfile, mask, method = 'top_n', threshold = 0.2,
-                      symmetric = True, comparison = None, signed = False):
-    """
-    Create a threshold mask based on an input image.
-
-    Arguments
-    ---------
-    infile: str
-        Path to the image file (.mnc) to mask.
-    outfile: str
-        Path to the image file (.mnc) in which to save the mask.
-    mask: str
-        Path to the mask image (.mnc) to apply before thresholding.
-    method: str
-        One of {'intensity', 'top_n'} indicating which method
-        to use for thresholding.
-    threshold: float
-        Threshold to determine which voxels are in the mask.
-        If method = 'intensity', this is the intensity value at
-        which to threshold.
-        If method = 'top_n', this is the number of fraction of top
-        voxels to use.
-    symmetric: bool
-        Option to apply threshold symmetrically to negative and
-        positive values.
-    comparison: str
-        String indicating how to apply the threshold if
-        method = 'intensity'. This is ignored if method = 'top_n'.
-    signed: bool
-        If True, the output mask will contain -1 where data < 0
-        and 1 where data > 0
-
-    Returns
-    -------
-    None
-    """
-
-    # Import image
-    img = import_image(img = infile, mask = mask, flatten = False)
+def threshold_image(img, method = 'top_n', threshold = 0.2, symmetric = True,
+                    comparison = 'gt'):
 
     # Thresholding method
     if method == 'intensity':
         img = threshold_intensity(img = img,
                                   threshold = threshold,
                                   symmetric = symmetric,
-                                  comparison = comparison,
-                                  signed = signed)
+                                  comparison = comparison)
     elif method == 'top_n':
         img = threshold_top_n(img = img,
                               n = threshold,
-                              symmetric = symmetric,
-                              signed = signed)
+                              symmetric = symmetric)
     else:
         raise ValueError("Argument method must be one of "
                          "{'intensity', 'top_n'}")
 
-    # MINC files can't handle negative integer labels
-    labels = False if signed else True
-    img_vol = volumeLikeFile(likeFilename = infile,
-                             outputFilename = outfile,
-                             labels = labels)
+    return img
 
-    img_vol.data = img
-    img_vol.writeFile()
-    img_vol.closeVolume()
 
-    return outfile
+def mask_from_image(img, signed = False):
 
-def create_image_masks(imgdir, outdir, mask, method = 'top_n',
-                       threshold = 0.2, symmetric = True, comparison = None,
-                       signed = False):
+    mask = np.zeros_like(img)
+    if signed:
+        mask[img > 0] = 1
+        mask[img < 0] = -1
+    else:
+        mask[np.abs(img) > 0] = 1
+    mask = np.int8(mask)
+    return mask
 
-    # Cast threshold to integer if number of voxels used
-    if (method == 'top_n') & (abs(threshold) > 1):
-        threshold = int(threshold)
 
-    # Ensure proper paths
-    imgdir = os.path.join(imgdir, '')
-    outdir = os.path.join(outdir, '')
+# def create_image_mask(infile, outfile, mask, method = 'top_n', threshold = 0.2,
+#                       symmetric = True, comparison = None, signed = False):
+#     """
+#     Create a threshold mask based on an input image.
 
-    # Create outdir if needed
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+#     Arguments
+#     ---------
+#     infile: str
+#         Path to the image file (.mnc) to mask.
+#     outfile: str
+#         Path to the image file (.mnc) in which to save the mask.
+#     mask: str
+#         Path to the mask image (.mnc) to apply before thresholding.
+#     method: str
+#         One of {'intensity', 'top_n'} indicating which method
+#         to use for thresholding.
+#     threshold: float
+#         Threshold to determine which voxels are in the mask.
+#         If method = 'intensity', this is the intensity value at
+#         which to threshold.
+#         If method = 'top_n', this is the number of fraction of top
+#         voxels to use.
+#     symmetric: bool
+#         Option to apply threshold symmetrically to negative and
+#         positive values.
+#     comparison: str
+#         String indicating how to apply the threshold if
+#         method = 'intensity'. This is ignored if method = 'top_n'.
+#     signed: bool
+#         If True, the output mask will contain -1 where data < 0
+#         and 1 where data > 0
 
-    # Get input images
-    infiles = os.listdir(imgdir)
-    infiles = [file for file in infiles if '.mnc' in file]
-    infiles = [os.path.join(imgdir, file) for file in infiles]
-    outfiles = [os.path.basename(file) for file in infiles]
-    outfiles = [os.path.join(outdir, file) for file in outfiles]
+#     Returns
+#     -------
+#     None
+#     """
 
-    #Partial function for iteration
-    masker = partial(create_image_mask,
-                     mask = mask,
-                     method = method,
-                     threshold = threshold,
-                     symmetric = symmetric,
-                     comparison = comparison,
-                     signed = signed)
+#     # Import image
+#     img = import_image(img = infile, mask = mask, flatten = False)
 
-    #Iterate over images
-    outfiles = list(map(masker, tqdm(infiles), outfiles))
+#     # Thresholding method
+#     if method == 'intensity':
+#         img = threshold_intensity(img = img,
+#                                   threshold = threshold,
+#                                   symmetric = symmetric,
+#                                   comparison = comparison,
+#                                   signed = signed)
+#     elif method == 'top_n':
+#         img = threshold_top_n(img = img,
+#                               n = threshold,
+#                               symmetric = symmetric,
+#                               signed = signed)
+#     else:
+#         raise ValueError("Argument method must be one of "
+#                          "{'intensity', 'top_n'}")
 
-    return outfiles
+#     # MINC files can't handle negative integer labels
+#     labels = False if signed else True
+#     img_vol = volumeLikeFile(likeFilename = infile,
+#                              outputFilename = outfile,
+#                              labels = labels)
+
+#     img_vol.data = img
+#     img_vol.writeFile()
+#     img_vol.closeVolume()
+
+#     return outfile
+
+# def create_image_masks(imgdir, outdir, mask, method = 'top_n',
+#                        threshold = 0.2, symmetric = True, comparison = None,
+#                        signed = False):
+
+#     # Cast threshold to integer if number of voxels used
+#     if (method == 'top_n') & (abs(threshold) > 1):
+#         threshold = int(threshold)
+
+#     # Ensure proper paths
+#     imgdir = os.path.join(imgdir, '')
+#     outdir = os.path.join(outdir, '')
+
+#     # Create outdir if needed
+#     if not os.path.exists(outdir):
+#         os.makedirs(outdir)
+
+#     # Get input images
+#     infiles = os.listdir(imgdir)
+#     infiles = [file for file in infiles if '.mnc' in file]
+#     infiles = [os.path.join(imgdir, file) for file in infiles]
+#     outfiles = [os.path.basename(file) for file in infiles]
+#     outfiles = [os.path.join(outdir, file) for file in outfiles]
+
+#     #Partial function for iteration
+#     masker = partial(create_image_mask,
+#                      mask = mask,
+#                      method = method,
+#                      threshold = threshold,
+#                      symmetric = symmetric,
+#                      comparison = comparison,
+#                      signed = signed)
+
+#     #Iterate over images
+#     outfiles = list(map(masker, tqdm(infiles), outfiles))
+
+#     return outfiles
