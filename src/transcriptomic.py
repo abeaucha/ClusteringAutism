@@ -11,6 +11,7 @@ from pyminc.volumes.factory import volumeFromFile
 from tqdm import tqdm
 from itertools import product
 from functools import partial
+from warnings import warn
 
 
 @contextlib.contextmanager
@@ -153,7 +154,7 @@ def similarity(x, y, metric = 'correlation'):
     return d
 
 
-def compute_transcriptomic_similarity(expr, imgs, masks, microarray_coords,
+def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                                       metric = 'correlation', signed = True,
                                       threshold = 'top_n',
                                       threshold_value = 0.2,
@@ -190,7 +191,15 @@ def compute_transcriptomic_similarity(expr, imgs, masks, microarray_coords,
             sim.append(similarity(x = signatures[0],
                                   y = signatures[1],
                                   metric = metric))
-        sim = np.mean(np.array(sim))
+
+        is_nan = np.isnan(sim)
+        if all(is_nan):
+            raise Exception("No surviving voxels.")
+        if any(is_nan):
+            warn("Incomplete signature")
+        sim = np.array(sim)
+        sim = sim[~is_nan]
+        sim = np.mean(sim)
 
     else:
         sim = similarity(x = mouse,
