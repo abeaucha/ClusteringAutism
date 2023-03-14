@@ -109,9 +109,7 @@ for (j in 1:ncol(df_clusters)) {
     class(cluster_map) <- class(mincGetVolume(files_k[1]))
     attributes(cluster_map) <- attributes(mincGetVolume(files_k[1]))
     
-    outfile <- paste0("cluster_map_nk_", max(krange), 
-                      "_k_", k, "_", method, ".mnc")
-    
+    outfile <- paste0("cluster_map_nk_", max(krange), "_k_", k, ".mnc")
     outfile <- file.path(outdir, outfile)
     
     mincWriteVolume(cluster_map,
