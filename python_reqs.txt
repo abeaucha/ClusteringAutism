@@ -9,3 +9,4 @@ tqdm
 sklearn
 torch
 skorch
+matplotlib
