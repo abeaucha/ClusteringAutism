@@ -6,24 +6,26 @@ import transcriptomic
 from glob import glob
 
 
-def get_mouse_clustering_outputs(input_dir, output_dir, resolution=200, method='mean', transform=None, like=None,
-                                 parallel=False, nproc=None):
+def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution=200,
+                                   method='mean', transform=None,
+                                   transform_like=None, parallel=False,
+                                   nproc=None):
     """
-    Get mouse clustering outputs from Jacob's directory.
-    
+    Fetch mouse clustering outputs from Jacob's directory.
+
     Arguments
     ---------
+    pipeline_dir: str
+        Path to output directory.
     input_dir:
         Path to input directory.
-    output_dir: str
-        Path to output directory.
     resolution: float
         Resolution (um) of images to link.
     method: str
         Method used to aggregate cluster maps.
     transform: str
         Path to transform file (.xfm) to use.
-    like: str
+    transform_like: str
         Path to transform likefile (.mnc).
     parallel: bool
         Option to run in parallel.
@@ -40,7 +42,7 @@ def get_mouse_clustering_outputs(input_dir, output_dir, resolution=200, method='
         raise OSError("Input directory not found: {}".format(input_dir))
 
     # Path to clustering directory
-    cluster_dir = os.path.join(output_dir, 'clusters', '')
+    cluster_dir = os.path.join(pipeline_dir, 'clusters', '')
 
     # Make link to cluster file
     cluster_file = os.path.join(input_dir, 'Clusters.csv')
@@ -50,11 +52,12 @@ def get_mouse_clustering_outputs(input_dir, output_dir, resolution=200, method='
               os.path.join(cluster_dir, 'cluster.csv'))
 
     # Path to cluster maps directory
-    cluster_map_dir = os.path.join(output_dir, 'cluster_maps')
-    metadata = os.path.join(output_dir, 'metadata.csv')
+    resolution_mm = float(resolution)/1000
+    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps')
+    metadata = os.path.join(pipeline_dir, 'metadata.csv')
     cluster_map_dir = utils.mkdir_from_params(params = {'cluster_map_method':method},
                                               outdir = cluster_map_dir)
-    cluster_map_dir = os.path.join(cluster_map_dir, 'resolution_{}'.format(resolution), '')
+    cluster_map_dir = os.path.join(cluster_map_dir, 'resolution_{}'.format(resolution_mm), '')
 
     # Iterate over jacobians
     jacobians = ['absolute', 'relative']
@@ -81,11 +84,11 @@ def get_mouse_clustering_outputs(input_dir, output_dir, resolution=200, method='
             outfiles = utils.mk_symlinks(src=input_files,
                                          dst=cluster_map_dir_jac)
         else:
-            if like is None:
-                raise Exception("Argument like must be specified when using transform.")
+            if transform_like is None:
+                raise Exception("Argument transform_like must be specified when using transform.")
             outfiles = utils.transform_images(infiles=input_files,
                                               outdir=cluster_map_dir_jac,
-                                              like=like,
+                                              transform_like=transform_like,
                                               transform=transform,
                                               parallel=parallel,
                                               nproc=nproc)
@@ -278,15 +281,25 @@ def process_human_data(pipeline_dir='data/human/derivatives/',
 
 
 
-def cluster_similarity(mouse_cluster_dir, mouse_mask, mouse_expr, mouse_resolution,
-                      human_cluster_dir, human_mask, human_expr, human_resolution, human_coords,
-                      gene_space = 'average-latent-space', n_latent_spaces = 100, latent_space_id = 1,
-                      metric = 'correlation', signed = True, threshold = 'top_n', threshold_value = 0.2, 
-                      threshold_symmetric = True, output_dir = 'data/similarity/', parallel = True, nproc = None):
-    
+def compute_cluster_similarity(mouse_cluster_dir, human_cluster_dir,
+                               pipeline_dir = 'data/similarity/',
+                               mouse_expr_dir = 'data/mouse/expression/',
+                               human_expr_dir = 'data/human/expression/',
+                               mouse_mask = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
+                               human_mask = 'data/human/registration/reference_files/mask_3.0mm.mnc',
+                               mouse_resolution = 0.2, human_resolution = 3.0,
+                               human_microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_studyspace.csv',
+                               gene_space = 'average-latent-space',
+                               n_latent_spaces = 100, latent_space_id = 1,
+                               metric = 'correlation', signed = True,
+                               threshold = 'top_n', threshold_value = 0.2,
+                               threshold_symmetric = True,
+                               parallel = True, nproc = None):
+
     if parallel:
         if nproc is None:
-            raise Exception("Argument --nproc must be specified when --parallel true")
+            raise Exception("Argument --nproc must be specified "
+                            "when --parallel true")
 
     #Ensure proper paths
     human_cluster_dir = os.path.join(human_cluster_dir, '')
@@ -297,33 +310,39 @@ def cluster_similarity(mouse_cluster_dir, mouse_mask, mouse_expr, mouse_resoluti
     mouse_input_params_id = mouse_cluster_dir.split('/')[-2]
 
     #Update paths with resolution information
-    human_cluster_dir = os.path.join(human_cluster_dir, 'resolution_{}'.format(human_resolution), '')
-    mouse_cluster_dir = os.path.join(mouse_cluster_dir, 'resolution_{}'.format(mouse_resolution), '')
+    human_cluster_dir = os.path.join(human_cluster_dir,
+                                     'resolution_{}'.format(human_resolution),
+                                     '')
+    mouse_cluster_dir = os.path.join(mouse_cluster_dir,
+                                     'resolution_{}'.format(mouse_resolution),
+                                     '')
 
     #Create output directory from parameters
     params = {'human_input_id':human_input_params_id,
-             'human_resolution':human_resolution,
-             'mouse_input_id':mouse_input_params_id,
-             'mouse_resolution':mouse_resolution,
+              'human_resolution':human_resolution,
+              'mouse_input_id':mouse_input_params_id,
+              'mouse_resolution':mouse_resolution,
               'gene_space':gene_space,
               'n_latent_spaces':n_latent_spaces,
-             'metric':metric,
+              'metric':metric,
               'signed':signed,
-             'threshold':threshold,
-             'threshold_value':threshold_value,
-             'threshold_symmetric':threshold_symmetric}
-    output_dir = utils.mkdir_from_params(params = params,
-                                         outdir = output_dir)
+              'threshold':threshold,
+              'threshold_value':threshold_value,
+              'threshold_symmetric':threshold_symmetric}
+    pipeline_dir = utils.mkdir_from_params(params = params,
+                                           outdir = pipeline_dir)
 
     #Combine mouse and human data into tuples
-    expr = (mouse_expr, human_expr)
+    expr = (mouse_expr_dir, human_expr_dir)
     masks = (mouse_mask, human_mask)
 
     #Iterate over Jacobians
     jacobians = ['absolute', 'relative']
     for j, jac in enumerate(jacobians):
-        
-        print("Evaluating similarity of {} Jacobian cluster maps...".format(jac))
+
+        print(
+            "Evaluating similarity of {} Jacobian cluster maps...".format(jac)
+        )
 
         #Update input paths with jacobians
         human_cluster_dir_jac = os.path.join(human_cluster_dir, jac, '')
@@ -334,31 +353,35 @@ def cluster_similarity(mouse_cluster_dir, mouse_mask, mouse_expr, mouse_resoluti
         human_cluster_maps = os.listdir(human_cluster_dir_jac)
 
         #Update cluster map files with directory paths
-        mouse_cluster_maps = [os.path.join(mouse_cluster_dir_jac, file) for file in mouse_cluster_maps]
-        human_cluster_maps = [os.path.join(human_cluster_dir_jac, file) for file in human_cluster_maps]
+        mouse_cluster_maps = [os.path.join(mouse_cluster_dir_jac, file)
+                              for file in mouse_cluster_maps]
+        human_cluster_maps = [os.path.join(human_cluster_dir_jac, file)
+                              for file in human_cluster_maps]
 
         #Combine mouse and human cluster maps into a tuple
         cluster_maps = (mouse_cluster_maps, human_cluster_maps)
 
         #Compute pairwise similarity between cluster maps
-        out = transcriptomic.pairwise_transcriptomic_similarity(imgs = cluster_maps,
-                                                         expr = expr,
-                                                         masks = masks,
-                                                         microarray_coords = human_coords,
-                                                         gene_space = gene_space,
-                                                           n_latent_spaces = n_latent_spaces,
-                                                           latent_space_id = latent_space_id,
-                                                           metric = metric,
-                                                           signed = signed,
-                                                           threshold = threshold,
-                                                           threshold_value = threshold_value,
-                                                           threshold_symmetric = threshold_symmetric,
-                                                         parallel = parallel,
-                                                         nproc = nproc)
+        out = transcriptomic.pairwise_transcriptomic_similarity(
+            imgs = cluster_maps,
+            expr = expr,
+            masks = masks,
+            microarray_coords = human_microarray_coords,
+            gene_space = gene_space,
+            n_latent_spaces = n_latent_spaces,
+            latent_space_id = latent_space_id,
+            metric = metric,
+            signed = signed,
+            threshold = threshold,
+            threshold_value = threshold_value,
+            threshold_symmetric = threshold_symmetric,
+            parallel = parallel,
+            nproc = nproc
+        )
 
         #Export similarity
         outfile = 'similarity_{}.csv'.format(jac)
-        outfile = os.path.join(output_dir, outfile)
+        outfile = os.path.join(pipeline_dir, outfile)
         out.to_csv(outfile, index = False)
-        
+
     return
