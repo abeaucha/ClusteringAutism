@@ -1,3 +1,4 @@
+#!.venv/bin/python3
 # ----------------------------------------------------------------------------
 # resample_images.py 
 # Author: Antoine Beauchamp
@@ -11,37 +12,36 @@ Resample a set of images using the autocrop command line tool.
 
 import argparse
 import os
-from src import processing
+import utils
 
 
 # Command line arguments -----------------------------------------------------
 
 def parse_args():
-    
     """Parse command line arguments"""
-    
+
     parser = argparse.ArgumentParser(
-                 formatter_class = argparse.ArgumentDefaultsHelpFormatter
-             )
-    
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
+
     parser.add_argument(
         '--imgdir',
         type = str,
-        help = ("Path to directory containing images to resample.")
+        help = "Path to directory containing images to resample."
     )
-    
+
     parser.add_argument(
         '--outdir',
         type = str,
-        help = ("Path to directory in which to save resampled images.")
+        help = "Path to directory in which to save resampled images."
     )
-    
+
     parser.add_argument(
         '--isostep',
         type = str,
-        help = ("Resolution of voxels in resampled images (mm).")
+        help = "Resolution of voxels in resampled images (mm)."
     )
-    
+
     parser.add_argument(
         '--parallel',
         type = str,
@@ -49,7 +49,7 @@ def parse_args():
         choices = ['true', 'false'],
         help = "Option to run in parallel."
     )
-    
+
     parser.add_argument(
         '--nproc',
         type = int,
@@ -57,49 +57,42 @@ def parse_args():
         help = ("Number of processors to use in parallel. "
                 "Ignored if --parallel set to false.")
     )
-    
-    args = vars(parser.parse_args())
-    
-    return args
+
+    return vars(parser.parse_args())
 
 
 # Main -----------------------------------------------------------------------
+if __name__ == '__main__':
 
-def main():
-    
-    #Parse command line arguments
+    # Parse command line arguments
     args = parse_args()
     imgdir = args['imgdir']
     outdir = args['outdir']
     isostep = args['isostep']
     parallel = True if args['parallel'] == 'true' else False
     nproc = args['nproc']
-    
-    #Parallel checks
+
+    # Parallel checks
     if parallel:
         if nproc is None:
-            raise Exception("Argument --nproc must be specified when --parallel true")
-    
-    #Ensure proper paths
+            raise Exception("Argument --nproc must be specified "
+                            "when --parallel true")
+
+    # Ensure proper paths
     imgdir = os.path.join(imgdir, '')
     outdir = os.path.join(outdir, '')
-    
-    #Create outdir if needed
+
+    # Create outdir if needed
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    
-    #Get images in dir
-    imgfiles = [os.path.join(imgdir, file) 
-                for file in os.listdir(imgdir) 
+
+    # Get images in dir
+    imgfiles = [os.path.join(imgdir, file)
+                for file in os.listdir(imgdir)
                 if '.mnc' in file]
 
-    outfiles = processing.resample_images(infiles = imgfiles,
-                                          isostep = isostep,
-                                          outdir = outdir,
-                                           parallel = parallel,
-                                           nproc = nproc)
-    
-    return
-
-if __name__=='__main__':
-    main()
+    outfiles = utils.resample_images(infiles = imgfiles,
+                                     isostep = isostep,
+                                     outdir = outdir,
+                                     parallel = parallel,
+                                     nproc = nproc)
