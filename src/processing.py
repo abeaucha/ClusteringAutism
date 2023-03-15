@@ -1,16 +1,14 @@
 import os
-import subprocess
 import tempfile
+import multiprocessing as mp
 import numpy as np
 import pandas as pd
-import multiprocessing as mp
-from src.utils import execute_R
-from re import sub
-from glob import glob
-from functools import partial
-from tqdm import tqdm
 from datatable import fread
+from functools import partial
+from glob import glob
 from pyminc.volumes.factory import volumeFromFile, volumeLikeFile
+from tqdm import tqdm
+from utils import execute_R
 from warnings import warn
 
 
