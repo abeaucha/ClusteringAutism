@@ -179,9 +179,7 @@ def parse_args():
         help = "Number of processors to use in parallel."
     )
 
-    args = vars(parser.parse_args())
-
-    return args
+    return vars(parser.parse_args())
 
 
 # Pipeline --------------------------------------------------------------------
@@ -203,14 +201,15 @@ if __name__ == '__main__':
         args['threshold_value'] = None
         args['threshold_symmetric'] = None
 
-    params = {key:val for key, val in args.items() if (type(val) is list)}
+    params = {key: val for key, val in args.items() if (type(val) is list)}
     param_keys = list(params.keys())
     for param_vals in product(*params.values()):
         param_set = dict(list(zip(param_keys, param_vals)))
         param_set['signed'] = (True if param_set['signed'] == 'true'
                                else 'false')
-        param_set['threshold_symmetric'] = (True if param_set['threshold_symmetric'] == 'true'
-                                            else 'false')
+        param_set['threshold_symmetric'] = (
+            True if param_set['threshold_symmetric'] == 'true' else 'false'
+        )
         param_msg = [': '.join([str(key), str(val)])
                      for key, val in param_set.items()]
         param_msg = reduce(lambda x, y: x + '\n\t' + y, param_msg)
