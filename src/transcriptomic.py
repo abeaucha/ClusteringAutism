@@ -195,8 +195,6 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
         is_nan = np.isnan(sim)
         if all(is_nan):
             raise Exception("No surviving voxels.")
-        if any(is_nan):
-            warn("Incomplete signature")
         sim = np.array(sim)
         sim = sim[~is_nan]
         sim = np.mean(sim)
@@ -313,7 +311,6 @@ def pairwise_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                         **partial_args)
 
     pairs = list(product(imgs[0], imgs[1]))
-    pairs = pairs[:5]
 
     if parallel:
         if nproc is None:
