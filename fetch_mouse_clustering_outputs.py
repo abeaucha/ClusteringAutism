@@ -15,13 +15,12 @@ Description
 
 import sys
 import argparse
-from src.pipelines import get_mouse_clustering_outputs
+from pipelines import fetch_mouse_clustering_outputs
 from itertools import product
 from functools import reduce
 
 
 # Command line arguments -----------------------------------------------------
-
 
 def parse_args():
     
@@ -99,7 +98,7 @@ if __name__ == '__main__':
     
     args = parse_args()
     args['parallel'] = bool(args['parallel'])
-    if args['transform'] == 'None':
+    if args['transform'] == 'none':
         args['transform'] = None
         args['like'] = None
     params = {key:val for key, val in args.items() 
@@ -112,5 +111,5 @@ if __name__ == '__main__':
         param_msg = "Running parameter set:\n\t{}\n".format(param_msg)
         print(param_msg)
         args.update(param_set)
-        get_mouse_clustering_outputs(**args)
+        fetch_mouse_clustering_outputs(**args)
     
