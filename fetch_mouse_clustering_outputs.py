@@ -68,7 +68,7 @@ def parse_args():
     )
     
     parser.add_argument(
-        '--like',
+        '--transform-like',
         type = str,
         default = 'data/mouse/atlas/average_template_200um.mnc',
         help = ("Path to transform likefile (.mnc).")
@@ -97,16 +97,17 @@ def parse_args():
 if __name__ == '__main__':
     
     args = parse_args()
-    args['parallel'] = bool(args['parallel'])
+    args['parallel'] = True if args['parallel'] == 'true' else False
     if args['transform'] == 'none':
         args['transform'] = None
-        args['like'] = None
+        args['transform_like'] = None
     params = {key:val for key, val in args.items() 
               if type(val) is list}
     param_keys = [key for key in params.keys()]
     for param_vals in product(*params.values()):
         param_set = dict(list(zip(param_keys, param_vals)))
-        param_msg = [': '.join([str(key), str(val)]) for key, val in param_set.items()]
+        param_msg = [': '.join([str(key), str(val)])
+                     for key, val in param_set.items()]
         param_msg = reduce(lambda x, y: x+'\n\t'+y, param_msg)
         param_msg = "Running parameter set:\n\t{}\n".format(param_msg)
         print(param_msg)
