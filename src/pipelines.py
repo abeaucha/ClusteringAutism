@@ -1,6 +1,8 @@
 import os
 import pandas as pd
-from src import utils, processing
+import utils
+import processing
+import transcriptomic
 from glob import glob
 
 
@@ -48,16 +50,17 @@ def get_mouse_clustering_outputs(input_dir, output_dir, resolution=200, method='
               os.path.join(cluster_dir, 'cluster.csv'))
 
     # Path to cluster maps directory
-    cluster_map_dir = os.path.join(output_dir,
-                                   'cluster_maps',
-                                   method,
-                                   'resolution_{}'.format(resolution))
+    cluster_map_dir = os.path.join(output_dir, 'cluster_maps')
+    metadata = os.path.join(output_dir, 'metadata.csv')
+    cluster_map_dir = utils.mkdir_from_params(params = {'cluster_map_method':method},
+                                              outdir = cluster_map_dir)
+    cluster_map_dir = os.path.join(cluster_map_dir, 'resolution_{}'.format(resolution), '')
 
     # Iterate over jacobians
     jacobians = ['absolute', 'relative']
     for jac in jacobians:
 
-        print("Getting {} Jacobian cluster_maps...".format(jac))
+        print("Getting {} Jacobian cluster maps...".format(jac))
 
         # Cluster map directory
         cluster_map_dir_jac = os.path.join(cluster_map_dir, jac, '')
@@ -269,4 +272,93 @@ def process_human_data(pipeline_dir='data/human/derivatives/',
 
     print("Done.")
 
+    return
+
+
+
+
+
+def cluster_similarity(mouse_cluster_dir, mouse_mask, mouse_expr, mouse_resolution,
+                      human_cluster_dir, human_mask, human_expr, human_resolution, human_coords,
+                      gene_space = 'average-latent-space', n_latent_spaces = 100, latent_space_id = 1,
+                      metric = 'correlation', signed = True, threshold = 'top_n', threshold_value = 0.2, 
+                      threshold_symmetric = True, output_dir = 'data/similarity/', parallel = True, nproc = None):
+    
+    if parallel:
+        if nproc is None:
+            raise Exception("Argument --nproc must be specified when --parallel true")
+
+    #Ensure proper paths
+    human_cluster_dir = os.path.join(human_cluster_dir, '')
+    mouse_cluster_dir = os.path.join(mouse_cluster_dir, '')
+
+    #Get parameter IDs for mouse and human pipelines
+    human_input_params_id = human_cluster_dir.split('/')[-2]
+    mouse_input_params_id = mouse_cluster_dir.split('/')[-2]
+
+    #Update paths with resolution information
+    human_cluster_dir = os.path.join(human_cluster_dir, 'resolution_{}'.format(human_resolution), '')
+    mouse_cluster_dir = os.path.join(mouse_cluster_dir, 'resolution_{}'.format(mouse_resolution), '')
+
+    #Create output directory from parameters
+    params = {'human_input_id':human_input_params_id,
+             'human_resolution':human_resolution,
+             'mouse_input_id':mouse_input_params_id,
+             'mouse_resolution':mouse_resolution,
+              'gene_space':gene_space,
+              'n_latent_spaces':n_latent_spaces,
+             'metric':metric,
+              'signed':signed,
+             'threshold':threshold,
+             'threshold_value':threshold_value,
+             'threshold_symmetric':threshold_symmetric}
+    output_dir = utils.mkdir_from_params(params = params,
+                                         outdir = output_dir)
+
+    #Combine mouse and human data into tuples
+    expr = (mouse_expr, human_expr)
+    masks = (mouse_mask, human_mask)
+
+    #Iterate over Jacobians
+    jacobians = ['absolute', 'relative']
+    for j, jac in enumerate(jacobians):
+        
+        print("Evaluating similarity of {} Jacobian cluster maps...".format(jac))
+
+        #Update input paths with jacobians
+        human_cluster_dir_jac = os.path.join(human_cluster_dir, jac, '')
+        mouse_cluster_dir_jac = os.path.join(mouse_cluster_dir, jac, '')
+
+        #Get mouse and human cluster map files
+        mouse_cluster_maps = os.listdir(mouse_cluster_dir_jac)
+        human_cluster_maps = os.listdir(human_cluster_dir_jac)
+
+        #Update cluster map files with directory paths
+        mouse_cluster_maps = [os.path.join(mouse_cluster_dir_jac, file) for file in mouse_cluster_maps]
+        human_cluster_maps = [os.path.join(human_cluster_dir_jac, file) for file in human_cluster_maps]
+
+        #Combine mouse and human cluster maps into a tuple
+        cluster_maps = (mouse_cluster_maps, human_cluster_maps)
+
+        #Compute pairwise similarity between cluster maps
+        out = transcriptomic.pairwise_transcriptomic_similarity(imgs = cluster_maps,
+                                                         expr = expr,
+                                                         masks = masks,
+                                                         microarray_coords = human_coords,
+                                                         gene_space = gene_space,
+                                                           n_latent_spaces = n_latent_spaces,
+                                                           latent_space_id = latent_space_id,
+                                                           metric = metric,
+                                                           signed = signed,
+                                                           threshold = threshold,
+                                                           threshold_value = threshold_value,
+                                                           threshold_symmetric = threshold_symmetric,
+                                                         parallel = parallel,
+                                                         nproc = nproc)
+
+        #Export similarity
+        outfile = 'similarity_{}.csv'.format(jac)
+        outfile = os.path.join(output_dir, outfile)
+        out.to_csv(outfile, index = False)
+        
     return
