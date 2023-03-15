@@ -13,7 +13,6 @@ Description
 
 # Packages -------------------------------------------------------------------
 
-import sys
 import argparse
 from pipelines import fetch_mouse_clustering_outputs
 from itertools import product
