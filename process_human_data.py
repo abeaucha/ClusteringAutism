@@ -15,7 +15,7 @@ Description
 
 import sys
 import argparse
-from src.pipelines import process_human_data
+from pipelines import process_human_data
 from itertools import product
 from functools import reduce
 
@@ -224,7 +224,7 @@ if __name__ == '__main__':
     del params['es_matrix_file']
     del params['cluster_file']
     del params['cluster_affinity_file']
-    param_keys = [key for key in params.keys()]
+    param_keys = list(params.keys())
     for param_vals in product(*params.values()):
         param_set = dict(list(zip(param_keys, param_vals)))
         param_set['es_combat'] = bool(param_set['es_combat'])
