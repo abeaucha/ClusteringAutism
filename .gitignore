@@ -26,3 +26,4 @@ figures/figure1
 figures/*.pdf
 .idea
 /.Rprofile
+scripts_old/
