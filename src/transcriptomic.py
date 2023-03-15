@@ -11,7 +11,6 @@ from pyminc.volumes.factory import volumeFromFile
 from tqdm import tqdm
 from itertools import product
 from functools import partial
-from warnings import warn
 
 
 @contextlib.contextmanager
@@ -134,7 +133,7 @@ def similarity(x, y, metric = 'correlation'):
     if (len(x.shape) != 1) | (len(y.shape) != 1):
         raise Exception("x and y must be 1-dimensional arrays")
 
-    if (len(x) != len(y)):
+    if len(x) != len(y):
         raise Exception("x and y must have the same length")
 
     if metric == 'correlation':
@@ -237,70 +236,82 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
         expr = [i for i in expr]
         expr_files = (
             'MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv',
-            'HumanExpressionMatrix_samples_pipeline_abagen_homologs_scaled.csv')
+            'HumanExpressionMatrix_samples_pipeline_abagen_homologs_scaled.csv'
+        )
         for i, path in enumerate(expr):
             expr[i] = os.path.join(path, 'input_space', expr_files[i])
         expr = (expr[0], expr[1])
 
-        sim = compute_transcriptomic_similarity(expr = expr,
-                                                imgs = imgs,
-                                                masks = masks,
-                                                microarray_coords = microarray_coords,
-                                                signed = signed,
-                                                metric = metric,
-                                                threshold = threshold,
-                                                threshold_value = threshold_value,
-                                                threshold_symmetric = threshold_symmetric)
+        sim = compute_transcriptomic_similarity(
+            expr = expr,
+            imgs = imgs,
+            masks = masks,
+            microarray_coords = microarray_coords,
+            signed = signed,
+            metric = metric,
+            threshold = threshold,
+            threshold_value = threshold_value,
+            threshold_symmetric = threshold_symmetric
+        )
 
     elif gene_space == 'latent-space':
 
         expr = get_latent_spaces(expr = expr, ids = [latent_space_id])
 
-        sim = compute_transcriptomic_similarity(expr = expr[0],
-                                                imgs = imgs,
-                                                masks = masks,
-                                                microarray_coords = microarray_coords,
-                                                signed = signed,
-                                                metric = metric,
-                                                threshold = threshold,
-                                                threshold_value = threshold_value,
-                                                threshold_symmetric = threshold_symmetric)
+        sim = compute_transcriptomic_similarity(
+            expr = expr[0],
+            imgs = imgs,
+            masks = masks,
+            microarray_coords = microarray_coords,
+            signed = signed,
+            metric = metric,
+            threshold = threshold,
+            threshold_value = threshold_value,
+            threshold_symmetric = threshold_symmetric
+        )
 
     elif gene_space == 'average-latent-space':
 
         expr = get_latent_spaces(expr = expr,
                                  ids = range(1, n_latent_spaces + 1))
-        if show_progress: expr = tqdm(expr)
+        if show_progress:
+            expr = tqdm(expr)
 
         sim = []
         for e in expr:
-            s = compute_transcriptomic_similarity(imgs = imgs,
-                                                  expr = e,
-                                                  masks = masks,
-                                                  microarray_coords = microarray_coords,
-                                                  signed = signed,
-                                                  metric = metric,
-                                                  threshold = threshold,
-                                                  threshold_value = threshold_value,
-                                                  threshold_symmetric = threshold_symmetric)
+            s = compute_transcriptomic_similarity(
+                imgs = imgs,
+                expr = e,
+                masks = masks,
+                microarray_coords = microarray_coords,
+                signed = signed,
+                metric = metric,
+                threshold = threshold,
+                threshold_value = threshold_value,
+                threshold_symmetric = threshold_symmetric
+            )
             sim.append(s)
         sim = np.mean(sim)
 
     else:
         raise ValueError("Argument gene_space must be one of "
-                         "{'homologous-genes', 'latent-space', 'average-latent-space'}")
+                         "['homologous-genes', " 
+                         "'latent-space', " 
+                         "'average-latent-space']")
 
     return sim
 
 
 def pairwise_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                                        gene_space = 'average-latent-space',
-                                       n_latent_spaces = 100, latent_space_id = 1,
+                                       n_latent_spaces = 100,
+                                       latent_space_id = 1,
                                        metric = 'correlation', signed = True,
-                                       threshold = 'top_n', threshold_value = 0.2,
-                                       threshold_symmetric = True, parallel = False,
+                                       threshold = 'top_n',
+                                       threshold_value = 0.2,
+                                       threshold_symmetric = True,
+                                       parallel = False,
                                        nproc = None):
-
     partial_args = locals().copy()
     partial_args['show_progress'] = False
     del partial_args['imgs']
@@ -325,8 +336,10 @@ def pairwise_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
     else:
         sim = list(map(evaluator, tqdm(pairs)))
 
-    out = pd.DataFrame({'mouse':[x[0] for x in pairs],
-                        'human':[x[1] for x in pairs],
-                        'similarity':sim})
+    out = pd.DataFrame(
+        dict(mouse = [x[0] for x in pairs],
+             human = [x[1] for x in pairs],
+             similarity = sim)
+    )
 
     return out

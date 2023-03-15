@@ -174,7 +174,7 @@ def matrix_to_images(x, outfiles, maskfile):
     x: numpy.ndarray
         Matrix of voxel values.
     outfiles: list
-        List of paths to output MINC files.
+        Paths to the output files (.mnc).
     maskfile: str
         Path to the MINC file containing the mask.
     
@@ -501,14 +501,14 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10,
     Arguments
     ---------
     infiles: list
-        List of paths to the CSV files containing voxelwise data.
+        List of paths to the files (.csv) containing voxelwise data.
     rownames: str
-        Column in CSV files containing row names.
+        File column containing row names.
     nk_max: int
         Maximum number of clusters to identify. 
         Solutions will be obtained for nk = 2 to nk = nk_max.
     metric: str
-        Distance metric used to compute the SNF affinity matrices.
+        Similarity metric used to compute the SNF affinity matrices.
     K: int
         Number of nearest-neighbours used to compute the SNF 
         affinity matrices.
@@ -516,19 +516,15 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10,
         Variance for the local model in the SNF affinity matrices.
     t: int
         Number of iterations for the diffusion process in SNF.
-    outfile: str
-        Path to the CSV file in which to write the cluster assignments.
+    cluster_file: str
+        Path to the file (.csv) in which to write the cluster assignments.
+    affinity_file: str
+        Path to the file (.csv) in which to write the affinity matrix.
         
     Returns
     -------
-    A Pandas DataFrame containing cluster assignments.
+    Path to the file containing the cluster assignments
     """
-
-    # TO-DO
-    # - Make this function more general so that it can run SNF on any set of voxel matrices
-    #   rather than just the specific human effect sizes.
-    # - Option to run SNF on more than two matrices? 
-    # Make it so that this function exits if an error happens in the R script
 
     # Unpack function args into dictionary
     script_args = locals().copy()
@@ -685,7 +681,7 @@ def threshold_top_n(img, n = 0.2, symmetric = True, tolerance = 1e-5):
     """
 
     # Raise error if symmetric is True and n < 0
-    if (symmetric) & (n < 0):
+    if symmetric & (n < 0):
         raise ValueError("Setting n < 0 while symmetric = True ",
                          "will return an empty mask.")
 

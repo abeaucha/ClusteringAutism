@@ -9,7 +9,6 @@ from tqdm import tqdm
 
 
 def execute_R(script, args):
-
     """
     Execute an R script.
     
@@ -33,7 +32,7 @@ def execute_R(script, args):
     return
 
 
-def mkdir_from_list(inlist, basedir='./', sep='_'):
+def mkdir_from_list(inlist, basedir = './', sep = '_'):
     """
     Create a directory from a list of strings.
     
@@ -60,10 +59,10 @@ def mkdir_from_list(inlist, basedir='./', sep='_'):
 
 
 def get_params_id(params, metadata):
-    df_params = pd.DataFrame(params, index=[0], dtype=str)
+    df_params = pd.DataFrame(params, index = [0], dtype = str)
     if os.path.exists(metadata):
-        df_metadata = pd.read_csv(metadata, dtype=str)
-        df_match = pd.merge(df_metadata, df_params, how='inner')
+        df_metadata = pd.read_csv(metadata, dtype = str)
+        df_match = pd.merge(df_metadata, df_params, how = 'inner')
         nmatch = df_match.shape[0]
         if nmatch == 1:
             return df_match['id'].values[0]
@@ -73,41 +72,42 @@ def get_params_id(params, metadata):
         return None
 
 
-def set_params_id(params, metadata, params_id=None):
-    df_params = pd.DataFrame(params, index=[0], dtype=str)
+def set_params_id(params, metadata, params_id = None):
+    df_params = pd.DataFrame(params, index = [0], dtype = str)
     if os.path.exists(metadata):
-        df_metadata = pd.read_csv(metadata, dtype=str)
-        df_match = pd.merge(df_metadata, df_params, how='inner')
+        df_metadata = pd.read_csv(metadata, dtype = str)
+        df_match = pd.merge(df_metadata, df_params, how = 'inner')
         nmatch = df_match.shape[0]
         if nmatch == 1:
             df_params['id'] = df_match['id'].values[0]
         elif nmatch == 0:
-            df_params['id'] = random_id(3) if params_id is None else str(params_id)
+            df_params['id'] = (random_id(3) if params_id is None
+                               else str(params_id))
             df_metadata = pd.concat([df_metadata, df_params])
-            df_metadata.to_csv(metadata, index=False)
+            df_metadata.to_csv(metadata, index = False)
         else:
             raise Exception
     else:
         df_params['id'] = random_id(3) if params_id is None else str(params_id)
-        df_params.to_csv(metadata, index=False)
+        df_params.to_csv(metadata, index = False)
 
     return df_params['id'].values[0]
 
 
-def mkdir_from_params(params, outdir, metadata=None, params_id=None):
+def mkdir_from_params(params, outdir, metadata = None, params_id = None):
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
     if metadata is None:
         metadata = os.path.join(outdir, 'metadata.csv')
 
-    params_id_check = get_params_id(params=params,
-                                    metadata=metadata)
+    params_id_check = get_params_id(params = params,
+                                    metadata = metadata)
 
     if params_id_check is None:
-        params_id = set_params_id(params=params,
-                                  metadata=metadata,
-                                  params_id=params_id)
+        params_id = set_params_id(params = params,
+                                  metadata = metadata,
+                                  params_id = params_id)
     else:
         if params_id is not None:
             print("Parameters already identified: {}".format(params_id_check))
@@ -174,7 +174,7 @@ def random_id(n):
     return randid
 
 
-def gunzip_file(gzfile, keep=True, outdir=None):
+def gunzip_file(gzfile, keep = True, outdir = None):
     """
     Unzip a compressed file.
     
@@ -208,8 +208,8 @@ def gunzip_file(gzfile, keep=True, outdir=None):
     return outfile
 
 
-def gunzip_files(infiles, keep=True, outdir=None,
-                 parallel=False, nproc=None):
+def gunzip_files(infiles, keep = True, outdir = None,
+                 parallel = False, nproc = None):
     """
     Unzip a set of compressed files.
     
@@ -234,15 +234,16 @@ def gunzip_files(infiles, keep=True, outdir=None,
     """
 
     gunzip_file_partial = partial(gunzip_file,
-                                  keep=keep,
-                                  outdir=outdir)
+                                  keep = keep,
+                                  outdir = outdir)
     if parallel:
         if nproc is None:
             raise ValueError("Set the nproc argument to specify the number ",
                              "of processors to use")
         pool = mp.Pool(nproc)
         outfiles = []
-        for outfile in tqdm(pool.imap(gunzip_file_partial, infiles), total=len(infiles)):
+        for outfile in tqdm(pool.imap(gunzip_file_partial, infiles),
+                            total = len(infiles)):
             outfiles.append(outfile)
         pool.close()
         pool.join()
@@ -252,7 +253,7 @@ def gunzip_files(infiles, keep=True, outdir=None,
     return outfiles
 
 
-def nii_to_mnc(infile, keep=True, outdir=None):
+def nii_to_mnc(infile, keep = True, outdir = None):
     """
     Convert a NIFTY file to MINC format.
     
@@ -286,7 +287,7 @@ def nii_to_mnc(infile, keep=True, outdir=None):
     return outfile
 
 
-def mnc_to_nii(infile, keep=True, outdir=None):
+def mnc_to_nii(infile, keep = True, outdir = None):
     """
     Convert a MINC file to NIFTY format.
     
@@ -320,8 +321,8 @@ def mnc_to_nii(infile, keep=True, outdir=None):
     return outfile
 
 
-def convert_images(infiles, input_format='nifty', output_format='minc',
-                   keep=True, outdir=None, parallel=False, nproc=None):
+def convert_images(infiles, input_format = 'nifty', output_format = 'minc',
+                   keep = True, outdir = None, parallel = False, nproc = None):
     """
     Convert a set of images between NIFTY and MINC formats.
     
@@ -351,9 +352,9 @@ def convert_images(infiles, input_format='nifty', output_format='minc',
     """
 
     if (input_format == 'nifty') & (output_format == 'minc'):
-        converter = partial(nii_to_mnc, keep=keep, outdir=outdir)
+        converter = partial(nii_to_mnc, keep = keep, outdir = outdir)
     elif (input_format == 'minc') & (output_format == 'nifty'):
-        converter = partial(mnc_to_nii, keep=keep, outdir=outdir)
+        converter = partial(mnc_to_nii, keep = keep, outdir = outdir)
     else:
         raise ValueError
 
@@ -363,7 +364,8 @@ def convert_images(infiles, input_format='nifty', output_format='minc',
                              "of processors to use")
         pool = mp.Pool(nproc)
         outfiles = []
-        for outfile in tqdm(pool.imap(converter, infiles), total=len(infiles)):
+        for outfile in tqdm(pool.imap(converter, infiles),
+                            total = len(infiles)):
             outfiles.append(outfile)
         pool.close()
         pool.join()
@@ -373,7 +375,7 @@ def convert_images(infiles, input_format='nifty', output_format='minc',
     return outfiles
 
 
-def transform_image(infile, like, transform, outdir=None, suffix=None):
+def transform_image(infile, like, transform, outdir = None, suffix = None):
     # Append suffix if specified
     if suffix is not None:
         outfile = (os.path.splitext(infile)[0] +
@@ -398,12 +400,13 @@ def transform_image(infile, like, transform, outdir=None, suffix=None):
     cmd_mincresample = ['mincresample', '-quiet', '-clobber',
                         '-like', like, '-transform', transform,
                         infile, outfile]
-    log = subprocess.run(cmd_mincresample, stdout=subprocess.PIPE)
+    log = subprocess.run(cmd_mincresample, stdout = subprocess.PIPE)
 
     return outfile
 
 
-def transform_images(infiles, like, transform, outdir=None, suffix=None, parallel=False, nproc=None):
+def transform_images(infiles, like, transform, outdir = None, suffix = None,
+                     parallel = False, nproc = None):
     # Create output directory if needed
     if outdir is not None:
         outdir = os.path.join(outdir, '')
@@ -412,10 +415,10 @@ def transform_images(infiles, like, transform, outdir=None, suffix=None, paralle
 
     # Partial transforming function
     transformer = partial(transform_image,
-                          like=like,
-                          transform=transform,
-                          outdir=outdir,
-                          suffix=suffix)
+                          like = like,
+                          transform = transform,
+                          outdir = outdir,
+                          suffix = suffix)
 
     if parallel:
         if nproc is None:
@@ -423,7 +426,8 @@ def transform_images(infiles, like, transform, outdir=None, suffix=None, paralle
                              "number of processors to use in parallel.")
         pool = mp.Pool(nproc)
         outfiles = []
-        for outfile in tqdm(pool.imap(transformer, infiles), total=len(infiles)):
+        for outfile in tqdm(pool.imap(transformer, infiles),
+                            total = len(infiles)):
             outfiles.append(outfile)
         pool.close()
         pool.join()
@@ -433,7 +437,7 @@ def transform_images(infiles, like, transform, outdir=None, suffix=None, paralle
     return outfiles
 
 
-def resample_image(infile, isostep, outdir=None, suffix=None):
+def resample_image(infile, isostep, outdir = None, suffix = None):
     """
     Resample a MINC image
     
@@ -479,13 +483,13 @@ def resample_image(infile, isostep, outdir=None, suffix=None):
     # Autocrop command
     cmd_autocrop = ['autocrop', '-quiet', '-clobber',
                     '-isostep', isostep, infile, outfile]
-    log = subprocess.run(cmd_autocrop, stdout=subprocess.PIPE)
+    log = subprocess.run(cmd_autocrop, stdout = subprocess.PIPE)
 
     return outfile
 
 
-def resample_images(infiles, isostep, outdir=None, suffix=None,
-                    parallel=False, nproc=None):
+def resample_images(infiles, isostep, outdir = None, suffix = None,
+                    parallel = False, nproc = None):
     """
     Resample a set of MINC images.
      
@@ -519,9 +523,9 @@ def resample_images(infiles, isostep, outdir=None, suffix=None,
 
     # Partial resampling function
     resampler = partial(resample_image,
-                        isostep=isostep,
-                        outdir=outdir,
-                        suffix=suffix)
+                        isostep = isostep,
+                        outdir = outdir,
+                        suffix = suffix)
 
     if parallel:
         if nproc is None:
@@ -529,7 +533,8 @@ def resample_images(infiles, isostep, outdir=None, suffix=None,
                              "number of processors to use in parallel.")
         pool = mp.Pool(nproc)
         outfiles = []
-        for outfile in tqdm(pool.imap(resampler, infiles), total=len(infiles)):
+        for outfile in tqdm(pool.imap(resampler, infiles),
+                            total = len(infiles)):
             outfiles.append(outfile)
         pool.close()
         pool.join()
