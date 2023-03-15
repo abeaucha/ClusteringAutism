@@ -217,8 +217,8 @@ def parse_args():
 if __name__ == '__main__':
 
     args = parse_args()
-    args['parallel'] = bool(args['parallel'])
-    args['verbose'] = bool(args['verbose'])
+    args['parallel'] = True if args['parallel'] == 'true' else False
+    args['verbose'] = True if args['verbose'] == 'true' else False
     params = {key: val for key, val in args.items()
               if 'es_' in key or 'cluster_' in key}
     del params['es_matrix_file']
@@ -227,9 +227,11 @@ if __name__ == '__main__':
     param_keys = list(params.keys())
     for param_vals in product(*params.values()):
         param_set = dict(list(zip(param_keys, param_vals)))
-        param_set['es_combat'] = bool(param_set['es_combat'])
+        param_set['es_combat'] = (True if param_set['es_combat'] == 'true'
+                                  else False)
         param_set['es_combat_batch'] = param_set['es_combat_batch'].split('-')
-        param_msg = [': '.join([str(key), str(val)]) for key, val in param_set.items()]
+        param_msg = [': '.join([str(key), str(val)])
+                     for key, val in param_set.items()]
         param_msg = reduce(lambda x, y: x + '\n\t' + y, param_msg)
         param_msg = "Running parameter set:\n\t{}\n".format(param_msg)
         print(param_msg)
