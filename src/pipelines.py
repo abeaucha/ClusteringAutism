@@ -386,7 +386,7 @@ def compute_cluster_similarity(mouse_cluster_dir, human_cluster_dir,
         cluster_maps = (mouse_cluster_maps, human_cluster_maps)
 
         # Compute pairwise similarity between cluster maps
-        out = transcriptomic.pairwise_transcriptomic_similarity(
+        out = transcriptomic.transcriptomic_similarity(
             imgs = cluster_maps,
             expr = expr,
             masks = masks,
