@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/similarity/',
+        default = 'data/cross_species/similarity/',
         help = "Path to pipeline output directory."
     )
 
