@@ -1,4 +1,5 @@
 import os
+import random
 import tempfile
 import multiprocessing as mp
 import numpy as np
@@ -755,6 +756,34 @@ def mask_from_image(img, signed = False):
         mask[np.abs(img) > 0] = 1
     mask = np.int8(mask)
     return mask
+
+
+def permute_cluster_labels(cluster_file, outdir, npermutations = 100):
+
+    outdir = os.path.join(outdir, '')
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
+    df_clusters = pd.read_csv(cluster_file)
+    cols = df_clusters.drop('ID', axis = 1).columns
+
+    for p in range(1, npermutations+1):
+
+        df_permute = df_clusters.copy()
+        for col in cols:
+
+            random.seed(p)
+            np.random.seed(p)
+            df_permute[col] = np.random.choice(df_clusters[col].to_numpy(),
+                                              size = df_clusters.shape[0],
+                                              replace = False)
+
+        outfile = 'clusters_permutation_{}.csv'.format(p)
+        outfile = os.path.join(outdir, outfile)
+        df_permute.to_csv(outfile, index = False)
+        
+    return
+
 
 # def create_image_mask(infile, outfile, mask, method = 'top_n', threshold = 0.2,
 #                       symmetric = True, comparison = None, signed = False):
