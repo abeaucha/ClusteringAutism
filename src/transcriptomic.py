@@ -225,7 +225,7 @@ def get_latent_spaces(expr, ids = None):
     return latent_spaces
 
 
-def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
+def transcriptomic_similarity_old(imgs, expr, masks, microarray_coords,
                               gene_space = 'average-latent-space',
                               n_latent_spaces = 100, latent_space_id = 1,
                               metric = 'correlation', signed = True,
@@ -302,26 +302,107 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
     return sim
 
 
-def pairwise_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
-                                       gene_space = 'average-latent-space',
-                                       n_latent_spaces = 100,
-                                       latent_space_id = 1,
-                                       metric = 'correlation', signed = True,
-                                       threshold = 'top_n',
-                                       threshold_value = 0.2,
-                                       threshold_symmetric = True,
-                                       parallel = False,
-                                       nproc = None):
-    partial_args = locals().copy()
-    partial_args['show_progress'] = False
-    del partial_args['imgs']
-    del partial_args['parallel']
-    del partial_args['nproc']
+# def pairwise_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
+#                                        gene_space = 'average-latent-space',
+#                                        n_latent_spaces = 100,
+#                                        latent_space_id = 1,
+#                                        metric = 'correlation', signed = True,
+#                                        threshold = 'top_n',
+#                                        threshold_value = 0.2,
+#                                        threshold_symmetric = True,
+#                                        parallel = False,
+#                                        nproc = None):
+#     partial_args = locals().copy()
+#     partial_args['show_progress'] = False
+#     del partial_args['imgs']
+#     del partial_args['parallel']
+#     del partial_args['nproc']
+#
+#     evaluator = partial(transcriptomic_similarity,
+#                         **partial_args)
+#
+#     pairs = list(product(imgs[0], imgs[1]))
+#
+#     if parallel:
+#         if nproc is None:
+#             raise ValueError("Set the nproc argument to specify the "
+#                              "number of processors to use in parallel.")
+#         pool = mp.Pool(nproc)
+#         sim = []
+#         for s in tqdm(pool.imap(evaluator, pairs), total = len(pairs)):
+#             sim.append(s)
+#         pool.close()
+#         pool.join()
+#     else:
+#         sim = list(map(evaluator, tqdm(pairs)))
+#
+#     out = pd.DataFrame(
+#         dict(mouse = [x[0] for x in pairs],
+#              human = [x[1] for x in pairs],
+#              similarity = sim)
+#     )
+#
+#     return out
 
-    evaluator = partial(transcriptomic_similarity,
-                        **partial_args)
+
+
+
+def tempfunc(inputs, **kwargs):
+    return compute_transcriptomic_similarity(imgs = inputs[0],
+                                             expr = inputs[1],
+                                             **kwargs)
+
+def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
+                              gene_space = 'average-latent-space',
+                              n_latent_spaces = 100, latent_space_id = 1,
+                              metric = 'correlation', signed = True,
+                              threshold = 'top_n', threshold_value = 0.2,
+                              threshold_symmetric = True, parallel = False,
+                              nproc = None):
+
+    imgs = list(imgs)
+    for i, img in enumerate(imgs):
+        if type(img) is str:
+            imgs[i] = [img]
 
     pairs = list(product(imgs[0], imgs[1]))
+
+    if gene_space == 'homologous-genes':
+
+        expr = list(expr)
+        expr_files = (
+            'MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv',
+            'HumanExpressionMatrix_samples_pipeline_abagen_homologs_scaled.csv'
+        )
+        for i, path in enumerate(expr):
+            expr[i] = os.path.join(path, 'input_space', expr_files[i])
+        expr = [tuple(expr)]
+
+    elif gene_space == 'latent-space':
+
+        expr = get_latent_spaces(expr = expr, ids = [latent_space_id])
+
+    elif gene_space == 'average-latent-space':
+
+        expr = get_latent_spaces(expr = expr,
+                                 ids = range(1, n_latent_spaces + 1))
+
+    else:
+        raise ValueError("Argument gene_space must be one of "
+                         "['homologous-genes', " 
+                         "'latent-space', " 
+                         "'average-latent-space']")
+
+    inputs = list(product(pairs, expr))
+
+    tempfunc_partial = partial(tempfunc,
+                               masks = masks,
+                               microarray_coords = microarray_coords,
+                               signed = signed,
+                               metric = metric,
+                               threshold = threshold,
+                               threshold_value = threshold_value,
+                               threshold_symmetric = threshold_symmetric)
 
     if parallel:
         if nproc is None:
@@ -329,17 +410,20 @@ def pairwise_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                              "number of processors to use in parallel.")
         pool = mp.Pool(nproc)
         sim = []
-        for s in tqdm(pool.imap(evaluator, pairs), total = len(pairs)):
+        for s in tqdm(pool.imap(tempfunc_partial, inputs), total = len(inputs)):
             sim.append(s)
         pool.close()
         pool.join()
     else:
-        sim = list(map(evaluator, tqdm(pairs)))
+        sim = list(map(tempfunc_partial, tqdm(inputs)))
 
     out = pd.DataFrame(
-        dict(mouse = [x[0] for x in pairs],
-             human = [x[1] for x in pairs],
+        dict(mouse_img = [x[0][0] for x in inputs],
+             human_img = [x[0][1] for x in inputs],
              similarity = sim)
     )
+
+    if gene_space == 'average-latent-space':
+        out = out.groupby(by = ['mouse_img', 'human_img'], as_index = False).mean().copy()
 
     return out
