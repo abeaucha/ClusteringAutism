@@ -27,3 +27,4 @@ figures/*.pdf
 .idea
 /.Rprofile
 scripts_old/
+dev.py
