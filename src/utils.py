@@ -71,6 +71,24 @@ def get_params_id(params, metadata):
     else:
         return None
 
+def fetch_metadata(metadata, **kwargs):
+
+    if not os.path.exists(metadata):
+        raise OSError("Metadata file not found: {}".format(metadata))
+
+    df_metadata = pd.read_csv(metadata, dtype = str)
+    if any(kwargs.keys()):
+        df_params = pd.DataFrame(kwargs, index = [0], dtype = str)
+    else:
+        print("No parameters provided. Returning all metadata.")
+        return df_metadata
+
+    df_match = pd.merge(df_metadata, df_params, how = 'inner')
+    nmatch = df_match.shape[0]
+    if nmatch == 0:
+        return None
+    else:
+        return df_match
 
 def set_params_id(params, metadata, params_id = None):
     df_params = pd.DataFrame(params, index = [0], dtype = str)
