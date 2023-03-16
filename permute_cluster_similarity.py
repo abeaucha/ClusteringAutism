@@ -1,3 +1,4 @@
+#!.venv/bin/python3
 # ----------------------------------------------------------------------------
 # permute_cluster_similarity.py
 # Author: Antoine Beauchamp
