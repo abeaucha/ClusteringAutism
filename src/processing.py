@@ -1,4 +1,6 @@
 import os
+if os.getenv('MINC_TOOLKIT') is None:
+    os.environ['MINC_TOOLKIT'] = '/projects/tools/programs/ubuntu-20.04/spack/opt/spack/linux-ubuntu20.04-ivybridge/gcc-9.4.0/minc-toolkit-1.9.18.2-wlesmlgkrqe5fkdkcsspjvavmj6j6d4w'
 import random
 import tempfile
 import multiprocessing as mp
@@ -767,6 +769,7 @@ def permute_cluster_labels(cluster_file, outdir, npermutations = 100):
     df_clusters = pd.read_csv(cluster_file)
     cols = df_clusters.drop('ID', axis = 1).columns
 
+    outfiles = []
     for p in range(1, npermutations+1):
 
         df_permute = df_clusters.copy()
@@ -781,8 +784,9 @@ def permute_cluster_labels(cluster_file, outdir, npermutations = 100):
         outfile = 'clusters_permutation_{}.csv'.format(p)
         outfile = os.path.join(outdir, outfile)
         df_permute.to_csv(outfile, index = False)
+        outfiles.append(outfile)
         
-    return
+    return outfiles
 
 
 # def create_image_mask(infile, outfile, mask, method = 'top_n', threshold = 0.2,
