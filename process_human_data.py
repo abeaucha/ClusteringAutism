@@ -87,13 +87,13 @@ def parse_args():
         help=("Number of processors to use in parallel.")
     )
 
-    parser.add_argument(
-        '--verbose',
-        type=str,
-        default='true',
-        choices=['true', 'false'],
-        help='Verbosity.'
-    )
+    # parser.add_argument(
+    #     '--verbose',
+    #     type=str,
+    #     default='true',
+    #     choices=['true', 'false'],
+    #     help='Verbosity.'
+    # )
 
     # Effect size arguments ---------------------------------------------------
     parser.add_argument(
