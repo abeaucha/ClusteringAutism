@@ -218,7 +218,7 @@ if __name__ == '__main__':
 
     args = parse_args()
     args['parallel'] = True if args['parallel'] == 'true' else False
-    args['verbose'] = True if args['verbose'] == 'true' else False
+    # args['verbose'] = True if args['verbose'] == 'true' else False
     params = {key: val for key, val in args.items()
               if 'es_' in key or 'cluster_' in key}
     del params['es_matrix_file']
