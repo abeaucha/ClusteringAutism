@@ -51,7 +51,7 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
     utils.mk_symlinks(src = [cluster_file],
                       dst = cluster_dir)
     os.rename(os.path.join(cluster_dir, os.path.basename(cluster_file)),
-              os.path.join(cluster_dir, 'cluster.csv'))
+              os.path.join(cluster_dir, 'clusters.csv'))
 
     # Path to cluster maps directory
     resolution_mm = float(resolution) / 1000
@@ -384,12 +384,12 @@ def compute_cluster_similarity(mouse_cluster_dir, human_cluster_dir,
         human_cluster_maps = [os.path.join(human_cluster_dir_jac, file)
                               for file in human_cluster_maps]
 
-        # Combine mouse and human cluster maps into a tuple
-        cluster_maps = (mouse_cluster_maps, human_cluster_maps)
+        # Expand mouse and human cluster map combinations
+        cluster_pairs = list(product(mouse_cluster_maps, human_cluster_maps))
 
         # Compute pairwise similarity between cluster maps
         out = transcriptomic.transcriptomic_similarity(
-            imgs = cluster_maps,
+            imgs = cluster_pairs,
             expr = expr,
             masks = masks,
             microarray_coords = human_microarray_coords,
@@ -411,8 +411,6 @@ def compute_cluster_similarity(mouse_cluster_dir, human_cluster_dir,
         out.to_csv(outfile, index = False)
 
     return
-
-
 
 
 def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
@@ -439,6 +437,11 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
                                parallel = True,
                                nproc = None):
 
+    if parallel:
+        if nproc is None:
+            raise Exception("Argument --nproc must be specified "
+                            "when --parallel true")
+    
     # Paths to human directories
     if human_cluster_params_id is None:
         raise Exception("Specify parameter set ID for human clusters.")
@@ -510,7 +513,7 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
             )
             human_cluster_maps = processing.create_cluster_maps(**cluster_map_kwargs)
 
-            #TODO: Potentially need to resample cluster maps here
+            #TODO: Potentially need to resample cluster maps to 1.0mm here
 
             mouse_imgdir = os.path.join(mouse_cluster_map_dir, j, '')
             mouse_cluster_maps = os.listdir(mouse_imgdir)
@@ -540,8 +543,7 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
 
             print("\t\tComputing pairwise cluster similarity...")
 
-            #TODO: Replace transcriptomic_similarity_new
-            sim = transcriptomic.transcriptomic_similarity_new(
+            sim = transcriptomic.transcriptomic_similarity(
                 imgs = cluster_pairs,
                 expr = expr,
                 masks = masks,
