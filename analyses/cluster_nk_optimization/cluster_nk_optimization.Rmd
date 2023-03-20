@@ -1,0 +1,253 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: '2023-03-17'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(SNFtool))
+suppressPackageStartupMessages(library(RColorBrewer))
+```
+
+```{r}
+source("../../src/utils.R")
+```
+
+```{r}
+#Parameters
+output_dir <- "outputs"
+mouse_dataset <- "Models_135"
+human_dataset <- "POND_SickKids"
+```
+
+```{r}
+#Mouse clustering directory
+mouse_cluster_dir <- "../../data/mouse/derivatives/"
+mouse_cluster_dir <- file.path(mouse_cluster_dir, mouse_dataset, "clusters")
+
+#Human_clustering directory
+human_cluster_dir <- "../../data/human/derivatives/"
+human_cluster_dir <- file.path(human_cluster_dir, human_dataset, "clusters")
+human_metadata <- file.path(human_cluster_dir, "metadata.csv")
+df_metadata <- fetch_metadata(metadata = human_metadata, 
+                              # es_method = 'normative-growth',
+                              es_method = 'propensity-matching',
+                              es_ncontrols = 10,
+                              # es_df = 3,
+                              cluster_sigma = 0.5, 
+                              cluster_K = 10)
+
+human_cluster_params_id <- pull(df_metadata, "id")
+print(human_cluster_params_id)
+human_cluster_dir <- file.path(human_cluster_dir, human_cluster_params_id, "resolution_3.0")
+```
+
+
+```{r}
+#Human cluster assignments
+human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
+df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
+
+#Mouse cluster assignments
+mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
+df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+
+#Human affinity matrix
+human_affinity_file <- file.path(human_cluster_dir, "affinity.csv")
+df_human_affinity <- read_csv(human_affinity_file, show_col_types = FALSE)
+mat_human_affinity <- as.matrix(df_human_affinity)
+rownames(mat_human_affinity) <- colnames(mat_human_affinity)
+
+#Mouse affinity matrix
+mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
+load(mouse_affinity_file)
+mat_mouse_affinity <- W
+df_mouse_affinity <- as_tibble(mat_mouse_affinity)
+```
+
+```{r}
+#Human affinity df long form
+df_human_affinity_long <- df_human_affinity %>% 
+  mutate(patient_1 = colnames(df_human_affinity)) %>% 
+  pivot_longer(cols = -patient_1, names_to = "patient_2", values_to = "affinity")
+
+#Mouse affinity df long form
+df_mouse_affinity_long <- df_mouse_affinity %>% 
+  mutate(model_1 = colnames(df_mouse_affinity)) %>% 
+  pivot_longer(cols = -model_1, names_to = "model_2", values_to = "affinity")
+
+#Compare mouse and human affinity
+df_affinity_compare <- bind_rows(df_human_affinity_long %>% 
+                                   select(affinity) %>% 
+                                   mutate(species = "human"),
+                                 df_mouse_affinity_long %>% 
+                                   select(affinity) %>% 
+                                   mutate(species = "mouse"))
+
+p_affinity_dist <- ggplot(df_affinity_compare, 
+                          aes(x = affinity, fill = species, y = ..density..)) + 
+  geom_histogram(binwidth = 0.0001, position = "dodge") + 
+  coord_cartesian(xlim = c(0, 0.01)) + 
+  labs(fill = "Species",
+       x = "Affinity",
+       y = "Density",
+       title = "Distribution of affinity values",
+       caption = "Note: Maximal affinity is 0.5") + 
+  theme_bw()
+
+outfile <- "affinity_distributions.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = 10,
+    height = 5)
+print(p_affinity_dist)
+dev.off()
+```
+
+```{r}
+#Max nk to examine
+nk_max <- 100
+
+#Human optimal nk
+estimateNumberOfClustersGivenGraph(W = mat_human_affinity, NUMC = 2:nk_max)
+```
+
+```{r}
+#Get human cluster labels for given nk
+nk_human <- 12
+df_human_labels_nk <- tibble(patient = colnames(df_human_affinity),
+                             k = spectralClustering(affinity = mat_human_affinity,
+                                                    K = nk_human))
+
+#Arrange patients by cluster assignment
+patient_lvls <- df_human_labels_nk %>% 
+  arrange(k) %>% 
+  pull(patient)
+
+#Clamp affinity values
+threshold <- 0.01
+df_human_affinity_long_clamped <- df_human_affinity_long %>% 
+  mutate(affinity = ifelse(affinity >= threshold, threshold, affinity),
+         patient_1 = factor(patient_1, levels = patient_lvls),
+         patient_2 = factor(patient_2, levels = patient_lvls))
+
+p_human_affinity_matrix <- ggplot(df_human_affinity_long_clamped, 
+       aes(x = patient_1,
+           y = fct_rev(patient_2),
+           fill = affinity)) + 
+  geom_tile() + 
+  scale_x_discrete(expand = expansion()) +
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_gradientn(colours = c("white", brewer.pal(n = 9, name = "Reds")), na.value = "white") + 
+  labs(fill = "Affinity",
+       x = "Patient",
+       y = "Patient",
+       title = paste("Human patient affinity matrix for nk =", nk_human),
+       caption = paste("Affinity values clamped at", threshold)) + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+outfile <- paste0("human_affinity_matrix_nk_", nk_human, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = 10,
+    height = 8)
+print(p_human_affinity_matrix)
+dev.off()
+```
+
+```{r}
+#Mouse optimal nk
+estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
+```
+
+```{r}
+#Get human cluster labels for given nk
+nk_mouse <- 47
+df_mouse_labels_nk <- tibble(model = colnames(df_mouse_affinity),
+                             k = spectralClustering(affinity = mat_mouse_affinity,
+                                                    K = nk_mouse))
+
+#Arrange models by cluster assignment
+model_lvls <- df_mouse_labels_nk %>% 
+  arrange(k) %>% 
+  pull(model)
+
+#Clamp affinity values
+threshold <- 0.01
+df_mouse_affinity_long_clamped <- df_mouse_affinity_long %>% 
+  mutate(affinity = ifelse(affinity >= threshold, threshold, affinity),
+         model_1 = factor(model_1, levels = model_lvls),
+         model_2 = factor(model_2, levels = model_lvls))
+
+p_mouse_affinity_matrix <- ggplot(df_mouse_affinity_long_clamped, 
+       aes(x = model_1,
+           y = fct_rev(model_2),
+           fill = affinity)) + 
+  geom_tile() + 
+  scale_x_discrete(expand = expansion()) +
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_gradientn(colours = c("white", brewer.pal(n = 9, name = "Reds")), na.value = "white") + 
+  labs(fill = "Affinity",
+       x = "Model",
+       y = "Model",
+       title = paste("Mouse model affinity matrix for nk =", nk_mouse),
+       caption = paste("Affinity values clamped at", threshold)) + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+outfile <- paste0("mouse_affinity_matrix_nk_", nk_mouse, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = 10,
+    height = 8)
+print(p_mouse_affinity_matrix)
+dev.off()
+```
+
+
+```{r fig.width = 5, fig.height = 4}
+mat_human_affinity_clamped <- mat_human_affinity
+mat_human_affinity_clamped[mat_human_affinity_clamped >= threshold] <- threshold
+
+outfile <- "human_affinity_matrix_clustered.pdf"
+outfile <- file.path(output_dir, outfile)
+pheatmap(mat_human_affinity_clamped, 
+         cluster_cols = T, 
+         cluster_rows = T,
+         clustering_distance_rows = "correlation",
+         clustering_distance_cols = "correlation",
+         show_rownames = F, 
+         show_colnames = F,
+         border_color = "white",
+         color = colorRampPalette(c("white", brewer.pal(n = 9, name = "Reds")))(100),
+         silent = T, filename = outfile, width = 10, height = 8)
+```
+
+
+
+```{r fig.width = 5, fig.height = 4}
+mat_mouse_affinity_clamped <- mat_mouse_affinity
+mat_mouse_affinity_clamped[mat_mouse_affinity_clamped >= threshold] <- threshold
+
+outfile <- "mouse_affinity_matrix_clustered.pdf"
+outfile <- file.path(output_dir, outfile)
+pheatmap(mat_mouse_affinity_clamped, 
+         cluster_cols = T, 
+         cluster_rows = T,
+         clustering_distance_rows = "correlation",
+         clustering_distance_cols = "correlation",
+         show_rownames = F, 
+         show_colnames = F,
+         border_color = "white",
+         color = colorRampPalette(c("white", brewer.pal(n = 9, name = "Reds")))(100),
+         silent = T, filename = outfile, width = 10, height = 8)
+```
