@@ -685,7 +685,7 @@ def threshold_top_n(img, n = 0.2, symmetric = True, tolerance = 1e-5):
 
     # Raise error if symmetric is True and n < 0
     if symmetric & (n < 0):
-        raise ValueError("Setting n < 0 while symmetric = True ",
+        raise ValueError("Setting n < 0 while symmetric = True "
                          "will return an empty mask.")
 
     # Flatten image and mask
@@ -744,7 +744,7 @@ def threshold_image(img, method = 'top_n', threshold = 0.2, symmetric = True,
                               symmetric = symmetric)
     else:
         raise ValueError("Argument method must be one of "
-                         "{'intensity', 'top_n'}")
+                         "['intensity', 'top_n']")
 
     return img
 
