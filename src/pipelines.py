@@ -114,7 +114,7 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
 def process_human_data(pipeline_dir = 'data/human/derivatives/',
                        input_dir = 'data/human/registration/jacobians_resampled/',
                        resolution = 3.0,
-                       demographics = 'data/human/registration/DBM_input_demo_passedqc.csv',
+                       demographics = 'data/human/registration/DBM_input_demo_passedqc_wfile.csv',
                        mask = 'data/human/registration/reference_files/mask_3.0mm.mnc',
                        datasets = ['POND', 'SickKids'], parallel = True,
                        nproc = None, es_method = 'normative-growth', es_df = 3,
@@ -157,6 +157,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
     df_demographics = (df_demographics
                        .loc[df_demographics['Dataset'].isin(datasets)]
                        .copy())
+
+    # TODO: Check whether demographics has column 'file'
 
     # Write out demographics subset to subset directory
     demographics = os.path.join(pipeline_dir, os.path.basename(demographics))
@@ -232,8 +234,7 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
         input_files = glob(os.path.join(input_dir, jac, '') + '*.mnc')
         if len(input_files) == 0:
             raise OSError("No input files in directory: ".format(input_dir))
-        input_files_in_dataset = [[f for f in input_files if g in f][0]
-                                  for g in df_demographics['file'].to_list()]
+        input_files_in_dataset = [[f for f in input_files if g in f][0] for g in df_demographics['file'].to_list()]
         imgfiles = utils.mk_symlinks(src = input_files_in_dataset,
                                      dst = os.path.join(imgdir, jac, ''))
 
@@ -243,6 +244,7 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
                          demographics = demographics,
                          mask = mask,
                          outdir = os.path.join(es_dir, jac, ''),
+                         matrix_file = es_matrix_file,
                          parallel = parallel,
                          nproc = nproc,
                          method = es_method)
@@ -259,17 +261,6 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
             )
 
         es_files = processing.calculate_human_effect_sizes(**es_kwargs)
-
-        # Build effect size matrix --------------------------------------------
-        print("Building effect size voxel matrix...")
-        df_es = processing.build_voxel_matrix(infiles = es_files,
-                                              mask = mask,
-                                              sort = True,
-                                              file_col = True,
-                                              parallel = parallel,
-                                              nproc = nproc)
-        df_es['file'] = [os.path.basename(file) for file in df_es['file']]
-        df_es.to_csv(os.path.join(es_dir, jac, es_matrix_file), index = False)
 
     # Cluster effect sizes ----------------------------------------------------
     print("Clustering absolute and relative effect size images...")
