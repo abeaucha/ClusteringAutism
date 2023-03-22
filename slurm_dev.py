@@ -21,6 +21,8 @@ if __name__ == '__main__':
     es_combat_batch = ['Site', 'Scanner']
     es_ncontrols = None
 
+    pipeline_dir = utils.mkdir_from_list(inlist = datasets,
+                                         basedir = pipeline_dir)
 
     df_demographics = pd.read_csv(demographics)
 
