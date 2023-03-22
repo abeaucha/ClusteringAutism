@@ -1,0 +1,405 @@
+
+import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, threshold = NULL, threshold_value = NULL, threshold_symmetric = NULL, threshold_comparison = NULL) {
+  
+  pattern = paste("nk", nk, "k", k, sep = "_")
+  img <- list.files(imgdir, full.names = TRUE, pattern = pattern)
+  img <- import_image(img = img, mask = mask, flatten = FALSE)
+  if (!is.null(threshold)) {
+    img <- threshold_image(img = img, 
+                           method = threshold, 
+                           threshold = threshold_value,
+                           symmetric = threshold_symmetric,
+                           comparison = threshold_comparison)
+  }
+  
+  if (flatten) {
+    img_attr <- attributes(img)
+    img_attr[["dim"]] <- NULL
+    img <- as.numeric(img)
+    attributes(img) <- img_attr
+  }
+  
+  return(img)
+}
+
+
+
+#' Create a reduced version of a mouse atlas. 
+#'
+#' @param tree (data.tree) A data tree containing the neuroanatomical
+#' hierarchy. Leaf nodes must correspond to the atlas regions.
+#' @param labels (mincSingleDim) Atlas labels.
+#' @param defs (data.frame) Atlas definitions.
+#' @param nodes (character vector) Tree nodes at which to aggregate the
+#' atlas.
+#' @param remove (logical scalar) Option to remove extra nodes not 
+#' specified in argument nodes.
+#'
+#' @return (list) A list with fields "labels" and "defs" containing the 
+#' reduced atlas labels and definitions.
+reduce_mouse_atlas <- function(tree, labels, defs, nodes, remove = TRUE) {
+  
+  #Prune the tree to the specified nodes
+  tree_reduced <- prune_tree(tree = tree,
+                             nodes = nodes,
+                             method = "below",
+                             remove = remove)
+  
+  #Reduce atlas labels
+  labels_reduced <- hanatToAtlas(tree_reduced, mincArray(labels))
+  
+  #Reduce atlas definitions
+  defs <- defs[defs$label %in% labels,]
+  defs_reduced <- hanatToAtlasDefs_new(tree_reduced)
+  
+  return(list(labels = labels_reduced,
+              defs = defs_reduced))
+  
+}
+
+#' Create reduced human atlas definitions
+#'
+#' @param tree (data.tree) Tree whose leaves will be new labels
+#' @param defs (data.frame) Definitions containing labels for all human microarray samples
+#' @param simplify (logical scalar) Option to simplify returned data frame
+#'
+#' @return (data.frame) Reduced atlas label definitions
+reduce_human_defs <- function(tree, defs, simplify = FALSE) {
+  
+  defs_reduced <- tree$Get(attribute = "samples", 
+                           filterFun = isLeaf, 
+                           simplify = FALSE) %>% 
+    map_dfr(.f = function(x){tibble(sample_id = x)},
+            .id = "name") %>% 
+    inner_join(defs,
+               by = "sample_id") %>% 
+    rename(sample_label = label) %>% 
+    group_by(name) %>% 
+    mutate(label = min(sample_label)) %>% 
+    ungroup()
+  
+  if(simplify) {
+    defs_reduced <- defs_reduced %>% 
+      select(name, label) %>% 
+      distinct()
+  }
+  
+  return(defs_reduced)
+  
+}
+
+#' Create reduced human atlas labels
+#'
+#' @param tree 
+#' @param labels 
+#' @param defs 
+#'
+#' @return (mincSingleDim) Reduced labels
+reduce_human_labels <- function(tree, labels, defs) {
+  
+  defs_reduced <- reduce_human_defs(tree = tree,
+                                    defs = defs,
+                                    simplify = FALSE)
+  
+  ind_match <- match(x = labels, 
+                     table = defs_reduced[["sample_label"]])
+  labels_reduced <- defs_reduced[ind_match,"label"][[1]]
+  labels_reduced[is.na(labels_reduced)] <- 0
+  attributes(labels_reduced) <- attributes(labels)
+  
+  return(labels_reduced)
+}
+
+
+#' Create a reduced version of a human atlas. 
+#'
+#' @param tree (data.tree) A data tree containing the neuroanatomical
+#' hierarchy. Leaf nodes must correspond to the atlas regions.
+#' @param labels (mincSingleDim) Atlas labels.
+#' @param defs (data.frame) Atlas definitions.
+#' @param nodes (character vector) Tree nodes at which to aggregate the
+#' atlas.
+#' @param remove (logical scalar) Option to remove extra nodes not 
+#' specified in argument nodes.
+#'
+#' @return (list) A list with fields "labels" and "defs" containing the 
+#' reduced atlas labels and definitions.
+reduce_human_atlas <- function(tree, labels, defs, nodes, remove = TRUE) {
+  
+  #Prune the tree to the specified nodes
+  tree_reduced <- prune_tree(tree = tree,
+                             nodes = nodes,
+                             method = "below",
+                             remove = remove)
+  
+  #Filter definitions labels for those in labels
+  defs <- defs[defs$label %in% labels,]
+  
+  #Reduce atlas labels
+  labels_reduced <- reduce_human_labels(tree = tree_reduced,
+                                        labels = labels,
+                                        defs = defs)
+  
+  #Reduce atlas definitions
+  defs_reduced <- reduce_human_defs(tree = tree_reduced,
+                                    defs = defs,
+                                    simplify = TRUE)
+  
+  return(list(labels = labels_reduced,
+              defs = defs_reduced))
+  
+}
+
+
+prepare_cluster_fractions <- function(clusters, species, structs, nk, k, sign, threshold, threshold_value, threshold_symmetric, threshold_comparison, tree, labels, defs, remove = TRUE) {
+  
+  if (species == "mouse") {
+    atlas_reduced <- reduce_mouse_atlas(tree = tree,
+                                        labels = labels,
+                                        defs = defs,
+                                        nodes = structs,
+                                        remove = remove)
+  } else if (species == "human") {
+    atlas_reduced <- reduce_human_atlas(tree = tree,
+                                        labels = labels,
+                                        defs = defs,
+                                        nodes = structs,
+                                        remove = remove)
+  }
+  
+  cluster_map <- import_cluster_map(imgdir = clusters,
+                                    nk = nk, k = k,
+                                    threshold = threshold,
+                                    threshold_value = threshold_value, 
+                                    threshold_symmetric = threshold_symmetric, 
+                                    threshold_comparison = threshold_comparison,
+                                    flatten = TRUE)  
+  
+  cluster_mask <- mask_from_image(img = cluster_map, signed = TRUE)
+  if (sign == "positive") {
+    cluster_mask[cluster_mask != 1] <- 0
+  } else if (sign == "negative") {
+    cluster_mask[cluster_mask != -1] <- 0
+    cluster_mask <- abs(cluster_mask)
+  } else if (sign == "both") {
+    cluster_mask <- abs(cluster_mask)
+  } else {
+    stop()
+  }
+  
+  df_fractions <- calc_cluster_region_fractions(cluster = cluster_mask,
+                                                labels = atlas_reduced[["labels"]],
+                                                defs = atlas_reduced[["defs"]])
+  
+  df_fractions[["cluster_id"]] <- str_c(nk, k, sep = "-")
+  
+  return(df_fractions)
+  
+}
+
+
+#' Intersect data with neuroanatomical homologues
+#'
+#' @param x (list) A list with named elements "mouse" and "human" 
+#' containing data to intersect. 
+#' @param homologues (data.frame) A data frame containing the set
+#' of mouse and human neuroanatomical homologues.
+#'
+#' @return (list) A list with named elements "mouse" and "human" 
+#' containing the intersected data.
+intersect_neuro_homologues <- function(x, homologues) {
+  for (i in 1:length(x)) {
+    species <- names(x)[[i]]
+    cols_init <- colnames(x[[i]])
+    colnames(x[[i]])[cols_init == "name"] <- species
+    x[[i]] <- inner_join(x[[i]], homologues, by = species)
+    x[[i]][["name"]] <- factor(x[[i]][["name"]], levels = homologues[["name"]])
+    x[[i]][["species"]] <- species
+    x[[i]] <- x[[i]][,match(cols_init, colnames(x[[i]]))]
+  }
+  return(x)
+}
+
+
+prepare_radar_chart <- function(clusters, trees, labels, defs, spokes, nk, k, threshold, threshold_value, threshold_symmetric, threshold_comparison) {
+  
+  species <- c("mouse", "human")
+  fractions <- vector(mode = "list", length = length(species))
+  names(fractions) <- species
+  for (i in 1:length(species)) {
+    
+    positive_fractions <- prepare_cluster_fractions(species = species[[i]],
+                                                    clusters = clusters[[species[[i]]]],
+                                                    tree = trees[[species[[i]]]],
+                                                    labels = labels[[species[[i]]]],
+                                                    defs = defs[[species[[i]]]],
+                                                    structs = spokes[[species[[i]]]],
+                                                    nk = nk[[species[[i]]]],
+                                                    k = k[[species[[i]]]],
+                                                    sign = "positive",
+                                                    threshold = threshold,
+                                                    threshold_value = threshold_value,
+                                                    threshold_symmetric = threshold_symmetric,
+                                                    threshold_comparison = threshold_comparison)
+    
+    negative_fractions <- prepare_cluster_fractions(species = species[[i]],
+                                                    clusters = clusters[[species[[i]]]],
+                                                    tree = trees[[species[[i]]]],
+                                                    labels = labels[[species[[i]]]],
+                                                    defs = defs[[species[[i]]]],
+                                                    structs = spokes[[species[[i]]]],
+                                                    nk = nk[[species[[i]]]],
+                                                    k = k[[species[[i]]]],
+                                                    sign = "negative",
+                                                    threshold = threshold,
+                                                    threshold_value = threshold_value,
+                                                    threshold_symmetric = threshold_symmetric,
+                                                    threshold_comparison = threshold_comparison)
+    
+    positive_fractions <- select(positive_fractions, name, positive = fvoxels_expr)
+    negative_fractions <- select(negative_fractions, name, negative = fvoxels_expr)
+    
+    fractions[[species[[i]]]] <- inner_join(positive_fractions,
+                                            negative_fractions,
+                                            by = "name") %>% 
+      mutate(negative = -1*negative,
+             species = species[[i]])
+    
+  }
+  
+  #Intersect regions with neuroanatomical homologues
+  fractions <- intersect_neuro_homologues(x = fractions, 
+                                          homologues = spokes)
+  
+  #Reduce list to a data frame
+  radar <- reduce(.x = fractions, .f = bind_rows)
+  
+  #Relevel regions so that the radar chart closes on itself
+  lvls <- levels(radar$name)
+  lvls <- c(" ", lvls)
+  radar_dummy <- radar %>% 
+    mutate(name = as.character(name)) %>% 
+    filter(name == lvls[length(lvls)]) %>% 
+    mutate(name = " ")
+  radar <- bind_rows(radar, radar_dummy)
+  radar <- mutate(radar, name = factor(name, levels = lvls))
+  
+  return(radar)
+  
+}
+
+#' Calculate cluster region fractions
+#'
+#' @param cluster (mincSingleDim)
+#' @param labels (mincSingleDim)
+#' @param defs (data.frame)
+#'
+#' @return (data.frame)
+calc_cluster_region_fractions <- function(cluster, labels, defs) {
+  voxels_cluster <- cluster == 1
+  voxels_nonzero <- labels != 0
+  labels_cluster <- labels[voxels_cluster & voxels_nonzero]
+  if (length(labels_cluster) == 0){
+    out <- tibble(label = defs[["label"]],
+                  nvoxels = 0)
+  } else {
+    out <- table(labels_cluster) %>% 
+      as_tibble() %>% 
+      rename(label = labels_cluster,
+             nvoxels = n) %>% 
+      mutate(label = as.integer(label))
+  }
+  out <- out %>% 
+    right_join(defs, by = "label") %>%
+    mutate(nvoxels = ifelse(is.na(nvoxels), 0, nvoxels),
+           nvoxels_cluster = sum(voxels_cluster),
+           nvoxels_expr = length(labels_cluster),
+           fvoxels_cluster = nvoxels/nvoxels_cluster,
+           fvoxels_expr = nvoxels/nvoxels_expr,
+           fvoxels_cluster = ifelse(is.nan(fvoxels_cluster), 0, fvoxels_cluster),
+           fvoxels_expr = ifelse(is.nan(fvoxels_expr), 0, fvoxels_expr)) %>% 
+    select(name,
+           label,
+           nvoxels,
+           nvoxels_cluster,
+           nvoxels_expr,
+           fvoxels_cluster,
+           fvoxels_expr)
+  return(out)
+}
+
+
+#Radar coordinate system for ggplot2
+coord_radar <- function (theta = "x", start = 0, direction = 1) {
+  
+  theta <- match.arg(theta, c("x", "y"))
+  r <- if (theta == "x") 
+    "y"
+  else "x"
+  
+  #dirty
+  rename_data <- function(coord, data) {
+    if (coord$theta == "y") {
+      plyr::rename(data, c("y" = "theta", "x" = "r"), warn_missing = FALSE)
+    } else {
+      plyr::rename(data, c("y" = "r", "x" = "theta"), warn_missing = FALSE)
+    }
+  }
+  
+  theta_rescale <- function(coord, x, scale_details) {
+    rotate <- function(x) (x + coord$start) %% (2 * pi) * coord$direction
+    rotate(scales::rescale(x, c(0, 2 * pi), scale_details$theta.range))
+  }
+  
+  r_rescale <- function(coord, x, scale_details) {
+    scales::rescale(x, c(0, 0.4), scale_details$r.range)
+  }
+  
+  ggproto("CoordRadar", CoordPolar, theta = theta, r = r, start = start, 
+          direction = sign(direction),
+          is_linear = function(coord) TRUE,
+          render_bg = function(self, scale_details, theme) {
+            scale_details <- rename_data(self, scale_details)
+            
+            theta <- if (length(scale_details$theta.major) > 0)
+              theta_rescale(self, scale_details$theta.major, scale_details)
+            thetamin <- if (length(scale_details$theta.minor) > 0)
+              theta_rescale(self, scale_details$theta.minor, scale_details)
+            # thetafine <- seq(0, 2 * pi, length.out = 100)
+            thetafine <- theta
+            
+            rfine <- c(r_rescale(self, scale_details$r.major, scale_details))
+            
+            # This gets the proper theme element for theta and r grid lines:
+            #   panel.grid.major.x or .y
+            majortheta <- paste("panel.grid.major.", self$theta, sep = "")
+            minortheta <- paste("panel.grid.minor.", self$theta, sep = "")
+            majorr     <- paste("panel.grid.major.", self$r,     sep = "")
+            
+            ggplot2:::ggname("grill", grid::grobTree(
+              ggplot2:::element_render(theme, "panel.background"),
+              if (length(theta) > 0) ggplot2:::element_render(
+                theme, majortheta, name = "angle",
+                x = c(rbind(0, 0.45 * sin(theta))) + 0.5,
+                y = c(rbind(0, 0.45 * cos(theta))) + 0.5,
+                id.lengths = rep(2, length(theta)),
+                default.units = "native"
+              ),
+              if (length(thetamin) > 0) ggplot2:::element_render(
+                theme, minortheta, name = "angle",
+                x = c(rbind(0, 0.45 * sin(thetamin))) + 0.5,
+                y = c(rbind(0, 0.45 * cos(thetamin))) + 0.5,
+                id.lengths = rep(2, length(thetamin)),
+                default.units = "native"
+              ),
+              
+              ggplot2:::element_render(
+                theme, majorr, name = "radius",
+                x = rep(rfine, each = length(thetafine)) * sin(thetafine) + 0.5,
+                y = rep(rfine, each = length(thetafine)) * cos(thetafine) + 0.5,
+                id.lengths = rep(length(thetafine), length(rfine)),
+                default.units = "native"
+              )
+            ))
+          })
+}
