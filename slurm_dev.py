@@ -72,4 +72,6 @@ if __name__ == '__main__':
             dict(ncontrols = es_ncontrols)
         )
 
+    print(es_kwargs)
+
     es_files = processing.calculate_human_effect_sizes(**es_kwargs)
