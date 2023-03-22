@@ -29,3 +29,4 @@ figures/*.pdf
 /.Rprofile
 scripts_old/
 dev.py
+dev.R
