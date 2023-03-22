@@ -15,8 +15,9 @@ from utils import execute_R
 from warnings import warn
 
 
-def normative_growth_norm(infile, demographics, outfile, key = 'file', df = 5,
-                          combat = False, combat_batch = None,
+def normative_growth_norm(imgdir, demographics, mask, outdir,
+                          matrix_file = 'effect_sizes.csv', key = 'file',
+                          df = 5, combat = False, combat_batch = None,
                           parallel = False, nproc = None):
     """
     Calculate human effect sizes using normative growth modelling.
@@ -76,10 +77,16 @@ def normative_growth_norm(infile, demographics, outfile, key = 'file', df = 5,
     else:
         script_args['parallel'] = 'false'
 
+# Effect size matrix file
+    script_args['matrix-file'] = script_args.pop('matrix_file')
+
     # Execute script
     script = 'normative_growth_normalization.R'
     execute_R(script = script, args = script_args)
-    return outfile
+    outfiles = os.listdir(imgdir)
+    outfiles = [file for file in outfiles if '.mnc' in file]
+    outfiles = [os.path.join(outdir, file) for file in outfiles]
+    return outfiles
 
 
 def propensity_matching_norm(imgdir, demographics, mask, outdir,
@@ -210,8 +217,10 @@ def matrix_to_images(x, outfiles, maskfile):
     return outfiles
 
 
-def calculate_human_effect_sizes(imgdir, demographics, outdir, method, mask,
-                                 parallel = False, nproc = None, **kwargs):
+def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
+                                 matrix_file = 'effect_sizes.csv',
+                                 method = 'normative-growth', parallel = False,
+                                 nproc = None, **kwargs):
     """
     Calculate human effect size images.
     
@@ -222,11 +231,13 @@ def calculate_human_effect_sizes(imgdir, demographics, outdir, method, mask,
         compute the effect sizes.
     demographics: str
         Path to the CSV file containing the human demographics data.
-    outdir: str
-        Path to the directory in which to save the effect size 
-        MINC images.
     mask: str
         Path to the mask MINC file for the images.
+    outdir: str
+        Path to the directory in which to save the effect size
+        MINC images.
+    matrix_file: str
+        Name of the CSV file in which to save the effect size matrix.
     method: str
         Method to use to compute effect sizes. 
     parallel: bool
@@ -260,52 +271,18 @@ def calculate_human_effect_sizes(imgdir, demographics, outdir, method, mask,
     # Compute effect sizes using normative growth modelling
     elif method == "normative-growth":
 
-        print("Building voxel matrix...")
-
-        # Create a voxel matrix from image files
-        imgfiles = glob(imgdir + '*.mnc')
-        tmpfile = tempfile.mkstemp(dir = outdir, suffix = '.csv')[1]
-        df_voxels = build_voxel_matrix(infiles = imgfiles,
-                                       mask = mask,
-                                       sort = True,
-                                       file_col = True,
-                                       parallel = parallel,
-                                       nproc = nproc)
-        if 'key' in kwargs.keys():
-            key = kwargs['key']
-        else:
-            key = 'file'
-        df_voxels[key] = [os.path.basename(file) for file in df_voxels['file']]
-
-        print("Writing out voxel matrix...")
-        df_voxels.to_csv(tmpfile, index = False)
-
-        # Run normative growth normalization
-        print("Executing normative growth modelling...")
-        outfile = tempfile.mkstemp(dir = outdir, suffix = '.csv')[1]
-        kwargs.update({'infile':tmpfile,
-                       'demographics':demographics,
-                       'outfile':outfile,
-                       'parallel':parallel,
-                       'nproc':nproc})
-        outfile = normative_growth_norm(**kwargs)
-
-        # Convert normalized matrix to images
-        x = fread(outfile, header = True).to_pandas()
-        outfiles = x[key].to_list()
-        outfiles = [os.path.join(outdir, outfile) for outfile in outfiles]
-        x = x.drop(key, axis = 1).to_numpy()
-        outfiles = matrix_to_images(x = x,
-                                    outfiles = outfiles,
-                                    maskfile = mask)
-
-        # Remove temporary files
-        os.remove(tmpfile)
-        os.remove(outfile)
+        kwargs.update(dict(imgdir=imgdir,
+                           demographics=demographics,
+                           mask=mask,
+                           outdir=outdir,
+                           matrix_file=matrix_file,
+                           parallel=parallel,
+                           nproc=nproc))
+        outfiles = normative_growth_norm(**kwargs)
 
     else:
         raise ValueError("Argument method must be one of ",
-                         "['propensity-matching', 'normative-growth']: {}"
+                         "('propensity-matching', 'normative-growth'): {}"
                          .format(method))
 
     return outfiles
@@ -366,19 +343,19 @@ def import_image(img, mask = None, flatten = True):
     return img
 
 
-def import_images(infiles, mask = None, output_format = 'list', flatten = True,
+def import_images(imgfiles, mask = None, output_format = 'list', flatten = True,
                   parallel = False, nproc = None):
     """
     Import a set of MINC images.
     
     Arguments
     ---------
-    infiles: list
+    imgfiles: list
         List of paths to images to import.
     mask: str
         Optional path to a mask image. 
     output_format: str
-        One of {'list', 'numpy', 'pandas'} indicating what format 
+        One of ('list', 'numpy', 'pandas') indicating what format
         to return.
     flatten: bool
         Option to flatten images into a 1-dimensional array. 
@@ -423,12 +400,12 @@ def import_images(infiles, mask = None, output_format = 'list', flatten = True,
                              "number of processors to use in parallel.")
         pool = mp.Pool(nproc)
         imgs = []
-        for img in tqdm(pool.imap(importer, infiles), total = len(infiles)):
+        for img in tqdm(pool.imap(importer, imgfiles), total = len(imgfiles)):
             imgs.append(img)
         pool.close()
         pool.join()
     else:
-        imgs = list(map(importer, tqdm(infiles)))
+        imgs = list(map(importer, tqdm(imgfiles)))
 
     imgsize_test = [len(img) for img in imgs]
     imgsize_err = "Images provided contain different numbers of voxels."
@@ -443,7 +420,7 @@ def import_images(infiles, mask = None, output_format = 'list', flatten = True,
         return imgs
 
 
-def build_voxel_matrix(infiles, mask = None, file_col = False, sort = False,
+def build_voxel_matrix(imgfiles, mask = None, file_col = False, sort = False,
                        save = False, outfile = 'voxel_matrix.csv',
                        parallel = False, nproc = None):
     """
@@ -451,13 +428,13 @@ def build_voxel_matrix(infiles, mask = None, file_col = False, sort = False,
     
     Arguments
     ---------
-    infiles: list
+    imgfiles: list
         List of paths to images.
     mask: str
         Optional path to a mask image. 
     file_col: bool
         Option to store input files in a column. 
-        If true, the paths in infiles are stored in a column 'file'.
+        If true, the paths in imgfiles are stored in a column 'file'.
     sort: bool
         Option to sort rows based on file names.
     save: bool
@@ -475,13 +452,13 @@ def build_voxel_matrix(infiles, mask = None, file_col = False, sort = False,
         A Pandas DataFrame containing the (masked) images.
     """
 
-    df_imgs = import_images(infiles = infiles,
+    df_imgs = import_images(imgfiles = imgfiles,
                             mask = mask,
                             output_format = 'pandas',
                             flatten = True,
                             parallel = parallel,
                             nproc = nproc)
-    df_imgs['file'] = infiles
+    df_imgs['file'] = imgfiles
 
     if sort:
         df_imgs = df_imgs.sort_values(by = 'file')
@@ -778,14 +755,14 @@ def permute_cluster_labels(cluster_file, outdir, npermutations = 100):
             random.seed(p)
             np.random.seed(p)
             df_permute[col] = np.random.choice(df_clusters[col].to_numpy(),
-                                              size = df_clusters.shape[0],
-                                              replace = False)
+                                               size = df_clusters.shape[0],
+                                               replace = False)
 
         outfile = 'clusters_permutation_{}.csv'.format(p)
         outfile = os.path.join(outdir, outfile)
         df_permute.to_csv(outfile, index = False)
         outfiles.append(outfile)
-        
+
     return outfiles
 
 
