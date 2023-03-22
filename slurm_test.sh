@@ -9,4 +9,6 @@ cd /hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 
 source activate_hpfenv.sh
 
+echo $MODULEPATH
+
 python3 slurm_dev.py
