@@ -238,19 +238,17 @@ if (inparallel) {
   registerDoSNOW(cl)
   opts <- list(progress=progress)
   zscores <- foreach(j = 1:ncol(voxels), 
-                     .packages = c("tidyverse", "splines"),
-                     .combine = "cbind",
+                     .packages = c("tidyverse", "splines"), 
                      .options.snow = opts) %dopar% {
-                       compute_normative_zscore(y = voxels[[j]],
-                                                demographics = demographics,
+                       compute_normative_zscore(y = voxels[[j]], 
+                                                demographics = demographics, 
                                                 df = df)
-                     } 
+                     }
   close(pb)
   stopCluster(cl)
 } else {
   zscores <- foreach(j = 1:ncol(voxels), 
-                     .packages = c("tidyverse", "splines"),
-                     .combine = "cbind") %do% {
+                     .packages = c("tidyverse", "splines")) %do% {
                        progress(n = j)
                        compute_normative_zscore(y = voxels[[j]],
                                                 demographics = demographics,
@@ -259,8 +257,12 @@ if (inparallel) {
   close(pb)
 }
 
-#Set columns
-colnames(zscores) <- 1:ncol(voxels)
+#Store zscore data in matrix
+voxels_norm <- matrix(data = 0, nrow = length(zscores[[1]]), ncol = length(zscores))
+for (j in 1:length(zscores)) {
+  voxels_norm[,j] <- zscores[[j]]
+}
+colnames(voxels_norm) <- 1:length(zscores)
 
 #Create output directory if necessary
 if (!dir.exists(outdir)) {
@@ -268,17 +270,18 @@ if (!dir.exists(outdir)) {
 }
 
 #Export z-scores to images
+if (verbose) {message("Exporting normalized images...")}
 outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]
 outfiles <- file.path(outdir, outfiles)
-outfiles <- matrix_to_images(x = zscores, outfiles = outfiles, mask = mask)
+outfiles <- matrix_to_images(x = voxels_norm, outfiles = outfiles, mask = mask)
 
 #Convert z-scores to data frame
-df_zscores <- as_tibble(zscores)
-df_zscores[[key]] <- basename(outfiles)
+df_voxels_norm <- as_tibble(voxels_norm)
+df_voxels_norm[[key]] <- basename(outfiles)
 
 #Write effect sizes to file
-if (verbose) {message("Writing out normalized data...")}
+if (verbose) {message("Exporting normalized voxel matrix...")}
 matrix_file <- basename(matrix_file)
 matrix_file <- file.path(outdir, matrix_file)
-data.table::fwrite(df_zscores, matrix_file)
+data.table::fwrite(df_voxels_norm, matrix_file)
 
