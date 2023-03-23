@@ -1,7 +1,6 @@
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(doSNOW))
-suppressPackageStartupMessages(library(tcltk))
 
 
 import_image <- function(img, mask = NULL, flatten = TRUE) {

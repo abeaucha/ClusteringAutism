@@ -15,7 +15,6 @@ suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(splines))
 suppressPackageStartupMessages(library(sva))
 suppressPackageStartupMessages(library(doSNOW))
-suppressPackageStartupMessages(library(tcltk))
 
 
 # Command line arguments -----------------------------------------------------
