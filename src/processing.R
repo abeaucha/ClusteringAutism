@@ -81,23 +81,28 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
   }
   
   #Check image sizes
-  imgsize_test <- length(unique(map_dbl(imgs, length)))
+  imgsize <- unique(map_dbl(imgs, length))
+  imgsize_test <- length(imgsize)
   if (imgsize_test != 1) {
     stop("Images provided contain different numbers of voxels.")
   }
   
   #Convert to output format
   if (output_format != "list") {
-    imgs <- reduce(imgs, rbind)
-    rownames(imgs) <- NULL
-    colnames(imgs) <- NULL
-    if (output_format == "tibble") {
-      colnames(imgs) <- as.character(1:ncol(imgs))
-      imgs <- as_tibble(imgs)
+    out <- matrix(data = 0, nrow = imgsize, ncol = length(imgs))
+    for (j in 1:length(imgs)) {
+      out[,j] <- imgs[[j]]
     }
+    out <- t(out)
+    if (output_format == "tibble") {
+      colnames(out) <- as.character(1:ncol(out))
+      out <- as_tibble(out)
+    }
+  } else {
+    out <- imgs
   }
   
-  return(imgs)
+  return(out)
   
 }
 
