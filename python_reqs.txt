@@ -1,12 +1,7 @@
-jupyter
 abagen
 numpy
 scipy
 pandas
-datatable
 pyminc
 tqdm
-sklearn
-torch
-skorch
 matplotlib
