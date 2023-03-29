@@ -1,38 +1,19 @@
 #!/bin/bash
+#Project environment on Graham
 
-#On MICe machines: Remove all modules
 module purge
+module use /project/def-jlerch/tools/modulefiles/
+module load python/3.10.2
 
-#If venv does not exist, create it
 if [ ! -d ".venv" ]; then
 	echo "Initializing python virtual environment..."
-
-	#Create the venv
 	python3 -m venv .venv
-
-	#Activate the venv
-	source .venv/bin/activate
-
-	#Upgrade pip
-	echo "Upgrading pip..."
+	source .ccenv/bin/activate
 	pip install pip --upgrade
-
-	#Install necessary python packages
-	echo "Installing python packages..."
 	pip3 install -r python_reqs.txt
-
-	#Deactivate the venv
 	deactivate
 fi
 
-#Load necessary modules 
-#NOTE: minc-stuffs module break python virtual environment
-module load \
-	minc-toolkit \
-	r/3.6.3 \
-	r-packages \
-	ants
-
-#Activate the python venv
+module load mice-env
 source .venv/bin/activate
 export PYTHONPATH="$PWD/src"
