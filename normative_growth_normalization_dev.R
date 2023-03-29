@@ -11,7 +11,9 @@
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(optparse))
-suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(tibble))
 suppressPackageStartupMessages(library(splines))
 suppressPackageStartupMessages(library(RMINC))
 
@@ -55,7 +57,7 @@ option_list <- list(
 # Functions ------------------------------------------------------------------
 
 # Processing functions
-source("src/processing.R")
+#source("src/processing.R")
 
 
 #' Function description
@@ -175,6 +177,7 @@ imgfiles <- imgfiles[imgs_in_demographics]
 row_match <- match(basename(imgfiles), demographics[[key]])
 demographics <- demographics[row_match,]
 
+ti <- Sys.time()
 #TESTING. DELETE LATER.
 # maskvol <- mincGetVolume(mask)
 # ind_mask_tmp <- sample(x = which(maskvol == 1), size = 1000, replace = FALSE)
@@ -186,7 +189,6 @@ demographics <- demographics[row_match,]
 
 #Run normative growth modelling
 if (verbose) {message("Evaluating normative growth models...")}
-ti <- Sys.time()
 voxels <- mcMincApply(filenames = imgfiles, 
                       fun = compute_normative_zscore,
                       demographics = demographics,
@@ -194,15 +196,10 @@ voxels <- mcMincApply(filenames = imgfiles,
                       mask = mask,
                       cores = nproc, 
                       return_raw = TRUE)
-tf <- Sys.time()
-tdiff <- tf-ti
 
-ti <- Sys.time()
 message("Converting voxel list to matrix")
 voxels <- simplify_masked(voxels[["vals"]])
 voxels <- asplit(voxels, MARGIN = 2)
-tf <- Sys.time()
-tdiff <- tf-ti
 
 #Export images
 if (verbose) {message("Exporting normalized images...")}
@@ -224,3 +221,5 @@ out <- parallel::mcmapply(vector_to_image, voxels, outfiles,
 #                   cores = nproc,
 #                   local = TRUE)
 
+tf <- Sys.time()
+print(tf-ti)
