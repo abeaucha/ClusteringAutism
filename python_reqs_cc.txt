@@ -1,0 +1,9 @@
+jupyter
+abagen
+numpy
+scipy
+pandas
+datatable
+pyminc
+tqdm
+matplotlib
