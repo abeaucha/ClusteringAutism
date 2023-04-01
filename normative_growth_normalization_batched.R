@@ -19,36 +19,36 @@ suppressPackageStartupMessages(library(RMINC))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-#   make_option("--demographics",
-#               type = "character",
-#               help = paste("Help message")),
-#   make_option("--imgdir",
-#               type = "character",
-#               help = paste("Help message")),
-#   make_option("--mask",
-#               type = "character"),
-#   make_option("--key",
-#               type = "character",
-#               default = "file",
-#               help = paste("Help message")),
-#   make_option("--df",
-#               type = "numeric",
-#               help = paste("Help message")),
-#   make_option("--outdir",
-#               type = "character",
-#               help = paste("Help message")),
-#   make_option("--matrix-file",
-#               type = "character",
-#               default = "effect_sizes.csv",
-#               help = paste("Help")),
+  #   make_option("--demographics",
+  #               type = "character",
+  #               help = paste("Help message")),
+  #   make_option("--imgdir",
+  #               type = "character",
+  #               help = paste("Help message")),
+  #   make_option("--mask",
+  #               type = "character"),
+  #   make_option("--key",
+  #               type = "character",
+  #               default = "file",
+  #               help = paste("Help message")),
+  #   make_option("--df",
+  #               type = "numeric",
+  #               help = paste("Help message")),
+  #   make_option("--outdir",
+  #               type = "character",
+  #               help = paste("Help message")),
+  #   make_option("--matrix-file",
+  #               type = "character",
+  #               default = "effect_sizes.csv",
+  #               help = paste("Help")),
   make_option("--nproc",
               type = "numeric",
               help = paste("Number of processors to use in parallel.",
                            "Ignored if --parallel is false."))
-#   make_option("--verbose",
-#               type = "character",
-#               default = "true",
-#               help = "Verbosity [default %default]")
+  #   make_option("--verbose",
+  #               type = "character",
+  #               default = "true",
+  #               help = "Verbosity [default %default]")
 )
 
 
@@ -131,15 +131,14 @@ args <- parse_args(OptionParser(option_list = option_list))
 nproc <- args[["nproc"]]
 # verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
-# demographics <- "data/tmp_16/POND_SickKids/DBM_input_demo_passedqc_wfile.csv"
 demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc_wfile.csv"
-# imgdir <- "data/tmp_16/POND_SickKids/jacobians/resolution_0.8/absolute/"
-imgdir <- "data/human/derivatives/POND_SickKids/jacobians/resolution_3.0/absolute/"
+# imgdir <- "data/human/registration/jacobians_resampled/resolution_0.8/absolute/"
+imgdir <- "data/human/registration/jacobians_resampled/resolution_3.0/absolute/"
 # mask <- "data/human/registration/reference_files/mask_0.8mm.mnc"
 mask <- "data/human/registration/reference_files/mask_3.0mm.mnc"
 key <- "file"
 df <- 3
-outdir <- "tmp/"
+outdir <- "tmp_batch/"
 matrix_file <- "effect_sizes.csv"
 verbose <- TRUE
 nproc <- 8
@@ -175,64 +174,100 @@ imgfiles <- imgfiles[imgs_in_demographics]
 row_match <- match(basename(imgfiles), demographics[[key]])
 demographics <- demographics[row_match,]
 
+#Batch size
+batch_size <- 5000
 
-
+#Mask voxels
 mask_vol <- mincGetVolume(mask)
 mask_ind <- which(mask_vol == 1)
-batch_ind <- mask_ind[1:1000]
-mask_batch <- numeric(length(mask_vol))
-mask_batch[batch_ind] <- 1
-attributes(mask_batch) <- attributes(mask_vol)
-mask_batch_file <- "tmp/mask_batch.mnc"
-mincWriteVolume(buffer = mask_batch,
-                output.filename = mask_batch_file,
-                like.filename = mask,
-                clobber = TRUE)
+mask_size <- length(mask_ind)
 
-ind_mask_tmp <- sample(x = which(maskvol == 1), size = 1000, replace = FALSE)
-mask_tmp <- numeric(length(maskvol))
-mask_tmp[ind_mask_tmp] <- 1
-attributes(mask_tmp) <- attributes(maskvol)
-outfile <- "masktmp.mnc"
-mincWriteVolume(buffer = mask_tmp, output.filename = outfile, like.filename = mask, clobber = TRUE)
+#Number of batches
+nbatches <- ceiling(mask_size/batch_size)
 
-#Run normative growth modelling
-if (verbose) {message("Evaluating normative growth models...")}
-ti <- Sys.time()
-voxels <- mcMincApply(filenames = imgfiles, 
-                      fun = compute_normative_zscore,
-                      demographics = demographics,
-                      df = df,
-                      mask = mask,
-                      cores = nproc, 
-                      return_raw = TRUE)
-tf <- Sys.time()
-tdiff <- tf-ti
+#Create batches
+batches <- rep(1:nbatches, each = batch_size)
+batches <- batches[1:mask_size]
+batches <- factor(batches)
+batches <- split(x = mask_ind, f = batches)
 
-ti <- Sys.time()
-message("Converting voxel list to matrix")
-voxels <- simplify_masked(voxels[["vals"]])
-voxels <- asplit(voxels, MARGIN = 2)
-tf <- Sys.time()
-tdiff <- tf-ti
+#For loop here
+for (b in 1:nbatches) {
+  
+  message("On batch ", b, " of ", nbatches)
+  
+  #Create batch mask
+  batch_ind <- batches[[b]]
+  batch_mask <- numeric(length(mask_vol))
+  batch_mask[batch_ind] <- 1
+  attributes(batch_mask) <- attributes(mask_vol)
+  batch_mask_file <- "batch_mask.mnc"
+  batch_mask_file <- file.path(outdir, batch_mask_file)
+  sink(nullfile())
+  mincWriteVolume(buffer = batch_mask,
+                  output.filename = batch_mask_file,
+                  like.filename = mask,
+                  clobber = TRUE)
+  sink(NULL)
+  
+  #Run normative growth modelling
+  batch_voxels <- mcMincApply(filenames = imgfiles, 
+                              fun = compute_normative_zscore,
+                              demographics = demographics,
+                              df = df,
+                              mask = batch_mask_file,
+                              cores = nproc, 
+                              return_raw = TRUE)
+  batch_voxels <- simplify_masked(batch_voxels[["vals"]])
+  
+  #Export batched voxels to csv
+  batch_voxels <- t(batch_voxels)
+  colnames(batch_voxels) <- 1:ncol(batch_voxels)
+  batch_voxels <- as_tibble(batch_voxels)
+  batch_file <- paste0("batch_", b, ".csv")
+  batch_file <- file.path(outdir, batch_file)
+  data.table::fwrite(x = batch_voxels, file = batch_file, col.names = FALSE)
+  
+}
 
-#Export images
-if (verbose) {message("Exporting normalized images...")}
 outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]
 outfiles <- file.path(outdir, outfiles)
-out <- parallel::mcmapply(vector_to_image, voxels, outfiles, 
-                          MoreArgs = list(mask = mask),
-                          SIMPLIFY = TRUE, mc.cores = nproc)
+for (i in 1:length(outfiles)) {
+  
+  img <- numeric(length = length(mask_vol))
+  
+  for (b in 1:nbatches) {
+    batch_file <- paste0("batch_", b, ".csv")
+    batch_file <- file.path(outdir, batch_file)
+    img_batch <- data.table::fread(batch_file, header = FALSE, skip = i-1, nrows = 1)
+    img_batch <- as.matrix(img_batch)
+    img_batch <- img_batch[1,]
+    names(img_batch) <- NULL
+    img[batches[[b]]] <- img_batch
+  }
+  
+  attributes(img) <- attributes(mask_vol)
+  outfile <- outfiles[i]
+  sink(nullfile())
+  mincWriteVolume(buffer = img, 
+                  output.filename = outfile, 
+                  like.filename = file.path(imgdir, basename(outfile)), 
+                  clobber = TRUE)
+  sink(NULL)
+  
+  file1 <- file.path("tmp", basename(outfile))
+  file2 <- file.path("tmp_batch", basename(outfile))
 
+  img1 <- mincGetVolume(file1)
+  img2 <- mincGetVolume(file2)
 
-#THis is a much faster way to import (I think?)
-#It also import the data in the orientation desired by ComBat
-# imgdir <- "data/human/registration/jacobians_resampled/resolution_0.8/absolute/"
-# imgfiles <- list.files(imgdir, full.names = TRUE)
-# mask <- "data/human/registration/reference_files/mask_0.8mm.mnc"
-# tmp <- pMincApply(filenames = imgfiles[1:100],
-#                   fun = function(x) {return(x)},
-#                   mask = mask,
-#                   cores = nproc,
-#                   local = TRUE)
+  img1 <- img1[mask_vol > 0.5]
+  img2 <- img2[mask_vol > 0.5]
+
+  n <- 9
+  ind_match <- round(img1, n) == round(img2, n)
+  print(sum(!ind_match))
+
+}
+
 
