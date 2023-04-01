@@ -157,10 +157,12 @@ vector_to_image <- function(x, outfile, mask) {
   img <- numeric(length(mask))
   img[mask == 1] <- x
   attributes(x) <- attributes(mask)
+  sink(nullfile(), type = "output")
   mincWriteVolume(buffer = img,
                   output.filename = outfile,
                   clobber = TRUE,
                   like.filename = attr(mask, "likeVolume"))
+  sink(NULL)
   
 }
 
