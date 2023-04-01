@@ -11,9 +11,7 @@
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(optparse))
-# suppressPackageStartupMessages(library(dplyr))
-# suppressPackageStartupMessages(library(tidyr))
-# suppressPackageStartupMessages(library(tibble))
+suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(splines))
 suppressPackageStartupMessages(library(RMINC))
 
@@ -57,7 +55,7 @@ option_list <- list(
 # Functions ------------------------------------------------------------------
 
 # Processing functions
-#source("src/processing.R")
+source("src/processing.R")
 
 
 #' Function description
@@ -133,10 +131,10 @@ args <- parse_args(OptionParser(option_list = option_list))
 nproc <- args[["nproc"]]
 # verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
-# demographics <- "data/tmp_16/POND_SickKids/DBM_input_demo_passedqc_wfile.csv"
+
 demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc_wfile.csv"
-# imgdir <- "data/tmp_16/POND_SickKids/jacobians/resolution_0.8/absolute/"
-imgdir <- "data/human/derivatives/POND_SickKids/jacobians/resolution_3.0/absolute/"
+# imgdir <- "data/human/registration/jacobians_resampled/resolution_0.8/absolute/"
+imgdir <- "data/human/registration/jacobians_resampled/resolution_3.0/absolute/"
 # mask <- "data/human/registration/reference_files/mask_0.8mm.mnc"
 mask <- "data/human/registration/reference_files/mask_3.0mm.mnc"
 key <- "file"
@@ -144,7 +142,7 @@ df <- 3
 outdir <- "tmp/"
 matrix_file <- "effect_sizes.csv"
 verbose <- TRUE
-# nproc <- 8
+nproc <- 8
 
 if (is.null(nproc)) {
   stop("Specify the number of processors to use in parallel.")
@@ -177,16 +175,6 @@ imgfiles <- imgfiles[imgs_in_demographics]
 row_match <- match(basename(imgfiles), demographics[[key]])
 demographics <- demographics[row_match,]
 
-ti <- Sys.time()
-#TESTING. DELETE LATER.
-# maskvol <- mincGetVolume(mask)
-# ind_mask_tmp <- sample(x = which(maskvol == 1), size = 1000, replace = FALSE)
-# mask_tmp <- numeric(length(maskvol))
-# mask_tmp[ind_mask_tmp] <- 1
-# attributes(mask_tmp) <- attributes(maskvol)
-# outfile <- "masktmp.mnc"
-# mincWriteVolume(buffer = mask_tmp, output.filename = outfile, like.filename = mask, clobber = TRUE)
-
 #Run normative growth modelling
 if (verbose) {message("Evaluating normative growth models...")}
 voxels <- mcMincApply(filenames = imgfiles, 
@@ -196,8 +184,6 @@ voxels <- mcMincApply(filenames = imgfiles,
                       mask = mask,
                       cores = nproc, 
                       return_raw = TRUE)
-
-message("Converting voxel list to matrix")
 voxels <- simplify_masked(voxels[["vals"]])
 voxels <- asplit(voxels, MARGIN = 2)
 
@@ -208,18 +194,3 @@ outfiles <- file.path(outdir, outfiles)
 out <- parallel::mcmapply(vector_to_image, voxels, outfiles, 
                           MoreArgs = list(mask = mask),
                           SIMPLIFY = TRUE, mc.cores = nproc)
-
-
-#THis is a much faster way to import (I think?)
-#It also import the data in the orientation desired by ComBat
-# imgdir <- "data/human/registration/jacobians_resampled/resolution_0.8/absolute/"
-# imgfiles <- list.files(imgdir, full.names = TRUE)
-# mask <- "data/human/registration/reference_files/mask_0.8mm.mnc"
-# tmp <- pMincApply(filenames = imgfiles[1:100],
-#                   fun = function(x) {return(x)},
-#                   mask = mask,
-#                   cores = nproc,
-#                   local = TRUE)
-
-tf <- Sys.time()
-print(tf-ti)
