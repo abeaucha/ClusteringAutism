@@ -139,21 +139,26 @@ build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE,
 
 vector_to_image <- function(x, outfile, mask) {
   
+  #Check output file
   if (is.null(outfile)) {
     stop("Specify output file.")
   }
   
+  #Check mask
   if (is.null(mask)) {
     stop("Specify mask file.")
   }
   
+  #Import mask
   mask <- mincGetVolume(mask)
   
+  #Check that x and mask match
   if (length(x) != sum(mask)) {
     stop(paste("Number of elements in x does not match the number of non-zero",
                "voxels in the mask."))
   }
   
+  #Export vector as image
   img <- numeric(length(mask))
   img[mask == 1] <- x
   attributes(x) <- attributes(mask)
@@ -167,7 +172,7 @@ vector_to_image <- function(x, outfile, mask) {
 }
 
 
-matrix_to_images <- function(x, outfiles, mask) {
+matrix_to_images <- function(x, outfiles, mask, margin = 1, nproc = NULL) {
   
   #Check output files
   if (is.null(outfiles)) {
@@ -184,20 +189,25 @@ matrix_to_images <- function(x, outfiles, mask) {
     stop("x must be a matrix.")  
   }
   
+  #Split matrix into array along margin
+  x <- asplit(x, MARGIN = margin)
+  
   #Check that number of output files matches the number of images
-  if (nrow(x) != length(outfiles)) {
-    stop(paste("Number of rows in x must be equal to the number of entries in",
-               "outfiles"))  
+  if (length(x) != length(outfiles)) {
+    stop("Number of entries in x along margin ", margin, 
+         " must be equal to the number of entries in outfiles")  
   }
   
-  #Export matrix rows
-  sink(file = nullfile(), type = "output")
-  for (i in 1:nrow(x)) {
-    vector_to_image(x = x[i,], outfile = outfiles[i], mask = mask)
+  #Export to images
+  if (!is.null(nproc)) {
+    out <- parallel::mcmapply(vector_to_image, x, outfiles, 
+                              MoreArgs = list(mask = mask),
+                              SIMPLIFY = TRUE, mc.cores = nproc)
+  } else {
+    out <- mapply(vector_to_image, x, outfiles,
+                  MoreArgs = list(mask = mask),
+                  SIMPLIFY = TRUE)
   }
-  sink(file = NULL)
-  
-  return(outfiles)
   
 }
 
