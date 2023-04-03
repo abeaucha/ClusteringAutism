@@ -13,8 +13,7 @@
 suppressPackageStartupMessages(library(optparse))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(splines))
-suppressPackageStartupMessages(library(sva))
-suppressPackageStartupMessages(library(doSNOW))
+suppressPackageStartupMessages(library(RMINC))
 
 
 # Command line arguments -----------------------------------------------------
@@ -34,34 +33,22 @@ option_list <- list(
               help = paste("Help message")),
   make_option("--df",
               type = "numeric",
+              default = 3, 
               help = paste("Help message")),
-  make_option("--combat",
-              type = "character",
-              default = "true",
-              help = paste("Help message")),
-  make_option("--combat-batch",
+  make_option("--batch",
               type = "character",
               help = paste("Help message")),
   make_option("--outdir",
               type = "character",
               help = paste("Help message")),
-  make_option("--matrix-file",
-              type = "character",
-              default = "effect_sizes.csv",
-              help = paste("Help")),
-  make_option("--parallel",
-              type = "character",
-              default = "false",
-              help = "Option to run in parallel. [default %default]"),
   make_option("--nproc",
               type = "numeric",
-              help = paste("Number of processors to use in parallel.",
-                           "Ignored if --parallel is false.")),
+              help = "Number of processors to use in parallel."),
   make_option("--verbose",
               type = "character",
               default = "true",
               help = "Verbosity [default %default]")
-) 
+)
 
 
 # Functions ------------------------------------------------------------------
@@ -70,25 +57,29 @@ option_list <- list(
 source("src/processing.R")
 
 
-#' Function description
-#'
-#' @param x (class) Parameter description.
-#'
-#' @return (class) Return description.
-fit_predict_model <- function(y, demographics, df) {
+fit_predict_model <- function(y, demographics, batch = NULL, df = 3) {
   
   if (length(y) != nrow(demographics)) {
     stop()
   }
   
+  if (!is.null(batch)) {
+    batch <- demographics %>% 
+      select(all_of(batch)) %>% 
+      unite(col = batch) %>% 
+      pull(batch)
+    y <- residuals(lm(y ~ batch))
+    names(y) <- NULL
+  }
+  
   ind_fit <- demographics[["DX"]] == "Control"
   ind_pred <- !ind_fit
   
-  df_fit <- demographics[ind_fit, c("Age", "Sex")] %>% 
-    mutate(y = y[ind_fit])
+  df_fit <- demographics[ind_fit, c("Age", "Sex")]
+  df_fit[["y"]] <- y[ind_fit] 
   
-  df_pred <- demographics[ind_pred, c("Age", "Sex")] %>% 
-    mutate(y = y[ind_pred])
+  df_pred <- demographics[ind_pred, c("Age", "Sex")]
+  df_pred[["y"]] <- y[ind_pred]
   
   model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
   model_pred <- predict(model_fit, 
@@ -103,6 +94,7 @@ fit_predict_model <- function(y, demographics, df) {
            y_sd = y_pred - y_lwr)
   
   return(df_pred)
+  
 }
 
 
@@ -116,15 +108,14 @@ zscore <- function(x){
 }
 
 
-compute_normative_zscore <- function(y, demographics, df) {
+compute_normative_zscore <- function(y, demographics, batch = NULL, df = 3) {
   
   y_pred <- fit_predict_model(y = y, 
                               demographics = demographics,
+                              batch = batch,
                               df = df)
   z <- pull(zscore(y_pred), "z")
   return(z)
-  
-  
 }
 
 
@@ -132,156 +123,85 @@ compute_normative_zscore <- function(y, demographics, df) {
 
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-
 imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
 mask <- args[["mask"]]
 key <- args[["key"]]
 df <- args[["df"]]
-combat <- ifelse(args[["combat"]] == "true", TRUE, FALSE)
-combat_batch <- args[["combat-batch"]]
+batch <- args[["batch"]]
 outdir <- args[["outdir"]]
-matrix_file <- args[["matrix-file"]]
-inparallel <- ifelse(args[["parallel"]] == "true", TRUE, FALSE)
 nproc <- args[["nproc"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
+# imgdir <- "data/human/registration/jacobians_resampled/resolution_0.8/absolute/"
+# mask <- "data/human/registration/reference_files/mask_0.8mm.mnc"
+
 # demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc_wfile.csv"
-# imgdir <- "data/human/derivatives/POND_SickKids/jacobians/resolution_3.0/absolute/"
+# imgdir <- "data/human/registration/jacobians_resampled/resolution_3.0/absolute/"
 # mask <- "data/human/registration/reference_files/mask_3.0mm.mnc"
 # key <- "file"
 # df <- 3
-# combat <- TRUE
-# combat_batch <- "Site-Scanner"
+# batch <- "Site-Scanner"
 # outdir <- "tmp/"
-# outfile <- "effect_sizes.csv"
+# matrix_file <- "effect_sizes.csv"
 # verbose <- TRUE
-# inparallel = TRUE
-# nproc <- 4
+# nproc <- 8
 
-if (inparallel) {
-  if (is.null(nproc)) {
-    stop("Specify the number of processors to use in parallel.")
-  }
+if (is.null(nproc)) {
+  stop("Specify the number of processors to use in parallel.")
 }
 
 #Import demographics data
-if (verbose) {message("Importing data...")}
+if (verbose) {message("Importing demographics information...")}
 demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
-
-#Import images as tibble
-imgfiles <- list.files(imgdir, full.names = TRUE)
-voxels <- build_voxel_matrix(imgfiles = imgfiles,
-                             mask = mask,
-                             file_col = TRUE,
-                             sort = TRUE,
-                             inparallel = inparallel,
-                             nproc = nproc)
-voxels[["file"]] <- basename(voxels[["file"]])
-if (key != "file") {
-  voxels[[key]] <- voxels[["file"]]
-  voxels <- select(voxels, -file)
-}
 
 #Check existence of key column in demographics
 if (!(key %in% colnames(demographics))) {
   stop(paste("demographics data is missing key column:", key))
 }
 
-#Check existence of key column in voxels
-if (!(key %in% colnames(voxels))) {
-  stop(paste("voxels data is missing key column:", key))
-}
-
 #Remove entries with missing diagnosis, age, or sex
-demographics <- demographics %>% 
+demographics <- demographics %>%
   filter(!is.na(DX),
          !is.na(Age),
          !is.na(Sex),
          !is.na(Site),
-         !is.na(Scanner)) 
+         !is.na(Scanner))
 
-#Align voxels and demographics rows
-if (verbose) {message("Aligning voxel and demographics data...")}
-voxels <- semi_join(voxels, demographics, by = key)
-row_match <- match(voxels[[key]], demographics[[key]])
+#Check existence of batch columns
+if (!is.null(batch)) {
+  batch <- str_split(batch, pattern = "-")[[1]]
+  batch_check <- batch %in% colnames(demographics)
+  if (!all(batch_check)) {
+    stop("Batch columns not found in demographics:\n", str_flatten(batch, collapse = "\n"))
+  }
+}
+
+#Image files
+imgfiles <- list.files(imgdir, full.names = TRUE)
+
+#Match image files to demographics
+if (verbose) {message("Matching image files to demographics...")}
+imgs_in_demographics <- basename(imgfiles) %in% demographics[[key]]
+imgfiles <- imgfiles[imgs_in_demographics]
+row_match <- match(basename(imgfiles), demographics[[key]])
 demographics <- demographics[row_match,]
-voxels <- select(voxels, -all_of(key))
 
-#Apply ComBat normalization if specified
-if (combat) {
-  if (verbose) {message("Running ComBat normalization...")}
-  if (is.null(combat_batch)) {
-    stop("Argument --combat-batch must be specified for ComBat normalization.")
-  }
-  combat_batch <- str_split(combat_batch, pattern = "-")[[1]]
-  batches_exist <- all(combat_batch %in% colnames(demographics))
-  if (!batches_exist) {
-    stop(paste("ComBat batch variables not found in --demographics:", 
-               str_flatten(combat_batch, collapse = ", ")))
-  }
-  for (i in 1:length(combat_batch)) {
-    message(paste("Normalizing using batch variable:", combat_batch[i]))
-    batch <- demographics[[combat_batch[i]]]
-    voxels <- t(as.matrix(voxels))
-    voxels <- sva::ComBat(dat = voxels, batch = batch)
-    voxels <- as_tibble(t(voxels))
-  }
-}
+#Run normative growth modelling
+if (verbose) {message("Evaluating normative growth models...")}
+voxels <- mcMincApply(filenames = imgfiles, 
+                      fun = compute_normative_zscore,
+                      demographics = demographics,
+                      batch = batch,
+                      df = df,
+                      mask = mask,
+                      cores = nproc, 
+                      return_raw = TRUE)
+voxels <- simplify_masked(voxels[["vals"]])
 
-#Compute normative z-scores voxelwise
-if (verbose) {message("Applying normative growth modelling...")}
-pb <- txtProgressBar(max = ncol(voxels), style = 3)
-progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
-if (inparallel) {
-  cl <- makeSOCKcluster(nproc)
-  registerDoSNOW(cl)
-  opts <- list(progress=progress)
-  zscores <- foreach(j = 1:ncol(voxels), 
-                     .packages = c("tidyverse", "splines"), 
-                     .options.snow = opts) %dopar% {
-                       compute_normative_zscore(y = voxels[[j]], 
-                                                demographics = demographics, 
-                                                df = df)
-                     }
-  close(pb)
-  stopCluster(cl)
-} else {
-  zscores <- foreach(j = 1:ncol(voxels), 
-                     .packages = c("tidyverse", "splines")) %do% {
-                       progress(n = j)
-                       compute_normative_zscore(y = voxels[[j]],
-                                                demographics = demographics,
-                                                df = df)
-                     }
-  close(pb)
-}
-
-#Store zscore data in matrix
-voxels_norm <- matrix(data = 0, nrow = length(zscores[[1]]), ncol = length(zscores))
-for (j in 1:length(zscores)) {
-  voxels_norm[,j] <- zscores[[j]]
-}
-colnames(voxels_norm) <- 1:length(zscores)
-
-#Create output directory if necessary
-if (!dir.exists(outdir)) {
-  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
-}
-
-#Export z-scores to images
+#Export images
 if (verbose) {message("Exporting normalized images...")}
 outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]
 outfiles <- file.path(outdir, outfiles)
-outfiles <- matrix_to_images(x = voxels_norm, outfiles = outfiles, mask = mask)
-
-#Convert z-scores to data frame
-df_voxels_norm <- as_tibble(voxels_norm)
-df_voxels_norm[[key]] <- basename(outfiles)
-
-#Write effect sizes to file
-if (verbose) {message("Exporting normalized voxel matrix...")}
-matrix_file <- basename(matrix_file)
-matrix_file <- file.path(outdir, matrix_file)
-data.table::fwrite(df_voxels_norm, matrix_file)
-
+matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
+                 margin = 2, nproc = nproc)
