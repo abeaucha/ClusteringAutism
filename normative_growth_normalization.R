@@ -133,20 +133,7 @@ outdir <- args[["outdir"]]
 nproc <- args[["nproc"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
-# imgdir <- "data/human/registration/jacobians_resampled/resolution_0.8/absolute/"
-# mask <- "data/human/registration/reference_files/mask_0.8mm.mnc"
-
-# demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc_wfile.csv"
-# imgdir <- "data/human/registration/jacobians_resampled/resolution_3.0/absolute/"
-# mask <- "data/human/registration/reference_files/mask_3.0mm.mnc"
-# key <- "file"
-# df <- 3
-# batch <- "Site-Scanner"
-# outdir <- "tmp/"
-# matrix_file <- "effect_sizes.csv"
-# verbose <- TRUE
-# nproc <- 8
-
+#Check nproc
 if (is.null(nproc)) {
   stop("Specify the number of processors to use in parallel.")
 }
@@ -201,6 +188,7 @@ voxels <- simplify_masked(voxels[["vals"]])
 
 #Export images
 if (verbose) {message("Exporting normalized images...")}
+if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
 outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]
 outfiles <- file.path(outdir, outfiles)
 matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
