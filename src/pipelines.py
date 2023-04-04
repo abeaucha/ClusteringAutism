@@ -6,7 +6,7 @@ import pandas as pd
 from glob import glob
 from itertools import product
 from shutil import rmtree
-
+import sys
 
 def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
                                    method = 'mean', transform = None,
@@ -116,10 +116,11 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
                        resolution = 3.0,
                        demographics = 'data/human/registration/DBM_input_demo_passedqc_wfile.csv',
                        mask = 'data/human/registration/reference_files/mask_3.0mm.mnc',
-                       datasets = ['POND', 'SickKids'], parallel = True,
-                       nproc = None, es_method = 'normative-growth', es_df = 3,
-                       es_combat = True, es_combat_batch = ['Site', 'Scanner'],
-                       es_ncontrols = 10, es_matrix_file = 'effect_sizes.csv',
+                       datasets = ('POND', 'SickKids'),
+                       parallel = True, nproc = None,
+                       es_method = 'normative-growth', es_df = 3,
+                       es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
+                       es_matrix_file = 'effect_sizes.csv',
                        cluster_nk_max = 10, cluster_metric = 'correlation',
                        cluster_K = 10, cluster_sigma = 0.5, cluster_t = 20,
                        cluster_file = 'clusters.csv',
@@ -130,19 +131,19 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
     
     """
 
+    datasets = list(datasets)
+    es_batch = list(es_batch)
+
     if parallel:
         if nproc is None:
-            raise Exception("Argument --nproc must be specified "
-                            "when --parallel true")
+            raise ValueError("Set the nproc argument to specify the "
+                             "number of processors to use in parallel.")
 
     if es_method == 'normative-growth':
-        if not es_combat:
-            es_combat_batch = None
         es_ncontrols = None
     else:
         es_df = None
-        es_combat = False
-        es_combat_batch = None
+        es_batch = None
 
     # Filter for data sets ----------------------------------------------------
 
@@ -157,8 +158,6 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
     df_demographics = (df_demographics
                        .loc[df_demographics['Dataset'].isin(datasets)]
                        .copy())
-
-    # TODO: Check whether demographics has column 'file'
 
     # Write out demographics subset to subset directory
     demographics = os.path.join(pipeline_dir, os.path.basename(demographics))
@@ -183,9 +182,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
     params = dict(
         effect_sizes = dict(es_method = es_method,
                             es_df = es_df,
-                            es_combat = es_combat,
-                            es_combat_batch = (None if es_combat_batch is None
-                                               else '-'.join(es_combat_batch)),
+                            es_batch = (None if es_batch is None
+                                        else '-'.join(es_batch)),
                             es_ncontrols = es_ncontrols),
         clusters = dict(cluster_nk_max = cluster_nk_max,
                         cluster_metric = cluster_metric,
@@ -244,16 +242,13 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
                          demographics = demographics,
                          mask = mask,
                          outdir = os.path.join(es_dir, jac, ''),
-                         matrix_file = es_matrix_file,
-                         parallel = parallel,
                          nproc = nproc,
                          method = es_method)
 
         if es_method == 'normative-growth':
             es_kwargs.update(
                 dict(df = es_df,
-                     combat = es_combat,
-                     combat_batch = es_combat_batch)
+                     batch = es_batch)
             )
         else:
             es_kwargs.update(
@@ -261,6 +256,31 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
             )
 
         es_files = processing.calculate_human_effect_sizes(**es_kwargs)
+
+        # Resample effect size images -----------------------------------------
+        if resolution < 3.0:
+            print("Downsampling effect sizes to 3.0mm...")
+            es_dir_downsampled = es_dir.replace('resolution_{}'.format(resolution),
+                                                'resolution_3.0')
+            es_files_downsampled = utils.resample_images(
+                infiles = es_files,
+                outdir = os.path.join(es_dir_downsampled, jac, ''),
+                isostep = 3.0,
+                parallel = parallel,
+                nproc = nproc
+            )
+        else:
+            es_dir_downsampled = es_dir
+            es_files_downsampled = es_files
+
+        print("Building effect size matrix...")            
+        df_es = processing.build_voxel_matrix(imgfiles = es_files_downsampled,
+                                               mask = mask, file_col = True,
+                                               sort = True, parallel = True,
+                                               nproc = nproc)
+        df_es['file'] = [os.path.basename(file) for file in df_es['file']]
+        df_es.to_csv(os.path.join(es_dir, jac, es_matrix_file))
+
 
     # Cluster effect sizes ----------------------------------------------------
     print("Clustering absolute and relative effect size images...")
@@ -293,7 +313,6 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
         )
         cluster_maps = processing.create_cluster_maps(**cluster_map_kwargs)
 
-    print("Done.")
 
     return
 
