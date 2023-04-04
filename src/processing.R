@@ -1,4 +1,8 @@
-suppressPackageStartupMessages(library(tidyverse))
+ssuppressPackageStartupMessages(library(tibble))
+suppressPackageStartupMessages(library(readr))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(stringr))
 suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(doSNOW))
 
