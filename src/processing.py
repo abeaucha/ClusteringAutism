@@ -15,10 +15,8 @@ from utils import execute_R
 from warnings import warn
 
 
-def normative_growth_norm(imgdir, demographics, mask, outdir,
-                          matrix_file = 'effect_sizes.csv', key = 'file',
-                          df = 5, combat = False, combat_batch = None,
-                          parallel = False, nproc = None):
+def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
+                          df = 3, batch = None, nproc = None):
     """
     Calculate human effect sizes using normative growth modelling.
     
@@ -34,11 +32,8 @@ def normative_growth_norm(imgdir, demographics, mask, outdir,
         Primary key between voxels and demographics data.
     df: int
         Degrees of freedom to use in natural splines.
-    combat: bool
-        Option to run ComBat normalization on batch variables prior to 
-        normative growth modelling.
-    combat_batch: list
-        Variables to use in ComBat normalization.
+    batch: list
+        Variables to use in normalization prior to modelling.
     parallel: bool
         Option to run in parallel.
     nproc: int
@@ -51,39 +46,32 @@ def normative_growth_norm(imgdir, demographics, mask, outdir,
     """
 
     # Unpack function args into dictionary
-    script_args = locals().copy()
+    script_args = dict(imgdir = imgdir,
+                       demographics = demographics,
+                       mask = mask,
+                       outdir = outdir,
+                       key = key,
+                       df = df,
+                       batch = batch,
+                       nproc = nproc)
 
     # ComBat normalization options
-    if combat:
-        script_args['combat'] = 'true'
-        if combat_batch is None:
-            raise Exception("Argument combat_batch must be specified ",
-                            "when combat is True")
-        else:
-            if type(combat_batch) is str:
-                combat_batch = [combat_batch]
-            script_args['combat_batch'] = '-'.join(combat_batch)
-            script_args['combat-batch'] = script_args.pop('combat_batch')
+    if batch is not None:
+        if type(batch) is str:
+            batch = [batch]
+        script_args['batch'] = '-'.join(batch)
     else:
-        script_args['combat'] = 'false'
-        del script_args['combat_batch']
+        del script_args['batch']
 
-    # Parallel options
-    if parallel:
-        script_args['parallel'] = 'true'
-        if nproc is None:
-            raise ValueError("Set the nproc argument to specify the ",
-                             "number of processors to use")
-    else:
-        script_args['parallel'] = 'false'
-
-# Effect size matrix file
-    script_args['matrix-file'] = script_args.pop('matrix_file')
+    # Parallel check
+    if nproc is None:
+        raise ValueError("Set the nproc argument to specify the number of "
+                         "processors to use")
 
     # Execute script
     script = 'normative_growth_normalization.R'
     execute_R(script = script, args = script_args)
-    outfiles = os.listdir(imgdir)
+    outfiles = os.listdir(outdir)
     outfiles = [file for file in outfiles if '.mnc' in file]
     outfiles = [os.path.join(outdir, file) for file in outfiles]
     return outfiles
@@ -218,7 +206,6 @@ def matrix_to_images(x, outfiles, maskfile):
 
 
 def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
-                                 matrix_file = 'effect_sizes.csv',
                                  method = 'normative-growth', parallel = False,
                                  nproc = None, **kwargs):
     """
@@ -236,8 +223,6 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
     outdir: str
         Path to the directory in which to save the effect size
         MINC images.
-    matrix_file: str
-        Name of the CSV file in which to save the effect size matrix.
     method: str
         Method to use to compute effect sizes. 
     parallel: bool
@@ -275,8 +260,6 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
                            demographics=demographics,
                            mask=mask,
                            outdir=outdir,
-                           matrix_file=matrix_file,
-                           parallel=parallel,
                            nproc=nproc))
         outfiles = normative_growth_norm(**kwargs)
 
