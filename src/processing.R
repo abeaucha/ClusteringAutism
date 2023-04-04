@@ -32,7 +32,7 @@ import_image <- function(img, mask = NULL, flatten = TRUE) {
 
 
 import_images <- function(imgfiles, mask = NULL, output_format = "list", 
-                          flatten = TRUE, inparallel = FALSE, nproc = NULL) {
+                          flatten = TRUE, margin = 1, inparallel = FALSE, nproc = NULL) {
   
   #Check output format
   format_opts <- c("list", "matrix", "tibble")
@@ -89,11 +89,23 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
   
   #Convert to output format
   if (output_format != "list") {
-    out <- matrix(data = 0, nrow = imgsize, ncol = length(imgs))
-    for (j in 1:length(imgs)) {
-      out[,j] <- imgs[[j]]
+    if (margin == 1) {
+      nrow = length(imgs)
+      ncol = imgsize
+    } else if (margin == 2) {
+      nrow = imgsize
+      ncol = length(imgs)
+    } else {
+      stop()
     }
-    out <- t(out)
+    out <- matrix(data = 0, nrow = nrow, ncol = ncol)
+    for (i in 1:length(imgs)) {
+      if (margin == 1) {
+        out[i,] <- imgs[[i]]
+      } else if (margin == 2) {
+        out[,i] <- imgs[[i]]
+      }
+    }
     if (output_format == "tibble") {
       colnames(out) <- as.character(1:ncol(out))
       out <- as_tibble(out)
