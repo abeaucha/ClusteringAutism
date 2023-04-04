@@ -19,10 +19,10 @@ suppressPackageStartupMessages(library(RMINC))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option("--demographics",
+  make_option("--imgdir",
               type = "character",
               help = paste("Help message")),
-  make_option("--imgdir",
+  make_option("--demographics",
               type = "character",
               help = paste("Help message")),
   make_option("--mask",
