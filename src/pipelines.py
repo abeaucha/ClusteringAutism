@@ -237,8 +237,6 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
         imgfiles = utils.mk_symlinks(src = input_files_in_dataset,
                                      dst = os.path.join(imgdir, jac, ''))
 
-        sys.exit()
-
         # Compute effect sizes ------------------------------------------------
         print("Computing effect size images...")
         es_kwargs = dict(imgdir = os.path.join(imgdir, jac, ''),
