@@ -12,95 +12,131 @@
 
 suppressPackageStartupMessages(library(optparse))
 suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
 
 
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option('--arg',
-              type = 'character',
+  make_option("--imgdir",
+              type = "character",
               help = paste("Help message")),
-  make_option('--verbose',
-              type = 'character',
-              default = 'true',
-              help = paste("Verbosity option. [default %default]"))
+  make_option("--demographics",
+              type = "character",
+              help = paste("Help message")),
+  make_option("--mask",
+              type = "character"),
+  make_option("--outdir",
+              type = "character",
+              help = paste("Help message")),
+  make_option("--key",
+              type = "character",
+              default = "file",
+              help = paste("Help message")),
+  make_option("--batch",
+              type = "character",
+              help = paste("Help message")),
+  make_option("--nproc",
+              type = "numeric",
+              help = "Number of processors to use in parallel."),
+  make_option("--verbose",
+              type = "character",
+              default = "true",
+              help = "Verbosity [default %default]")
 ) 
 
 
 # Functions ------------------------------------------------------------------
 
-#' Function description
-#'
-#' @param x (class) Parameter description.
-#'
-#' @return (class) Return description.
-template <- function(x){
-  return()
-}
+source("src/processing.R")
 
 
 # Main -----------------------------------------------------------------------
 
 #Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
+imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
-infile <- args[["infile"]]
-outfile <- args[["outfile"]]
+mask <- args[["mask"]]
+key <- args[["key"]]
+batch <- args[["batch"]]
+outdir <- args[["outdir"]]
+nproc <- args[["nproc"]]
+verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
-# if (verbose) {message("")}
+# demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc_wfile.csv"
+# imgdir <- "data/human/registration/jacobians_resampled/resolution_3.0/absolute/"
+# mask <- "data/human/registration/reference_files/mask_3.0mm.mnc"
+# outdir <- "data/human/test/"
+# key <- "file"
+# batch <- "Site-Scanner"
+# nproc <- 8
+# verbose <- TRUE
 
-demographics <- "data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc.csv"
-voxels <- "data/human/derivatives/POND_SickKids/jacobians_3mm/absolute/jacobians.csv"
-outfile <- "data/human/derivatives/POND_SickKids/combat/jacobians_normalized.csv"
-key <- "file"
-
-outdir <- dirname(outfile)
-if (!dir.exists(outdir)) {
-  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
-}
-
-#Import data
+#Import demographics data
+if (verbose) {message("Importing demographics information...")}
 demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
-demographics <- demographics %>% rename(file = File) #REMOVE THIS LINE ONCE FIXED
-voxels <- as_tibble(data.table::fread(voxels, header = TRUE))
 
-#Check existence of key column
+#Check existence of key column in demographics
 if (!(key %in% colnames(demographics))) {
   stop(paste("demographics data is missing key column:", key))
 }
 
-if (!(key %in% colnames(voxels))) {
-  stop(paste("voxels data is missing key column:", key))
-}
-
 #Remove entries with missing diagnosis, age, or sex
-demographics <- demographics %>% 
+demographics <- demographics %>%
   filter(!is.na(DX),
          !is.na(Age),
          !is.na(Sex),
          !is.na(Site),
          !is.na(Scanner))
 
-#Align voxels and demographics rows
-dat <- semi_join(dat, demographics, by = "file")
+#Check existence of key column
+if (!(key %in% colnames(demographics))) {
+  stop(paste("demographics data is missing key column:", key))
+}
 
-ind_match <- match(dat[["file"]], demographics[["file"]])
-demographics <- demographics[ind_match,]
+#Check existence of batch columns
+if (!is.null(batch)) {
+  batch <- str_split(batch, pattern = "-")[[1]]
+  batch_check <- batch %in% colnames(demographics)
+  if (!all(batch_check)) {
+    stop("Batch columns not found in demographics:\n", str_flatten(batch, collapse = "\n"))
+  }
+}
 
-batch <- "Site"
-batch <- demographics[[batch]]
+#Image files
+imgfiles <- list.files(imgdir, full.names = TRUE)
 
-dat <- dat %>% 
-  column_to_rownames(var = "file") %>% 
-  as.matrix() %>% 
-  t()
+#Match image files to demographics
+if (verbose) {message("Matching image files to demographics...")}
+imgs_in_demographics <- basename(imgfiles) %in% demographics[[key]]
+imgfiles <- imgfiles[imgs_in_demographics]
+row_match <- match(basename(imgfiles), demographics[[key]])
+demographics <- demographics[row_match,]
 
-dat_norm <- sva::ComBat(dat = dat,
-                        batch = batch)
+#Import images
+if (verbose) {message("Importing images...")}
+voxels <- import_images(imgfiles = imgfiles, 
+                        mask = mask, 
+                        output_format = "matrix", 
+                        margin = 2,
+                        inparallel = TRUE, 
+                        nproc = nproc)
+gc()
 
-dat_norm <- t(dat_norm)
+#Pull batch information
+batch <- demographics %>% 
+  select(all_of(batch)) %>% 
+  unite(col = batch) %>% 
+  pull(batch)
 
-df_dat_norm <- as_tibble(dat_norm, rownames = "file")
+#Run ComBat normalization
+voxels <- sva::ComBat(dat = voxels, batch = batch)
 
-data.table::fwrite(x = df_dat_norm, file = outfile)
+#Export images
+if (verbose) {message("Exporting ComBat normalized images...")}
+if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
+outfiles <- file.path(outdir, basename(imgfiles))
+matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
+                 margin = 2, nproc = nproc)
 
