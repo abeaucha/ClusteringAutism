@@ -30,3 +30,4 @@ figures/*.pdf
 scripts_old/
 dev.py
 dev.R
+logs/
