@@ -11,7 +11,6 @@ suppressPackageStartupMessages(library(optparse))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(doSNOW))
-suppressPackageStartupMessages(library(tcltk))
 
 
 # Command line arguments -----------------------------------------------------
