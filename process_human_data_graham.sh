@@ -16,7 +16,7 @@ python3 process_human_data.py \
   --demographics data/human/registration/DBM_input_demo_passedqc_wfile.csv \
   --mask data/human/registration/reference_files/mask_3.0mm.mnc \
   --datasets POND SickKids \
-  --nproc 8 \
+  --nproc $SLURM_CPUS_PER_TASK \
   --es-method normative-growth \
   --es-df 3 \
   --es-batch Site-Scanner \
