@@ -4,4 +4,5 @@ scipy
 pandas
 pyminc
 tqdm
+git+https://github.com/h2oai/datatable
 matplotlib
