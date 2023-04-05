@@ -31,14 +31,18 @@ option_list <- list(
   make_option("--mask",
               type = "character",
               help = "Path to the mask file to use."),
+  make_option("--outdir",
+              type = "character",
+              help = paste("Path to output directory.")),
   make_option("--method",
               type = "character",
               default = "mean",
               help = paste("Method used to create the representative cluster",
                            "maps. [default %default]")),
-  make_option("--outdir",
-              type = "character",
-              help = paste("Path to output directory.")),
+  make_option("--nproc",
+              type = "numeric",
+              default = 2,
+              help = paste("Number of processors to use in parallel.")),
   make_option("--verbose",
               type = "character",
               default = "true",
@@ -53,8 +57,9 @@ args <- parse_args(OptionParser(option_list = option_list))
 clusterfile <- args[["cluster-file"]]
 imgdir <- args[["imgdir"]]
 mask <- args[["mask"]]
-method <- args[["method"]]
 outdir <- args[["outdir"]]
+method <- args[["method"]]
+nproc <- args[["nproc"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
 #Create outdir if needed
@@ -64,20 +69,17 @@ if (!dir.exists(outdir)) {
 
 #Import cluster information
 if (verbose) {message("Importing cluster information...")}
-
 df_clusters <- data.table::fread(clusterfile, header = TRUE) %>% 
   as_tibble() %>% 
   column_to_rownames("ID")
 
 #Create cluster maps
-if (verbose) {message("Creating cluster maps...")}
-
-sink(file = "tmp.log", type = "output")
-imgfiles <- list.files(imgdir, full.names = T)
+if (verbose) {message("Creating centroid images...")}
+sink(nullfile(), type = "output")
+imgfiles <- list.files(imgdir, full.names = TRUE, pattern = "*.mnc")
 for (j in 1:ncol(df_clusters)) {
   
   krange <- sort(unique(df_clusters[,j]))
-  
   for (k in krange) {
     
     if (verbose) {
@@ -94,28 +96,27 @@ for (j in 1:ncol(df_clusters)) {
                     "the calculation."))
     }
     
+    #Centroid function
     if (method == "mean") {
-      cluster_map <- mincMean(filenames = files_k,
-                              mask = mask)
-      cluster_map <- cluster_map[,1]
+      centroid <- mean
     } else if (method == "median") {
-      cluster_map <- mincApply(filenames = files_k,
-                               function.string = quote(median(x)),
-                               mask = mask)
+      centroid <- median
     } else {
-      stop("Argument method must be one of {mean, median}.")
+      stop("Argument --method must be one of {mean, median}.")
     }
     
-    class(cluster_map) <- class(mincGetVolume(files_k[1]))
-    attributes(cluster_map) <- attributes(mincGetVolume(files_k[1]))
+    #Create centroid image
+    cluster_map <- mcMincApply(filenames = files_k,
+                               fun = centroid,
+                               mask = mask,
+                               cores = nproc)
     
+    #Export image
     outfile <- paste0("cluster_map_nk_", max(krange), "_k_", k, ".mnc")
     outfile <- file.path(outdir, outfile)
-    
     mincWriteVolume(cluster_map,
                     output.filename = outfile,
                     clobber = TRUE)
   }
 }
-sink(file = NULL)
-system("rm tmp.log")
+sink(NULL)
