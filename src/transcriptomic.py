@@ -21,10 +21,39 @@ def silence():
     sys.stdout = save_stdout
 
 
-def mouse_signature(img, expr, mask, signed = True, threshold = 'top_n',
-                    threshold_value = 0.2, threshold_symmetric = True):
+def mouse_signature(img: str, expr: str, mask: str, signed: bool = True,
+                    threshold: str = 'top_n', threshold_value: float = 0.2,
+                    threshold_symmetric: bool = True):
     """
-    Compute the transcriptomic signature for a mouse image
+    Compute the transcriptomic signature of a mouse image.
+
+    Description
+    -----------
+
+
+    Arguments
+    ---------
+    img: str
+        Path to the image file (.mnc).
+    expr: str
+        Path to the expression matrix file (.csv).
+    mask: str
+        Path to the mask image file used to construct the expression matrix
+        (.mnc).
+    signed: bool, default True
+    threshold: {'top_n', 'intensity'}
+        Method used to threshold the image prior to compute the transcriptomic
+        signature. If None, all non-zero voxels that fall within the mask will
+        be used.
+    threshold_value: float, default 0.2
+        Threshold for the thresholding method. Ignored if `threshold` is None.
+    threshold_symmetric: bool, default True
+        Option to apply the thresholding method symmetrically to positive and
+        negative voxels.
+
+    Returns
+    -------
+    signature:
     """
 
     # Import image
@@ -37,8 +66,8 @@ def mouse_signature(img, expr, mask, signed = True, threshold = 'top_n',
     with silence():
         expr = fread(expr, header = True).to_pandas()
     if np.sum(mask) != expr.shape[0]:
-        raise Exception("The number of voxels in mask does not match the "
-                        "number of rows in expr.")
+        raise Exception("The number of voxels in `mask` does not match the "
+                        "number of rows in `expr`.")
 
     # Threshold the image if desired
     if threshold is not None:

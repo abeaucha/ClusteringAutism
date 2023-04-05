@@ -704,7 +704,7 @@ def threshold_image(img, method = 'top_n', threshold = 0.2, symmetric = True,
                               symmetric = symmetric)
     else:
         raise ValueError("Argument method must be one of "
-                         "['intensity', 'top_n']")
+                         "('intensity', 'top_n')")
 
     return img
 
