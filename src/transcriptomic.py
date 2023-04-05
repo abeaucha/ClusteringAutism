@@ -5,7 +5,7 @@ import multiprocessing as mp
 import numpy as np
 import pandas as pd
 import processing
-#from datatable import fread
+from datatable import fread
 from functools import partial
 from io import StringIO
 from itertools import product
