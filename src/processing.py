@@ -521,7 +521,7 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10,
 
 
 def create_cluster_maps(clusters, imgdir, outdir, mask = None,
-                        method = 'mean', verbose = True):
+                        method = 'mean', nproc = 2, verbose = True):
     """
     Create representative voxel-wise maps for clustered images.
     
@@ -537,6 +537,8 @@ def create_cluster_maps(clusters, imgdir, outdir, mask = None,
         Path to the output directory.
     method: str
         Method used to create the representative cluster maps.
+    nproc: int, default 2
+        Number of processors to use in parallel.
     verbose: bool
         Verbosity option.
         
