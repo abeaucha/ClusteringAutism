@@ -71,7 +71,7 @@ def parse_args():
     parser.add_argument(
         '--human-mask',
         type = str,
-        default = 'data/human/registration/reference_files/mask_1.0mm.mnc',
+        default = 'data/human/registration/v1/reference_files/mask_3.0mm.mnc',
         help = "Path to human mask (.mnc)."
     )
 
@@ -85,7 +85,7 @@ def parse_args():
     parser.add_argument(
         '--human-resolution',
         type = float,
-        default = 1.0,
+        default = 3.0,
         help = "Resolution (mm) of human images."
     )
 
