@@ -70,7 +70,7 @@ def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
 
     # Execute script
     script = 'normative_growth_normalization.R'
-    execute_R(script = script, args = script_args)
+    execute_R(script = script, **script_args)
     outfiles = os.listdir(outdir)
     outfiles = [file for file in outfiles if '.mnc' in file]
     outfiles = [os.path.join(outdir, file) for file in outfiles]
@@ -121,7 +121,7 @@ def propensity_matching_norm(imgdir, demographics, mask, outdir,
         script_args['parallel'] = 'false'
 
     script = 'propensity_matching_normalization.R'
-    execute_R(script = script, args = script_args)
+    execute_R(script = script, **script_args)
     outfiles = glob(outdir + '*.mnc')
     return outfiles
 
@@ -516,7 +516,7 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10,
         del script_args['affinity-file']
 
     script = 'cluster_human_data.R'
-    execute_R(script = script, args = script_args)
+    execute_R(script = script, **script_args)
     return cluster_file
 
 
@@ -565,7 +565,7 @@ def create_cluster_maps(clusters, imgdir, outdir, mask = None,
         del script_args['mask']
 
     script = 'create_cluster_maps.R'
-    execute_R(script = script, args = script_args)
+    execute_R(script = script, **script_args)
     outfiles = glob(outdir + '*.mnc')
     return outfiles
 

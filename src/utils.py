@@ -215,9 +215,14 @@ def mkdir_from_params(params, outdir, metadata = None, params_id = None):
     if metadata is None:
         metadata = os.path.join(outdir, 'metadata.csv')
 
-    params_id_check = get_params_id(params = params, metadata = metadata)
+    try:
+        params_id_check = fetch_params_id(metadata = metadata,
+                                          params = params)
+    except OSError:
+        params_id_check = None
     if params_id_check is None:
-        params_id = set_params_id(params = params, metadata = metadata,
+        params_id = set_params_id(metadata = metadata,
+                                  params = params,
                                   params_id = params_id)
     else:
         if params_id is not None:

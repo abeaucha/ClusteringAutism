@@ -8,6 +8,7 @@ from itertools import product
 from shutil import rmtree
 import sys
 
+
 def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
                                    method = 'mean', transform = None,
                                    transform_like = None, parallel = False,
@@ -114,8 +115,8 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
 def process_human_data(pipeline_dir = 'data/human/derivatives/',
                        input_dir = 'data/human/registration/jacobians_resampled/',
                        resolution = 3.0,
-                       demographics = 'data/human/registration/DBM_input_demo_passedqc_wfile.csv',
-                       mask = 'data/human/registration/reference_files/mask_3.0mm.mnc',
+                       demographics = 'data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv',
+                       mask = 'data/human/registration/v1/reference_files/mask_3.0mm.mnc',
                        datasets = ('POND', 'SickKids'),
                        parallel = True, nproc = None,
                        es_method = 'normative-growth', es_df = 3,
@@ -131,6 +132,7 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
     
     """
 
+    # Convert parameter tuples to lists
     datasets = list(datasets)
     es_batch = list(es_batch)
 
@@ -139,17 +141,20 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
             raise ValueError("Set the nproc argument to specify the "
                              "number of processors to use in parallel.")
 
+    # Effect size calculation method parameters
     if es_method == 'normative-growth':
         es_ncontrols = None
-    else:
+    elif es_method == 'propensity-matching':
         es_df = None
         es_batch = None
+    else:
+        raise ValueError
 
     # Filter for data sets ----------------------------------------------------
 
     # Create output directory for specified datasets
-    pipeline_dir = utils.mkdir_from_list(inlist = datasets,
-                                         basedir = pipeline_dir)
+    pipeline_dir = utils.mkdir_from_list(strings = datasets,
+                                         outdir = pipeline_dir)
 
     # Import demographics
     df_demographics = pd.read_csv(demographics)
@@ -211,8 +216,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
                                  'resolution_{}'.format(resolution),
                                  '')
         stage_dirs[key] = stage_dir
-        params_id = utils.get_params_id(params = stage_params,
-                                        metadata = metadata)
+        params_id = utils.fetch_params_id(metadata = metadata,
+                                          params = stage_params)
 
     # Extract directories for pipeline stages
     es_dir = stage_dirs['effect_sizes']
@@ -232,7 +237,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
         input_files = glob(os.path.join(input_dir, jac, '') + '*.mnc')
         if len(input_files) == 0:
             raise OSError("No input files in directory: ".format(input_dir))
-        input_files_in_dataset = [[f for f in input_files if g in f][0] for g in df_demographics['file'].to_list()]
+        input_files_in_dataset = [[f for f in input_files if g in f][0]
+                                  for g in df_demographics['file'].to_list()]
         imgfiles = utils.mk_symlinks(src = input_files_in_dataset,
                                      dst = os.path.join(imgdir, jac, ''))
 
@@ -260,8 +266,9 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
         # Resample effect size images -----------------------------------------
         if resolution < 3.0:
             print("Downsampling effect sizes to 3.0mm...")
-            es_dir_downsampled = es_dir.replace('resolution_{}'.format(resolution),
-                                                'resolution_3.0')
+            es_dir_downsampled = es_dir.replace(
+                'resolution_{}'.format(resolution),
+                'resolution_3.0')
             es_files_downsampled = utils.resample_images(
                 infiles = es_files,
                 outdir = os.path.join(es_dir_downsampled, jac, ''),
@@ -273,19 +280,18 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
             es_dir_downsampled = es_dir
             es_files_downsampled = es_files
 
-        print("Building effect size matrix...")            
+        print("Building effect size matrix...")
         df_es = processing.build_voxel_matrix(imgfiles = es_files_downsampled,
-                                               mask = mask, file_col = True,
-                                               sort = True, parallel = True,
-                                               nproc = nproc)
+                                              mask = mask, file_col = True,
+                                              sort = True, parallel = True,
+                                              nproc = nproc)
         df_es['file'] = [os.path.basename(file) for file in df_es['file']]
-        df_es.to_csv(os.path.join(es_dir, jac, es_matrix_file))
-
+        df_es.to_csv(os.path.join(es_dir_downsampled, jac, es_matrix_file))
 
     # Cluster effect sizes ----------------------------------------------------
     print("Clustering absolute and relative effect size images...")
     cluster_kwargs = dict(
-        infiles = [os.path.join(es_dir, jac, es_matrix_file)
+        infiles = [os.path.join(es_dir_downsampled, jac, es_matrix_file)
                    for jac in jacobians],
         rownames = 'file',
         nk_max = cluster_nk_max,
@@ -309,10 +315,10 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
             imgdir = os.path.join(es_dir, jac, ''),
             outdir = os.path.join(cluster_map_dir, jac, ''),
             mask = mask,
-            method = cluster_map_method
+            method = cluster_map_method,
+            nproc = nproc
         )
         cluster_maps = processing.create_cluster_maps(**cluster_map_kwargs)
-
 
     return
 
@@ -354,17 +360,17 @@ def compute_cluster_similarity(mouse_cluster_dir, human_cluster_dir,
 
     # Create output directory from parameters
     params = dict(
-        human_input_id=human_input_params_id,
-        human_resolution=human_resolution,
-        mouse_input_id=mouse_input_params_id,
-        mouse_resolution=mouse_resolution,
-        gene_space=gene_space,
-        n_latent_spaces=n_latent_spaces,
-        metric=metric,
-        signed=signed,
-        threshold=threshold,
-        threshold_value=threshold_value,
-        threshold_symmetric=threshold_symmetric
+        human_input_id = human_input_params_id,
+        human_resolution = human_resolution,
+        mouse_input_id = mouse_input_params_id,
+        mouse_resolution = mouse_resolution,
+        gene_space = gene_space,
+        n_latent_spaces = n_latent_spaces,
+        metric = metric,
+        signed = signed,
+        threshold = threshold,
+        threshold_value = threshold_value,
+        threshold_symmetric = threshold_symmetric
     )
     pipeline_dir = utils.mkdir_from_params(params = params,
                                            outdir = pipeline_dir)
@@ -446,19 +452,21 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
                                sim_threshold_symmetric = True,
                                parallel = True,
                                nproc = None):
-
     if parallel:
         if nproc is None:
             raise Exception("Argument --nproc must be specified "
                             "when --parallel true")
-    
+
     # Paths to human directories
     if human_cluster_params_id is None:
         raise Exception("Specify parameter set ID for human clusters.")
     human_pipeline_dir = os.path.join(human_pipeline_dir, human_dataset, '')
     human_es_params_id = human_cluster_params_id.split('-')[0]
-    human_es_dir = os.path.join(human_pipeline_dir, 'effect_sizes', human_es_params_id, 'resolution_3.0', '')
-    human_cluster_dir = os.path.join(human_pipeline_dir, 'clusters', human_cluster_params_id, 'resolution_3.0', '')
+    human_es_dir = os.path.join(human_pipeline_dir, 'effect_sizes',
+                                human_es_params_id, 'resolution_3.0', '')
+    human_cluster_dir = os.path.join(human_pipeline_dir, 'clusters',
+                                     human_cluster_params_id, 'resolution_3.0',
+                                     '')
 
     # Paths to mouse directories
     mouse_pipeline_dir = os.path.join(mouse_pipeline_dir, mouse_dataset, '')
@@ -467,11 +475,14 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
     df_mouse_metadata = utils.fetch_metadata(metadata = mouse_metadata,
                                              cluster_map_method = cluster_map_method)
     mouse_cluster_map_params_id = df_mouse_metadata['id'].values[0]
-    mouse_cluster_map_dir = os.path.join(mouse_cluster_map_dir, mouse_cluster_map_params_id, 'resolution_0.2', '')
+    mouse_cluster_map_dir = os.path.join(mouse_cluster_map_dir,
+                                         mouse_cluster_map_params_id,
+                                         'resolution_0.2', '')
 
     # Output directory
     datasets = '-'.join([mouse_dataset, human_dataset])
-    output_dir = os.path.join(output_dir, datasets, 'permutations', 'similarity', '')
+    output_dir = os.path.join(output_dir, datasets, 'permutations',
+                              'similarity', '')
     params = dict(
         human_input_id = human_cluster_params_id,
         cluster_map_method = cluster_map_method,
@@ -492,20 +503,21 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
                                           human_cluster_params_id,
                                           'resolution_3.0',
                                           '')
-    human_perm_files = processing.permute_cluster_labels(cluster_file = human_cluster_file,
-                                                         outdir = human_cluster_perm_dir,
-                                                         npermutations = npermutations)
+    human_perm_files = processing.permute_cluster_labels(
+        cluster_file = human_cluster_file,
+        outdir = human_cluster_perm_dir,
+        npermutations = npermutations)
 
     # Iterate over permutations
     for p, pfile in enumerate(human_perm_files):
 
-        print("Permutation {} of {}".format(p+1, len(human_perm_files)))
+        print("Permutation {} of {}".format(p + 1, len(human_perm_files)))
 
         perm = os.path.basename(pfile)
         perm = os.path.splitext(perm)[0]
         perm = perm.replace('clusters_', '')
 
-        #Iterate over jacobians
+        # Iterate over jacobians
         jacobians = ['absolute', 'relative']
         for j in jacobians:
 
@@ -513,7 +525,8 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
 
             print("\t\tCreating cluster maps...")
             human_imgdir = os.path.join(human_es_dir, j, '')
-            human_cluster_map_dir = os.path.join(human_perm_dir, 'cluster_maps', 'resolution_3.0', j, '')
+            human_cluster_map_dir = os.path.join(human_perm_dir, 'cluster_maps',
+                                                 'resolution_3.0', j, '')
             cluster_map_kwargs = dict(
                 clusters = pfile,
                 imgdir = human_imgdir,
@@ -521,16 +534,18 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
                 mask = human_mask,
                 method = cluster_map_method
             )
-            human_cluster_maps = processing.create_cluster_maps(**cluster_map_kwargs)
+            human_cluster_maps = processing.create_cluster_maps(
+                **cluster_map_kwargs)
 
-            #TODO: Potentially need to resample cluster maps to 1.0mm here
+            # TODO: Potentially need to resample cluster maps to 1.0mm here
 
             mouse_imgdir = os.path.join(mouse_cluster_map_dir, j, '')
             mouse_cluster_maps = os.listdir(mouse_imgdir)
             mouse_cluster_maps = [os.path.join(mouse_imgdir, img) for img in
                                   mouse_cluster_maps]
 
-            cluster_pairs_all = list(product(mouse_cluster_maps, human_cluster_maps))
+            cluster_pairs_all = list(
+                product(mouse_cluster_maps, human_cluster_maps))
             cluster_pairs = []
             for pair in cluster_pairs_all:
 
@@ -549,7 +564,7 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
                         cluster_pairs.append(pair)
 
             expr = (mouse_expr_dir, human_expr_dir)
-            masks =(mouse_mask, human_mask)
+            masks = (mouse_mask, human_mask)
 
             print("\t\tComputing pairwise cluster similarity...")
 
