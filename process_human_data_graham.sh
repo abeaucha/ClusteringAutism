@@ -9,12 +9,14 @@
 
 source activate_venv.sh
 
+outdir=data/human/derivatives/v1
+
 python3 process_human_data.py \
-  --pipeline-dir /scratch/abeaucha/data/human/derivatives/ \
-  --input-dir data/human/registration/jacobians_resampled/ \
+  --pipeline-dir $SLURM_TMPDIR \
+  --input-dir data/human/registration/v1/jacobians_resampled/ \
   --resolution 3.0 \
-  --demographics data/human/registration/DBM_input_demo_passedqc_wfile.csv \
-  --mask data/human/registration/reference_files/mask_3.0mm.mnc \
+  --demographics data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv \
+  --mask data/human/registration/v1/reference_files/mask_3.0mm.mnc \
   --datasets POND SickKids \
   --nproc $SLURM_CPUS_PER_TASK \
   --es-method normative-growth \
@@ -26,3 +28,5 @@ python3 process_human_data.py \
   --cluster-sigma 0.5 \
   --cluster-t 20 \
   --cluster-map-method mean
+
+cp -r ${SLURM_TMPDIR}/* ${outdir}

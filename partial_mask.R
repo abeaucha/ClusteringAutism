@@ -9,7 +9,7 @@ mask <- floor(mask)
 mask_ind <- which(mask == 1)
 mask_size <- length(mask_ind)
 
-frac <- 0.1
+frac <- 0.75
 mask_frac <- ceiling(frac*mask_size)
 print(mask_frac)
 
