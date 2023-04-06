@@ -206,4 +206,4 @@ if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
 outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]
 outfiles <- file.path(outdir, outfiles)
 matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
-                 margin = 2, nproc = nproc)
+                 margin = 2, nproc = NULL)
