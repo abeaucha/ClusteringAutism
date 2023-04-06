@@ -64,15 +64,15 @@ def parse_args():
     parser.add_argument(
         '--demographics',
         type=str,
-        default='data/human/registration/DBM_input_demo_passedqc_wfile.csv',
+        default='data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv',
         help="Path to file (.csv) containing demographics information."
     )
 
     parser.add_argument(
         '--mask',
         type=str,
-        default='data/human/registration/reference_files/mask_3.0mm.mnc',
-        help=("Path to mask file (.mnc) associated with the study images.")
+        default='data/human/registration/v1/reference_files/mask_3.0mm.mnc',
+        help="Path to mask file (.mnc) associated with the study images."
     )
 
     parser.add_argument(
@@ -86,7 +86,7 @@ def parse_args():
     parser.add_argument(
         '--nproc',
         type=int,
-        help=("Number of processors to use in parallel.")
+        help="Number of processors to use in parallel."
     )
 
     # Effect size arguments ---------------------------------------------------
@@ -96,7 +96,7 @@ def parse_args():
         type=str,
         default=['normative-growth'],
         choices=['normative-growth', 'propensity-matching'],
-        help=("Method to use to compute effect size images.")
+        help="Method to use to compute effect size images."
     )
 
     parser.add_argument(
