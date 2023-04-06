@@ -268,6 +268,60 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                               threshold_symmetric = True, parallel = False,
                               nproc = None):
 
+    """
+    Compute the transcriptomic similarity for a set of mouse and human images.
+
+    Parameters
+    ----------
+    imgs: tuple of str or list of tuple of str
+        A tuple of length 2 containing the paths to the mouse and human images
+        (.mnc) to compare. Multipe pairs of mouse and human images can be
+        passed as a list of tuples.
+    expr: tuple of str
+        A tuple of length 2 containing the paths to the mouse and human
+        expression directories.
+    masks: tuple of str
+        A tuple of length 2 containing the paths to the mouse and human mask
+        images (.mnc).
+    microarray_coords: str
+        The path to the human microarray sample coordinates file (.csv).
+    gene_space: {'average-latent-space', 'latent-space', 'homologous-genes'}
+        The transcriptomic common space to use for comparison.
+    n_latent_spaces: int, default 100
+        The number of latent spaces to aggregate when `gene_space` =
+        'average-latent-space'. Ignored otherwise.
+    latent_space_id: int, default 1
+        The ID of the latent space to use when 'gene_space' = 'latent-space'.
+        Ignored otherwise.
+    metric: str, default 'correlation'
+        The metric used to compute the similarity of mouse and human images.
+    signed: str, default True
+    threshold: {'top_n', 'intensity', None}
+    threshold_value: float, default 0.2
+    threshold_symmetric: bool, default True
+    parallel: bool, default True
+    nproc: int, default None
+
+    Returns
+    -------
+    """
+
+    # If imgs is tuple, convert to list of tuple
+    if type(imgs) is tuple:
+        imgs = [imgs]
+
+    # Check imgs lengths
+    imgs_test = [len(i) for i in imgs]
+    if set(imgs_test) != {2}:
+        raise Exception("`imgs` must either be a tuple of length 2 or a list "
+                        "of tuples of length 2.")
+
+    # Check imgs types
+    imgs_test = [type(i) for i in imgs]
+    if set(imgs_test) != {tuple}:
+        raise Exception("`imgs` must either be a tuple of length 2 or a list "
+                        "of tuples of length 2.")
+
     if gene_space == 'homologous-genes':
 
         expr = list(expr)
@@ -289,10 +343,10 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                                  ids = range(1, n_latent_spaces + 1))
 
     else:
-        raise ValueError("Argument gene_space must be one of "
-                         "['homologous-genes', " 
+        raise ValueError("`gene_space` must be one of "
+                         "{'homologous-genes', " 
                          "'latent-space', " 
-                         "'average-latent-space']")
+                         "'average-latent-space'}")
 
     inputs = list(product(imgs, expr))
 
