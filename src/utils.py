@@ -8,41 +8,40 @@ from re import sub
 from tqdm import tqdm
 
 
-def execute_R(script, args):
+def execute_R(script, **kwargs):
     """
     Execute an R script.
     
-    Arguments
+    Parameters
     ---------
-    :param script: str
-        String containing the name of the R script to execute.
-    :param args: dict
-        Dictionary of key-value pairs containing command line arguments 
-        to pass to the script.
-    
+    script: str
+        Name of the R script to execute.
+    **kwargs: dict, optional
+        Key-value pairs containing command line arguments to pass to the script.
+
     Returns
     -------
-    :return: None
+    None
     """
 
-    args = [['--' + str(key), str(val)] for key, val in args.items()]
-    args = sum(args, [])
-    cmd = ['Rscript'] + [script] + args
+    kwargs = [['--' + str(key), str(val)] for key, val in kwargs.items()]
+    kwargs = sum(kwargs, [])
+    cmd = ['Rscript'] + [script] + kwargs
     subprocess.run(cmd)
     return
 
 
-def mkdir_from_list(inlist, basedir = './', sep = '_'):
+def mkdir_from_list(strings, outdir = './', sep = '_'):
     """
     Create a directory from a list of strings.
     
-    Arguments
+    Parameters
     ---------
-    inlist: list
+    strings: list
         List of strings to use in directory name.
-    basedir: str
+    outdir: str, default './'
         Path to the base directory in which to create the new directory.
-    sep: str
+    sep: str, default '_'
         Separator used to concatenate the strings in `inlist`.
     
     Returns
@@ -51,8 +50,8 @@ def mkdir_from_list(inlist, basedir = './', sep = '_'):
         Path to the new directory.
     """
 
-    inlist = sep.join(inlist)
-    outdir = os.path.join(basedir, inlist)
+    strings = sep.join(strings)
+    outdir = os.path.join(outdir, strings)
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     return outdir
@@ -71,7 +70,25 @@ def get_params_id(params, metadata):
     else:
         return None
 
-def fetch_metadata(metadata, **kwargs):
+
+def fetch_params_metadata(metadata, **kwargs):
+    """
+    Fetch the metadata for a set of parameters.
+
+    Parameters
+    ----------
+    metadata: str
+        Path to the file (.csv) containing parameter set metadata.
+    kwargs: dict, optional
+        The parameter set to look for. If none is provided, all parameter sets
+        found in `metadata` are returned.
+
+    Returns
+    -------
+    df_match: pandas.core.frame.DataFrame or None
+        Parameter sets that matched the parameters provided, or None if no
+        matches found.
+    """
 
     if not os.path.exists(metadata):
         raise OSError("Metadata file not found: {}".format(metadata))
@@ -90,7 +107,63 @@ def fetch_metadata(metadata, **kwargs):
     else:
         return df_match
 
-def set_params_id(params, metadata, params_id = None):
+
+def fetch_params_id(metadata, params):
+    """
+    Fetch the ID for a parameter set.
+
+    Parameters
+    ----------
+    metadata: str
+        Path to the file (.csv) containing parameter set metadata.
+    params: dict
+        The parameter set to look for.
+
+    Returns
+    -------
+    str or None
+        The ID of the parameter set, or None if no parameter set matches the
+        one provided.
+
+    Raises
+    ------
+    Exception
+        If multiple entries are found for the parameters provided.
+    """
+
+    df_metadata = fetch_params_metadata(metadata = metadata, **params)
+    if df_metadata is not None:
+        nmatch = df_metadata.shape[0]
+        if nmatch > 1:
+            raise Exception("Multiple entries found for the parameters "
+                            "provided. Narrow your search.")
+        else:
+            return df_metadata['id'].values[0]
+    else:
+        return None
+
+
+def set_params_id(metadata, params, params_id = None):
+    """
+    Identify a parameter set.
+
+    Parameters
+    ----------
+    metadata: str
+        Path to the file (.csv) containing parameter set metadata. If the file
+        does not yet exist, it will be created.
+    params: dict
+        The parameter set to identify.
+    params_id: str, default None
+        The ID to assign to the parameter set. If None, a random numeric ID is
+        generated.
+
+    Returns
+    -------
+    str
+        The ID of the parameter set.
+    """
+
     df_params = pd.DataFrame(params, index = [0], dtype = str)
     if os.path.exists(metadata):
         df_metadata = pd.read_csv(metadata, dtype = str)
@@ -113,18 +186,38 @@ def set_params_id(params, metadata, params_id = None):
 
 
 def mkdir_from_params(params, outdir, metadata = None, params_id = None):
+    """
+    Create a unique directory for a set of parameters.
+
+    Parameters
+    ----------
+    params: dict
+        The parameter set for which to create the directory.
+    outdir: str
+        Path to the directory in which to create the parameter set directory.
+    metadata: str, default None
+        Path to the metadata file (.csv) in which to store the parameter
+        set information. If None, a file called 'metadata.csv' will be created
+        in the directory passed to `outdir`.
+    params_id: str, default None
+        The ID to assign to the parameter set. If None, a random numeric ID is
+        generated.
+
+    Returns
+    -------
+    outdir: str
+        The path to the unique directory for parameter set.
+    """
+
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
     if metadata is None:
         metadata = os.path.join(outdir, 'metadata.csv')
 
-    params_id_check = get_params_id(params = params,
-                                    metadata = metadata)
-
+    params_id_check = get_params_id(params = params, metadata = metadata)
     if params_id_check is None:
-        params_id = set_params_id(params = params,
-                                  metadata = metadata,
+        params_id = set_params_id(params = params, metadata = metadata,
                                   params_id = params_id)
     else:
         if params_id is not None:
@@ -142,10 +235,10 @@ def mk_symlinks(src, dst):
     """
     Create a set of symbolic links.
     
-    Arguments
+    Parameters
     ---------
     src: list
-        List of paths to the source files.
+        Paths to the source files.
     dst: str
         Path to the directory in which to save the links.
     
@@ -171,19 +264,19 @@ def mk_symlinks(src, dst):
     return dstfiles
 
 
-def random_id(n):
+def random_id(n = 3):
     """
     Create a random ID with a specific number of digits.
     
-    Arguments
+    Parameters
     ---------
-    n: int
-        Number of digits in the random ID.
+    n: int, default 3
+        The number of digits in the random ID.
         
     Returns
     -------
     randid: str
-        Random ID as string.
+        The random ID.
     """
 
     num = randint(0, (10 ** n) - 1)
@@ -196,13 +289,13 @@ def gunzip_file(gzfile, keep = True, outdir = None):
     """
     Unzip a compressed file.
     
-    Arguments
+    Parameters
     ---------
     gzfile: str
         Path to the file to unzip.
-    keep: bool
+    keep: bool, default True
         Option to keep the compressed file after extraction.
-    outdir: str
+    outdir: str, default None
         Path to the output directory. If None, the file will
         be unzipped in its native directory.
         
@@ -226,38 +319,33 @@ def gunzip_file(gzfile, keep = True, outdir = None):
     return outfile
 
 
-def gunzip_files(infiles, keep = True, outdir = None,
-                 parallel = False, nproc = None):
+def gunzip_files(infiles, keep = True, outdir = None, nproc = 1):
     """
     Unzip a set of compressed files.
     
-    Arguments
+    Parameters
     ---------
     infiles: list
-        List of paths to files to unzip.
-    keep: bool
-        Option to keep the compressed files after extraction.
-    outdir: None
-        Path to the output directory. If None, the files will be 
-        unzipped in their native directories.
-    parallel: bool
-        Option to run in parallel.
-    nproc: int
-        Number of processors to use in parallel.
+        Paths to files to unzip.
+    keep: bool, default True
+        Option to keep the original compressed files after extraction.
+    outdir: str, default None
+        Path to the output directory. If None, the files are unzipped in their
+        native directories.
+    nproc: int, default 1
+        Number of processors to use. If `nproc` > 1, the program is executed
+        in parallel.
         
     Returns
     -------
     outfiles: list
-        List of paths to the unzipped files.
+        Paths to the unzipped files.
     """
 
     gunzip_file_partial = partial(gunzip_file,
                                   keep = keep,
                                   outdir = outdir)
-    if parallel:
-        if nproc is None:
-            raise ValueError("Set the nproc argument to specify the number ",
-                             "of processors to use")
+    if nproc > 1:
         pool = mp.Pool(nproc)
         outfiles = []
         for outfile in tqdm(pool.imap(gunzip_file_partial, infiles),
@@ -275,7 +363,7 @@ def nii_to_mnc(infile, keep = True, outdir = None):
     """
     Convert a NIFTY file to MINC format.
     
-    Arguments
+    Parameters
     ---------
     infile: str
         Path to the NIFTY file to convert.
@@ -309,7 +397,7 @@ def mnc_to_nii(infile, keep = True, outdir = None):
     """
     Convert a MINC file to NIFTY format.
     
-    Arguments
+    Parameters
     ---------
     infile: str
         Path to the MINC file to convert.
@@ -344,7 +432,7 @@ def convert_images(infiles, input_format = 'nifty', output_format = 'minc',
     """
     Convert a set of images between NIFTY and MINC formats.
     
-    Arguments
+    Parameters
     ---------
     infiles: list
         List of paths to images to convert.
@@ -411,7 +499,7 @@ def transform_image(infile, like, transform, outdir = None, suffix = None):
         outfile = os.path.join(outdir, outfile)
     else:
         if suffix is None:
-            raise Exception("Arguments outdir and suffix "
+            raise Exception("Parameters outdir and suffix "
                             "cannot both be None.")
 
     # Command line mincresample command
@@ -459,7 +547,7 @@ def resample_image(infile, isostep, outdir = None, suffix = None):
     """
     Resample a MINC image
     
-    Arguments
+    Parameters
     ---------
     infile: str
         Path to the image file to resample.
@@ -495,7 +583,7 @@ def resample_image(infile, isostep, outdir = None, suffix = None):
         outfile = os.path.join(outdir, outfile)
     else:
         if suffix is None:
-            raise Exception("Arguments outdir and suffix "
+            raise Exception("Parameters outdir and suffix "
                             "cannot both be None.")
 
     # Autocrop command
@@ -511,7 +599,7 @@ def resample_images(infiles, isostep, outdir = None, suffix = None,
     """
     Resample a set of MINC images.
      
-    Arguments
+    Parameters
     ---------
     infiles: list
         List of paths to images to resample.
