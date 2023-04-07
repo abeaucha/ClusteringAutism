@@ -180,6 +180,7 @@ demographics <- demographics[row_match,]
 
 #Run normative growth modelling
 if (verbose) {message("Evaluating normative growth models...")}
+sink(nullfile())
 voxels <- mcMincApply(filenames = imgfiles, 
                       fun = compute_normative_zscore,
                       demographics = demographics,
@@ -190,15 +191,7 @@ voxels <- mcMincApply(filenames = imgfiles,
                       return_raw = TRUE)
 voxels <- simplify_masked(voxels[["vals"]])
 gc()
-
-print("Glimpse of voxels matrix:")
-print(voxels[1:5, 1:5])
-print("Dimensions of voxels matrix:")
-print(dim(voxels))
-print("Object size of voxels matrix:")
-print(object.size(voxels)/1e9)
-print("Mem used:")
-print(pryr::mem_used())
+sink(NULL)
 
 #Export images
 if (verbose) {message("Exporting normalized images...")}
