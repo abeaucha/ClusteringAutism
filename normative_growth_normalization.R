@@ -176,6 +176,7 @@ demographics <- demographics[row_match,]
 
 #Run normative growth modelling
 if (verbose) {message("Evaluating normative growth models...")}
+sink(nullfile())
 voxels <- mcMincApply(filenames = imgfiles, 
                       fun = compute_normative_zscore,
                       demographics = demographics,
@@ -185,6 +186,8 @@ voxels <- mcMincApply(filenames = imgfiles,
                       cores = nproc, 
                       return_raw = TRUE)
 voxels <- simplify_masked(voxels[["vals"]])
+sink(NULL)
+gc()
 
 #Export images
 if (verbose) {message("Exporting normalized images...")}
