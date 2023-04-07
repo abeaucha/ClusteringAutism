@@ -10,16 +10,17 @@ from datatable import fread
 from functools import partial
 from glob import glob
 from pyminc.volumes.factory import volumeFromFile, volumeLikeFile
+from shutil import rmtree
 from tqdm import tqdm
 from utils import execute_R
 from warnings import warn
 
 
 def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
-                          df = 3, batch = None, nproc = None):
+                          df = 3, batch = None, nbatches = 1, nproc = None):
     """
     Calculate human effect sizes using normative growth modelling.
-    
+
     Arguments
     ---------
     infile: str
@@ -34,11 +35,9 @@ def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
         Degrees of freedom to use in natural splines.
     batch: list
         Variables to use in normalization prior to modelling.
-    parallel: bool
-        Option to run in parallel.
     nproc: int
         Number of processors to use in parallel.
-    
+
     Returns
     -------
     outfile: str
@@ -68,9 +67,69 @@ def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
         raise ValueError("Set the nproc argument to specify the number of "
                          "processors to use")
 
-    # Execute script
+    # R script
     script = 'normative_growth_normalization.R'
-    execute_R(script = script, **script_args)
+
+    # Option to run in batches
+    if nbatches > 1:
+
+        print("Executing script in batches...")
+
+        # Create voxel batches
+        mask_array = import_image(img = mask, mask = mask)
+        mask_ind = np.arange(len(mask_array))
+        batches = np.array_split(mask_ind, nbatches)
+
+        # Batch directories
+        batch_dirs = ['batch_{}'.format(batch) for batch in range(nbatches)]
+        batch_dirs = [os.path.join(outdir, dir, '') for dir in batch_dirs]
+
+        # Execute script in batches
+        for i, batch in enumerate(batches):
+
+            print("Processing batch {}...".format(i))
+
+            # Create batch mask
+            batch_mask = np.zeros(len(mask_array))
+            batch_mask[batch] = 1
+
+            # Export batch mask
+            batch_dir = batch_dirs[i]
+            if not os.path.exists(batch_dir):
+                os.makedirs(batch_dir)
+            batch_maskfile = os.path.join(batch_dir, 'batch_mask.mnc')
+            vector_to_image(x = batch_mask, outfile = batch_maskfile,
+                            maskfile = mask)
+
+            # Update script args with batch paths
+            script_args.update(dict(mask = batch_maskfile, outdir = batch_dir))
+
+            # Execute script
+            execute_R(script = script, **script_args)
+
+        # Collate batch images
+        print("Collating batched images...")
+        outfiles = os.listdir(batch_dirs[0])
+        outfiles = [file for file in outfiles if file != 'batch_mask.mnc']
+        for outfile in outfiles:
+
+            img = np.zeros_like(mask_array)
+            for b, batch in enumerate(batches):
+                batch_img = os.path.join(batch_dirs[b], outfile)
+                batch_mask = os.path.join(batch_dirs[b], 'batch_mask.mnc')
+                img[batch] = import_image(img = batch_img, mask = batch_mask)
+
+            outfile = os.path.join(outdir, outfile)
+            vector_to_image(x = img, outfile = outfile, maskfile = mask)
+
+        print("Cleaning up...")
+        for batch_dir in batch_dirs:
+            rmtree(batch_dir)
+
+    else:
+
+        execute_R(script = script, **script_args)
+
     outfiles = os.listdir(outdir)
     outfiles = [file for file in outfiles if '.mnc' in file]
     outfiles = [os.path.join(outdir, file) for file in outfiles]
