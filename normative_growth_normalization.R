@@ -186,8 +186,8 @@ voxels <- mcMincApply(filenames = imgfiles,
                       cores = nproc, 
                       return_raw = TRUE)
 voxels <- simplify_masked(voxels[["vals"]])
-sink(NULL)
 gc()
+sink(NULL)
 
 #Export images
 if (verbose) {message("Exporting normalized images...")}
