@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=compute_cluster_similarity
 #SBATCH -N 1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
-#SBATCH --time=12:00:00
+#SBATCH --time=48:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
 #SBATCH --output=logs/compute_cluster_similarity_%j.out
 
@@ -23,5 +23,5 @@ python3 compute_cluster_similarity.py \
 	--human-resolution 3.0 \
 	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_studyspace.csv \
 	--gene-space average-latent-space \
-	--n-latent-spaces 5 \
+	--n-latent-spaces 50 \
 	--nproc $SLURM_CPUS_PER_TASK
