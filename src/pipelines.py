@@ -119,9 +119,9 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
                        mask = 'data/human/registration/v1/reference_files/mask_3.0mm.mnc',
                        datasets = ('POND', 'SickKids'),
                        parallel = True, nproc = None,
-                       es_method = 'normative-growth', es_df = 3,
-                       es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
-                       es_matrix_file = 'effect_sizes.csv',
+                       es_method = 'normative-growth', es_nbatches = 1,
+                       es_df = 3, es_batch = ('Site', 'Scanner'),
+                       es_ncontrols = 10, es_matrix_file = 'effect_sizes.csv',
                        cluster_nk_max = 10, cluster_metric = 'correlation',
                        cluster_K = 10, cluster_sigma = 0.5, cluster_t = 20,
                        cluster_file = 'clusters.csv',
@@ -254,7 +254,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
         if es_method == 'normative-growth':
             es_kwargs.update(
                 dict(df = es_df,
-                     batch = es_batch)
+                     batch = es_batch,
+                     nbatches = es_nbatches)
             )
         else:
             es_kwargs.update(
@@ -472,8 +473,10 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
     mouse_pipeline_dir = os.path.join(mouse_pipeline_dir, mouse_dataset, '')
     mouse_cluster_map_dir = os.path.join(mouse_pipeline_dir, 'cluster_maps', '')
     mouse_metadata = os.path.join(mouse_cluster_map_dir, 'metadata.csv')
-    df_mouse_metadata = utils.fetch_metadata(metadata = mouse_metadata,
-                                             cluster_map_method = cluster_map_method)
+    df_mouse_metadata = utils.fetch_params_metadata(
+        metadata = mouse_metadata,
+        cluster_map_method = cluster_map_method
+    )
     mouse_cluster_map_params_id = df_mouse_metadata['id'].values[0]
     mouse_cluster_map_dir = os.path.join(mouse_cluster_map_dir,
                                          mouse_cluster_map_params_id,
