@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument(
         '--input-dir',
         type=str,
-        default='data/human/registration/jacobians_resampled/',
+        default='data/human/registration/v1/jacobians_resampled/',
         help=("Path to the directory containing Jacobian images. The program "
               "will look for a sub-directory 'resolution_##' using the value "
               "passed to --resolution.")
@@ -97,6 +97,13 @@ def parse_args():
         default=['normative-growth'],
         choices=['normative-growth', 'propensity-matching'],
         help="Method to use to compute effect size images."
+    )
+
+    parser.add_argument(
+        '--es-nbatches',
+        type = int,
+        default = 1,
+        help = "Number of batches to use to process effect sizes."
     )
 
     parser.add_argument(
@@ -217,6 +224,7 @@ if __name__ == '__main__':
     params = {key: val for key, val in args.items()
               if 'es_' in key or 'cluster_' in key}
     del params['es_matrix_file']
+    del params['es_nbatches']
     del params['cluster_file']
     del params['cluster_affinity_file']
     param_keys = list(params.keys())
