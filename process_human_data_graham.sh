@@ -12,7 +12,7 @@ source activate_venv.sh
 outdir=data/human/derivatives/v1
 
 python3 process_human_data.py \
-  --pipeline-dir $SLURM_TMPDIR \
+  --pipeline-dir $outdir \
   --input-dir data/human/registration/v1/jacobians_resampled/ \
   --resolution 3.0 \
   --demographics data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv \
@@ -20,6 +20,7 @@ python3 process_human_data.py \
   --datasets POND SickKids \
   --nproc $SLURM_CPUS_PER_TASK \
   --es-method normative-growth \
+  --es-nbatches 1 \
   --es-df 3 \
   --es-batch Site-Scanner \
   --cluster-nk-max 10 \
@@ -28,5 +29,3 @@ python3 process_human_data.py \
   --cluster-sigma 0.5 \
   --cluster-t 20 \
   --cluster-map-method mean
-
-cp -r ${SLURM_TMPDIR}/* ${outdir}
