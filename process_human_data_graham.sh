@@ -9,7 +9,7 @@
 
 source activate_venv.sh
 
-outdir=data/human/derivatives/v1
+outdir=data/human/derivatives/v1/
 
 python3 process_human_data.py \
   --pipeline-dir $SLURM_TMPDIR \
@@ -29,4 +29,5 @@ python3 process_human_data.py \
   --cluster-t 20 \
   --cluster-map-method mean
 
-cp -r ${SLURM_TMPDIR}/* ${outdir}
+ls $SLURM_TMPDIR
+cp -r ${SLURM_TMPDIR}/POND_SickKids ${outdir}
