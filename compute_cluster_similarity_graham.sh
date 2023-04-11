@@ -11,7 +11,7 @@ source activate_venv.sh
 
 outdir=data/cross_species/v1/Models_135-POND_SickKids/similarity/
 
-python3 compute_cluster_similarity \
+python3 compute_cluster_similarity.py \
 	--pipeline-dir $outdir \
 	--mouse-cluster-dir data/mouse/derivatives/Models_135/cluster_maps/956/ \
 	--human-cluster-dir data/human/derivatives/v1/POND_SickKids/cluster_maps/488-834-817/ \
