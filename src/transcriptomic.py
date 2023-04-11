@@ -295,7 +295,7 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
         Ignored otherwise.
     metric: str, default 'correlation'
         The metric used to compute the similarity of mouse and human images.
-    signed: str, default True
+    signed: bool, default True
     threshold: {'top_n', 'intensity', None}
     threshold_value: float, default 0.2
     threshold_symmetric: bool, default True
