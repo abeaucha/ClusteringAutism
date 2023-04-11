@@ -9,7 +9,7 @@
 
 source activate_venv.sh
 
-outdir=data/human/derivatives/v1
+outdir=data/human/derivatives/v1/
 
 python3 process_human_data.py \
   --pipeline-dir $outdir \

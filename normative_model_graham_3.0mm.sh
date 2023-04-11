@@ -9,18 +9,19 @@
 
 source activate_venv.sh
 
-echo $SLURM_TMPDIR
+outdir=data/human/test/
 
 ti=$(date +"%T")
 echo "Start time: $ti"
-Rscript normative_growth_normalization.R \
-	--imgdir data/human/registration/v1/jacobians_resampled/resolution_3.0/absolute/ \
-	--demographics data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv \
-	--outdir $SLURM_TMPDIR \
-	--mask data/human/registration/v1/reference_files/mask_3.0mm.mnc \
-	--batch Site-Scanner \
-	--nproc $SLURM_CPUS_PER_TASK
+#Rscript normative_growth_normalization.R \
+#	--imgdir data/human/registration/v1/jacobians_resampled/resolution_3.0/absolute/ \
+#	--demographics data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv \
+#	--outdir $SLURM_TMPDIR \
+#	--mask data/human/registration/v1/reference_files/mask_3.0mm.mnc \
+#	--batch Site-Scanner \
+#	--nproc $SLURM_CPUS_PER_TASK
+python3 normative_growth_test.py
 tf=$(date +"%T")
 echo "End time: $tf"
 
-ls $SLURM_TMPDIR
+#cp -r $SLURM_TMPDIR $outdir
