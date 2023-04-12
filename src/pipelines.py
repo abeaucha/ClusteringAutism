@@ -265,7 +265,6 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
 
         es_files = processing.calculate_human_effect_sizes(**es_kwargs)
 
-
         # Resample effect size images -----------------------------------------
         if resolution < 3.0:
             print("Downsampling effect sizes to 3.0mm...")
@@ -279,7 +278,10 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
                 parallel = parallel,
                 nproc = nproc
             )
-            mask_downsampled = utils.resample_image(infile = mask, isostep = 3.0, outdir = es_dir_downsampled, suffix = '_3.0mm')
+            mask_downsampled = utils.resample_image(infile = mask,
+                                                    isostep = 3.0,
+                                                    outdir = es_dir_downsampled,
+                                                    suffix = '_3.0mm')
 
         else:
             es_dir_downsampled = es_dir
@@ -288,12 +290,11 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
 
         print("Building effect size matrix...")
         df_es = processing.build_voxel_matrix(imgfiles = es_files_downsampled,
-                                              mask = mask_downsampled, file_col = True,
-                                              sort = True, parallel = True,
-                                              nproc = nproc)
+                                              mask = mask_downsampled,
+                                              file_col = True, sort = True,
+                                              parallel = True, nproc = nproc)
         df_es['file'] = [os.path.basename(file) for file in df_es['file']]
         df_es.to_csv(os.path.join(es_dir_downsampled, jac, es_matrix_file))
-
 
     # Cluster effect sizes ----------------------------------------------------
     print("Clustering absolute and relative effect size images...")
