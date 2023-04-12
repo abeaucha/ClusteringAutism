@@ -265,7 +265,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
 
         es_files = processing.calculate_human_effect_sizes(**es_kwargs)
 
-        print(es_files[:50])
+        print(es_files[:5])
+        print(es_dir)
         sys.exit()
 
         # Resample effect size images -----------------------------------------
