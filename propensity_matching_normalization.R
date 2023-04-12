@@ -239,7 +239,7 @@ if (inparallel) {
   registerDoSNOW(cl)
   opts <- list(progress=progress)
   tmp <- foreach(i = 1:nrow(participants), 
-                 .packages = c("tidyverse", "RMINC"),
+                 .packages = c("tibble", "readr", "dplyr", "tidyr", "stringr", "RMINC"),
                  .options.snow=opts) %dopar% {
                    executor(participant = participants[i,],
                             controls = controls,
@@ -253,7 +253,7 @@ if (inparallel) {
   stopCluster(cl)
 } else {
   tmp <- foreach(i = 1:nrow(participants), 
-                 .packages = c("tidyverse", "RMINC")) %do% {
+                 .packages = c("tibble", "readr", "dplyr", "tidyr", "stringr", "RMINC")) %do% {
                    progress(n = i)
                    executor(participant = participants[i,],
                             controls = controls,
