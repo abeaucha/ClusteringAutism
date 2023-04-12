@@ -2,7 +2,7 @@
 import processing
 
 imgdir = 'data/human/registration/v1/jacobians_resampled/resolution_0.8/absolute/'
-demographics = 'data/human/derivatives/POND_SickKids/DBM_input_demo_passedqc_wfile.csv'
+demographics = 'data/human/derivatives/v1/POND_SickKids/DBM_input_demo_passedqc_wfile.csv'
 mask = 'data/human/registration/v1/reference_files/mask_0.8mm.mnc'
 outdir = '/scratch/abeaucha/data/human/test/normative_growth/'
 key = 'file'
