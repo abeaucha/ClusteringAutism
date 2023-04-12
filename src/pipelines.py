@@ -480,10 +480,7 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
     mouse_pipeline_dir = os.path.join(mouse_pipeline_dir, mouse_dataset, '')
     mouse_cluster_map_dir = os.path.join(mouse_pipeline_dir, 'cluster_maps', '')
     mouse_metadata = os.path.join(mouse_cluster_map_dir, 'metadata.csv')
-    df_mouse_metadata = utils.fetch_params_metadata(
-        metadata = mouse_metadata,
-        cluster_map_method = cluster_map_method
-    )
+    df_mouse_metadata = utils.fetch_params_metadata(metadata = mouse_metadata, cluster_map_method = cluster_map_method)
     mouse_cluster_map_params_id = df_mouse_metadata['id'].values[0]
     mouse_cluster_map_dir = os.path.join(mouse_cluster_map_dir,
                                          mouse_cluster_map_params_id,
@@ -542,7 +539,8 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
                 imgdir = human_imgdir,
                 outdir = human_cluster_map_dir,
                 mask = human_mask,
-                method = cluster_map_method
+                method = cluster_map_method,
+                nproc = nproc
             )
             human_cluster_maps = processing.create_cluster_maps(
                 **cluster_map_kwargs)
@@ -567,11 +565,14 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
                 h = os.path.basename(h).replace('.mnc', '').split('_')
                 h_nk = int(h[-3])
 
-                if m_nk == h_nk:
-                    m_k = int(m[-1])
-                    h_k = int(h[-1])
-                    if abs(m_k - h_k) < 2:
-                        cluster_pairs.append(pair)
+                if h_nk == 5:
+                    cluster_pairs.append(pair)
+
+                # if m_nk == h_nk:
+                #     m_k = int(m[-1])
+                #     h_k = int(h[-1])
+                #     if abs(m_k - h_k) < 2:
+                #         cluster_pairs.append(pair)
 
             expr = (mouse_expr_dir, human_expr_dir)
             masks = (mouse_mask, human_mask)
