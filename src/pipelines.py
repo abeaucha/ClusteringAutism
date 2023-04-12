@@ -265,6 +265,9 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
 
         es_files = processing.calculate_human_effect_sizes(**es_kwargs)
 
+        print(es_files[:50])
+        sys.exit()
+
         # Resample effect size images -----------------------------------------
         if resolution < 3.0:
             print("Downsampling effect sizes to 3.0mm...")
