@@ -593,7 +593,7 @@ def resample_image(infile, isostep, outdir = None, suffix = None):
 
     # Autocrop command
     cmd_autocrop = ['autocrop', '-quiet', '-clobber',
-                    '-isostep', isostep, infile, outfile]
+                    '-isostep', str(isostep), infile, outfile]
     log = subprocess.run(cmd_autocrop, stdout = subprocess.PIPE)
 
     return outfile
