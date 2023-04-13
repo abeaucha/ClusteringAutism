@@ -5,7 +5,7 @@ import utils
 import pandas as pd
 from glob import glob
 from itertools import product
-from shutil import rmtree
+from shutil import rmtree, copyfile
 from pyminc.volumes.factory import volumeFromFile
 import sys
 
@@ -41,30 +41,37 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
     None
     """
 
+    # Create pipeline directories ---------------------------------------------
+
+    # Path to cluster maps directory
+    resolution_mm = float(resolution) / 1000
+
+    params = dict(resolution = resolution_mm,
+                  cluster_map_method = method)
+    pipeline_dir = utils.mkdir_from_params(params = params,
+                                           outdir = pipeline_dir)
+
+    # Path to clustering directory
+    cluster_dir = os.path.join(pipeline_dir, 'clusters', '')
+    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps', 'resolution_{}'.format(resolution_mm), '')
+
     # Check existence of input directory
     if not os.path.exists(input_dir):
         raise OSError("Input directory not found: {}".format(input_dir))
 
-    # Path to clustering directory
-    cluster_dir = os.path.join(pipeline_dir, 'clusters', '')
+    # Get cluster files -------------------------------------------------------
 
     # Make link to cluster file
-    cluster_file = os.path.join(input_dir, 'Clusters.csv')
-    utils.mk_symlinks(src = [cluster_file],
-                      dst = cluster_dir)
-    os.rename(os.path.join(cluster_dir, os.path.basename(cluster_file)),
-              os.path.join(cluster_dir, 'clusters.csv'))
+    if not os.path.exists(cluster_dir):
+        os.makedirs(cluster_dir)
 
-    # Path to cluster maps directory
-    resolution_mm = float(resolution) / 1000
-    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps')
-    cluster_map_dir = utils.mkdir_from_params(
-        params = dict(cluster_map_method = method),
-        outdir = cluster_map_dir
-    )
-    cluster_map_dir = os.path.join(cluster_map_dir,
-                                   'resolution_{}'.format(resolution_mm),
-                                   '')
+    #Clusters and affinity matrix
+    cluster_file = os.path.join(input_dir, 'Clusters.csv')
+    affinity_file = '/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/SNFMatrix_Paper/WMatrix.RData'
+
+    #Copy files
+    copyfile(cluster_file, os.path.join(cluster_dir, 'clusters.csv'))
+    copyfile(affinity_file, os.path.join(cluster_dir, 'affinity.RData'))
 
     # Iterate over jacobians
     jacobians = ['absolute', 'relative']
@@ -74,6 +81,8 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
 
         # Cluster map directory
         cluster_map_dir_jac = os.path.join(cluster_map_dir, jac, '')
+        if not os.path.exists(cluster_map_dir_jac):
+            os.makedirs(cluster_map_dir_jac)
 
         # Get input files
         jac_short = jac[:3]
