@@ -48,17 +48,10 @@ def parse_args():
     parser.add_argument(
         '--input-dir',
         type=str,
-        default='data/human/registration/v1/jacobians_resampled/',
+        default='data/human/registration/v1/jacobians_resampled/resolution_0.8/',
         help=("Path to the directory containing Jacobian images. The program "
               "will look for a sub-directory 'resolution_##' using the value "
               "passed to --resolution.")
-    )
-
-    parser.add_argument(
-        '--resolution',
-        type=float,
-        default=3.0,
-        help=("Resolution (mm) of Jacobian images to use.")
     )
 
     parser.add_argument(
@@ -71,7 +64,7 @@ def parse_args():
     parser.add_argument(
         '--mask',
         type=str,
-        default='data/human/registration/v1/reference_files/mask_3.0mm.mnc',
+        default='data/human/registration/v1/reference_files/mask_0.8mm.mnc',
         help="Path to mask file (.mnc) associated with the study images."
     )
 
@@ -145,6 +138,14 @@ def parse_args():
     )
 
     # Clustering arguments ---------------------------------------------------
+    parser.add_argument(
+        '--cluster-resolution',
+        nargs = 1,
+        type = float,
+        default = [3.0],
+        help = ""
+    )
+
     parser.add_argument(
         '--cluster-nk-max',
         nargs=1,

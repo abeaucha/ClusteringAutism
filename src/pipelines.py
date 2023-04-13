@@ -6,6 +6,7 @@ import pandas as pd
 from glob import glob
 from itertools import product
 from shutil import rmtree
+from pyminc.volumes.factory import volumeFromFile
 import sys
 
 
@@ -112,16 +113,16 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
     return
 
 
-def process_human_data(pipeline_dir = 'data/human/derivatives/',
-                       input_dir = 'data/human/registration/jacobians_resampled/',
-                       resolution = 3.0,
+def process_human_data(pipeline_dir = 'data/human/derivatives/v1/',
+                       input_dir = 'data/human/registration/v1/jacobians_resampled/resolution_0.8/',
                        demographics = 'data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv',
-                       mask = 'data/human/registration/v1/reference_files/mask_3.0mm.mnc',
+                       mask = 'data/human/registration/v1/reference_files/mask_0.8mm.mnc',
                        datasets = ('POND', 'SickKids'),
                        parallel = True, nproc = None,
                        es_method = 'normative-growth', es_nbatches = 1,
                        es_df = 3, es_batch = ('Site', 'Scanner'),
                        es_ncontrols = 10, es_matrix_file = 'effect_sizes.csv',
+                       cluster_resolution = 3.0,
                        cluster_nk_max = 10, cluster_metric = 'correlation',
                        cluster_K = 10, cluster_sigma = 0.5, cluster_t = 20,
                        cluster_file = 'clusters.csv',
@@ -150,11 +151,55 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
     else:
         raise ValueError
 
-    # Filter for data sets ----------------------------------------------------
+    # Image resolution
+    vol = volumeFromFile(mask)
+    resolution = vol.getSeparations()
+    if len(set(resolution)) == 1:
+        resolution = resolution[0]
+    else:
+        raise Exception
+    vol.closeVolume()
 
-    # Create output directory for specified datasets
-    pipeline_dir = utils.mkdir_from_list(strings = datasets,
-                                         outdir = pipeline_dir)
+    # Create pipeline directories ---------------------------------------------
+
+    # Pipeline parameters
+    params = dict(
+        dataset = '-'.join(datasets),
+        resolution = resolution,
+        es_method = es_method,
+        es_df = es_df,
+        es_batch = (None if es_batch is None
+                    else '-'.join(es_batch)),
+        es_ncontrols = es_ncontrols,
+        cluster_resolution = cluster_resolution,
+        cluster_nk_max = cluster_nk_max,
+        cluster_metric = cluster_metric,
+        cluster_K = cluster_K,
+        cluster_sigma = cluster_sigma,
+        cluster_t = cluster_t,
+        cluster_map_method = cluster_map_method
+    )
+
+    # Create pipeline directory
+    params_id = utils.random_id(3)
+    metadata = os.path.join(pipeline_dir, 'metadata.csv')
+    pipeline_dir = utils.mkdir_from_params(params = params,
+                                           outdir = pipeline_dir,
+                                           params_id = params_id)
+    params_id = utils.fetch_params_id(metadata = metadata,
+                                      params = params)
+
+    # Directories for pipeline stages
+    imgdir = os.path.join(pipeline_dir, 'jacobians', '')
+    es_dir = os.path.join(pipeline_dir, 'effect_sizes', 'resolution_{}'.format(resolution), '')
+    cluster_dir = os.path.join(pipeline_dir, 'clusters', 'resolution_{}'.format(cluster_resolution), '')
+    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps', 'resolution_{}'.format(resolution), '')
+
+    # Check existence of input directory
+    if not os.path.exists(input_dir):
+        raise OSError("Input directory not found: ".format(input_dir))
+
+    # Filter for data sets ----------------------------------------------------
 
     # Import demographics
     df_demographics = pd.read_csv(demographics)
@@ -167,62 +212,6 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
     # Write out demographics subset to subset directory
     demographics = os.path.join(pipeline_dir, os.path.basename(demographics))
     df_demographics.to_csv(demographics, index = False)
-
-    # Create pipeline directories ---------------------------------------------
-
-    # Paths to input directory
-    input_dir = os.path.join(input_dir,
-                             'resolution_{}'.format(resolution),
-                             '')
-    if not os.path.exists(input_dir):
-        raise OSError("Input directory not found: ".format(input_dir))
-
-    # Paths to pipeline image directory
-    imgdir = os.path.join(pipeline_dir,
-                          'jacobians',
-                          'resolution_{}'.format(resolution),
-                          '')
-
-    # Pipeline parameters
-    params = dict(
-        effect_sizes = dict(es_method = es_method,
-                            es_df = es_df,
-                            es_batch = (None if es_batch is None
-                                        else '-'.join(es_batch)),
-                            es_ncontrols = es_ncontrols),
-        clusters = dict(cluster_nk_max = cluster_nk_max,
-                        cluster_metric = cluster_metric,
-                        cluster_K = cluster_K,
-                        cluster_sigma = cluster_sigma,
-                        cluster_t = cluster_t),
-        cluster_maps = dict(cluster_map_method = cluster_map_method)
-    )
-
-    # Create directories for pipeline stages based on parameters
-    stage_params = {}
-    stage_dirs = {}
-    for key, val in params.items():
-        if key == list(params.keys())[0]:
-            params_id = utils.random_id(3)
-        else:
-            params_id = '-'.join([params_id, utils.random_id(3)])
-        stage_params.update(val)
-        stage_dir = os.path.join(pipeline_dir, key, '')
-        metadata = os.path.join(stage_dir, 'metadata.csv')
-        stage_dir = utils.mkdir_from_params(params = stage_params,
-                                            outdir = stage_dir,
-                                            params_id = params_id)
-        stage_dir = os.path.join(stage_dir,
-                                 'resolution_{}'.format(resolution),
-                                 '')
-        stage_dirs[key] = stage_dir
-        params_id = utils.fetch_params_id(metadata = metadata,
-                                          params = stage_params)
-
-    # Extract directories for pipeline stages
-    es_dir = stage_dirs['effect_sizes']
-    cluster_dir = stage_dirs['clusters']
-    cluster_map_dir = stage_dirs['cluster_maps']
 
     # Execute pipeline --------------------------------------------------------
 
@@ -265,15 +254,15 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/',
         es_files = processing.calculate_human_effect_sizes(**es_kwargs)
 
         # Resample effect size images -----------------------------------------
-        if resolution < 3.0:
-            print("Downsampling effect sizes to 3.0mm...")
+        if resolution != cluster_resolution:
+            print("Downsampling effect sizes to {}mm...".format(cluster_resolution))
             es_dir_downsampled = es_dir.replace(
                 'resolution_{}'.format(resolution),
                 'resolution_3.0')
             es_files_downsampled = utils.resample_images(
                 infiles = es_files,
                 outdir = os.path.join(es_dir_downsampled, jac, ''),
-                isostep = 3.0,
+                isostep = cluster_resolution,
                 parallel = parallel,
                 nproc = nproc
             )
