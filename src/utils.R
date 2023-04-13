@@ -1,7 +1,7 @@
 suppressPackageStartupMessages(library(tidyverse))
 
 
-fetch_metadata <- function(metadata, ...) {
+fetch_params_metadata <- function(metadata, ...) {
   kwargs <- list(...)
   
   if (!file.exists(metadata)) {
