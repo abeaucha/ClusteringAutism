@@ -3,15 +3,14 @@
 #SBATCH -N 1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=8:00:00
+#SBATCH --time=24:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
-#SBATCH --output=logs/process_human_data_0.8mm_%j.out
+#SBATCH --output=logs/process_human_data_0.8mm_propensity_%j.out
 
 source activate_venv.sh
 
 outdir=/scratch/abeaucha/data/human/derivatives/v1/
 
-#Takes about 5 hours
 ti=$(date +"%T")
 echo "Start time: $ti"
 python3 process_human_data.py \
@@ -22,10 +21,8 @@ python3 process_human_data.py \
   --mask data/human/registration/v1/reference_files/mask_0.8mm.mnc \
   --datasets POND SickKids \
   --nproc $SLURM_CPUS_PER_TASK \
-  --es-method normative-growth \
-  --es-nbatches 4 \
-  --es-df 3 \
-  --es-batch Site-Scanner \
+  --es-method propensity-matching \
+  --es-ncontrols 10 \
   --cluster-nk-max 10 \
   --cluster-metric correlation \
   --cluster-K 10 \
