@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=process_human_data
 #SBATCH -N 1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
