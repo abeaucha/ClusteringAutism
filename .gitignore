@@ -22,6 +22,8 @@ analyses/cluster_permutations/*.pdf
 analyses/cluster_permutations/*.html
 analyses/human_processing_comparison/outputs
 analyses/cluster_nk_optimization/outputs
+analyses/cluster_nk_optimization/*.pdf
+analyses/cluster_nk_optimization/*.html
 analyses/troubleshoot_effect_sizes/*.pdf
 figures/figure1
 figures/*.pdf
