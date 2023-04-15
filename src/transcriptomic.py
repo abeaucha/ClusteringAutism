@@ -188,21 +188,13 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                                       threshold_value = 0.2,
                                       threshold_symmetric = True):
     """
-    Compute the similarity between a mouse image and a human image. 
+    Compute the similarity between a human image and a mouse image. 
     
     """
 
-    img_mouse, img_human = imgs
-    expr_mouse, expr_human = expr
-    mask_mouse, mask_human = masks
-
-    mouse = mouse_signature(img = img_mouse,
-                            expr = expr_mouse,
-                            mask = mask_mouse,
-                            signed = signed,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
+    img_human, img_mouse = imgs
+    expr_human, expr_mouse = expr
+    mask_human, mask_mouse = masks
 
     human = human_signature(img = img_human,
                             expr = expr_human,
@@ -212,10 +204,18 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                             threshold = threshold,
                             threshold_value = threshold_value,
                             threshold_symmetric = threshold_symmetric)
+    
+    mouse = mouse_signature(img = img_mouse,
+                            expr = expr_mouse,
+                            mask = mask_mouse,
+                            signed = signed,
+                            threshold = threshold,
+                            threshold_value = threshold_value,
+                            threshold_symmetric = threshold_symmetric)
 
     if signed:
         sim = []
-        for signatures in zip(mouse, human):
+        for signatures in zip(human, mouse):
             sim.append(similarity(x = signatures[0],
                                   y = signatures[1],
                                   metric = metric))
@@ -228,8 +228,8 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
         sim = np.mean(sim)
 
     else:
-        sim = similarity(x = mouse,
-                         y = human,
+        sim = similarity(x = human,
+                         y = mouse,
                          metric = metric)
 
     return sim
@@ -347,9 +347,9 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                          "{'homologous-genes', " 
                          "'latent-space', " 
                          "'average-latent-space'}")
-
+        
     inputs = list(product(imgs, expr))
-
+    
     tempfunc_partial = partial(tempfunc,
                                masks = masks,
                                microarray_coords = microarray_coords,
@@ -379,6 +379,6 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
     )
 
     if gene_space == 'average-latent-space':
-        out = out.groupby(by = ['mouse_img', 'human_img'], as_index = False).mean().copy()
+        out = out.groupby(by = ['human_img','mouse_img'], as_index = False).mean().copy()
 
     return out

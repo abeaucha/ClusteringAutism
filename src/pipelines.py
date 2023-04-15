@@ -394,7 +394,7 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
     # Combine mouse and human data into tuples
     expr = (human_expr_dir, mouse_expr_dir)
     masks = (human_mask, mouse_mask)
-
+             
     # Iterate over Jacobians
     jacobians = ['absolute', 'relative']
     for j, jac in enumerate(jacobians):
@@ -418,7 +418,7 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
 
         # Expand mouse and human cluster map combinations
         cluster_pairs = list(product(human_cluster_maps, mouse_cluster_maps))
-
+        
         # Compute pairwise similarity between cluster maps
         out = transcriptomic.transcriptomic_similarity(
             imgs = cluster_pairs,
