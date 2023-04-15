@@ -274,14 +274,14 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
     Parameters
     ----------
     imgs: tuple of str or list of tuple of str
-        A tuple of length 2 containing the paths to the mouse and human images
-        (.mnc) to compare. Multipe pairs of mouse and human images can be
+        A tuple of length 2 containing the paths to the human and mouse images
+        (.mnc) to compare. Multiple pairs of human and mouse images can be
         passed as a list of tuples.
     expr: tuple of str
-        A tuple of length 2 containing the paths to the mouse and human
+        A tuple of length 2 containing the paths to the human and mouse
         expression directories.
     masks: tuple of str
-        A tuple of length 2 containing the paths to the mouse and human mask
+        A tuple of length 2 containing the paths to the human and mouse mask
         images (.mnc).
     microarray_coords: str
         The path to the human microarray sample coordinates file (.csv).
@@ -326,8 +326,8 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
 
         expr = list(expr)
         expr_files = (
-            'MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv',
             'HumanExpressionMatrix_samples_pipeline_abagen_homologs_scaled.csv'
+            'MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv',
         )
         for i, path in enumerate(expr):
             expr[i] = os.path.join(path, 'input_space', expr_files[i])
@@ -373,8 +373,8 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
         sim = list(map(tempfunc_partial, tqdm(inputs)))
 
     out = pd.DataFrame(
-        dict(mouse_img = [x[0][0] for x in inputs],
-             human_img = [x[0][1] for x in inputs],
+        dict(human_img = [x[0][0] for x in inputs],
+             mouse_img = [x[0][1] for x in inputs],
              similarity = sim)
     )
 
