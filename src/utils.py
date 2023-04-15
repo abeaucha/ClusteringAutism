@@ -384,7 +384,7 @@ def nii_to_mnc(infile, keep = True, outdir = None):
         Path to the converted MINC file.
     """
 
-    subprocess.run(['nii2mnc', '-quiet', 'clobber', infile])
+    subprocess.run(['nii2mnc', '-quiet', '-clobber', infile])
     outfile = sub(r'.nii', '.mnc', infile)
     if not keep:
         subprocess.run(['rm', infile])

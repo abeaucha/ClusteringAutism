@@ -30,20 +30,41 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/cross_species/similarity/',
+        default = 'data/cross_species/v1/',
         help = "Path to pipeline output directory."
     )
-
+    
     parser.add_argument(
-        '--mouse-cluster-dir',
+        '--human-pipeline-dir',
         type = str,
-        help = "Path to directory containing mouse cluster maps."
+        default = 'data/human/derivatives/v1/',
+        help = "Path to human pipeline directory."
     )
 
     parser.add_argument(
-        '--human-cluster-dir',
+        '--mouse-pipeline-dir',
         type = str,
-        help = "Path to directory containing human cluster maps."
+        default = 'data/human/derivatives/v2/',
+        help = "Path to mouse pipeline directory."
+    )
+    
+    parser.add_argument(
+        '--human-params-id',
+        type = str,
+        help = "Human pipeline ID"
+    )
+    
+    parser.add_argument(
+        '--mouse-params-id',
+        type = str,
+        help = "Mouse pipeline ID"
+    )
+    
+    parser.add_argument(
+        '--human-expr-dir',
+        type = str,
+        default = 'data/human/expression/',
+        help = "Path to human expression directory."
     )
 
     parser.add_argument(
@@ -54,12 +75,12 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--human-expr-dir',
+        '--human-mask',
         type = str,
-        default = 'data/human/expression/',
-        help = "Path to human expression directory."
+        default = 'data/human/registration/v1/reference_files/mask_3.0mm.mnc',
+        help = "Path to human mask (.mnc)."
     )
-
+    
     parser.add_argument(
         '--mouse-mask',
         type = str,
@@ -69,30 +90,9 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--human-mask',
-        type = str,
-        default = 'data/human/registration/v1/reference_files/mask_3.0mm.mnc',
-        help = "Path to human mask (.mnc)."
-    )
-
-    parser.add_argument(
-        '--mouse-resolution',
-        type = float,
-        default = 0.2,
-        help = "Resolution (mm) of mouse images."
-    )
-
-    parser.add_argument(
-        '--human-resolution',
-        type = float,
-        default = 3.0,
-        help = "Resolution (mm) of human images."
-    )
-
-    parser.add_argument(
         '--human-microarray-coords',
         type = str,
-        default = 'data/human/expression/AHBA_microarray_coordinates_studyspace.csv',
+        default = 'data/human/expression/AHBA_microarray_coordinates_studyspace_v1.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
                 "the AHBA microarray samples.")
     )

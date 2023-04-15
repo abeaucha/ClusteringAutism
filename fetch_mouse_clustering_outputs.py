@@ -38,9 +38,9 @@ def parse_args():
     )
     
     parser.add_argument(
-        '--output-dir',
+        '--pipeline-dir',
         type = str,
-        default = 'data/mouse/derivatives/Models_135/',
+        default = 'data/mouse/derivatives/v2/',
         help = ("Path to output directory.")
     )
     
