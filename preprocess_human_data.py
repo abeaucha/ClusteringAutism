@@ -108,7 +108,6 @@ def main():
             print("\tExtracting compressed images...")
         unzipped_files = utils.gunzip_files(infiles = input_files,
                                             keep = True,
-                                            parallel = parallel,
                                             nproc = nproc)
 
         if verbose:
