@@ -2,28 +2,26 @@
 #SBATCH --job-name=process_human_data
 #SBATCH -N 1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
-#SBATCH --time=8:00:00
+#SBATCH --mem=32G
+#SBATCH --time=12:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
-#SBATCH --output=logs/process_human_data_0.8mm_%j.out
+#SBATCH --output=logs/process_human_data_v1_3.0mm_%j.out
 
 source activate_venv.sh
 
-#Takes about 5 hours
 ti=$(date +"%T")
 echo "Start time: $ti"
 python3 process_human_data.py \
-  --pipeline-dir data/human/derivatives/v1/ \
-  --input-dir data/human/registration/v1/jacobians_resampled/resolution_0.8/ \
-  --demographics data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv \
-  --mask data/human/registration/v1/reference_files/mask_0.8mm.mnc \
+  --pipeline-dir data/human/derivatives/v2/ \
+  --input-dir data/human/registration/v2/jacobians_resampled/resolution_3.0/ \
+  --demographics data/human/registration/v2/subject_info/demographics.csv \
+  --mask data/human/registration/v2/reference_files/mask_3.0mm.mnc \
   --datasets POND SickKids \
   --nproc $SLURM_CPUS_PER_TASK \
   --es-method normative-growth \
-  --es-nbatches 4 \
+  --es-nbatches 1 \
   --es-df 3 \
   --es-batch Site-Scanner \
-  --cluster-resolution 3.0 \
   --cluster-nk-max 10 \
   --cluster-metric correlation \
   --cluster-K 10 \

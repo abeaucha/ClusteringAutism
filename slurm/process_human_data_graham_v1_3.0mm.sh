@@ -9,12 +9,10 @@
 
 source activate_venv.sh
 
-outdir=data/human/derivatives/v1/
-
 ti=$(date +"%T")
 echo "Start time: $ti"
 python3 process_human_data.py \
-  --pipeline-dir $outdir \
+  --pipeline-dir data/human/derivatives/v1/ \
   --input-dir data/human/registration/v1/jacobians_resampled/resolution_3.0/ \
   --demographics data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv \
   --mask data/human/registration/v1/reference_files/mask_3.0mm.mnc \
