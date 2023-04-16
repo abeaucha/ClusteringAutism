@@ -9,6 +9,8 @@
 
 source activate_venv.sh
 
+ti=$(date +"%T")
+echo "Start time: $ti"
 python3 compute_cluster_similarity.py \
 	--pipeline-dir data/cross_species/v2/ \
 	--human-pipeline-dir data/human/derivatives/v2/ \
@@ -23,3 +25,5 @@ python3 compute_cluster_similarity.py \
 	--gene-space average-latent-space \
 	--n-latent-spaces 50 \
 	--nproc $SLURM_CPUS_PER_TASK
+tf=$(date +"%T")
+echo "End time: $tf"
