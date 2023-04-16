@@ -5,7 +5,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
-#SBATCH --output=logs/process_human_data_3.0mm_%j.out
+#SBATCH --output=logs/process_human_data_v1_3.0mm_%j.out
 
 source activate_venv.sh
 
