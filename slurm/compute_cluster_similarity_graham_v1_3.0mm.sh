@@ -3,12 +3,13 @@
 #SBATCH -N 1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
-#SBATCH --time=48:00:00
+#SBATCH --time=12:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
 #SBATCH --output=logs/compute_cluster_similarity_v1_3.0mm_%j.out
 
 source activate_venv.sh
 
+#Takes about 10 hours
 ti=$(date +"%T")
 echo "Start time: $ti"
 python3 compute_cluster_similarity.py \
