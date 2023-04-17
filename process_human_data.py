@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type=str,
-        default='data/human/derivatives/',
+        default='data/human/derivatives/v2/',
         help=("Path to the directory in which to store pipeline outputs. "
               "A sub-directory will be created based on the datasets specified "
               "using --datasets. Directories for the various pipeline stages "
@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument(
         '--input-dir',
         type=str,
-        default='data/human/registration/v1/jacobians_resampled/resolution_0.8/',
+        default='data/human/registration/v2/jacobians_resampled/resolution_0.8/',
         help=("Path to the directory containing Jacobian images. The program "
               "will look for a sub-directory 'resolution_##' using the value "
               "passed to --resolution.")
@@ -57,14 +57,14 @@ def parse_args():
     parser.add_argument(
         '--demographics',
         type=str,
-        default='data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv',
+        default='data/human/registration/v2/subject_info/demographics.csv',
         help="Path to file (.csv) containing demographics information."
     )
 
     parser.add_argument(
         '--mask',
         type=str,
-        default='data/human/registration/v1/reference_files/mask_0.8mm.mnc',
+        default='data/human/registration/v2/reference_files/mask_0.8mm.mnc',
         help="Path to mask file (.mnc) associated with the study images."
     )
 
@@ -95,7 +95,7 @@ def parse_args():
     parser.add_argument(
         '--es-nbatches',
         type = int,
-        default = 1,
+        default = 4,
         help = "Number of batches to use to process effect sizes."
     )
 
