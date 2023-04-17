@@ -324,7 +324,7 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v1/',
 
 def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
                                human_params_id, mouse_params_id,
-                               pipeline_dir = 'data/similarity/',
+                               pipeline_dir = 'data/cross_species/',
                                human_expr_dir = 'data/human/expression/',
                                mouse_expr_dir = 'data/mouse/expression/',
                                human_mask = 'data/human/registration/reference_files/mask_3.0mm.mnc',
@@ -378,6 +378,9 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
     # Create pipeline directory for parameter set
     pipeline_dir = utils.mkdir_from_params(params = params,
                                            outdir = pipeline_dir)
+    pipeline_dir = os.path.join(pipeline_dir, 'similarity', '')
+    if not os.path.exists(pipeline_dir):
+        os.makedirs(pipeline_dir)
 
     # Image resolutions
     human_resolution = params['human_resolution']
@@ -394,7 +397,7 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
     # Combine mouse and human data into tuples
     expr = (human_expr_dir, mouse_expr_dir)
     masks = (human_mask, mouse_mask)
-             
+
     # Iterate over Jacobians
     jacobians = ['absolute', 'relative']
     for j, jac in enumerate(jacobians):
@@ -418,7 +421,7 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
 
         # Expand mouse and human cluster map combinations
         cluster_pairs = list(product(human_cluster_maps, mouse_cluster_maps))
-        
+
         # Compute pairwise similarity between cluster maps
         out = transcriptomic.transcriptomic_similarity(
             imgs = cluster_pairs,
@@ -445,86 +448,72 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
     return
 
 
-def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
+def permute_cluster_similarity(pipeline_dir, params_id,
+                               human_pipeline_dir = 'data/human/derivatives/',
                                mouse_pipeline_dir = 'data/mouse/derivatives/',
                                human_expr_dir = 'data/human/expression/',
                                mouse_expr_dir = 'data/mouse/expression/',
-                               human_mask = 'data/human/registration/reference_files/mask_3.0mm.mnc',
+                               human_mask = 'data/human/registration/reference_files/v2/mask_0.8mm.mnc',
                                mouse_mask = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
-                               human_microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_studyspace.csv',
-                               output_dir = 'data/cross_species/',
-                               human_cluster_params_id = None,
-                               human_dataset = 'POND_SickKids',
-                               mouse_dataset = 'Models_135',
-                               npermutations = 100,
-                               cluster_map_method = 'mean',
-                               sim_gene_space = 'average-latent-space',
-                               sim_n_latent_spaces = 5,
-                               sim_latent_space_id = 1,
-                               sim_metric = 'correlation',
-                               sim_signed = True,
-                               sim_threshold = 'top_n',
-                               sim_threshold_value = 0.2,
-                               sim_threshold_symmetric = True,
-                               parallel = True,
-                               nproc = None):
-    if parallel:
-        if nproc is None:
-            raise Exception("Argument --nproc must be specified "
-                            "when --parallel true")
+                               human_microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_studyspace_v2.csv',
+                               npermutations = 100, nproc = 1):
 
-    # Paths to human directories
-    if human_cluster_params_id is None:
-        raise Exception("Specify parameter set ID for human clusters.")
-    human_pipeline_dir = os.path.join(human_pipeline_dir, human_dataset, '')
-    human_es_params_id = human_cluster_params_id.split('-')[0]
-    human_es_dir = os.path.join(human_pipeline_dir, 'effect_sizes',
-                                human_es_params_id, 'resolution_3.0', '')
-    human_cluster_dir = os.path.join(human_pipeline_dir, 'clusters',
-                                     human_cluster_params_id, 'resolution_3.0',
-                                     '')
+    #Get parameter set with specified ID
+    params_metadata = os.path.join(pipeline_dir, 'metadata.csv')
+    if not os.path.exists(params_metadata):
+        raise OSError("File not found: {}".params_metadata)
+    params = utils.fetch_params_metadata(params_metadata, id = str(params_id))
 
-    # Paths to mouse directories
-    mouse_pipeline_dir = os.path.join(mouse_pipeline_dir, mouse_dataset, '')
-    mouse_cluster_map_dir = os.path.join(mouse_pipeline_dir, 'cluster_maps', '')
-    mouse_metadata = os.path.join(mouse_cluster_map_dir, 'metadata.csv')
-    df_mouse_metadata = utils.fetch_params_metadata(
-        metadata = mouse_metadata,
-        cluster_map_method = cluster_map_method
-    )
-    mouse_cluster_map_params_id = df_mouse_metadata['id'].values[0]
-    mouse_cluster_map_dir = os.path.join(mouse_cluster_map_dir,
-                                         mouse_cluster_map_params_id,
-                                         'resolution_0.2', '')
+    #Pipeline directory
+    pipeline_dir = os.path.join(pipeline_dir, params_id, 'permutations', '')
+    if not os.path.exists(pipeline_dir):
+        os.makedirs(pipeline_dir)
 
     # Output directory
-    datasets = '-'.join([mouse_dataset, human_dataset])
-    output_dir = os.path.join(output_dir, datasets, 'permutations',
-                              'similarity', '')
-    params = dict(
-        human_input_id = human_cluster_params_id,
-        cluster_map_method = cluster_map_method,
-        gene_space = sim_gene_space,
-        n_latent_spaces = sim_n_latent_spaces,
-        metric = sim_metric,
-        signed = sim_signed,
-        threshold = sim_threshold,
-        threshold_value = sim_threshold_value,
-        threshold_symmetric = sim_threshold_symmetric
-    )
-    output_dir = utils.mkdir_from_params(params = params, outdir = output_dir)
+    output_dir = os.path.join(pipeline_dir, 'similarity', '')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    #Human and mouse parameter set IDs
+    human_params_id = params['human_id'].values[0]
+    mouse_params_id = params['mouse_id'].values[0]
+
+    #Human and mouse pipeline resolutions
+    human_resolution = params['human_resolution'].values[0]
+    human_cluster_resolution = params['human_cluster_resolution'].values[0]
+    mouse_resolution = params['mouse_resolution'].values[0]
+
+    #Human directories
+    human_pipeline_dir = os.path.join(human_pipeline_dir, human_params_id, '')
+    human_es_dir = os.path.join(human_pipeline_dir, 'effect_sizes', 'resolution_{}'.format(human_resolution), '')
+    human_cluster_dir = os.path.join(human_pipeline_dir, 'clusters', 'resolution_{}'.format(human_cluster_resolution), '')
+
+    #Mouse directories
+    mouse_pipeline_dir = os.path.join(mouse_pipeline_dir, mouse_params_id, '')
+    mouse_cluster_map_dir = os.path.join(mouse_pipeline_dir, 'cluster_maps', 'resolution_{}'.format(mouse_resolution),)
 
     # Permute cluster labels
-    human_perm_dir = os.path.join(human_pipeline_dir, 'permutations', '')
     human_cluster_file = os.path.join(human_cluster_dir, 'clusters.csv')
-    human_cluster_perm_dir = os.path.join(human_perm_dir, 'clusters',
-                                          human_cluster_params_id,
-                                          'resolution_3.0',
-                                          '')
+    human_cluster_perm_dir = os.path.join(pipeline_dir, 'clusters', '')
     human_perm_files = processing.permute_cluster_labels(
         cluster_file = human_cluster_file,
         outdir = human_cluster_perm_dir,
         npermutations = npermutations)
+
+    #Human cluster centroid method
+    cluster_map_method = params['human_cluster_map_method'].values[0]
+
+    # Transcriptomic similarity args
+    similarity_kwargs = params[['gene_space', 'n_latent_spaces',
+                                'latent_space_id', 'metric', 'signed',
+                                'threshold', 'threshold_value',
+                                'threshold_symmetric']]
+    similarity_kwargs = similarity_kwargs.to_dict(orient = 'list')
+    similarity_kwargs = {key:val[0] for key, val in similarity_kwargs.items()}
+    similarity_kwargs['n_latent_spaces'] = int(similarity_kwargs['n_latent_spaces'])
+    similarity_kwargs['signed'] = bool(similarity_kwargs['signed'])
+    similarity_kwargs['threshold_value'] = float(similarity_kwargs['threshold_value'])
+    similarity_kwargs['threshold_symmetric'] = bool(similarity_kwargs['threshold_symmetric'])
 
     # Iterate over permutations
     for p, pfile in enumerate(human_perm_files):
@@ -541,70 +530,62 @@ def permute_cluster_similarity(human_pipeline_dir = 'data/human/derivatives/',
 
             print("\tProcessing {} Jacobians...".format(j))
 
+            # Create permuted human cluster maps
             print("\t\tCreating cluster maps...")
-            human_imgdir = os.path.join(human_es_dir, j, '')
-            human_cluster_map_dir = os.path.join(human_perm_dir, 'cluster_maps',
-                                                 'resolution_3.0', j, '')
+            human_imgdir = os.path.join(pipeline_dir, 'cluster_maps',
+                                        'resolution_{}'.format(human_resolution),
+                                        j, '')
             cluster_map_kwargs = dict(
                 clusters = pfile,
-                imgdir = human_imgdir,
-                outdir = human_cluster_map_dir,
+                imgdir = os.path.join(human_es_dir, j, ''),
+                outdir = human_imgdir,
                 mask = human_mask,
                 method = cluster_map_method
             )
             human_cluster_maps = processing.create_cluster_maps(
                 **cluster_map_kwargs)
 
-            # TODO: Potentially need to resample cluster maps to 1.0mm here
-
+            # Get mouse cluster maps
             mouse_imgdir = os.path.join(mouse_cluster_map_dir, j, '')
             mouse_cluster_maps = os.listdir(mouse_imgdir)
             mouse_cluster_maps = [os.path.join(mouse_imgdir, img) for img in
                                   mouse_cluster_maps]
 
+            # Identify cluster pairs to evaluate
             cluster_pairs_all = list(
-                product(mouse_cluster_maps, human_cluster_maps))
+                product(human_cluster_maps, mouse_cluster_maps))
             cluster_pairs = []
             for pair in cluster_pairs_all:
 
-                m = pair[0]
-                m = os.path.basename(m).replace('.mnc', '').split('_')
-                m_nk = int(m[-3])
-
-                h = pair[1]
+                h = pair[0]
                 h = os.path.basename(h).replace('.mnc', '').split('_')
                 h_nk = int(h[-3])
 
-                if m_nk == h_nk:
-                    m_k = int(m[-1])
-                    h_k = int(h[-1])
-                    if abs(m_k - h_k) < 2:
-                        cluster_pairs.append(pair)
+                m = pair[1]
+                m = os.path.basename(m).replace('.mnc', '').split('_')
+                m_nk = int(m[-3])
 
-            expr = (mouse_expr_dir, human_expr_dir)
-            masks = (mouse_mask, human_mask)
+                if h_nk == 5:
+                    cluster_pairs.append(pair)
+                # if m_nk == h_nk:
+                #     m_k = int(m[-1])
+                #     h_k = int(h[-1])
+                #     if abs(m_k - h_k) < 2:
+                #         cluster_pairs.append(pair)
 
             print("\t\tComputing pairwise cluster similarity...")
-
-            sim = transcriptomic.transcriptomic_similarity(
+            similarity_kwargs.update(dict(
                 imgs = cluster_pairs,
-                expr = expr,
-                masks = masks,
+                expr = (human_expr_dir, mouse_expr_dir),
+                masks = (human_mask, mouse_mask),
                 microarray_coords = human_microarray_coords,
-                gene_space = sim_gene_space,
-                n_latent_spaces = sim_n_latent_spaces,
-                latent_space_id = sim_latent_space_id,
-                metric = sim_metric,
-                signed = sim_signed,
-                threshold = sim_threshold,
-                threshold_value = sim_threshold_value,
-                threshold_symmetric = sim_threshold_symmetric,
-                parallel = parallel,
+                parallel = True if nproc > 1 else False,
                 nproc = nproc
-            )
+            ))
+            sim = transcriptomic.transcriptomic_similarity(**similarity_kwargs)
 
             outfile = 'similarity_{}_{}.csv'.format(perm, j)
             outfile = os.path.join(output_dir, outfile)
             sim.to_csv(outfile, index = False)
 
-    rmtree(os.path.join(human_perm_dir, 'cluster_maps'))
+    rmtree(os.path.join(pipeline_dir, 'cluster_maps'))

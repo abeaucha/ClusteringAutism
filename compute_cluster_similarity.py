@@ -30,21 +30,21 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/cross_species/v1/',
+        default = 'data/cross_species/v2/',
         help = "Path to pipeline output directory."
     )
     
     parser.add_argument(
         '--human-pipeline-dir',
         type = str,
-        default = 'data/human/derivatives/v1/',
+        default = 'data/human/derivatives/v2/',
         help = "Path to human pipeline directory."
     )
 
     parser.add_argument(
         '--mouse-pipeline-dir',
         type = str,
-        default = 'data/human/derivatives/v2/',
+        default = 'data/mouse/derivatives/v2/',
         help = "Path to mouse pipeline directory."
     )
     
@@ -77,7 +77,7 @@ def parse_args():
     parser.add_argument(
         '--human-mask',
         type = str,
-        default = 'data/human/registration/v1/reference_files/mask_3.0mm.mnc',
+        default = 'data/human/registration/v2/reference_files/mask_3.0mm.mnc',
         help = "Path to human mask (.mnc)."
     )
     
@@ -92,7 +92,7 @@ def parse_args():
     parser.add_argument(
         '--human-microarray-coords',
         type = str,
-        default = 'data/human/expression/AHBA_microarray_coordinates_studyspace_v1.csv',
+        default = 'data/human/expression/AHBA_microarray_coordinates_studyspace_v2.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
                 "the AHBA microarray samples.")
     )
