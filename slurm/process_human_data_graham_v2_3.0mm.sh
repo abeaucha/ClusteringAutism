@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=process_human_data
 #SBATCH -N 1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
@@ -19,7 +19,7 @@ python3 process_human_data.py \
   --datasets POND SickKids \
   --nproc $SLURM_CPUS_PER_TASK \
   --es-method normative-growth \
-  --es-nbatches 1 \
+  --es-nbatches 2 \
   --es-df 3 \
   --es-batch Site-Scanner \
   --cluster-nk-max 10 \

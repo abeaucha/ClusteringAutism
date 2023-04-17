@@ -20,7 +20,7 @@ python3 process_human_data.py \
   --datasets POND SickKids \
   --nproc $SLURM_CPUS_PER_TASK \
   --es-method normative-growth \
-  --es-nbatches 4 \
+  --es-nbatches 8 \
   --es-df 3 \
   --es-batch Site-Scanner \
   --cluster-resolution 3.0 \
