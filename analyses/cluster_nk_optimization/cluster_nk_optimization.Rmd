@@ -65,46 +65,71 @@ estimate_cluster_metrics <- function (W, NUMC = 2:5){
 }
 ```
 
-```{r parameters}
+
+```{r directories}
 #Parameters
 output_dir <- "outputs"
-mouse_dataset <- "Models_135"
-human_dataset <- "POND_SickKids"
 
-#Mouse clustering directory
-mouse_cluster_dir <- "../../data/mouse/derivatives/"
-mouse_cluster_dir <- file.path(mouse_cluster_dir, mouse_dataset, "clusters")
+#Human pipeline
+human_version <- "v1"
+human_pipeline_dir <- "../../data/human/derivatives/"
+human_pipeline_dir <- file.path(human_pipeline_dir, human_version)
 
-#Human parameters
-es_method <- 'normative-growth'
-# es_method <- 'propensity-matching'
-es_df <- 3
-# es_df <- NA
-es_ncontrols <- NA
-# es_ncontrols <- 10
-cluster_sigma <- 0.5
-cluster_K <- 10
-
-#Human_clustering directory
-human_cluster_dir <- "../../data/human/derivatives/v1/"
-human_cluster_dir <- file.path(human_cluster_dir, human_dataset, "clusters")
-human_metadata <- file.path(human_cluster_dir, "metadata.csv")
-df_metadata <- fetch_params_metadata(metadata = human_metadata, 
-                                     es_method = es_method,
-                                     es_df = es_df,
-                                     es_ncontrols = es_ncontrols,
-                                     cluster_sigma = cluster_sigma, 
-                                     cluster_K = cluster_K)
-
-human_cluster_params_id <- pull(df_metadata, "id")
-human_cluster_dir <- file.path(human_cluster_dir, human_cluster_params_id, "resolution_0.8")
-
-output_dir <- file.path(output_dir, str_c("H", human_cluster_params_id))
-if (!(dir.exists(output_dir))) {
-  dir.create(output_dir, recursive = TRUE)
-}
+#Mouse pipeline
+mouse_version <- "v2"
+mouse_pipeline_dir <- "../../data/mouse/derivatives/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_version)
 ```
 
+```{r mouse-params}
+mouse_resolution <- 0.2
+mouse_cluster_map_method <- "mean"
+
+mouse_metadata <- file.path(mouse_pipeline_dir, "metadata.csv")
+mouse_params <- fetch_params_metadata(mouse_metadata, 
+                                      resolution = mouse_resolution,
+                                      cluster_map_method = mouse_cluster_map_method)
+mouse_params
+```
+
+```{r human-params}
+human_resolution <- 0.8
+human_es_method <- 'normative-growth'
+human_es_df <- 3
+human_cluster_map_method <- mouse_cluster_map_method
+
+
+human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
+human_params <- fetch_params_metadata(metadata = human_metadata,
+                                        resolution = human_resolution,
+                                        es_method = human_es_method,
+                                        es_df = human_es_df,
+                                        cluster_map_method = human_cluster_map_method)
+human_params
+```
+
+```{r parameters}
+#Parameter set IDs
+mouse_params_id <- 107
+human_params_id <- 700
+# human_params_id <- 547
+
+#Mouse clustering directory
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters")
+human_cluster_dir <- file.path(human_pipeline_dir, human_params_id, "clusters")
+
+human_params <- fetch_params_metadata(metadata = human_metadata, 
+                                      id = human_params_id)
+human_cluster_resolution <- human_params[["cluster_resolution"]]
+human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
+human_cluster_dir <- file.path(human_cluster_dir, str_c("resolution_", human_cluster_resolution))
+
+params_id <- str_c(str_c("H", human_params_id), 
+                   str_c("M", mouse_params_id), 
+                   sep = "-")
+output_dir <- file.path(output_dir, params_id)
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
 
 ```{r import}
 #Human cluster assignments
@@ -183,7 +208,7 @@ estimateNumberOfClustersGivenGraph(W = mat_human_affinity, NUMC = 2:nk_max)
 
 ```{r fig.width = 6, fig.height = 5}
 #Get human cluster labels for given nk
-nk_human <- 3
+nk_human <- 6
 df_human_labels_nk <- tibble(patient = colnames(df_human_affinity),
                              k = spectralClustering(affinity = mat_human_affinity,
                                                     K = nk_human))
