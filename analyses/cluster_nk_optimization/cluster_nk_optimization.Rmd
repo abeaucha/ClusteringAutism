@@ -93,7 +93,11 @@ mouse_params
 ```
 
 ```{r human-params}
+<<<<<<< HEAD
 human_resolution <- 0.8
+=======
+human_resolution <- 3.0
+>>>>>>> main
 human_es_method <- 'normative-growth'
 human_es_df <- 3
 human_cluster_map_method <- mouse_cluster_map_method
