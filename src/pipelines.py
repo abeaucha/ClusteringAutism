@@ -565,7 +565,7 @@ def permute_cluster_similarity(pipeline_dir, params_id,
                 m = os.path.basename(m).replace('.mnc', '').split('_')
                 m_nk = int(m[-3])
 
-                if h_nk == 5:
+                if h_nk == 6:
                     cluster_pairs.append(pair)
                 # if m_nk == h_nk:
                 #     m_k = int(m[-1])
