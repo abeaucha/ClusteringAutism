@@ -67,7 +67,7 @@ estimate_cluster_metrics <- function (W, NUMC = 2:5){
 
 
 ```{r directories}
-#Parameters
+#Output directory
 output_dir <- "outputs"
 
 #Human pipeline
@@ -94,7 +94,7 @@ mouse_params
 
 ```{r human-params}
 human_resolution <- 3.0
-human_es_method <- 'normative-growth'
+human_es_method <- "normative-growth"
 human_es_df <- 3
 human_cluster_map_method <- mouse_cluster_map_method
 
@@ -127,7 +127,7 @@ human_cluster_dir <- file.path(human_cluster_dir, str_c("resolution_", human_clu
 params_id <- str_c(str_c("H", human_params_id), 
                    str_c("M", mouse_params_id), 
                    sep = "-")
-output_dir <- file.path(output_dir, params_id)
+output_dir <- file.path(output_dir, human_version, params_id)
 if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 

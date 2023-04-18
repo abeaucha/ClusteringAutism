@@ -3,7 +3,7 @@
 
 outdir=data/human/expression/
 #coordinates=${outdir}AHBA_microarray_coordinates_mni.csv
-coordinates=${outdir}AHBA_microarray_coordinates_studyspace_v2.csv
+coordinates=${outdir}AHBA_microarray_coordinates_studyspace_v1.csv
 
 tags=$(basename $coordinates .csv).tag
 tags=${outdir}$tags
