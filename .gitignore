@@ -4,7 +4,6 @@ __pycache__/
 plots_temp/
 data/
 .Rhistory
-jacob_code
 dev.ipynb
 analyses/*.html
 analyses/troubleshoot_cluster_similarity/data/
@@ -30,5 +29,6 @@ figures/*.pdf
 .idea
 /.Rprofile
 scripts_old/
+templates/
 dev.py
 dev.R
