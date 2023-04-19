@@ -3,7 +3,7 @@
 #SBATCH -N 1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
-#SBATCH --time=48:00:00
+#SBATCH --time=24:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
 #SBATCH --output=logs/compute_cluster_similarity_v2_0.8mm_%j.out
 
