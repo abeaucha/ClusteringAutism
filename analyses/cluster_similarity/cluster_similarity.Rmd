@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ```{r packages}
 suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(data.tree))
 suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
 suppressPackageStartupMessages(library(patchwork))
@@ -23,6 +24,7 @@ suppressPackageStartupMessages(library(gridExtra))
 source("../../src/utils.R")
 source("../../src/processing.R")
 source("../../src/analysis.R")
+source("../../src/tree_tools.R")
 ```
 
 ```{r directories}
@@ -329,5 +331,144 @@ grid.newpage()
 grid.draw(ss_grob)
 ```
 
+# Mouse and human polar plots
+
+```{r}
+#Import mouse atlas labels
+mouse_labels_file <- "../../data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc"
+mouse_labels <- mincGetVolume(mouse_labels_file)
+
+#Import mouse atlas definitions
+mouse_defs_file <- "../../data/mouse/atlas/DSURQE_40micron_R_mapping_long.csv"
+mouse_defs <- read_csv(mouse_defs_file, show_col_types = FALSE) %>% 
+  select(name = Structure, label = Label)
+
+#Import mouse neuroanatomical tree
+mouse_tree_file <- "../../data/mouse/expression/MouseExpressionTree_DSURQE.RData"
+load(mouse_tree_file)
+mouse_tree <- Clone(treeMouseExpr)
+rm(treeMouseExpr)
+
+#Import human microarray atlas labels
+human_labels_file <- str_c("AHBA_microarray_labels_studyspace_", version, "_", human_resolution, "mm.mnc")
+human_labels_file <- file.path("../../data/human/expression/", human_labels_file)
+human_labels <- mincGetVolume(human_labels_file)
+human_labels <- round(human_labels)
+
+#Import human microarray atlas definitions
+human_defs_file <- "../../data/human/expression/AHBA_microarray_coordinates_mni_defs.csv"
+human_defs <- read_csv(human_defs_file, show_col_types = FALSE)
+
+#Import human neuroanatomical tree
+human_tree_file <- "../../data/human/expression/HumanExpressionTree.RData"
+load(human_tree_file)
+human_tree <- Clone(treeHumanExpr)
+rm(treeHumanExpr)
+
+#Import mapping for mouse-human neuroanatomical homologues
+neuro_file <- "../../data/cross_species/MouseHumanMatches_H10M09.csv"
+df_spokes <- read_csv(neuro_file, show_col_types = FALSE)
+colnames(df_spokes) <- str_to_lower(colnames(df_spokes))
+df_spokes <- df_spokes %>% 
+  filter(!(name %in% c("White matter", "Ventricles")))
+```
+
+
+
+```{r}
+tree <- Clone(human_tree)
+mask <- human_mask
+defs <- human_defs
+labels <- human_labels
+remove <- TRUE
+imgdir <- human_cluster_map_dirs[[1]]
+structs <- df_spokes[["human"]]
+nk <- nk_human
+k <- k_human
+sign <- "negative"
+
+human_atlas_reduced <- reduce_human_atlas(tree = human_tree,
+                                          labels = labels,
+                                          defs = defs,
+                                          nodes = structs, 
+                                          remove = TRUE)
+
+
+```
+
+
+```{r}
+cluster_dirs <- c("human" = human_cluster_map_dirs[[1]], 
+                  "mouse" = mouse_cluster_map_dirs[[1]])
+
+#Mouse and human trees
+trees <- list("human" = human_tree,
+              "mouse" = mouse_tree)
+
+#Mouse and human labels
+labels <- list("human" = human_labels,
+               "mouse" = mouse_labels)
+
+#Mouse and human definitions
+defs <- list("human" = human_defs,
+             "mouse" = mouse_defs)
+
+masks <- list("human" = human_mask,
+              "mouse" = mouse_mask)
+
+nk <- list("human" = nk_human,
+           "mouse" = nk_mouse)
+
+k <- list("human" = k_human,
+          "mouse" = k_mouse)
+
+spokes <- df_spokes
+
+
+
+species <- c("human", "mouse")
+fractions <- vector(mode = "list", length = length(species))
+names(fractions) <- species
+
+s <- species[1]
+
+if (s == "human") {
+  reduce_atlas <- reduce_human_atlas
+} else {
+  reduce_atlas <- reduce_mouse_atlas
+}
+
+atlas <- reduce_atlas(tree = trees[[s]],
+                      labels = labels[[s]],
+                      defs = defs[[s]],
+                      nodes = spokes[[s]],
+                      remove = TRUE)
+
+positive_fractions <- compute_cluster_fractions(cluster_dir = cluster_dirs[[s]],
+                                                nk = nk[[s]],
+                                                k = k[[s]],
+                                                labels = atlas[["labels"]],
+                                                defs = atlas[["defs"]],
+                                                mask = masks[[s]],
+                                                sign = "positive",
+                                                threshold = threshold, 
+                                                threshold_value = threshold_value,
+                                                threshold_symmetric = threshold_symmetric,
+                                                threshold_comparison = threshold_comparison)
+
+negative_fractions <- compute_cluster_fractions(cluster_dir = cluster_dirs[[s]],
+                                                nk = nk[[s]],
+                                                k = k[[s]],
+                                                labels = atlas[["labels"]],
+                                                defs = atlas[["defs"]],
+                                                mask = masks[[s]],
+                                                sign = "negative",
+                                                threshold = threshold, 
+                                                threshold_value = threshold_value,
+                                                threshold_symmetric = threshold_symmetric,
+                                                threshold_comparison = threshold_comparison)
+
+
+```
 
 
