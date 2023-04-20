@@ -9,6 +9,7 @@ from pyminc.volumes.factory import volumeFromFile
 # Directories
 expr_dir = 'data/human/expression'
 registration_dir = 'data/human/registration/'
+# version = 'v1'
 version = 'v2'
 
 # Expression inputs
@@ -17,7 +18,10 @@ annotations = 'AHBA_microarray_sample_annotations.csv'
 
 # Registration inputs
 template = 'model_0.8mm.mnc'
-transforms = ['to_target_0GenericAffine.mat', 'to_target_1Warp.nii']
+# transforms = ['average_to_icbm_nlin_sym_09c0GenericAffine.mat', 
+#               'average_to_icbm_nlin_sym_09c1Warp.nii.gz']
+transforms = ['to_target_0GenericAffine.mat', 
+              'to_target_1Warp.nii']
 
 if __name__ == '__main__':
 
