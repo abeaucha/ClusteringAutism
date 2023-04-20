@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=permute_cluster_similarity
 #SBATCH -N 1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
