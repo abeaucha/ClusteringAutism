@@ -2,8 +2,9 @@
 # Convert a CSV of coordinates to Tag point format
 
 outdir=data/human/expression/
-#coordinates=${outdir}AHBA_microarray_coordinates_mni.csv
-coordinates=${outdir}AHBA_microarray_coordinates_studyspace_v1.csv
+# coordinates=${outdir}AHBA_microarray_coordinates_mni.csv
+# coordinates=${outdir}AHBA_microarray_coordinates_study_v1.csv
+coordinates=${outdir}AHBA_microarray_coordinates_study_v2.csv
 
 tags=$(basename $coordinates .csv).tag
 tags=${outdir}$tags
