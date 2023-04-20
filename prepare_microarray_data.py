@@ -1,17 +1,21 @@
 #!.venv/bin/python3
 
+# Packages
 import os
 import transcriptomic
 from pyminc.volumes.factory import volumeFromFile
 
-
+# Global variables
+# Directories
 expr_dir = 'data/human/expression'
 registration_dir = 'data/human/registration/'
 version = 'v2'
 
+# Expression inputs
 metadata = 'SampleInformation_pipeline_abagen.csv'
 annotations = 'AHBA_microarray_sample_annotations.csv'
 
+# Registration inputs
 template = 'model_0.8mm.mnc'
 transforms = ['to_target_0GenericAffine.mat', 'to_target_1Warp.nii']
 
