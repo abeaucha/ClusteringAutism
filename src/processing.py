@@ -781,7 +781,7 @@ def mask_from_image(img, signed = False):
     return mask
 
 
-def permute_cluster_labels(cluster_file, outdir, npermutations = 100):
+def permute_cluster_labels(cluster_file, outdir, npermutations = 100, start = 1):
 
     outdir = os.path.join(outdir, '')
     if not os.path.exists(outdir):
@@ -791,7 +791,7 @@ def permute_cluster_labels(cluster_file, outdir, npermutations = 100):
     cols = df_clusters.drop('ID', axis = 1).columns
 
     outfiles = []
-    for p in range(1, npermutations+1):
+    for p in range(start, start+npermutations):
 
         df_permute = df_clusters.copy()
         for col in cols:

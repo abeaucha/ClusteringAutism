@@ -449,13 +449,13 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
 
 
 def permute_cluster_similarity(pipeline_dir, params_id,
-                               human_pipeline_dir = 'data/human/derivatives/',
-                               mouse_pipeline_dir = 'data/mouse/derivatives/',
+                               human_pipeline_dir = 'data/human/derivatives/v2/',
+                               mouse_pipeline_dir = 'data/mouse/derivatives/v2/',
                                human_expr_dir = 'data/human/expression/',
                                mouse_expr_dir = 'data/mouse/expression/',
                                human_mask = 'data/human/registration/reference_files/v2/mask_0.8mm.mnc',
                                mouse_mask = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
-                               human_microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_studyspace_v2.csv',
+                               human_microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study_v2.csv',
                                npermutations = 100, nproc = 1):
 
     #Get parameter set with specified ID
