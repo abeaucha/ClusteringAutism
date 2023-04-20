@@ -5,7 +5,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
-#SBATCH --output=logs/permute_cluster_similarity_v1_0.8mm_%j.out
+#SBATCH --output=logs/permute_cluster_similarity_v2_0.8mm_21-30%j.out
 
 source activate_venv.sh
 
@@ -22,6 +22,7 @@ python3 permute_cluster_similarity.py \
 	--human-mask data/human/registration/v2/reference_files/mask_0.8mm.mnc \
 	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_study_v2.csv \
 	--npermutations 10 \
+	--permutations-start 21 \
 	--nproc $SLURM_CPUS_PER_TASK
 tf=$(date +"%T")
 echo "End time: $tf"
