@@ -5,7 +5,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
-#SBATCH --output=logs/permute_cluster_similarity_v2_0.8mm_21-30%j.out
+#SBATCH --output=logs/permute_cluster_similarity_v2_0.8mm_21_30_%j.out
 
 source activate_venv.sh
 
