@@ -93,11 +93,10 @@ mouse_params
 ```
 
 ```{r human-params}
-human_resolution <- 3.0
+human_resolution <- 0.8
 human_es_method <- "normative-growth"
 human_es_df <- 3
 human_cluster_map_method <- mouse_cluster_map_method
-
 
 human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
 human_params <- fetch_params_metadata(metadata = human_metadata,
@@ -111,8 +110,8 @@ human_params
 ```{r parameters}
 #Parameter set IDs
 mouse_params_id <- 107
-# human_params_id <- 700
-human_params_id <- 547
+human_params_id <- 700
+# human_params_id <- 547
 
 #Mouse clustering directory
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters")
