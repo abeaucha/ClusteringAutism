@@ -22,7 +22,7 @@ python3 compute_cluster_similarity.py \
 	--human-expr-dir data/human/expression/ \
 	--mouse-mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 	--human-mask data/human/registration/v1/reference_files/mask_3.0mm.mnc \
-	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_studyspace_v1.csv \
+	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_study_v1.csv \
 	--gene-space average-latent-space \
 	--n-latent-spaces 50 \
 	--nproc $SLURM_CPUS_PER_TASK
