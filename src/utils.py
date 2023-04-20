@@ -653,3 +653,61 @@ def resample_images(infiles, isostep, outdir = None, suffix = None,
         outfiles = list(map(resampler, tqdm(infiles)))
 
     return outfiles
+
+
+def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
+
+    """
+    Transform coordinates from one space to another
+
+    Parameters
+    ----------
+    infile: str
+        Path to the coordinates to transform (.csv)
+    outfile: str
+        Path to the file in which to save transformed coordinates (.csv)
+    transforms: tuple of str
+        Paths to the transform files specified in the order of application.
+    orientation: str, default 'RAS'
+        The world coordinate system of the input coordinates.
+
+    Returns
+    -------
+    outfile: str
+        Path to the file in which to save transformed coordinates (.csv)
+    """
+
+    # If RAS orientation, convert to LPS
+    if orientation == 'RAS':
+        coordinates = pd.read_csv(infile)
+        coordinates['x'] = -1 * coordinates['x']
+        coordinates['y'] = -1 * coordinates['y']
+        infile = infile.replace('.csv', '_LPS.csv')
+        coordinates.to_csv(infile, index = False)
+    elif orientation == 'LPS':
+        pass
+    else:
+        raise ValueError("`orientation` must be one of {'RAS', 'LPS'}")
+
+    # Concatenate transforms
+    transforms = list(reversed(transforms))
+    transforms = [['-t', i] for i in transforms]
+    transforms = sum(transforms, [])
+
+    # ANTs transform command
+    cmd = ['antsApplyTransformsToPoints',
+           '-d', str(3),
+           '-i', infile,
+           '-o', outfile]
+    cmd = cmd + transforms
+    subprocess.run(cmd)
+
+    # Return to RAS orientation
+    if orientation == 'RAS':
+        coordinates = pd.read_csv(outfile)
+        coordinates['x'] = -1 * coordinates['x']
+        coordinates['y'] = -1 * coordinates['y']
+        coordinates.to_csv(outfile, index = False)
+        os.remove(infile)
+
+    return outfile

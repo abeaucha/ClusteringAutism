@@ -1,6 +1,7 @@
 import contextlib
 import os
 import sys
+import utils
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
@@ -19,6 +20,64 @@ def silence():
     sys.stdout = StringIO()
     yield
     sys.stdout = save_stdout
+
+
+def fetch_microarray_coordinates(metadata, outfile, labels = True,
+                                 verbose = False):
+    script_args = locals().copy()
+    script_args['labels'] = 'true' if script_args['labels'] else 'false'
+    script_args['verbose'] = 'true' if script_args['verbose'] else 'false'
+    script = 'fetch_microarray_coordinates.R'
+    utils.execute_R(script = script, **script_args)
+    return outfile
+
+
+def coordinates_to_minc(coordinates, template, outfile, type = 'labels',
+                        verbose = False):
+    script_args = locals().copy()
+    script_args['verbose'] = 'true' if script_args['verbose'] else 'false'
+    script = 'coordinates_to_minc.R'
+    utils.execute_R(script = script, **script_args)
+    return outfile
+
+
+def prepare_microarray_coordinates(metadata, transforms,
+                                   outdir = 'data/human/expression/',
+                                   annotations = None):
+    # MNI coordinates output file
+    coords_mni = 'AHBA_microarray_coordinates_mni.csv'
+    coords_mni = os.path.join(outdir, coords_mni)
+
+    # Fetch microarray coordinates
+    coords_mni = fetch_microarray_coordinates(metadata = metadata,
+                                              outfile = coords_mni,
+                                              labels = True)
+
+    # Microarray coordinates label definitions
+    defs = coords_mni.replace('.csv', '_defs.csv')
+
+    if annotations is not None:
+        # Microarray sample annotations
+        annotations = pd.read_csv(annotations)
+
+        # Filter MNI coordinates
+        (pd.read_csv(coords_mni)
+         .loc[annotations['keep']]
+         .to_csv(coords_mni, index = False))
+
+        # Filter MNI coordinates label definitions
+        (pd.read_csv(defs)
+         .loc[annotations['keep']]
+         .to_csv(defs, index = False))
+
+    # Transform MNI coordinates to study space
+    coords_study = coords_mni.replace('mni', 'study')
+    coords = utils.transform_coordinates(infile = coords_mni,
+                                         outfile = coords_study,
+                                         transforms = transforms,
+                                         orientation = 'RAS')
+
+    return coords
 
 
 def mouse_signature(img: str, expr: str, mask: str, signed: bool = True,

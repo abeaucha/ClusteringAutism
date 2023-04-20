@@ -77,7 +77,7 @@ def parse_args():
     parser.add_argument(
         '--human-mask',
         type = str,
-        default = 'data/human/registration/v2/reference_files/mask_3.0mm.mnc',
+        default = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
         help = "Path to human mask (.mnc)."
     )
     
@@ -92,7 +92,7 @@ def parse_args():
     parser.add_argument(
         '--human-microarray-coords',
         type = str,
-        default = 'data/human/expression/AHBA_microarray_coordinates_studyspace_v2.csv',
+        default = 'data/human/expression/AHBA_microarray_coordinates_study_v2.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
                 "the AHBA microarray samples.")
     )

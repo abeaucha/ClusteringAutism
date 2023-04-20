@@ -4,6 +4,7 @@ import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, thres
   pattern = paste("nk", nk, "k", k, sep = "_")
   img <- list.files(imgdir, full.names = TRUE, pattern = pattern)
   img <- import_image(img = img, mask = mask, flatten = FALSE)
+  
   if (!is.null(threshold)) {
     img <- threshold_image(img = img, 
                            method = threshold, 
@@ -64,7 +65,7 @@ reduce_mouse_atlas <- function(tree, labels, defs, nodes, remove = TRUE) {
 #' @param simplify (logical scalar) Option to simplify returned data frame
 #'
 #' @return (data.frame) Reduced atlas label definitions
-reduce_human_defs <- function(tree, defs, simplify = FALSE) {
+reduce_human_defs <- function(tree, defs, simplify = TRUE) {
   
   defs_reduced <- tree$Get(attribute = "samples", 
                            filterFun = isLeaf, 
@@ -103,7 +104,7 @@ reduce_human_labels <- function(tree, labels, defs) {
   
   ind_match <- match(x = labels, 
                      table = defs_reduced[["sample_label"]])
-  labels_reduced <- defs_reduced[ind_match,"label"][[1]]
+  labels_reduced <- defs_reduced[ind_match, "label"][[1]]
   labels_reduced[is.na(labels_reduced)] <- 0
   attributes(labels_reduced) <- attributes(labels)
   
@@ -115,12 +116,12 @@ reduce_human_labels <- function(tree, labels, defs) {
 #'
 #' @param tree (data.tree) A data tree containing the neuroanatomical
 #' hierarchy. Leaf nodes must correspond to the atlas regions.
-#' @param labels (mincSingleDim) Atlas labels.
+#' @param labels (mincSingleDim, numeric) Atlas labels.
 #' @param defs (data.frame) Atlas definitions.
 #' @param nodes (character vector) Tree nodes at which to aggregate the
 #' atlas.
 #' @param remove (logical scalar) Option to remove extra nodes not 
-#' specified in argument nodes.
+#' specified in `nodes`.
 #'
 #' @return (list) A list with fields "labels" and "defs" containing the 
 #' reduced atlas labels and definitions.
@@ -151,7 +152,136 @@ reduce_human_atlas <- function(tree, labels, defs, nodes, remove = TRUE) {
 }
 
 
-prepare_cluster_fractions <- function(clusters, species, structs, nk, k, sign, threshold, threshold_value, threshold_symmetric, threshold_comparison, tree, labels, defs, remove = TRUE) {
+#' Tabulate atlas labels in an image
+#'
+#' This function will tabulate the atlas labels using non-zero voxels
+#' in the input image. 
+#'
+#' @param img (mincSingleDim, numeric) Input image.
+#' @param labels (mincSingleDim, numeric) Atlas labels.
+#' @param defs (data.frame) Atlas definitions.
+#' @param mask (character scalar or NULL) Path to a mask image.
+#' @param sign (character scalar or NULL) Option to tabulate using 
+#' positive or negative intensity voxels only. 
+#'
+#' @return (data.frame) Number and fraction of atlas voxels found in 
+#' the image.
+tabulate_labels_in_img <- function(img, labels, defs, mask = NULL, sign = NULL) {
+  
+  #Create a mask from the image
+  img_mask <- mask_from_image(img = img, signed = TRUE)
+  
+  #Filter for signed voxels if specified
+  if (is.null(sign)) {
+    img_mask <- abs(img_mask)
+  } else {
+    if (sign == "positive") {
+      img_mask[img_mask < 1] <- 0
+    } else if (sign == "negative") {
+      img_mask[img_mask > -1] <- 0
+      img_mask <- abs(img_mask)
+    } else {
+      stop("`sign` must be NULL or one of {'positive', 'negative'}")
+    }
+  }
+  
+  #Voxels in the image
+  voxels_in_img <- img_mask > 0.5
+  
+  #Mask if specified
+  if (!is.null(mask)) {
+    mask <- round(mincGetVolume(mask))
+    voxels_in_mask <- mask > 0.5
+    voxels_in_img <- voxels_in_img & voxels_in_mask
+  }
+  
+  #Nonzero labels
+  labels_nonzero <- labels != 0
+  
+  #Nonzero labels in the image
+  labels_in_img <- labels[voxels_in_img & labels_nonzero]
+  
+  #Tabulate number of labels in the image
+  if (length(labels_in_img) != 0) {
+    out <- table(labels_in_img) %>% 
+      as_tibble() %>% 
+      rename(label = labels_in_img, 
+             n_per_label = n) %>% 
+      mutate(label = as.integer(label))
+  } else {
+    out <- tibble(label = defs[["label"]],
+                  n_per_label = 0)
+  }
+  
+  #Compute label fractions
+  out <- out %>% 
+    right_join(defs, by = "label") %>% 
+    mutate(n_per_label = ifelse(is.na(n_per_label), 0, n_per_label),
+           n_labels_in_img = length(labels_in_img),
+           f_per_label = n_per_label/n_labels_in_img) %>% 
+    select(name, label, n_per_label, f_per_label, n_labels_in_img)
+  
+  return(out)
+}
+
+
+#' Compute the fraction of voxels
+#'
+#' @param cluster_dir (character scalar) Path to the directory 
+#' containing cluster images.
+#' @param nk (integer scalar) Number of clusters in the cluster 
+#' solution. 
+#' @param k (integer scalar) Cluster ID in the solution set.
+#' @param labels (mincSingleDim, numeric) Atlas labels.
+#' @param defs (data.frame) Atlas definitions.
+#' @param mask (character scalar or NULL) Path to a mask image.
+#' @param sign (character scalar or NULL) Option to tabulate using 
+#' positive or negative intensity voxels only. 
+#' @param threshold (character scalar or NULL) Method used to threshold 
+#' the cluster centroid image. No thresholding is applied if NULL.
+#' @param threshold_value (numeric scalar or NULL) Value at which to 
+#' threshold the image.
+#' @param threshold_symmetric (logical scalar or NULL) Option to apply 
+#' the threshold symmetrically. 
+#' @param threshold_comparison (character scalar or NULL) String indicating 
+#' how to apply the threshold
+#'
+#' @return (data.frame) Cluster fractions
+compute_cluster_fractions <- function(cluster_dir, nk, k, labels, defs, mask,
+                                      sign = "both", threshold = NULL, 
+                                      threshold_value = NULL, threshold_symmetric = NULL,
+                                      threshold_comparison = NULL) {
+  
+  #Import cluster map
+  cluster_map <- import_cluster_map(imgdir = imgdir,
+                                    mask = mask,
+                                    nk = nk, k = k,
+                                    threshold = threshold,
+                                    threshold_value = threshold_value, 
+                                    threshold_symmetric = threshold_symmetric, 
+                                    threshold_comparison = threshold_comparison,
+                                    flatten = TRUE)
+  
+  #Compute cluster anatomical fractions
+  cluster_fractions<- tabulate_labels_in_img(img = cluster_map,
+                                             mask = mask, 
+                                             labels = atlas_reduced[["label"]],
+                                             defs = atlas_reduced[["defs"]],
+                                             sign = sign)
+  
+  #Include cluster ID
+  cluster_fractions[["cluster_id"]] <- str_c(nk, k, sep = "-")
+  
+  return(cluster_fractions)
+  
+}
+
+
+# OLD FUNCTIONS =====================
+
+prepare_cluster_fractions <- function(clusters, species, structs, nk, k, sign, 
+                                      threshold, threshold_value, threshold_symmetric, 
+                                      threshold_comparison, tree, labels, defs, remove = TRUE) {
   
   if (species == "mouse") {
     atlas_reduced <- reduce_mouse_atlas(tree = tree,
@@ -177,14 +307,14 @@ prepare_cluster_fractions <- function(clusters, species, structs, nk, k, sign, t
   
   cluster_mask <- mask_from_image(img = cluster_map, signed = TRUE)
   if (sign == "positive") {
-    cluster_mask[cluster_mask != 1] <- 0
+    cluster_mask[cluster_mask < 1] <- 0
   } else if (sign == "negative") {
-    cluster_mask[cluster_mask != -1] <- 0
+    cluster_mask[cluster_mask > -1] <- 0
     cluster_mask <- abs(cluster_mask)
   } else if (sign == "both") {
     cluster_mask <- abs(cluster_mask)
   } else {
-    stop()
+    stop(paste("`sign` must be one of {'positive', 'negative', 'both'}"))
   }
   
   df_fractions <- calc_cluster_region_fractions(cluster = cluster_mask,
@@ -221,7 +351,9 @@ intersect_neuro_homologues <- function(x, homologues) {
 }
 
 
-prepare_radar_chart <- function(clusters, trees, labels, defs, spokes, nk, k, threshold, threshold_value, threshold_symmetric, threshold_comparison) {
+prepare_radar_chart <- function(clusters, trees, labels, defs, spokes, nk, k,
+                                threshold, threshold_value, threshold_symmetric, 
+                                threshold_comparison) {
   
   species <- c("mouse", "human")
   fractions <- vector(mode = "list", length = length(species))
@@ -286,46 +418,6 @@ prepare_radar_chart <- function(clusters, trees, labels, defs, spokes, nk, k, th
   
   return(radar)
   
-}
-
-#' Calculate cluster region fractions
-#'
-#' @param cluster (mincSingleDim)
-#' @param labels (mincSingleDim)
-#' @param defs (data.frame)
-#'
-#' @return (data.frame)
-calc_cluster_region_fractions <- function(cluster, labels, defs) {
-  voxels_cluster <- cluster == 1
-  voxels_nonzero <- labels != 0
-  labels_cluster <- labels[voxels_cluster & voxels_nonzero]
-  if (length(labels_cluster) == 0){
-    out <- tibble(label = defs[["label"]],
-                  nvoxels = 0)
-  } else {
-    out <- table(labels_cluster) %>% 
-      as_tibble() %>% 
-      rename(label = labels_cluster,
-             nvoxels = n) %>% 
-      mutate(label = as.integer(label))
-  }
-  out <- out %>% 
-    right_join(defs, by = "label") %>%
-    mutate(nvoxels = ifelse(is.na(nvoxels), 0, nvoxels),
-           nvoxels_cluster = sum(voxels_cluster),
-           nvoxels_expr = length(labels_cluster),
-           fvoxels_cluster = nvoxels/nvoxels_cluster,
-           fvoxels_expr = nvoxels/nvoxels_expr,
-           fvoxels_cluster = ifelse(is.nan(fvoxels_cluster), 0, fvoxels_cluster),
-           fvoxels_expr = ifelse(is.nan(fvoxels_expr), 0, fvoxels_expr)) %>% 
-    select(name,
-           label,
-           nvoxels,
-           nvoxels_cluster,
-           nvoxels_expr,
-           fvoxels_cluster,
-           fvoxels_expr)
-  return(out)
 }
 
 
