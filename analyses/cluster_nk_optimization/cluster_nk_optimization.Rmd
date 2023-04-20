@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = FALSE)
 ```{r packages}
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(SNFtool))
+suppressPackageStartupMessages(library(ggalluvial))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(RColorBrewer))
 ```
@@ -72,6 +73,7 @@ output_dir <- "outputs"
 
 #Human pipeline
 human_version <- "v1"
+# human_version <- "v2"
 human_pipeline_dir <- "../../data/human/derivatives/"
 human_pipeline_dir <- file.path(human_pipeline_dir, human_version)
 
@@ -100,10 +102,10 @@ human_cluster_map_method <- mouse_cluster_map_method
 
 human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
 human_params <- fetch_params_metadata(metadata = human_metadata,
-                                        resolution = human_resolution,
-                                        es_method = human_es_method,
-                                        es_df = human_es_df,
-                                        cluster_map_method = human_cluster_map_method)
+                                      resolution = human_resolution,
+                                      es_method = human_es_method,
+                                      es_df = human_es_df,
+                                      cluster_map_method = human_cluster_map_method)
 human_params
 ```
 
@@ -137,7 +139,8 @@ df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
 
 #Mouse cluster assignments
 mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
-df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE, col_names = str_c("ID", str_c("nk", 2:10)))
+df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+colnames(df_mouse_clusters) <- c("ID", str_c("nk", 2:10))
 
 #Human affinity matrix
 human_affinity_file <- file.path(human_cluster_dir, "affinity.csv")
@@ -195,7 +198,38 @@ dev.off()
 p_affinity_dist
 ```
 
-# Optimal number of human clusters
+# Human clusters
+
+## Human cluster dispersion
+
+```{r}
+df_human_clusters_long <- df_human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_extract(nk_name, "[0-9]+"),
+         nk = as.numeric(nk),
+         nk = factor(nk, levels = 2:10),
+         k = factor(k, levels = 1:10))
+
+p_human_alluvial <- ggplot(df_human_clusters_long,
+                           aes(x = nk,
+                               stratum = k,
+                               alluvium = ID,
+                               fill = k, 
+                               label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 0.5) + 
+  labs(x = 'Number of clusters',
+       y = 'Number of patients',
+       title = "Human clusters") + 
+  theme_bw() + 
+  theme(axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank())
+
+p_human_alluvial
+```
+
+
+## Optimal number of human clusters
 
 ```{r}
 #Max nk to examine
@@ -205,9 +239,41 @@ nk_max <- 100
 estimateNumberOfClustersGivenGraph(W = mat_human_affinity, NUMC = 2:nk_max)
 ```
 
+```{r}
+nk_human <- 4
+```
+
+
+```{r fig.width = 10, fig.height = 5}
+df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:nk_max)
+
+xbreaks <- seq(0, nk_max, by = 4)
+
+p_human_eigengap <- ggplot(df_human_cluster_metrics,
+                           aes(x = nk, y = eigengap)) + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed",
+             col = "grey50") + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = xbreaks) + 
+  labs(y = "Eigengap") +
+  theme_bw()
+
+p_human_rotation <- ggplot(df_human_cluster_metrics,
+                           aes(x = nk, y = rotation)) + 
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = xbreaks) + 
+  labs(y = "Rotation best") +
+  theme_bw()
+
+(p_human_eigengap / p_human_rotation) +
+  plot_annotation(title = "Human cluster metric distribution")
+```
+
 ```{r fig.width = 6, fig.height = 5}
 #Get human cluster labels for given nk
-nk_human <- 6
 df_human_labels_nk <- tibble(patient = colnames(df_human_affinity),
                              k = spectralClustering(affinity = mat_human_affinity,
                                                     K = nk_human))
@@ -251,12 +317,72 @@ dev.off()
 
 p_human_affinity_matrix
 ```
+```{r}
+df_human_cluster_counts <- df_human_clusters %>% 
+  select(k = paste0("nk", nk_human)) %>% 
+  group_by(k) %>% 
+  count()
+
+ggplot(df_human_cluster_counts, 
+       aes(x = factor(k), y = n)) +
+  geom_col(fill = "grey70", col = "grey20") + 
+  scale_y_continuous(breaks = seq(0, 1000, by = 40)) + 
+  labs(x = "Cluster",
+       y = "Count",
+       title = "Number of patients in human clusters") +
+  theme_bw()
+```
+
+# Mouse clusters
+
+## Mouse cluster dispersion
+
+```{r}
+df_mouse_clusters_long <- df_mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_extract(nk_name, "[0-9]+"),
+         nk = as.numeric(nk),
+         nk = factor(nk, levels = 2:10),
+         k = factor(k, levels = 1:10))
+
+p_mouse_alluvial <- ggplot(df_mouse_clusters_long,
+                           aes(x = nk,
+                               stratum = k,
+                               alluvium = ID,
+                               fill = k, 
+                               label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 0.5) + 
+  labs(x = 'Number of clusters',
+       y = 'Number of patients',
+       title = "Mouse clusters") + 
+  theme_bw() + 
+  theme(axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank())
+
+p_mouse_alluvial
+```
+
+
+
+## Optimal number of mouse clusters
+
+
+```{r}
+#Mouse optimal nk
+estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
+```
+
+```{r}
+nk_mouse <- 4
+```
+
 ```{r fig.width = 10, fig.height = 5}
-df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:nk_max)
+df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:nk_max)
 
 xbreaks <- seq(0, nk_max, by = 4)
 
-p_human_eigengap <- ggplot(df_human_cluster_metrics,
+p_mouse_eigengap <- ggplot(df_mouse_cluster_metrics,
                            aes(x = nk, y = eigengap)) + 
   geom_hline(yintercept = 0,
              linetype = "dashed",
@@ -267,7 +393,7 @@ p_human_eigengap <- ggplot(df_human_cluster_metrics,
   labs(y = "Eigengap") +
   theme_bw()
 
-p_human_rotation <- ggplot(df_human_cluster_metrics,
+p_mouse_rotation <- ggplot(df_mouse_cluster_metrics,
                            aes(x = nk, y = rotation)) + 
   geom_line() +
   geom_point() +
@@ -275,21 +401,12 @@ p_human_rotation <- ggplot(df_human_cluster_metrics,
   labs(y = "Rotation best") +
   theme_bw()
 
-(p_human_eigengap / p_human_rotation) +
-  plot_annotation(title = "Human cluster metric distribution")
-```
-
-
-# Optimal number of mouse clusters
-
-```{r}
-#Mouse optimal nk
-estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
+(p_mouse_eigengap / p_mouse_rotation) +
+  plot_annotation(title = "Mouse cluster metric distribution")
 ```
 
 ```{r fig.width = 6, fig.height = 5}
-#Get human cluster labels for given nk
-nk_mouse <- 4
+#Get mouse cluster labels for given nk
 df_mouse_labels_nk <- tibble(model = colnames(df_mouse_affinity),
                              k = spectralClustering(affinity = mat_mouse_affinity,
                                                     K = nk_mouse))
@@ -334,33 +451,18 @@ dev.off()
 print(p_mouse_affinity_matrix)
 ```
 
+```{r}
+df_mouse_cluster_counts <- df_mouse_clusters %>% 
+  select(k = paste0("nk", nk_mouse)) %>% 
+  group_by(k) %>% 
+  count()
 
-```{r fig.width = 10, fig.height = 5}
-df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:nk_max)
-
-xbreaks <- seq(0, nk_max, by = 4)
-
-p_mouse_eigengap <- ggplot(df_mouse_cluster_metrics,
-                           aes(x = nk, y = eigengap)) + 
-  geom_hline(yintercept = 0,
-             linetype = "dashed",
-             col = "grey50") + 
-  geom_line() + 
-  geom_point() +
-  scale_x_continuous(breaks = xbreaks) + 
-  labs(y = "Eigengap") +
+ggplot(df_mouse_cluster_counts, 
+       aes(x = factor(k), y = n)) +
+  geom_col(fill = "grey70", col = "grey20") + 
+  scale_y_continuous(breaks = seq(0, 1000, by = 40)) + 
+  labs(x = "Cluster",
+       y = "Count",
+       title = "Number of patients in mouse clusters") +
   theme_bw()
-
-p_mouse_rotation <- ggplot(df_mouse_cluster_metrics,
-                           aes(x = nk, y = rotation)) + 
-  geom_line() +
-  geom_point() +
-  scale_x_continuous(breaks = xbreaks) + 
-  labs(y = "Rotation best") +
-  theme_bw()
-
-(p_mouse_eigengap / p_mouse_rotation) +
-  plot_annotation(title = "Mouse cluster metric distribution")
 ```
-
-
