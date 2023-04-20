@@ -85,7 +85,7 @@ def parse_args():
     parser.add_argument(
         '--human-microarray-coords',
         type = str,
-        default = 'data/human/expression/AHBA_microarray_coordinates_studyspace_v2.csv',
+        default = 'data/human/expression/AHBA_microarray_coordinates_study_v2.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
                 "the AHBA microarray samples.")
     )
@@ -98,10 +98,24 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--permutations-start',
+        type = int,
+        default = 1,
+        help = "Permutation to start on."
+    )
+
+    parser.add_argument(
+        '--keep-cluster-maps',
+        type = str,
+        default = 'false',
+        help = "Option to keep permuted cluster maps."
+    )
+
+    parser.add_argument(
         '--nproc',
         type = int,
         default = 1,
-        help = "Number of processors to use in parallel."
+        help = "Number of processors to use. Executes in parallel if > 1."
     )
 
     return vars(parser.parse_args())
@@ -110,4 +124,6 @@ def parse_args():
 # Main -----------------------------------------------------------------------
 
 if __name__ == '__main__':
-    permute_cluster_similarity(**parse_args())
+    args = parse_args()
+    args['keep_cluster_maps'] = True if args['keep_cluster_maps'] == 'true' else False
+    permute_cluster_similarity(**args)
