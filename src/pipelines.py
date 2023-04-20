@@ -456,7 +456,8 @@ def permute_cluster_similarity(pipeline_dir, params_id,
                                human_mask = 'data/human/registration/reference_files/v2/mask_0.8mm.mnc',
                                mouse_mask = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
                                human_microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study_v2.csv',
-                               npermutations = 100, nproc = 1):
+                               npermutations = 100, permutations_start = 1,
+                               nproc = 1):
 
     #Get parameter set with specified ID
     params_metadata = os.path.join(pipeline_dir, 'metadata.csv')
@@ -498,7 +499,8 @@ def permute_cluster_similarity(pipeline_dir, params_id,
     human_perm_files = processing.permute_cluster_labels(
         cluster_file = human_cluster_file,
         outdir = human_cluster_perm_dir,
-        npermutations = npermutations)
+        npermutations = npermutations,
+        start = permutations_start)
 
     #Human cluster centroid method
     cluster_map_method = params['human_cluster_map_method'].values[0]
