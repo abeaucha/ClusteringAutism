@@ -3,13 +3,13 @@
 #SBATCH -N 1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_data_v2_0.8mm_propensity_%j.out
 
 source activate_venv.sh
 
-#Takes about __  hours
+#Takes about 11 hours
 ti=$(date)
 echo "Start time: $ti"
 python3 process_human_data.py \
