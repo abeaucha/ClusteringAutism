@@ -25,6 +25,7 @@ sickkids <- read_csv(sickkids, show_col_types = FALSE) %>%
          file = str_c(Subject_ID, file_suffix))
 
 #Clean up POND demographics
+#Get registration information
 pond_dbm <- file.path(demographics_dir, "POND_release2_motion_in3_rescored_baseline_norepeats_pass_dbm_input_n791.csv")
 pond_dbm <- read_csv(pond_dbm, show_col_types = FALSE) %>% 
   select(Subject_ID, 
@@ -33,6 +34,20 @@ pond_dbm <- read_csv(pond_dbm, show_col_types = FALSE) %>%
          Rating_IN3, 
          QC_Status) %>% 
   mutate(Dataset = "POND")
+
+#Get demographics information
+pond_metadata <- "/projects/POND/POND_BIDS/workflows/pond-metadata-20230111.xlsx"
+pond_metadata <- read_excel(pond_metadata) %>% 
+  mutate(Subject_ID = str_c("POND_", Subject)) %>% 
+  select(Subject_ID,
+         Sex = NSI_SEX,
+         DX = PRIMARY_DIAGNOSIS) %>% 
+  mutate(DX = ifelse(DX == "Typically Developing", "Control", DX),
+         DX = ifelse(DX == "Unaffected Sibling", "Control", DX))
+
+#Join registration info with demographics
+pond <- pond_dbm %>% 
+  left_join(pond_metadata, by = "Subject_ID")
 
 #POND site and scanner information
 pond_sites <- tibble(Scanner = c("SickKids_Trio", "SickKids_Prisma", "Queens_Trio", "Queens_Prisma", "Bloorview_Prisma"),
@@ -44,20 +59,26 @@ pond_neuro <- read_csv(pond_neuro, show_col_types = FALSE) %>%
   select(Subject_ID = subject,
          Scan_ID = scan,
          Scanner = scanned_on,
-         Age = age_at_scan,
-         DX = Dx,
-         Sex = sex) %>% 
+         Age = age_at_scan) %>% 
   mutate(Subject_ID = str_replace(Subject_ID, "sub-", "POND_"),
          Scan_ID = str_c(Scan_ID, ".mnc")) %>% 
   left_join(pond_sites, by = "Scanner")
 
 #Combine POND demographics
-pond <- pond_dbm %>% 
+pond <- pond %>% 
   left_join(pond_neuro, by = c("Subject_ID", "Scan_ID")) %>% 
   mutate(file = str_replace(Scan_ID, ".mnc", file_suffix))
 
 #Combined demographics
 demographics <- bind_rows(pond, sickkids)
+
+#Remove NAs
+demographics <- demographics %>%
+  filter(!is.na(DX), 
+         !is.na(Sex),
+         !is.na(Age),
+         !is.na(Site),
+         !is.na(Scanner))
 
 #Patients to remove based on the README 
 to_remove <- c("sub-0880102",
