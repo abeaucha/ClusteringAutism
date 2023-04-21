@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=process_human_data
+#SBATCH --job-name=process_human_data_v2_3.0mm
 #SBATCH -N 1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
