@@ -9,7 +9,7 @@
 
 source activate_venv.sh
 
-ti=$(date +"%T")
+ti=$(date)
 echo "Start time: $ti"
 python3 permute_cluster_similarity.py \
 	--pipeline-dir data/cross_species/v1/ \
@@ -23,5 +23,5 @@ python3 permute_cluster_similarity.py \
 	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_study_v1.csv \
 	--npermutations 10 \
 	--nproc $SLURM_CPUS_PER_TASK
-tf=$(date +"%T")
+tf=$(date)
 echo "End time: $tf"

@@ -10,7 +10,7 @@
 source activate_venv.sh
 
 #Takes about 5 hours
-ti=$(date +"%T")
+ti=$(date)
 echo "Start time: $ti"
 python3 process_human_data.py \
   --pipeline-dir data/human/derivatives/v1/ \
@@ -30,5 +30,5 @@ python3 process_human_data.py \
   --cluster-sigma 0.5 \
   --cluster-t 20 \
   --cluster-map-method mean
-tf=$(date +"%T")
+tf=$(date)
 echo "End time: $tf"
