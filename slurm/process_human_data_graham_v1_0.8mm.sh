@@ -9,7 +9,7 @@
 
 source activate_venv.sh
 
-#Takes about 5 hours
+#Takes about 7 hours
 ti=$(date)
 echo "Start time: $ti"
 python3 process_human_data.py \
