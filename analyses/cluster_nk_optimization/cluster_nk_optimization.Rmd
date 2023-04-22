@@ -72,8 +72,8 @@ estimate_cluster_metrics <- function (W, NUMC = 2:5){
 output_dir <- "outputs"
 
 #Human pipeline
-human_version <- "v1"
-# human_version <- "v2"
+# human_version <- "v1"
+human_version <- "v2"
 # human_version <- "v2_test"
 human_pipeline_dir <- "../../data/human/derivatives/"
 human_pipeline_dir <- file.path(human_pipeline_dir, human_version)
