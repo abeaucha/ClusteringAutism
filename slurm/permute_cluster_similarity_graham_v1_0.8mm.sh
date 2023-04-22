@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=permute_cluster_similarity
+#SBATCH --job-name=permute_cluster_similarity_v1_0.8mm
 #SBATCH -N 1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
