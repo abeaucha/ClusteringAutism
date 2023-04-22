@@ -105,6 +105,14 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--jacobians',
+        nargs = '*',
+        type = str,
+        default = ['absolute', 'relative'],
+        help = "Jacobians to use"
+    )
+
+    parser.add_argument(
         '--keep-cluster-maps',
         type = str,
         default = 'false',
@@ -125,5 +133,6 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
+    args['jacobians'] = tuple(args['jacobians'])
     args['keep_cluster_maps'] = True if args['keep_cluster_maps'] == 'true' else False
     permute_cluster_similarity(**args)

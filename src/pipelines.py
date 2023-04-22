@@ -335,11 +335,20 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
                                metric = 'correlation', signed = True,
                                threshold = 'top_n', threshold_value = 0.2,
                                threshold_symmetric = True,
+                               jacobians = ('absolute', 'relative'),
                                parallel = True, nproc = None):
     if parallel:
         if nproc is None:
             raise Exception("Argument --nproc must be specified "
                             "when --parallel true")
+
+    #Check jacobians type
+    if type(jacobians) is tuple:
+        jacobians = list(jacobians)
+    elif type(jacobians) is str:
+        jacobians = [jacobians]
+    else:
+        raise TypeError("`jacobians` must be a string or a tuple of strings.")
 
     # Ensure proper paths
     human_pipeline_dir = os.path.join(human_pipeline_dir, '')
@@ -399,7 +408,6 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
     masks = (human_mask, mouse_mask)
 
     # Iterate over Jacobians
-    jacobians = ['absolute', 'relative']
     for j, jac in enumerate(jacobians):
         print(
             "Evaluating similarity of {} Jacobian cluster maps...".format(jac)

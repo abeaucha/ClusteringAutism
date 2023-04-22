@@ -74,6 +74,7 @@ output_dir <- "outputs"
 #Human pipeline
 human_version <- "v1"
 # human_version <- "v2"
+# human_version <- "v2_test"
 human_pipeline_dir <- "../../data/human/derivatives/"
 human_pipeline_dir <- file.path(human_pipeline_dir, human_version)
 
@@ -96,11 +97,12 @@ mouse_params
 
 ```{r human-params}
 human_resolution <- 0.8
-# human_es_method <- "normative-growth"
-human_es_method <- "propensity-matching"
-# human_es_df <- 3
-human_es_df <- NA
-human_es_ncontrols <- 10
+human_es_method <- "normative-growth"
+# human_es_method <- "propensity-matching"
+human_es_df <- 3
+# human_es_df <- NA
+# human_es_ncontrols <- 10
+human_es_ncontrols <- NA
 human_cluster_map_method <- mouse_cluster_map_method
 
 human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
@@ -116,8 +118,8 @@ human_params
 ```{r parameters}
 #Parameter set IDs
 mouse_params_id <- 107
-human_params_id <- 256
-# human_params_id <- 700
+# human_params_id <- 256
+human_params_id <- 700
 # human_params_id <- 547
 
 #Mouse clustering directory
@@ -245,7 +247,7 @@ estimateNumberOfClustersGivenGraph(W = mat_human_affinity, NUMC = 2:nk_max)
 ```
 
 ```{r}
-nk_human <- 3
+nk_human <- 4
 ```
 
 
