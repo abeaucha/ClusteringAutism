@@ -166,6 +166,14 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--jacobians',
+        nargs = '*',
+        type = str,
+        default = ['absolute', 'relative'],
+        help = "Jacobians to use"
+    )
+
+    parser.add_argument(
         '--parallel',
         type = str,
         default = 'true',
@@ -187,7 +195,7 @@ if __name__ == '__main__':
     args = parse_args()
 
     args['parallel'] = True if args['parallel'] == 'true' else False
-
+    args['jacobians'] = tuple(args['jacobians'])
     if args['gene_space'] == 'average-latent-space':
         args['latent_space_id'] = None
     elif args['gene_space'] == 'latent-space':
@@ -195,7 +203,6 @@ if __name__ == '__main__':
     else:
         args['latent_space_id'] = None
         args['n_latent_spaces'] = None
-
     if args['threshold'] == 'none':
         args['threshold'] = None
         args['threshold_value'] = None

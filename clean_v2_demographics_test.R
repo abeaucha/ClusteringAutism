@@ -72,33 +72,46 @@ pond <- pond %>%
 #Combined demographics
 demographics <- bind_rows(pond, sickkids)
 
-#Remove NAs
-demographics <- demographics %>%
-  filter(!is.na(DX), 
-         !is.na(Sex),
-         !is.na(Age),
-         !is.na(Site),
-         !is.na(Scanner))
+# #Remove NAs
+# demographics <- demographics %>%
+#   filter(!is.na(DX),
+#          !is.na(Sex),
+#          !is.na(Age),
+#          !is.na(Site),
+#          !is.na(Scanner))
+ 
+# #Patients to remove based on the README 
+# to_remove <- c("sub-0880102",
+#                "sub-0881247",
+#                "sub-0881263",
+#                "sub-0881263",
+#                "sub-1050027",
+#                "sub-1050452",
+#                "sub-0881317",
+#                "sub-1050959",
+#                "sub-1050959")
 
-#Patients to remove based on the README 
-to_remove <- c("sub-0880102",
-               "sub-0881247",
-               "sub-0881263",
-               "sub-0881263",
-               "sub-1050027",
-               "sub-1050452",
-               "sub-0881317",
-               "sub-1050959",
-               "sub-1050959")
+# #Remove patients
+# demographics <- demographics %>% 
+#   mutate(ID_temp = str_remove(Scan_ID, "_ses.*.mnc")) %>% 
+#   filter(!(ID_temp %in% to_remove)) %>% 
+#   select(-ID_temp)
 
-#Remove patients
-demographics <- demographics %>% 
-  mutate(ID_temp = str_remove(Scan_ID, "_ses.*.mnc")) %>% 
-  filter(!(ID_temp %in% to_remove)) %>% 
-  select(-ID_temp)
+demographics_v1 <- "data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv"
+demographics_v1 <- read_csv(demographics_v1, show_col_types = FALSE) %>% 
+  filter(Dataset %in% c("POND", "SickKids"))
+  
+ind_v1_in_v2 <- demographics_v1$Subject_ID %in% demographics$Subject_ID
+print(nrow(demographics_v1[!ind_v1_in_v2,]))
 
-#Export
-outfile <- "demographics.csv"
-outfile <- file.path(demographics_dir, outfile)
-write_csv(x = demographics, file = outfile)
+# demographics_v1 %>% 
+#   filter(!ind_v1_in_v2) %>% 
+#   group_by(DX) %>% 
+#   count()
 
+ind_v2_in_v1 <- demographics$Subject_ID %in% demographics_v1$Subject_ID
+demographics_test <- demographics[ind_v2_in_v1,]
+
+outfile <- "demographics_filter_v1.csv"
+outfile <- file.path("data/human/registration/v2/subject_info/", outfile)
+write_csv(x = demographics_test, file = outfile)
