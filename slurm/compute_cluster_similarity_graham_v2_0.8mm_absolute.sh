@@ -9,6 +9,7 @@
 
 source activate_venv.sh
 
+# Takes about 15 hours
 ti=$(date)
 echo "Start time: $ti"
 python3 compute_cluster_similarity.py \
