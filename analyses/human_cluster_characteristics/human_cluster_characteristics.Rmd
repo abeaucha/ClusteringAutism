@@ -42,12 +42,12 @@ pipeline_dir <- file.path(pipeline_dir, version)
 
 ```{r human-params}
 resolution <- 0.8
-es_method <- "normative-growth"
-# es_method <- "propensity-matching"
-es_df <- 3
-# es_df <- NA
-# es_ncontrols <- 10
-es_ncontrols <- NA
+# es_method <- "normative-growth"
+es_method <- "propensity-matching"
+# es_df <- 3
+es_df <- NA
+es_ncontrols <- 10
+# es_ncontrols <- NA
 cluster_map_method <- "mean"
 
 metadata <- file.path(pipeline_dir, "metadata.csv")
@@ -59,10 +59,11 @@ params <- fetch_params_metadata(metadata = metadata,
                                 cluster_map_method = cluster_map_method)
 params
 ```
+
 ```{r params}
 #Parameter set IDs
-# params_id <- 256
-params_id <- 700
+params_id <- 256
+# params_id <- 700
 # params_id <- 547
 
 #Clustering directories
