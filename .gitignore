@@ -13,7 +13,7 @@ analyses/troubleshoot_microarray_transforms/transforms/
 analyses/*.pdf
 analyses/cluster_similarity/*.pdf
 analyses/cluster_similarity/*.html
-analyses/cluster_similarity/plots
+analyses/cluster_similarity/outputs/
 analyses/cluster_similarity_old/
 analyses/*.csv
 analyses/gene_space_decomposition/heatmap_animation_nk_5/

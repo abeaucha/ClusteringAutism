@@ -62,8 +62,8 @@ params
 
 ```{r params}
 #Parameter set IDs
-params_id <- 256
-# params_id <- 700
+# params_id <- 256
+params_id <- 700
 # params_id <- 547
 
 #Clustering directories
@@ -364,5 +364,32 @@ grid.newpage()
 grid.draw(ss_grob)
 ```
 
+```{r}
+pond_neuro <- "../../data/human/registration/v2/subject_info/pond-neuroanatomy20230111.csv"
+df_pond_neuro <- read_csv(pond_neuro)
+tmp <- df_pond_neuro %>% 
+  select(scan, BRAIN_VOL) %>% 
+  mutate(ID = str_c(scan, ".denoise.extracted_fwhm_2mm.mnc")) %>% 
+  right_join(df_clusters_nk_demo, by = "ID")
 
+tmp %>% 
+  filter(!is.na(BRAIN_VOL)) %>% 
+  ggplot(aes(x = factor(k), y = BRAIN_VOL)) + 
+    geom_jitter(width = 0.2,
+              col = "grey70",
+              alpha = 0.4) + 
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.5) + 
+  labs(x = "Cluster", 
+       y = "Brain volume",
+       title = "Cluster total volume distributions") + 
+  theme_bw()
+```
+
+
+```{r}
+df_clusters_nk_demo %>% 
+  group_by(k, Dataset) %>% 
+  count
+```
 

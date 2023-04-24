@@ -1,3 +1,54 @@
+#' Compute the fraction of voxels
+#'
+#' @param cluster_dir (character scalar) Path to the directory 
+#' containing cluster images.
+#' @param nk (integer scalar) Number of clusters in the cluster 
+#' solution. 
+#' @param k (integer scalar) Cluster ID in the solution set.
+#' @param labels (mincSingleDim, numeric) Atlas labels.
+#' @param defs (data.frame) Atlas definitions.
+#' @param mask (character scalar or NULL) Path to a mask image.
+#' @param sign (character scalar or NULL) Option to tabulate using 
+#' positive or negative intensity voxels only. 
+#' @param threshold (character scalar or NULL) Method used to threshold 
+#' the cluster centroid image. No thresholding is applied if NULL.
+#' @param threshold_value (numeric scalar or NULL) Value at which to 
+#' threshold the image.
+#' @param threshold_symmetric (logical scalar or NULL) Option to apply 
+#' the threshold symmetrically. 
+#' @param threshold_comparison (character scalar or NULL) String indicating 
+#' how to apply the threshold
+#'
+#' @return (data.frame) Cluster fractions
+compute_cluster_fractions <- function(cluster_dir, nk, k, labels, defs, mask,
+                                      sign = "both", threshold = NULL, 
+                                      threshold_value = NULL, threshold_symmetric = NULL,
+                                      threshold_comparison = NULL) {
+  
+  #Import cluster map
+  cluster_map <- import_cluster_map(imgdir = cluster_dir,
+                                    mask = mask,
+                                    nk = nk, k = k,
+                                    threshold = threshold,
+                                    threshold_value = threshold_value, 
+                                    threshold_symmetric = threshold_symmetric, 
+                                    threshold_comparison = threshold_comparison,
+                                    flatten = TRUE)
+  
+  #Compute cluster anatomical fractions
+  cluster_fractions <- tabulate_labels_in_img(img = cluster_map,
+                                              mask = mask, 
+                                              labels = labels,
+                                              defs = defs,
+                                              sign = sign)
+  
+  #Include cluster ID
+  cluster_fractions[["cluster_id"]] <- str_c(nk, k, sep = "-")
+  
+  return(cluster_fractions)
+  
+}
+
 
 import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, threshold = NULL, threshold_value = NULL, threshold_symmetric = NULL, threshold_comparison = NULL) {
   
@@ -24,37 +75,102 @@ import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, thres
 }
 
 
+#' Intersect data with neuroanatomical homologues
+#'
+#' @param x (list) A list with named elements "mouse" and "human" 
+#' containing data to intersect. 
+#' @param homologues (data.frame) A data frame containing the set
+#' of mouse and human neuroanatomical homologues.
+#'
+#' @return (list) A list with named elements "mouse" and "human" 
+#' containing the intersected data.
+intersect_neuro_homologues <- function(x, homologues) {
+  for (i in 1:length(x)) {
+    species <- names(x)[[i]]
+    cols_init <- colnames(x[[i]])
+    colnames(x[[i]])[cols_init == "name"] <- species
+    x[[i]] <- inner_join(x[[i]], homologues, by = species)
+    x[[i]][["name"]] <- factor(x[[i]][["name"]], levels = homologues[["name"]])
+    x[[i]][["species"]] <- species
+    x[[i]] <- x[[i]][,match(cols_init, colnames(x[[i]]))]
+  }
+  return(x)
+}
 
-#' Create a reduced version of a mouse atlas. 
-#'
-#' @param tree (data.tree) A data tree containing the neuroanatomical
-#' hierarchy. Leaf nodes must correspond to the atlas regions.
-#' @param labels (mincSingleDim) Atlas labels.
-#' @param defs (data.frame) Atlas definitions.
-#' @param nodes (character vector) Tree nodes at which to aggregate the
-#' atlas.
-#' @param remove (logical scalar) Option to remove extra nodes not 
-#' specified in argument nodes.
-#'
-#' @return (list) A list with fields "labels" and "defs" containing the 
-#' reduced atlas labels and definitions.
-reduce_mouse_atlas <- function(tree, labels, defs, nodes, remove = TRUE) {
+
+prepare_radar_chart <- function(cluster_dirs, nk, k, spokes, trees, labels, 
+                                defs, masks, threshold, threshold_value, 
+                                threshold_symmetric, threshold_comparison = NULL) {
   
-  #Prune the tree to the specified nodes
-  tree_reduced <- prune_tree(tree = tree,
-                             nodes = nodes,
-                             method = "below",
-                             remove = remove)
+  species <- c("human", "mouse")
+  fractions <- vector(mode = "list", length = length(species))
+  names(fractions) <- species
+  for (s in species) {
+    
+    if (s == "human") {
+      reduce_atlas <- reduce_human_atlas
+    } else {
+      reduce_atlas <- reduce_mouse_atlas
+    }
+    
+    atlas <- reduce_atlas(tree = trees[[s]],
+                          labels = labels[[s]],
+                          defs = defs[[s]],
+                          nodes = spokes[[s]],
+                          remove = TRUE)
+    
+    fractions_positive <- compute_cluster_fractions(cluster_dir = cluster_dirs[[s]],
+                                                    nk = nk[[s]],
+                                                    k = k[[s]],
+                                                    labels = atlas[["labels"]],
+                                                    defs = atlas[["defs"]],
+                                                    mask = masks[[s]],
+                                                    sign = "positive",
+                                                    threshold = threshold,
+                                                    threshold_value = threshold_value,
+                                                    threshold_symmetric = threshold_symmetric,
+                                                    threshold_comparison = threshold_comparison)
+    
+    fractions_negative <- compute_cluster_fractions(cluster_dir = cluster_dirs[[s]],
+                                                    nk = nk[[s]],
+                                                    k = k[[s]],
+                                                    labels = atlas[["labels"]],
+                                                    defs = atlas[["defs"]],
+                                                    mask = masks[[s]],
+                                                    sign = "negative",
+                                                    threshold = threshold,
+                                                    threshold_value = threshold_value,
+                                                    threshold_symmetric = threshold_symmetric,
+                                                    threshold_comparison = threshold_comparison)
+    
+    fractions_positive <- select(fractions_positive, name, positive = f_per_label)
+    fractions_negative <- select(fractions_negative, name, negative = f_per_label)
+    
+    fractions[[s]] <- inner_join(fractions_positive, 
+                                 fractions_negative, 
+                                 by = "name") %>% 
+      mutate(negative = -1*negative, 
+             species = s)
+  }
   
-  #Reduce atlas labels
-  labels_reduced <- hanatToAtlas(tree_reduced, mincArray(labels))
+  #Intersect regions with neuroanatomical homologues
+  fractions <- intersect_neuro_homologues(x = fractions,
+                                          homologues = spokes)
   
-  #Reduce atlas definitions
-  defs <- defs[defs$label %in% labels,]
-  defs_reduced <- hanatToAtlasDefs_new(tree_reduced)
+  #Reduce list to a data frame
+  radar <- reduce(.x = fractions, .f = bind_rows)
   
-  return(list(labels = labels_reduced,
-              defs = defs_reduced))
+  #Relevel regions so that the radar chart closes on itself
+  lvls <- levels(radar$name)
+  lvls <- c(" ", lvls)
+  radar_dummy <- radar %>% 
+    mutate(name = as.character(name)) %>% 
+    filter(name == lvls[length(lvls)]) %>% 
+    mutate(name = " ")
+  radar <- bind_rows(radar, radar_dummy)
+  radar <- mutate(radar, name = factor(name, levels = lvls))
+  
+  return(radar)
   
 }
 
@@ -88,6 +204,7 @@ reduce_human_defs <- function(tree, defs, simplify = TRUE) {
   return(defs_reduced)
   
 }
+
 
 #' Create reduced human atlas labels
 #'
@@ -145,6 +262,40 @@ reduce_human_atlas <- function(tree, labels, defs, nodes, remove = TRUE) {
   defs_reduced <- reduce_human_defs(tree = tree_reduced,
                                     defs = defs,
                                     simplify = TRUE)
+  
+  return(list(labels = labels_reduced,
+              defs = defs_reduced))
+  
+}
+
+
+#' Create a reduced version of a mouse atlas. 
+#'
+#' @param tree (data.tree) A data tree containing the neuroanatomical
+#' hierarchy. Leaf nodes must correspond to the atlas regions.
+#' @param labels (mincSingleDim) Atlas labels.
+#' @param defs (data.frame) Atlas definitions.
+#' @param nodes (character vector) Tree nodes at which to aggregate the
+#' atlas.
+#' @param remove (logical scalar) Option to remove extra nodes not 
+#' specified in argument nodes.
+#'
+#' @return (list) A list with fields "labels" and "defs" containing the 
+#' reduced atlas labels and definitions.
+reduce_mouse_atlas <- function(tree, labels, defs, nodes, remove = TRUE) {
+  
+  #Prune the tree to the specified nodes
+  tree_reduced <- prune_tree(tree = tree,
+                             nodes = nodes,
+                             method = "below",
+                             remove = remove)
+  
+  #Reduce atlas labels
+  labels_reduced <- hanatToAtlas(tree_reduced, mincArray(labels))
+  
+  #Reduce atlas definitions
+  defs <- defs[defs$label %in% labels,]
+  defs_reduced <- hanatToAtlasDefs_new(tree_reduced)
   
   return(list(labels = labels_reduced,
               defs = defs_reduced))
@@ -222,202 +373,6 @@ tabulate_labels_in_img <- function(img, labels, defs, mask = NULL, sign = NULL) 
     select(name, label, n_per_label, f_per_label, n_labels_in_img)
   
   return(out)
-}
-
-
-#' Compute the fraction of voxels
-#'
-#' @param cluster_dir (character scalar) Path to the directory 
-#' containing cluster images.
-#' @param nk (integer scalar) Number of clusters in the cluster 
-#' solution. 
-#' @param k (integer scalar) Cluster ID in the solution set.
-#' @param labels (mincSingleDim, numeric) Atlas labels.
-#' @param defs (data.frame) Atlas definitions.
-#' @param mask (character scalar or NULL) Path to a mask image.
-#' @param sign (character scalar or NULL) Option to tabulate using 
-#' positive or negative intensity voxels only. 
-#' @param threshold (character scalar or NULL) Method used to threshold 
-#' the cluster centroid image. No thresholding is applied if NULL.
-#' @param threshold_value (numeric scalar or NULL) Value at which to 
-#' threshold the image.
-#' @param threshold_symmetric (logical scalar or NULL) Option to apply 
-#' the threshold symmetrically. 
-#' @param threshold_comparison (character scalar or NULL) String indicating 
-#' how to apply the threshold
-#'
-#' @return (data.frame) Cluster fractions
-compute_cluster_fractions <- function(cluster_dir, nk, k, labels, defs, mask,
-                                      sign = "both", threshold = NULL, 
-                                      threshold_value = NULL, threshold_symmetric = NULL,
-                                      threshold_comparison = NULL) {
-  
-  #Import cluster map
-  cluster_map <- import_cluster_map(imgdir = imgdir,
-                                    mask = mask,
-                                    nk = nk, k = k,
-                                    threshold = threshold,
-                                    threshold_value = threshold_value, 
-                                    threshold_symmetric = threshold_symmetric, 
-                                    threshold_comparison = threshold_comparison,
-                                    flatten = TRUE)
-  
-  #Compute cluster anatomical fractions
-  cluster_fractions<- tabulate_labels_in_img(img = cluster_map,
-                                             mask = mask, 
-                                             labels = atlas_reduced[["label"]],
-                                             defs = atlas_reduced[["defs"]],
-                                             sign = sign)
-  
-  #Include cluster ID
-  cluster_fractions[["cluster_id"]] <- str_c(nk, k, sep = "-")
-  
-  return(cluster_fractions)
-  
-}
-
-
-# OLD FUNCTIONS =====================
-
-prepare_cluster_fractions <- function(clusters, species, structs, nk, k, sign, 
-                                      threshold, threshold_value, threshold_symmetric, 
-                                      threshold_comparison, tree, labels, defs, remove = TRUE) {
-  
-  if (species == "mouse") {
-    atlas_reduced <- reduce_mouse_atlas(tree = tree,
-                                        labels = labels,
-                                        defs = defs,
-                                        nodes = structs,
-                                        remove = remove)
-  } else if (species == "human") {
-    atlas_reduced <- reduce_human_atlas(tree = tree,
-                                        labels = labels,
-                                        defs = defs,
-                                        nodes = structs,
-                                        remove = remove)
-  }
-  
-  cluster_map <- import_cluster_map(imgdir = clusters,
-                                    nk = nk, k = k,
-                                    threshold = threshold,
-                                    threshold_value = threshold_value, 
-                                    threshold_symmetric = threshold_symmetric, 
-                                    threshold_comparison = threshold_comparison,
-                                    flatten = TRUE)  
-  
-  cluster_mask <- mask_from_image(img = cluster_map, signed = TRUE)
-  if (sign == "positive") {
-    cluster_mask[cluster_mask < 1] <- 0
-  } else if (sign == "negative") {
-    cluster_mask[cluster_mask > -1] <- 0
-    cluster_mask <- abs(cluster_mask)
-  } else if (sign == "both") {
-    cluster_mask <- abs(cluster_mask)
-  } else {
-    stop(paste("`sign` must be one of {'positive', 'negative', 'both'}"))
-  }
-  
-  df_fractions <- calc_cluster_region_fractions(cluster = cluster_mask,
-                                                labels = atlas_reduced[["labels"]],
-                                                defs = atlas_reduced[["defs"]])
-  
-  df_fractions[["cluster_id"]] <- str_c(nk, k, sep = "-")
-  
-  return(df_fractions)
-  
-}
-
-
-#' Intersect data with neuroanatomical homologues
-#'
-#' @param x (list) A list with named elements "mouse" and "human" 
-#' containing data to intersect. 
-#' @param homologues (data.frame) A data frame containing the set
-#' of mouse and human neuroanatomical homologues.
-#'
-#' @return (list) A list with named elements "mouse" and "human" 
-#' containing the intersected data.
-intersect_neuro_homologues <- function(x, homologues) {
-  for (i in 1:length(x)) {
-    species <- names(x)[[i]]
-    cols_init <- colnames(x[[i]])
-    colnames(x[[i]])[cols_init == "name"] <- species
-    x[[i]] <- inner_join(x[[i]], homologues, by = species)
-    x[[i]][["name"]] <- factor(x[[i]][["name"]], levels = homologues[["name"]])
-    x[[i]][["species"]] <- species
-    x[[i]] <- x[[i]][,match(cols_init, colnames(x[[i]]))]
-  }
-  return(x)
-}
-
-
-prepare_radar_chart <- function(clusters, trees, labels, defs, spokes, nk, k,
-                                threshold, threshold_value, threshold_symmetric, 
-                                threshold_comparison) {
-  
-  species <- c("mouse", "human")
-  fractions <- vector(mode = "list", length = length(species))
-  names(fractions) <- species
-  for (i in 1:length(species)) {
-    
-    positive_fractions <- prepare_cluster_fractions(species = species[[i]],
-                                                    clusters = clusters[[species[[i]]]],
-                                                    tree = trees[[species[[i]]]],
-                                                    labels = labels[[species[[i]]]],
-                                                    defs = defs[[species[[i]]]],
-                                                    structs = spokes[[species[[i]]]],
-                                                    nk = nk[[species[[i]]]],
-                                                    k = k[[species[[i]]]],
-                                                    sign = "positive",
-                                                    threshold = threshold,
-                                                    threshold_value = threshold_value,
-                                                    threshold_symmetric = threshold_symmetric,
-                                                    threshold_comparison = threshold_comparison)
-    
-    negative_fractions <- prepare_cluster_fractions(species = species[[i]],
-                                                    clusters = clusters[[species[[i]]]],
-                                                    tree = trees[[species[[i]]]],
-                                                    labels = labels[[species[[i]]]],
-                                                    defs = defs[[species[[i]]]],
-                                                    structs = spokes[[species[[i]]]],
-                                                    nk = nk[[species[[i]]]],
-                                                    k = k[[species[[i]]]],
-                                                    sign = "negative",
-                                                    threshold = threshold,
-                                                    threshold_value = threshold_value,
-                                                    threshold_symmetric = threshold_symmetric,
-                                                    threshold_comparison = threshold_comparison)
-    
-    positive_fractions <- select(positive_fractions, name, positive = fvoxels_expr)
-    negative_fractions <- select(negative_fractions, name, negative = fvoxels_expr)
-    
-    fractions[[species[[i]]]] <- inner_join(positive_fractions,
-                                            negative_fractions,
-                                            by = "name") %>% 
-      mutate(negative = -1*negative,
-             species = species[[i]])
-    
-  }
-  
-  #Intersect regions with neuroanatomical homologues
-  fractions <- intersect_neuro_homologues(x = fractions, 
-                                          homologues = spokes)
-  
-  #Reduce list to a data frame
-  radar <- reduce(.x = fractions, .f = bind_rows)
-  
-  #Relevel regions so that the radar chart closes on itself
-  lvls <- levels(radar$name)
-  lvls <- c(" ", lvls)
-  radar_dummy <- radar %>% 
-    mutate(name = as.character(name)) %>% 
-    filter(name == lvls[length(lvls)]) %>% 
-    mutate(name = " ")
-  radar <- bind_rows(radar, radar_dummy)
-  radar <- mutate(radar, name = factor(name, levels = lvls))
-  
-  return(radar)
-  
 }
 
 
