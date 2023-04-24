@@ -17,7 +17,7 @@ suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(RColorBrewer))
 ```
 
-```{r functions, }
+```{r functions}
 source("../../src/utils.R")
 
 estimate_cluster_metrics <- function (W, NUMC = 2:5){
@@ -65,7 +65,6 @@ estimate_cluster_metrics <- function (W, NUMC = 2:5){
   return(out)
 }
 ```
-
 
 ```{r directories}
 #Output directory
@@ -115,14 +114,14 @@ human_params <- fetch_params_metadata(metadata = human_metadata,
 human_params
 ```
 
-```{r parameters}
+```{r params}
 #Parameter set IDs
 mouse_params_id <- 107
 # human_params_id <- 256
 human_params_id <- 700
 # human_params_id <- 547
 
-#Mouse clustering directory
+#Clustering directories
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters")
 human_cluster_dir <- file.path(human_pipeline_dir, human_params_id, "clusters")
 
@@ -324,6 +323,7 @@ dev.off()
 
 p_human_affinity_matrix
 ```
+
 ```{r}
 df_human_cluster_counts <- df_human_clusters %>% 
   select(k = paste0("nk", nk_human)) %>% 

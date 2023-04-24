@@ -25,6 +25,8 @@ analyses/cluster_nk_optimization/outputs
 analyses/cluster_nk_optimization/*.pdf
 analyses/cluster_nk_optimization/*.html
 analyses/troubleshoot_effect_sizes/*.pdf
+analyses/human_cluster_characteristics/*.pdf
+analyses/human_cluster_characteristics/outputs
 figures/figure1
 figures/*.pdf
 .idea
