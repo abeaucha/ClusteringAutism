@@ -35,3 +35,4 @@ scripts_old/
 templates/
 dev.py
 dev.R
+logs/
