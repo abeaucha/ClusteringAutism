@@ -285,7 +285,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v1/',
                                               sort = True, parallel = True,
                                               nproc = nproc)
         df_es['file'] = [os.path.basename(file) for file in df_es['file']]
-        df_es.to_csv(os.path.join(es_dir_downsampled, jac, es_matrix_file))
+        df_es.to_csv(os.path.join(es_dir_downsampled, jac, es_matrix_file),
+                     index = False)
 
     # Cluster effect sizes ----------------------------------------------------
     print("Clustering absolute and relative effect size images...")
