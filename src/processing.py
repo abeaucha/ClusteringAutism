@@ -781,8 +781,8 @@ def mask_from_image(img, signed = False):
     return mask
 
 
-def permute_cluster_labels(cluster_file, outdir, npermutations = 100, start = 1):
-
+def permute_cluster_labels(cluster_file, outdir, npermutations = 100, start = 1,
+                           min_per_k = None):
     outdir = os.path.join(outdir, '')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -790,17 +790,26 @@ def permute_cluster_labels(cluster_file, outdir, npermutations = 100, start = 1)
     df_clusters = pd.read_csv(cluster_file)
     cols = df_clusters.drop('ID', axis = 1).columns
 
+    min_per_k = 0 if min_per_k is None else min_per_k
+
     outfiles = []
-    for p in range(start, start+npermutations):
+    for p in range(start, start + npermutations):
 
         df_permute = df_clusters.copy()
         for col in cols:
+            k = df_clusters[col].to_numpy()
+            k_vals, k_freq = np.unique(k, return_counts = True)
+            k_lt_min = k_vals[k_freq < min_per_k]
+            lt_min = np.isin(k, k_lt_min)
 
             random.seed(p)
             np.random.seed(p)
-            df_permute[col] = np.random.choice(df_clusters[col].to_numpy(),
-                                               size = df_clusters.shape[0],
-                                               replace = False)
+            k[~lt_min] = np.random.choice(k[~lt_min],
+                                          size = len(k[~lt_min]),
+                                          replace = False)
+
+            k[lt_min] = -1
+            df_permute[col] = k
 
         outfile = 'clusters_permutation_{}.csv'.format(p)
         outfile = os.path.join(outdir, outfile)
