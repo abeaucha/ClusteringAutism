@@ -132,6 +132,10 @@ human_cluster_resolution <- human_params[["cluster_resolution"]]
 human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
 human_cluster_dir <- file.path(human_cluster_dir, str_c("resolution_", human_cluster_resolution))
 
+#Human effect size directory
+human_es_dir <- file.path(human_pipeline_dir, human_params_id, "effect_sizes")
+human_es_dir <- file.path(human_es_dir, str_c("resolution_", human_cluster_resolution))
+
 params_id <- str_c(str_c("H", human_params_id), 
                    str_c("M", mouse_params_id), 
                    sep = "-")
@@ -257,45 +261,71 @@ p_human_counts
 ```
 
 ```{r}
-human_es_dir <- file.path(human_pipeline_dir, human_params_id, "effect_sizes")
-human_es_dir <- file.path(human_es_dir, str_c("resolution_", human_cluster_resolution))
+umap_seed <- 2
+jacobians <- c("absolute", "relative")
+list_human_umap <- vector(mode = "list", length = length(jacobians))
+names(list_human_umap) <- jacobians
+for (j in jacobians) {
+  
+  human_es_file <- file.path(human_es_dir, j, "effect_sizes.csv")
+  df_human_es <- as_tibble(data.table::fread(human_es_file, header = TRUE))
+  
+  df_human_es_data <- df_human_es[,colnames(df_human_es) != "file"]
+  df_human_es_labels <- df_human_es[,colnames(df_human_es) == "file"]
+  
+  human_umap <- umap(df_human_es_data, n_components = 2, random_state = umap_seed)
+  df_human_umap <- human_umap[["layout"]]
+  colnames(df_human_umap) <- c("x1", "x2")
+  df_human_umap <- as_tibble(df_human_umap)
+  df_human_umap[["ID"]] <- df_human_es_labels[["file"]]
+  
+  df_human_umap <- df_human_umap %>% 
+    inner_join(df_human_clusters, by = "ID")
+  
+  df_human_umap_long <- df_human_umap %>% 
+    column_to_rownames("ID") %>% 
+    pivot_longer(cols = c(-x1, -x2), names_to = "nk", values_to = "k") %>% 
+    mutate(nk = str_remove(nk, "nk"),
+           nk = as.numeric(nk),
+           nk = factor(nk),
+           k = factor(k))
+  
+  list_human_umap[[j]] <- df_human_umap_long
+  
+}
+```
 
-human_es_file <- file.path(human_es_dir, "absolute", "effect_sizes.csv")
-df_human_es <- as_tibble(data.table::fread(human_es_file, header = TRUE))
+```{r}
+p_human_umap_abs <- ggplot(list_human_umap[["absolute"]], 
+       aes(x = x1, y = x2, col = k)) + 
+  geom_point() + 
+  facet_wrap(~nk, nrow = 3) + 
+  labs(title = "Human absolute effect size UMAP projection") + 
+  theme_bw()
 
-df_human_es_data <- df_human_es[,colnames(df_human_es) != "file"]
-df_human_es_labels <- df_human_es[,colnames(df_human_es) == "file"]
+outfile <- paste0("human_umap_", umap_seed, "_absolute.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = 12,
+    height = 10)
+print(p_human_umap_abs)
+dev.off()
+```
 
-human_umap <- umap(df_human_es_data, n_components = 2, random_state = 1)
-df_human_umap <- human_umap[["layout"]]
-colnames(df_human_umap) <- c("x1", "x2")
-df_human_umap <- as_tibble(df_human_umap)
-df_human_umap[["ID"]] <- df_human_es_labels[["file"]]
-
-df_human_umap <- df_human_umap %>% 
-  inner_join(df_human_clusters, by = "ID")
-
-df_human_umap_long <- df_human_umap %>% 
-  column_to_rownames("ID") %>% 
-  pivot_longer(cols = c(-x1, -x2), names_to = "nk", values_to = "k") %>% 
-  mutate(nk = str_remove(nk, "nk"),
-         nk = as.numeric(nk),
-         nk = factor(nk),
-         k = factor(k))
-
-p_human_umap <- ggplot(df_human_umap_long, 
+```{r}
+p_human_umap_rel <- ggplot(list_human_umap[["relative"]], 
        aes(x = x1, y = x2, col = k)) + 
   geom_point() + 
   facet_wrap(~nk, nrow = 3) + 
   labs(title = "Human relative effect size UMAP projection") + 
   theme_bw()
 
-outfile <- "human_umap_relative.pdf"
+outfile <- paste0("human_umap_", umap_seed, "_relative.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile, 
     width = 12,
     height = 10)
-print(p_human_umap)
+print(p_human_umap_rel)
 dev.off()
 ```
 
