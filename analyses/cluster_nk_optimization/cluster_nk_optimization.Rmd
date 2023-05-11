@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = FALSE)
 ```{r packages}
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(SNFtool))
+suppressPackageStartupMessages(library(umap))
 suppressPackageStartupMessages(library(ggalluvial))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(RColorBrewer))
@@ -211,10 +212,10 @@ p_affinity_dist
 ```{r}
 df_human_clusters_long <- df_human_clusters %>% 
   pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = str_extract(nk_name, "[0-9]+"),
+  mutate(nk = str_remove(nk_name, "nk"),
          nk = as.numeric(nk),
-         nk = factor(nk, levels = 2:10),
-         k = factor(k, levels = 1:10))
+         nk = factor(nk),
+         k = factor(k))
 
 p_human_alluvial <- ggplot(df_human_clusters_long,
                            aes(x = nk,
@@ -234,6 +235,70 @@ p_human_alluvial <- ggplot(df_human_clusters_long,
 p_human_alluvial
 ```
 
+```{r}
+df_human_clusters_n <- df_human_clusters_long %>% 
+  group_by(nk, k) %>% 
+  count() %>% 
+  ungroup()
+
+p_human_counts <- ggplot(df_human_clusters_n, 
+       aes(x = nk, y = fct_rev(k), fill = n)) + 
+  geom_tile(col = "black") +
+  geom_text(aes(label = n)) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_distiller(na.value = "white", palette = "Reds", direction = 1) +
+  labs(x = "nk",
+       y = "k",
+       title = "Human clusters numbers") + 
+  theme_bw()
+
+p_human_counts
+```
+
+```{r}
+human_es_dir <- file.path(human_pipeline_dir, human_params_id, "effect_sizes")
+human_es_dir <- file.path(human_es_dir, str_c("resolution_", human_cluster_resolution))
+
+human_es_file <- file.path(human_es_dir, "absolute", "effect_sizes.csv")
+df_human_es <- as_tibble(data.table::fread(human_es_file, header = TRUE))
+
+df_human_es_data <- df_human_es[,colnames(df_human_es) != "file"]
+df_human_es_labels <- df_human_es[,colnames(df_human_es) == "file"]
+
+human_umap <- umap(df_human_es_data, n_components = 2, random_state = 1)
+df_human_umap <- human_umap[["layout"]]
+colnames(df_human_umap) <- c("x1", "x2")
+df_human_umap <- as_tibble(df_human_umap)
+df_human_umap[["ID"]] <- df_human_es_labels[["file"]]
+
+df_human_umap <- df_human_umap %>% 
+  inner_join(df_human_clusters, by = "ID")
+
+df_human_umap_long <- df_human_umap %>% 
+  column_to_rownames("ID") %>% 
+  pivot_longer(cols = c(-x1, -x2), names_to = "nk", values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+p_human_umap <- ggplot(df_human_umap_long, 
+       aes(x = x1, y = x2, col = k)) + 
+  geom_point() + 
+  facet_wrap(~nk, nrow = 3) + 
+  labs(title = "Human relative effect size UMAP projection") + 
+  theme_bw()
+
+outfile <- "human_umap_relative.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = 12,
+    height = 10)
+print(p_human_umap)
+dev.off()
+```
+
 
 ## Optimal number of human clusters
 
@@ -244,11 +309,6 @@ nk_max <- 100
 #Human optimal nk
 estimateNumberOfClustersGivenGraph(W = mat_human_affinity, NUMC = 2:nk_max)
 ```
-
-```{r}
-nk_human <- 4
-```
-
 
 ```{r fig.width = 10, fig.height = 5}
 df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:nk_max)
@@ -276,6 +336,10 @@ p_human_rotation <- ggplot(df_human_cluster_metrics,
 
 (p_human_eigengap / p_human_rotation) +
   plot_annotation(title = "Human cluster metric distribution")
+```
+
+```{r}
+nk_human <- 4
 ```
 
 ```{r fig.width = 6, fig.height = 5}
@@ -347,10 +411,10 @@ ggplot(df_human_cluster_counts,
 ```{r}
 df_mouse_clusters_long <- df_mouse_clusters %>% 
   pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = str_extract(nk_name, "[0-9]+"),
+  mutate(nk = str_remove(nk_name, "nk"),
          nk = as.numeric(nk),
-         nk = factor(nk, levels = 2:10),
-         k = factor(k, levels = 1:10))
+         nk = factor(nk),
+         k = factor(k))
 
 p_mouse_alluvial <- ggplot(df_mouse_clusters_long,
                            aes(x = nk,
