@@ -413,21 +413,108 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
     return
 
 
-def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
-                               human_params_id, mouse_params_id,
-                               pipeline_dir = 'data/cross_species/',
-                               human_expr_dir = 'data/human/expression/',
-                               mouse_expr_dir = 'data/mouse/expression/',
-                               human_mask = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
-                               mouse_mask = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
-                               human_microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study_v2.csv',
-                               gene_space = 'average-latent-space',
-                               n_latent_spaces = 100, latent_space_id = 1,
-                               metric = 'correlation', signed = True,
-                               threshold = 'top_n', threshold_value = 0.2,
-                               threshold_symmetric = True,
-                               jacobians = ('absolute', 'relative'),
-                               parallel = True, nproc = None):
+def compute_cluster_similarity(
+        human_pipeline_dir, mouse_pipeline_dir,
+        human_params_id, mouse_params_id,
+        pipeline_dir = 'data/cross_species/v2/',
+        human_expr_dir = 'data/human/expression/',
+        mouse_expr_dir = 'data/mouse/expression/',
+        human_mask = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
+        mouse_mask = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
+        human_microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study_v2.csv',
+        gene_space = 'average-latent-space',
+        n_latent_spaces = 100, latent_space_id = 1,
+        metric = 'correlation', signed = True,
+        threshold = 'top_n', threshold_value = 0.2,
+        threshold_symmetric = True,
+        jacobians = ('absolute', 'relative'),
+        parallel = True, nproc = None
+):
+    """
+    Mouse-human cluster similarity pipeline.
+
+    Parameters
+    ----------
+    human_pipeline_dir: str
+        Path to human processing pipeline directory.
+    mouse_pipeline_dir: str
+        Path to mouse processing pipeline directory.
+    human_params_id: str
+        Human processing pipeline parameter set ID.
+    mouse_params_id: str
+        Mouse processing pipeline parameter set ID.
+    pipeline_dir: str
+        Path to the pipeline directory.
+    human_expr_dir: str, default 'data/human/expression/'
+        Path to the human expression directory.
+    mouse_expr_dir: str, default 'data/mouse/expression/'
+        Path to the mouse expression directory.
+    human_mask: str, default 'data/human/registration/v2/reference_files/mask_0.8mm.mnc'
+        Path to the human mask image (.mnc)
+    mouse_mask: str, default 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc'
+        Path to the mouse mask image (.mnc) used to generate the expression
+        data.
+    human_microarray_coords: str, default 'data/human/expression/AHBA_microarray_coordinates_study_v2.csv',
+        Path to the file (.csv) containing AHBA microarray sample coordinates
+        in the study space.
+    gene_space: {'average-latent-space', 'latent-space', 'homologous-genes'}
+        The gene expression common space to use to compute transcriptomic
+        similarity.
+    n_latent_spaces: int, default 100
+        The number of latent spaces to use when `gene_space` =
+        'average-latent-space'. Ignored otherwise.
+    latent_space_id: int, default 1
+        The ID of the latent space to use when `gene_space` = 'latent-space'.
+        Ignored otherwise.
+    metric: str, default 'correlation'
+        The metric used to compute the similarity of mouse and human cluster
+        centroid images.
+    signed: bool, default True
+        Option to evaluate similarity based on positive and negative image
+        values before combining into a single similarity value. If False,
+        similarity is calculated based on absolute voxel values.
+    threshold: {'top_n', 'intensity', None}
+        Method used to threshold mouse and human images before evaluating
+        similarity.
+    threshold_value: float, default 0.2
+        Threshold value to use with threshold method.
+    threshold_symmetric: bool, default True
+        Option to apply threshold symmetrically to positive and negative voxel
+        values.
+    jacobians: str or tuple of str, default ('absolute', 'relative')
+        Option to compute mouse-human similarity using absolute or relative
+        cluster centroid images, or both.
+    parallel: bool, default True
+        Option to run in parallel.
+    nproc: int, default None
+        Number of processors to use in parallel.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    The pipeline evaluates the pairwise similarity between all mouse and human
+    cluster centroid images in the specified input directories.
+
+    The arguments `human_params_id` and `mouse_params_id` specify the
+    processing pipeline parameter sets to use as input. This function will look
+    for sub-directories corresponding to these parameter set IDs in the human
+    and mouse pipeline directories.
+
+    The similarity between human and mouse cluster centroid images is evaluated
+    by creating human and mouse gene expression signatures for each image.
+    These gene expression signatures are compared using the specified
+    similarity metric.
+
+    The pipeline provides the option to threshold the human and mouse images
+    prior to constructing the gene expression signatures. Only supra-threshold
+    voxels contribute to the expression signatures. If no `threshold` = None,
+    all voxels contribute.
+    """
+
+    # Parallel option
     if parallel:
         if nproc is None:
             raise Exception("Argument --nproc must be specified "
