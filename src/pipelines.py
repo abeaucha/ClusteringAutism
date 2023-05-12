@@ -53,7 +53,8 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
 
     # Path to clustering directory
     cluster_dir = os.path.join(pipeline_dir, 'clusters', '')
-    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps', 'resolution_{}'.format(resolution_mm), '')
+    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps',
+                                   'resolution_{}'.format(resolution_mm), '')
 
     # Check existence of input directory
     if not os.path.exists(input_dir):
@@ -65,11 +66,11 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
     if not os.path.exists(cluster_dir):
         os.makedirs(cluster_dir)
 
-    #Clusters and affinity matrix
+    # Clusters and affinity matrix
     cluster_file = os.path.join(input_dir, 'Clusters.csv')
     affinity_file = '/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/SNFMatrix_Paper/WMatrix.RData'
 
-    #Copy files
+    # Copy files
     copyfile(cluster_file, os.path.join(cluster_dir, 'clusters.csv'))
     copyfile(affinity_file, os.path.join(cluster_dir, 'affinity.RData'))
 
@@ -122,10 +123,10 @@ def fetch_mouse_clustering_outputs(pipeline_dir, input_dir, resolution = 200,
     return
 
 
-def process_human_data(pipeline_dir = 'data/human/derivatives/v1/',
-                       input_dir = 'data/human/registration/v1/jacobians_resampled/resolution_0.8/',
-                       demographics = 'data/human/registration/v1/DBM_input_demo_passedqc_wfile.csv',
-                       mask = 'data/human/registration/v1/reference_files/mask_0.8mm.mnc',
+def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
+                       input_dir = 'data/human/registration/v2/jacobians_resampled/resolution_0.8/',
+                       demographics = 'data/human/registration/v2/subject_info/demographics.csv',
+                       mask = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
                        datasets = ('POND', 'SickKids'),
                        parallel = True, nproc = None,
                        es_method = 'normative-growth', es_nbatches = 1,
@@ -137,9 +138,93 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v1/',
                        cluster_file = 'clusters.csv',
                        cluster_affinity_file = 'affinity.csv',
                        cluster_map_method = 'mean'):
-    """
-    Docstring
-    
+    """Human processing pipeline.
+
+    Function to implement human processing pipeline steps, including computing
+    effect sizes, clustering, and generating cluster centroid maps.
+
+    Parameters
+    ----------
+    pipeline_dir: str
+        Path to the pipeline directory.
+    input_dir: str
+        Path to the directory containing absolute and relative Jacobian images.
+    demographics: str
+        Path to the file (.csv) containing demographics information.
+    mask: str
+        Path to the mask image (.mnc)
+    datasets: tuple of str
+        Datasets to include in processing.
+    parallel: bool, default True
+        Option to run in parallel.
+    nproc: int, default None
+        Number of processors to use in parallel.
+    es_method: {'normative-growth', 'propensity-matching'}
+        Method used to compute effect sizes.
+    es_nbatches: int, default 1
+        Number of batches to use in effect size computation.
+    es_df: int, default 3
+        Number of degrees of freedom to use when `es_method` = 'normative-growth'
+    es_batch: str or tuple of str
+        Batch variables to normalize against when `es_method` =
+        'normative-growth'
+    es_ncontrols: int, default 10
+        Number of controls to use for propensity matching when `es_method` =
+        'propensity-matching'
+    es_matrix_file: str, default 'effect_sizes.csv'
+        Basename of the file (.csv) in which to write the absolute and relative
+        effect size matrices.
+    cluster_resolution: float, default 3.0
+        Resolution (mm) of effect size images at which to execute clustering.
+    cluster_nk_max: int, default 10
+        Maximum number of clusters to identify. Clustering solutions are
+        identified from nk = 2 to nk = `cluster_nk_max`
+    cluster_metric: str, default 'correlation'
+        Distance metric used to generate affinity matrices during clustering.
+    cluster_K: int, default 10
+        Number of nearest-neighbours to consider when building affinity matrices
+        during clustering.
+    cluster_sigma: float, default 0.5
+        Variance of the local model used to generate affinity matrices during
+        clustering.
+    cluster_t: int, default 20
+        Number of iterations for the diffusion process in similarity network
+        fusion during clustering.
+    cluster_file: str, default 'clusters.csv'
+        Basename of the file (.csv) in which to write the cluster assignments.
+    cluster_affinity_file: str, default 'affinity.csv'
+        Basename of the file (.csv) in which to write the fused affinity matrix.
+    cluster_map_method: {'mean', 'median'}
+        Method used to generate cluster centroid images.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    The pipeline consists of three main stages:
+    1. Compute effect size images for all participants.
+    2. Identify clusters of participants using effect size images.
+    3. Generate cluster centroid images for all clusters.
+
+    The pipeline generates a set of sub-directories in the specified pipeline
+    directory for each of the stages.
+
+    The input directory provided to `input_dir` must contain sub-directories
+    'absolute' and 'relative', which contain the Jacobian images.
+
+    Effect size images are evaluated using absolute and relative Jacobian images
+    separately. Effect sizes can be computed either using voxel-wise normative
+    growth models or using propensity-matching and voxel-wise z-scoring.
+
+    Clusters are obtained using both absolute and relative effect size images.
+    Information from both classes of images are combined using similarity
+    network fusion. Fused similarity networks are clustered using spectral
+    clustering.
+
+    Absolute and relative cluster centroid maps are generated using the method
+    specified for every cluster identified.
     """
 
     # Convert parameter tuples to lists
@@ -200,9 +285,12 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v1/',
 
     # Directories for pipeline stages
     imgdir = os.path.join(pipeline_dir, 'jacobians', '')
-    es_dir = os.path.join(pipeline_dir, 'effect_sizes', 'resolution_{}'.format(resolution), '')
-    cluster_dir = os.path.join(pipeline_dir, 'clusters', 'resolution_{}'.format(cluster_resolution), '')
-    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps', 'resolution_{}'.format(resolution), '')
+    es_dir = os.path.join(pipeline_dir, 'effect_sizes',
+                          'resolution_{}'.format(resolution), '')
+    cluster_dir = os.path.join(pipeline_dir, 'clusters',
+                               'resolution_{}'.format(cluster_resolution), '')
+    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps',
+                                   'resolution_{}'.format(resolution), '')
 
     # Check existence of input directory
     if not os.path.exists(input_dir):
@@ -264,7 +352,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v1/',
 
         # Resample effect size images -----------------------------------------
         if resolution != cluster_resolution:
-            print("Downsampling effect sizes to {}mm...".format(cluster_resolution))
+            print("Downsampling effect sizes to {}mm...".format(
+                cluster_resolution))
             es_dir_downsampled = es_dir.replace(
                 'resolution_{}'.format(resolution),
                 'resolution_3.0')
@@ -343,7 +432,7 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
             raise Exception("Argument --nproc must be specified "
                             "when --parallel true")
 
-    #Check jacobians type
+    # Check jacobians type
     if type(jacobians) is tuple:
         jacobians = list(jacobians)
     elif type(jacobians) is str:
@@ -397,10 +486,12 @@ def compute_cluster_similarity(human_pipeline_dir, mouse_pipeline_dir,
     mouse_resolution = params['mouse_resolution']
 
     # Cluster map directories
-    human_cluster_dir = os.path.join(human_pipeline_dir, human_params_id, 'cluster_maps',
+    human_cluster_dir = os.path.join(human_pipeline_dir, human_params_id,
+                                     'cluster_maps',
                                      'resolution_{}'.format(human_resolution),
                                      '')
-    mouse_cluster_dir = os.path.join(mouse_pipeline_dir, mouse_params_id, 'cluster_maps',
+    mouse_cluster_dir = os.path.join(mouse_pipeline_dir, mouse_params_id,
+                                     'cluster_maps',
                                      'resolution_{}'.format(mouse_resolution),
                                      '')
 
@@ -468,8 +559,7 @@ def permute_cluster_similarity(pipeline_dir, params_id,
                                npermutations = 100, permutations_start = 1,
                                jacobians = ('absolute', 'relative'),
                                keep_cluster_maps = False, nproc = 1):
-
-    #Check jacobians type
+    # Check jacobians type
     if type(jacobians) is tuple:
         jacobians = list(jacobians)
     elif type(jacobians) is str:
@@ -477,13 +567,13 @@ def permute_cluster_similarity(pipeline_dir, params_id,
     else:
         raise TypeError("`jacobians` must be a string or a tuple of strings.")
 
-    #Get parameter set with specified ID
+    # Get parameter set with specified ID
     params_metadata = os.path.join(pipeline_dir, 'metadata.csv')
     if not os.path.exists(params_metadata):
         raise OSError("File not found: {}".params_metadata)
     params = utils.fetch_params_metadata(params_metadata, id = str(params_id))
 
-    #Pipeline directory
+    # Pipeline directory
     pipeline_dir = os.path.join(pipeline_dir, params_id, 'permutations', '')
     if not os.path.exists(pipeline_dir):
         os.makedirs(pipeline_dir)
@@ -493,23 +583,28 @@ def permute_cluster_similarity(pipeline_dir, params_id,
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    #Human and mouse parameter set IDs
+    # Human and mouse parameter set IDs
     human_params_id = params['human_id'].values[0]
     mouse_params_id = params['mouse_id'].values[0]
 
-    #Human and mouse pipeline resolutions
+    # Human and mouse pipeline resolutions
     human_resolution = params['human_resolution'].values[0]
     human_cluster_resolution = params['human_cluster_resolution'].values[0]
     mouse_resolution = params['mouse_resolution'].values[0]
 
-    #Human directories
+    # Human directories
     human_pipeline_dir = os.path.join(human_pipeline_dir, human_params_id, '')
-    human_es_dir = os.path.join(human_pipeline_dir, 'effect_sizes', 'resolution_{}'.format(human_resolution), '')
-    human_cluster_dir = os.path.join(human_pipeline_dir, 'clusters', 'resolution_{}'.format(human_cluster_resolution), '')
+    human_es_dir = os.path.join(human_pipeline_dir, 'effect_sizes',
+                                'resolution_{}'.format(human_resolution), '')
+    human_cluster_dir = os.path.join(human_pipeline_dir, 'clusters',
+                                     'resolution_{}'.format(
+                                         human_cluster_resolution), '')
 
-    #Mouse directories
+    # Mouse directories
     mouse_pipeline_dir = os.path.join(mouse_pipeline_dir, mouse_params_id, '')
-    mouse_cluster_map_dir = os.path.join(mouse_pipeline_dir, 'cluster_maps', 'resolution_{}'.format(mouse_resolution),)
+    mouse_cluster_map_dir = os.path.join(mouse_pipeline_dir, 'cluster_maps',
+                                         'resolution_{}'.format(
+                                             mouse_resolution), )
 
     # Permute cluster labels
     human_cluster_file = os.path.join(human_cluster_dir, 'clusters.csv')
@@ -520,7 +615,7 @@ def permute_cluster_similarity(pipeline_dir, params_id,
         npermutations = npermutations,
         start = permutations_start)
 
-    #Human cluster centroid method
+    # Human cluster centroid method
     cluster_map_method = params['human_cluster_map_method'].values[0]
 
     # Transcriptomic similarity args
@@ -529,16 +624,19 @@ def permute_cluster_similarity(pipeline_dir, params_id,
                                 'threshold', 'threshold_value',
                                 'threshold_symmetric']]
     similarity_kwargs = similarity_kwargs.to_dict(orient = 'list')
-    similarity_kwargs = {key:val[0] for key, val in similarity_kwargs.items()}
-    similarity_kwargs['n_latent_spaces'] = int(similarity_kwargs['n_latent_spaces'])
+    similarity_kwargs = {key: val[0] for key, val in similarity_kwargs.items()}
+    similarity_kwargs['n_latent_spaces'] = int(
+        similarity_kwargs['n_latent_spaces'])
     similarity_kwargs['signed'] = bool(similarity_kwargs['signed'])
-    similarity_kwargs['threshold_value'] = float(similarity_kwargs['threshold_value'])
-    similarity_kwargs['threshold_symmetric'] = bool(similarity_kwargs['threshold_symmetric'])
+    similarity_kwargs['threshold_value'] = float(
+        similarity_kwargs['threshold_value'])
+    similarity_kwargs['threshold_symmetric'] = bool(
+        similarity_kwargs['threshold_symmetric'])
 
     # Iterate over permutations
     p_range = range(permutations_start, permutations_start + npermutations)
     for p, pfile in zip(p_range, human_perm_files):
-        print("Permutation {} of {}".format(p, p_range[len(p_range)-1]))
+        print("Permutation {} of {}".format(p, p_range[len(p_range) - 1]))
 
         # Iterate over jacobians
         for j in jacobians:
@@ -549,7 +647,8 @@ def permute_cluster_similarity(pipeline_dir, params_id,
             print("\t\tCreating cluster maps...")
             human_imgdir = os.path.join(pipeline_dir, 'cluster_maps',
                                         'permutation_{}'.format(p),
-                                        'resolution_{}'.format(human_resolution),
+                                        'resolution_{}'.format(
+                                            human_resolution),
                                         j, '')
             cluster_map_kwargs = dict(
                 clusters = pfile,
