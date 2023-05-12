@@ -23,25 +23,32 @@ def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
 
     Arguments
     ---------
-    infile: str
-        Path to the CSV file containing the voxelwise data.
+    imgdir: str
+        Path to the directory containing the images (.mnc) to use to
+        compute the effect sizes.
     demographics: str
-        Path to the CSV file containing the human demographics data.
-    outfile: str
-        Path to the CSV file in which to write the effect size data.
-    key: str
-        Primary key between voxels and demographics data.
-    df: int
-        Degrees of freedom to use in natural splines.
-    batch: list
+        Path to the file (.csv) containing the demographics data.
+    mask: str
+        Path to the mask file (.mnc).
+    outdir: str
+        Path to the directory in which to save the effect size images.
+    key: str, default 'file'
+        Primary key between demographics data and constructed voxel matrix.
+    df: int, default 3
+        Degrees of freedom to use in normative model natural splines.
+    batch: list of str
         Variables to use in normalization prior to modelling.
-    nproc: int
-        Number of processors to use in parallel.
+    nbatches: int, default 1
+        Number of voxel batches to use for computation of voxel-wise
+        normative models.
+    nproc: int, default None
+        Number of processors to use in parallel. Executed sequentially when
+        None.
 
     Returns
     -------
-    outfile: str
-        Path to the CSV file containing the effect size data.
+    outfiles: list of str
+        List of paths to the effect size images.
     """
 
     # Unpack function args into dictionary
@@ -144,26 +151,25 @@ def propensity_matching_norm(imgdir, demographics, mask, outdir,
     Arguments
     ---------
     imgdir: str
-        Path to the directory containing the MINC images to use to 
+        Path to the directory containing the images (.mnc) to use to
         compute the effect sizes.
     demographics: str
-        Path to the CSV file containing the human demographics data.
+        Path to the file (.csv) containing the demographics data.
     mask: str
-        Path to the mask MINC file for the images.
+        Path to the mask file (.mnc).
     outdir: str
-        Path to the directory in which to save the effect size MINC
-        images.
-    ncontrols: int
+        Path to the directory in which to save the effect size images.
+    ncontrols: int, default 10
         Number of propensity-matched controls to use when computing 
         the effect sizes.
-    parallel: bool
+    parallel: bool, default False
         Option to run in parallel.
-    nproc: int
+    nproc: int, default None
         Number of processors to use in parallel.
     
     Returns
     -------
-    outfiles: list
+    outfiles: list of str
         List of paths to the effect size images.
     """
 
@@ -273,25 +279,28 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
     Arguments
     ---------
     imgdir: str
-        Path to the directory containing the MINC images to use to 
+        Path to the directory containing the images (.mnc) to use to
         compute the effect sizes.
     demographics: str
-        Path to the CSV file containing the human demographics data.
+        Path to the file (.csv) containing the demographics data.
     mask: str
-        Path to the mask MINC file for the images.
+        Path to the mask file (.mnc).
     outdir: str
-        Path to the directory in which to save the effect size
-        MINC images.
-    method: str
+        Path to the directory in which to save the effect size images.
+    method: {'normative-growth', 'propensity-matching'}
         Method to use to compute effect sizes. 
-    parallel: bool
+    parallel: bool, default False
         Option to run in parallel.
-    nproc: int
+    nproc: int, default None
         Number of processors to use in parallel.
+    **kwargs: dict, optional
+        Extra arguments passed to `normative_growth_norm` and
+        `propensity_matching_norm` sub-routines. Refer to documentation for a
+        list of possible arguments.
         
     Returns
     -------
-    outfiles: list
+    outfiles: list of str
         List of paths to the effect size images.
     """
 

@@ -138,7 +138,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
                        cluster_file = 'clusters.csv',
                        cluster_affinity_file = 'affinity.csv',
                        cluster_map_method = 'mean'):
-    """Human processing pipeline.
+    """
+    Human processing pipeline.
 
     Function to implement human processing pipeline steps, including computing
     effect sizes, clustering, and generating cluster centroid maps.

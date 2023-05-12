@@ -3,7 +3,7 @@
 # Author: Antoine Beauchamp
 # Created: May 9th, 2022
 #
-# Calculate voxel-wise effect sizes for human patients.
+# Calculate voxel-wise effect sizes for human patients using propensity-matching.
 #
 # Description
 # -----------
@@ -25,16 +25,16 @@ suppressPackageStartupMessages(library(doSNOW))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
+    make_option("--imgdir",
+              type = "character",
+              help = paste("Path to directory containing the images (.mnc) to",
+                           "use to compute the effect sizes.")),
   make_option("--demographics",
               type = "character",
-              help = "Path to CSV file containing human demographics data."),
-  make_option("--imgdir",
-              type = "character",
-              help = paste("Path to directory containing images to use",
-                           "to compute effect sizes.")),
+              help = "Path to file (.csv) containing the demographics data."),
   make_option("--maskfile",
               type = "character",
-              help = "Path to mask file for the images."),
+              help = "Path to the mask file (.mnc)."),
   make_option("--outdir",
               type = "character",
               help = paste("Path to directory in which to save the effect",
@@ -42,8 +42,8 @@ option_list <- list(
   make_option("--ncontrols",
               type = "numeric",
               default = 10,
-              help = paste("Number of controls to use when computing effect",
-                           "sizes. [default %default]")),
+              help = paste("Number of propensity-matched controls to use when",
+                           "computing the effect sizes. [default %default]")),
   make_option("--parallel",
               type = "character",
               default = "false",
