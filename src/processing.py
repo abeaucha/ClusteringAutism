@@ -21,25 +21,32 @@ def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
 
     Arguments
     ---------
-    infile: str
-        Path to the CSV file containing the voxelwise data.
+    imgdir: str
+        Path to the directory containing the images (.mnc) to use to
+        compute the effect sizes.
     demographics: str
-        Path to the CSV file containing the human demographics data.
-    outfile: str
-        Path to the CSV file in which to write the effect size data.
-    key: str
-        Primary key between voxels and demographics data.
-    df: int
-        Degrees of freedom to use in natural splines.
-    batch: list
+        Path to the file (.csv) containing the demographics data.
+    mask: str
+        Path to the mask file (.mnc).
+    outdir: str
+        Path to the directory in which to save the effect size images.
+    key: str, default 'file'
+        Primary key between demographics data and constructed voxel matrix.
+    df: int, default 3
+        Degrees of freedom to use in normative model natural splines.
+    batch: list of str
         Variables to use in normalization prior to modelling.
-    nproc: int
-        Number of processors to use in parallel.
+    nbatches: int, default 1
+        Number of voxel batches to use for computation of voxel-wise
+        normative models.
+    nproc: int, default None
+        Number of processors to use in parallel. Executed sequentially when
+        None.
 
     Returns
     -------
-    outfile: str
-        Path to the CSV file containing the effect size data.
+    outfiles: list of str
+        List of paths to the effect size images.
     """
 
     # Unpack function args into dictionary
@@ -142,26 +149,25 @@ def propensity_matching_norm(imgdir, demographics, mask, outdir,
     Arguments
     ---------
     imgdir: str
-        Path to the directory containing the MINC images to use to 
+        Path to the directory containing the images (.mnc) to use to
         compute the effect sizes.
     demographics: str
-        Path to the CSV file containing the human demographics data.
+        Path to the file (.csv) containing the demographics data.
     mask: str
-        Path to the mask MINC file for the images.
+        Path to the mask file (.mnc).
     outdir: str
-        Path to the directory in which to save the effect size MINC
-        images.
-    ncontrols: int
+        Path to the directory in which to save the effect size images.
+    ncontrols: int, default 10
         Number of propensity-matched controls to use when computing 
         the effect sizes.
-    parallel: bool
+    parallel: bool, default False
         Option to run in parallel.
-    nproc: int
+    nproc: int, default None
         Number of processors to use in parallel.
     
     Returns
     -------
-    outfiles: list
+    outfiles: list of str
         List of paths to the effect size images.
     """
 
@@ -271,25 +277,28 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
     Arguments
     ---------
     imgdir: str
-        Path to the directory containing the MINC images to use to 
+        Path to the directory containing the images (.mnc) to use to
         compute the effect sizes.
     demographics: str
-        Path to the CSV file containing the human demographics data.
+        Path to the file (.csv) containing the demographics data.
     mask: str
-        Path to the mask MINC file for the images.
+        Path to the mask file (.mnc).
     outdir: str
-        Path to the directory in which to save the effect size
-        MINC images.
-    method: str
+        Path to the directory in which to save the effect size images.
+    method: {'normative-growth', 'propensity-matching'}
         Method to use to compute effect sizes. 
-    parallel: bool
+    parallel: bool, default False
         Option to run in parallel.
-    nproc: int
+    nproc: int, default None
         Number of processors to use in parallel.
+    **kwargs: dict, optional
+        Extra arguments passed to `normative_growth_norm` and
+        `propensity_matching_norm` sub-routines. Refer to documentation for a
+        list of possible arguments.
         
     Returns
     -------
-    outfiles: list
+    outfiles: list of str
         List of paths to the effect size images.
     """
 
@@ -335,18 +344,17 @@ def import_image(img, mask = None, flatten = True):
     Arguments
     ---------
     img: str
-        Path to the MINC image to import.
-    mask: str
-        Optional path to the MINC mask. 
-    flatten: bool
-        Option to flatten image into a 1-dimensional array. 
-        If True and a mask is provided, only the voxels in the mask 
-        will be returned.
+        Path to the image (.mnc) to import.
+    mask: str, default None
+        Path to a mask image (.mnc).
+    flatten: bool, default True
+        Option to flatten image into a 1-dimensional array. If True and a mask
+        is provided, only the voxels in the mask will be returned.
     
     Returns
     -------
     img: numpy.ndarray
-        A NumPy array containing the (masked) image.
+        Image voxel values.
     """
 
     # Import image
@@ -390,29 +398,25 @@ def import_images(imgfiles, mask = None, output_format = 'list', flatten = True,
     
     Arguments
     ---------
-    imgfiles: list
-        List of paths to images to import.
-    mask: str
-        Optional path to a mask image. 
-    output_format: str
-        One of ('list', 'numpy', 'pandas') indicating what format
-        to return.
-    flatten: bool
-        Option to flatten images into a 1-dimensional array. 
-        If True and a mask is provided, only the voxels in the mask 
-        will be returned.
-        If False and output_format is not 'list', images will be 
-        flattened regardless.
-    parallel: bool
+    imgfiles: list of str
+        List of paths to images.
+    mask: str, default None
+        Path to a mask image (.mnc).
+    output_format: {'list', 'numpy', 'pandas'}
+        String indicating what format to return.
+    flatten: bool, default True
+        Option to flatten images into a 1-dimensional array. If True and a mask
+        is provided, only the voxels in the mask will be returned. If False and
+        `output_format` is not 'list', images will be  flattened regardless.
+    parallel: bool, default False
         Option to run in parallel.
-    nproc: int
+    nproc: int, default None
         Number of processors to use in parallel.
     
     Returns
     -------
-    imgs
-        A list, NumPy array, or Pandas DataFrame containing 
-        the (masked) images.
+    imgs: list or numpy.ndarray or pandas.DataFrame
+        Object containing image voxel values.
     """
 
     format_opts = ['list', 'numpy', 'pandas']
@@ -468,28 +472,28 @@ def build_voxel_matrix(imgfiles, mask = None, file_col = False, sort = False,
     
     Arguments
     ---------
-    imgfiles: list
+    imgfiles: list of str
         List of paths to images.
-    mask: str
-        Optional path to a mask image. 
-    file_col: bool
-        Option to store input files in a column. 
-        If true, the paths in imgfiles are stored in a column 'file'.
-    sort: bool
+    mask: str, default None
+        Path to a mask image (.mnc).
+    file_col: bool, default False
+        Option to store input files in a column. If true, the paths in
+        `imgfiles` are stored in a column 'file'.
+    sort: bool, default False
         Option to sort rows based on file names.
-    save: bool
+    save: bool, default False
         Option to save to CSV.
-    outfile: str
-        Path to the output CSV file. Ignored if save = False.
-    parallel: bool
+    outfile: str, default 'voxel_matrix.csv'
+        Path to the output CSV file. Ignored if `save` = False.
+    parallel: bool, default False
         Option to run in parallel.
-    nproc: int
+    nproc: int, default None
         Number of processors to use in parallel.
     
     Returns
     -------
-    df_imgs
-        A Pandas DataFrame containing the (masked) images.
+    df_imgs: pandas.DataFrame
+        A data frame containing the image voxel values.
     """
 
     df_imgs = import_images(imgfiles = imgfiles,
@@ -520,30 +524,32 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10,
     
     Arguments
     ---------
-    infiles: list
-        List of paths to the files (.csv) containing voxelwise data.
-    rownames: str
-        File column containing row names.
-    nk_max: int
-        Maximum number of clusters to identify. 
-        Solutions will be obtained for nk = 2 to nk = nk_max.
-    metric: str
+    infiles: list of str
+        List of paths to the files (.csv) containing voxel-wise data.
+    rownames: str, default None
+        Column in the input files containing row names.
+    nk_max: int, default 10
+        Maximum number of clusters to identify. Solutions will be obtained for
+        nk = 2 to nk = `nk_max`.
+    metric: str, default 'correlation'
         Similarity metric used to compute the SNF affinity matrices.
-    K: int
+    K: int, default 10
         Number of nearest-neighbours used to compute the SNF 
         affinity matrices.
-    sigma: float
+    sigma: float, default 0.5
         Variance for the local model in the SNF affinity matrices.
-    t: int
+    t: int, default 20
         Number of iterations for the diffusion process in SNF.
-    cluster_file: str
+    cluster_file: str, default 'clusters.csv'
         Path to the file (.csv) in which to write the cluster assignments.
-    affinity_file: str
-        Path to the file (.csv) in which to write the affinity matrix.
+    affinity_file: str, default None
+        Path to the file (.csv) in which to write the affinity matrix. If None,
+        the affinity matrix is not saved.
         
     Returns
     -------
-    Path to the file containing the cluster assignments
+    cluster_file: str
+    Path to the file (.csv) containing the cluster assignments
     """
 
     # Unpack function args into dictionary
@@ -580,20 +586,20 @@ def cluster_human_data(infiles, rownames = None, nk_max = 10,
 def create_cluster_maps(clusters, imgdir, outdir, mask = None,
                         method = 'mean', nproc = 2, verbose = True):
     """
-    Create representative voxel-wise maps for clustered images.
+    Create cluster centroid images.
     
     Arguments
     ---------
     clusters: str
-        Path to the CSV file containing cluster assignments.
+        Path to the file (.csv) containing cluster assignments.
     imgdir: str
-        Path to the directory containing images to use.
-    mask: str
-        Path to the mask file to use.
+        Path to the directory containing images.
     outdir: str
         Path to the output directory.
-    method: str
-        Method used to create the representative cluster maps.
+    mask: str, default None
+        Path to a mask image (.mnc).
+    method: {'mean', 'median'}
+        Method used to compute the centroid images.
     nproc: int, default 2
         Number of processors to use in parallel.
     verbose: bool
@@ -601,8 +607,8 @@ def create_cluster_maps(clusters, imgdir, outdir, mask = None,
         
     Returns
     -------
-    outfiles: list
-        List of paths to the cluster maps.
+    outfiles: list of str
+        Paths to the cluster centroid images.
     """
 
     # Unpack function args into dictionary
