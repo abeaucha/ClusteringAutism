@@ -396,7 +396,7 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
 
     cluster_file = processing.cluster_human_data(**cluster_kwargs)
 
-    # Create cluster maps -----------------------------------------------------
+    # Create cluster centroid images ------------------------------------------
     for j, jac in enumerate(jacobians):
         print("Creating representative cluster maps for {} images..."
               .format(jac))

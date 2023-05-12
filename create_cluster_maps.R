@@ -3,13 +3,13 @@
 # Author: Antoine Beauchamp
 # Created: May 18th, 2022
 #
-# Create representative voxel-wise maps for clustered images.
+# Create cluster centroid images.
 #
 # Description
 # -----------
-# This script creates a representative voxel-wise map for each cluster. 
-# The representative cluster maps are computed by aggregating the voxel-wise
-# values for all images in a cluster. 
+# This script creates a cluster centroid image for each cluster. The centroid
+# images are computed by aggregating the voxel-wise values for all images in a
+# cluster.
 
 
 # Packages -------------------------------------------------------------------
@@ -24,25 +24,26 @@ suppressPackageStartupMessages(library(RMINC))
 option_list <- list(
   make_option("--cluster-file",
               type = "character",
-              help = "Path to .csv file containing cluster assignment data."),
+              help = "Path to the file (.csv) containing cluster assignments."),
   make_option("--imgdir",
               type = "character",
-              help = "Path to directory containing images to use."),
+              help = "Path to directory containing images."),
   make_option("--mask",
               type = "character",
-              help = "Path to the mask file to use."),
+              help = "Path to a mask image (.mnc)."),
   make_option("--outdir",
               type = "character",
-              help = paste("Path to output directory.")),
+              help = "Path to the output directory."),
   make_option("--method",
               type = "character",
               default = "mean",
-              help = paste("Method used to create the representative cluster",
-                           "maps. [default %default]")),
+              help = paste("Method used to compute the centroid images.",
+                           "[default %default]")),
   make_option("--nproc",
               type = "numeric",
               default = 2,
-              help = paste("Number of processors to use in parallel.")),
+              help = paste("Number of processors to use in parallel.",
+                           "[default %default]")),
   make_option("--verbose",
               type = "character",
               default = "true",

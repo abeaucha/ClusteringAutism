@@ -606,23 +606,23 @@ def resample_images(infiles, isostep, outdir = None, suffix = None,
      
     Parameters
     ---------
-    infiles: list
+    infiles: list of str
         List of paths to images to resample.
     isostep: float
         Isotropic dimension of voxels in the resampled image (mm).
-    outdir: str
+    outdir: str, default None
         Path to the output directory. If None, the resampled 
         images will be stored in the native directory.
-    suffix: str
+    suffix: str, default None
         Suffix to append to output filename before the file extension.
-    parallel: bool
+    parallel: bool, default False
         Option to run in parallel.
-    nproc: int
+    nproc: int, default None
         Number of processors to use in parallel.
         
     Returns
     -------
-    outfiles: list
+    outfiles: list of str
         List of paths to the resampled images.
     """
 
