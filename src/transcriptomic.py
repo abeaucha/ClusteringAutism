@@ -247,14 +247,48 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                                       threshold_value = 0.2,
                                       threshold_symmetric = True):
     """
-    Compute the similarity between a human image and a mouse image. 
-    
+    Compute the similarity between a human image and a mouse image.
+
+    Parameters
+    ----------
+    imgs: tuple of str
+        A tuple of length 2 containing the paths to the human and mouse images
+        (.mnc) to compare.
+    expr: tuple of str
+        A tuple of length 2 containing the paths to the human and mouse
+        expression matrices (.csv).
+    masks: tuple of str
+        A tuple of length 2 containing the paths to the human and mouse mask
+        images (.mnc).
+    microarray_coords: str
+        The path to the human microarray sample coordinates file (.csv).
+    metric: str, default 'correlation'
+        The metric used to compute the similarity of mouse and human images.
+    signed: bool, default True
+        Option to evaluate similarity based on positive and negative image
+        values before combining into a single similarity value. If False,
+        similarity is calculated based on absolute voxel values.
+    threshold: {'top_n', 'intensity', None}
+        Method used to threshold mouse and human images before evaluating
+        similarity.
+    threshold_value: float, default 0.2
+        Threshold value to use with threshold method.
+    threshold_symmetric: bool, default True
+        Option to apply threshold symmetrically to positive and negative voxel
+        values.
+
+    Returns
+    -------
+    sim: float
+        The similarity between the images.
     """
 
+    #Unpack the input tuples
     img_human, img_mouse = imgs
     expr_human, expr_mouse = expr
     mask_human, mask_mouse = masks
 
+    #Evaluate the human expression signature
     human = human_signature(img = img_human,
                             expr = expr_human,
                             mask = mask_human,
@@ -263,7 +297,8 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                             threshold = threshold,
                             threshold_value = threshold_value,
                             threshold_symmetric = threshold_symmetric)
-    
+
+    #Evaluate the mouse expression signature
     mouse = mouse_signature(img = img_mouse,
                             expr = expr_mouse,
                             mask = mask_mouse,
@@ -272,6 +307,7 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                             threshold_value = threshold_value,
                             threshold_symmetric = threshold_symmetric)
 
+    #Evaluate the similarity of the expression signatures
     if signed:
         sim = []
         for signatures in zip(human, mouse):
@@ -314,6 +350,7 @@ def get_latent_spaces(expr, ids = None):
 
 
 def tempfunc(inputs, **kwargs):
+    #TODO: Name this function
     return compute_transcriptomic_similarity(imgs = inputs[0],
                                              expr = inputs[1],
                                              **kwargs)
@@ -345,7 +382,7 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
     microarray_coords: str
         The path to the human microarray sample coordinates file (.csv).
     gene_space: {'average-latent-space', 'latent-space', 'homologous-genes'}
-        The transcriptomic common space to use for comparison.
+        The gene expression common space to use for comparison.
     n_latent_spaces: int, default 100
         The number of latent spaces to aggregate when `gene_space` =
         'average-latent-space'. Ignored otherwise.
@@ -355,14 +392,26 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
     metric: str, default 'correlation'
         The metric used to compute the similarity of mouse and human images.
     signed: bool, default True
+        Option to evaluate similarity based on positive and negative image
+        values before combining into a single similarity value. If False,
+        similarity is calculated based on absolute voxel values.
     threshold: {'top_n', 'intensity', None}
+        Method used to threshold mouse and human images before evaluating
+        similarity.
     threshold_value: float, default 0.2
+        Threshold value to use with threshold method.
     threshold_symmetric: bool, default True
+        Option to apply threshold symmetrically to positive and negative voxel
+        values.
     parallel: bool, default True
+        Option to run in parallel.
     nproc: int, default None
+        Number of processors to use in parallel.
 
     Returns
     -------
+    out: pandas.DataFrame
+        A data frame containing the similarity values for all input images.
     """
 
     # If imgs is tuple, convert to list of tuple
