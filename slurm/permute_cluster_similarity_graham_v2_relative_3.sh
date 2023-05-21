@@ -3,7 +3,7 @@
 #SBATCH -N 1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=48:00:00
+#SBATCH --time=54:00:00
 #SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main
 #SBATCH --output=logs/permute_cluster_similarity_v2_0.8mm_rel_3_%j.out
 
@@ -22,7 +22,7 @@ python3 permute_cluster_similarity.py \
 	--human-mask data/human/registration/v2/reference_files/mask_0.8mm.mnc \
 	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_study_v2.csv \
 	--npermutations 4 \
-	--permutations-start 33 \
+	--permutations-start 45 \
 	--jacobians relative \
 	--nproc $SLURM_CPUS_PER_TASK
 tf=$(date)
