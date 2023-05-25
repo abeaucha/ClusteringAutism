@@ -13,11 +13,8 @@ knitr::opts_chunk$set(echo = FALSE)
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(data.tree))
 suppressPackageStartupMessages(library(RMINC))
-suppressPackageStartupMessages(library(MRIcrotome))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(RColorBrewer))
-suppressPackageStartupMessages(library(grid))
-suppressPackageStartupMessages(library(gridExtra))
 ```
 
 ```{r functions}
@@ -27,7 +24,7 @@ source("../../src/analysis.R")
 source("../../src/tree_tools.R")
 ```
 
-```{r directories}
+```{r parameters}
 #Output directory
 output_dir <- "outputs/cluster_similarity/"
 
@@ -59,7 +56,7 @@ params <- fetch_params_metadata(metadata = metadata,
 params
 ```
 
-```{r parameters}
+```{r directories}
 #Parameter set ID
 params_id <- 405
 
@@ -107,7 +104,6 @@ for (i in 1:length(similarity)) {
 
 # Mouse-human cluster similarity
 
-
 ```{r similarity-matrices}
 nk_max <- params[["human_cluster_nk_max"]]
 
@@ -119,6 +115,7 @@ for (nk in 2:nk_max) {
   similarity_nk <- vector(mode = "list", length = length(similarity))
   names(similarity_nk) <- names(similarity)
   for (i in 1:length(similarity_nk)) {
+    
     df_sim <- similarity[[i]] %>% 
       filter(human_nk == nk,
              mouse_nk == nk) %>% 
@@ -192,15 +189,7 @@ for (nk in 2:nk_max) {
 ```
 
 
-# Mouse and human cluster centroid maps
-
-```{r}
-nk_mouse <- 4
-k_mouse <- 4
-
-nk_human <- 4
-k_human <- 4
-```
+# Mouse and human polar plots
 
 ```{r}
 mouse_anat_file <- "../../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
@@ -208,7 +197,7 @@ mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
 
 #Human anatomy
-human_anat_file <- "../../data/human/registration/v1/reference_files/model_0.8mm.mnc"
+human_anat_file <- "../../data/human/registration/v2/reference_files/model_0.8mm.mnc"
 human_anat <- mincGetVolume(human_anat_file)
 human_anat_vol <- mincArray(human_anat)
 
@@ -218,13 +207,11 @@ human_slices_dim_3 <- 25:220
 human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
 
 #Human mask
-human_mask <- "../../data/human/registration/v1/reference_files/mask_0.8mm.mnc"
+human_mask <- "../../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
 
 #Mouse mask
 mouse_mask <- "../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
-```
 
-```{r}
 #Human cluster map directories
 human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
 human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
@@ -236,9 +223,7 @@ mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
 mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
 mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
 names(mouse_cluster_map_dirs) <- jacobians  
-```
 
-```{r}
 signed <- params %>% 
   filter(id == params_id) %>% 
   pull(signed)
@@ -255,94 +240,6 @@ threshold_symmetric <- params %>%
   filter(id == params_id) %>% 
   pull(threshold_symmetric)
 ```
-
-```{r fig.height = 10, fig.width = 3}
-list_human_clusters <- vector(mode = "list", length = length(jacobians))
-for (i in 1:length(list_human_clusters)) {
-  list_human_clusters[[i]] <-  import_cluster_map(imgdir = human_cluster_map_dirs[[i]],
-                                                  mask = human_mask,
-                                                  nk = nk_human, k = k_human,
-                                                  threshold = threshold,
-                                                  threshold_value = threshold_value,
-                                                  threshold_symmetric = threshold_symmetric)
-}
-
-human_overlay_low <- numeric(length(list_human_clusters)) 
-human_overlay_high <- numeric(length(list_human_clusters)) 
-for (i in 1:length(list_human_clusters)) {
-  x <- list_human_clusters[[i]]
-  human_overlay_low[i] <- min(abs(x[x != 0]))
-  human_overlay_high[i] <- max(abs(x[x != 0]))
-}
-
-human_overlay_low <- min(human_overlay_low)
-human_overlay_high <- 0.8*max(human_overlay_high)
-
-human_overlay_low <- round(human_overlay_low, 2)
-human_overlay_high <- round(human_overlay_high, 2)
-
-ss_human_grob <- sliceSeries(nrow = 10, ncol = 1, begin = 50, end = 200) %>% 
-  anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
-  overlay(mincArray(list_human_clusters[[1]])[human_slices_dim_1,,human_slices_dim_3], 
-          low = human_overlay_low, high = human_overlay_high, symmetric = TRUE) %>% 
-  addtitle(jacobians[1]) %>% 
-  sliceSeries() %>% anatomy() %>%
-  overlay(mincArray(list_human_clusters[[2]])[human_slices_dim_1,,human_slices_dim_3], 
-          low = human_overlay_low, high = human_overlay_high, symmetric = TRUE) %>% 
-  addtitle(jacobians[2]) %>% 
-  legend("Effect size") %>% 
-  grobify()
-```
-
-```{r fig.height = 10, fig.width = 4}
-list_mouse_clusters <- vector(mode = "list", length = length(jacobians))
-for (i in 1:length(list_mouse_clusters)) {
-  list_mouse_clusters[[i]] <-  import_cluster_map(imgdir = mouse_cluster_map_dirs[[i]],
-                                                  mask = mouse_mask,
-                                                  nk = nk_mouse, k = k_mouse,
-                                                  threshold = threshold,
-                                                  threshold_value = threshold_value,
-                                                  threshold_symmetric = threshold_symmetric)
-}
-
-mouse_overlay_low <- numeric(length(list_mouse_clusters)) 
-mouse_overlay_high <- numeric(length(list_mouse_clusters)) 
-for (i in 1:length(list_mouse_clusters)) {
-  x <- list_mouse_clusters[[i]]
-  mouse_overlay_low[i] <- min(abs(x[x != 0]))
-  mouse_overlay_high[i] <- max(abs(x[x != 0]))
-}
-
-mouse_overlay_low <- min(mouse_overlay_low)
-mouse_overlay_high <- 0.8*max(mouse_overlay_high)
-
-mouse_overlay_low <- round(mouse_overlay_low, 2)
-mouse_overlay_high <- round(mouse_overlay_high, 2)
-
-
-ss_mouse_grob <- sliceSeries(nrow = 10, ncol = 1, begin = 10, end = 50) %>% 
-  anatomy(mouse_anat_vol, low = 700, high = 1400) %>% 
-  overlay(mincArray(list_mouse_clusters[[1]]), 
-          low = mouse_overlay_low, high = mouse_overlay_high, symmetric = TRUE) %>% 
-  addtitle(jacobians[1]) %>% 
-  sliceSeries() %>% anatomy() %>%
-  overlay(mincArray(list_mouse_clusters[[2]]), 
-          low = mouse_overlay_low, high = mouse_overlay_high, symmetric = TRUE) %>% 
-  addtitle(jacobians[2]) %>% 
-  legend("Effect size") %>% 
-  grobify()
-```
-
-```{r fig.width = 10, fig.height = 10}
-ss_grob <- arrangeGrob(ss_human_grob, ss_mouse_grob,
-                       layout_matrix = rbind(c(1,2)),
-                       widths = unit(c(0.45, 0.55), 'npc'))
-
-grid.newpage()
-grid.draw(ss_grob)
-```
-
-# Mouse and human polar plots
 
 ```{r}
 #Import mouse atlas labels
@@ -392,6 +289,9 @@ cluster_dirs_abs <- c("human" = human_cluster_map_dirs[[1]],
 cluster_dirs_rel <- c("human" = human_cluster_map_dirs[[2]], 
                       "mouse" = mouse_cluster_map_dirs[[2]])
 
+cluster_dirs <- list(cluster_dirs_abs, cluster_dirs_rel)
+names(cluster_dirs) <- jacobians
+
 #Human and mouse trees
 trees <- list("human" = human_tree,
               "mouse" = mouse_tree)
@@ -407,149 +307,112 @@ defs <- list("human" = human_defs,
 #Human and mouse masks
 masks <- list("human" = human_mask,
               "mouse" = mouse_mask)
-
-#Human and mouse nk
-nk <- list("human" = nk_human,
-           "mouse" = nk_mouse)
-
-#Human and mouse k
-k <- list("human" = k_human,
-          "mouse" = k_mouse)
-
-# Prepare radar chart data
-radar_abs <- prepare_radar_chart(cluster_dirs = cluster_dirs_abs,
-                                 nk = nk, k = k,
-                                 trees = trees,
-                                 spokes = df_spokes,
-                                 labels = labels,
-                                 defs = defs,
-                                 masks = masks,
-                                 threshold = threshold,
-                                 threshold_value = threshold_value,
-                                 threshold_symmetric = threshold_symmetric)
-
-radar_abs <- radar_abs %>% 
-  mutate(positive = ifelse(is.nan(positive), 0, positive))
-
-radar_rel <- prepare_radar_chart(cluster_dirs = cluster_dirs_rel,
-                                 nk = nk, k = k,
-                                 trees = trees,
-                                 spokes = df_spokes,
-                                 labels = labels,
-                                 defs = defs,
-                                 masks = masks,
-                                 threshold = threshold,
-                                 threshold_value = threshold_value,
-                                 threshold_symmetric = threshold_symmetric)
-
-radar_rel <- radar_rel %>% 
-  mutate(positive = ifelse(is.nan(positive), 0, positive))
 ```
 
 ```{r}
-#Data for line at 0
-radar_zeroline <- tibble(name = unique(radar_abs$name),
-                         y = 0)
+nk_max <- params[["human_cluster_nk_max"]]
 
-#Plot parameters
-nspokes <- length(unique(radar_abs$name))-1
-radar_start <- -(2*pi)/nspokes
-breaks_start <- -1
-breaks_end <- 1
-breaks_step <- 0.5
-radar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
-radar_labels <- tibble(name = levels(radar_abs$name)[6],
-                       breaks = radar_breaks)
+for (nk in 2:nk_max) {
+  for (hk in 1:nk) {
+    for (mk in 1:nk) {
+      
+      print(paste0("H", nk, "-", hk, "; M", nk, "-", mk))
+      
+      #Human and mouse nk
+      nk_list <- list("human" = nk,
+                      "mouse" = nk)
+      
+      #Human and mouse k
+      k <- list("human" = hk,
+                "mouse" = mk)
+      
+      list_radar <- vector(mode = "list", length = length(jacobians))
+      names(list_radar) <- jacobians
+      for (j in jacobians) {
+        
+        df_radar <- prepare_radar_chart(cluster_dirs = cluster_dirs[[j]],
+                                        nk = nk_list, k = k,
+                                        trees = trees,
+                                        spokes = df_spokes,
+                                        labels = labels,
+                                        defs = defs,
+                                        masks = masks,
+                                        threshold = threshold,
+                                        threshold_value = threshold_value,
+                                        threshold_symmetric = threshold_symmetric)
+        
+        df_radar <- df_radar %>% 
+          mutate(positive = ifelse(is.nan(positive), 0, positive))
+        
+        #Data for line at 0
+        radar_zeroline <- tibble(name = unique(df_radar[["name"]]),
+                                 y = 0)
+        
+        #Plot parameters
+        nspokes <- length(unique(df_radar[["name"]]))-1
+        radar_start <- -(2*pi)/nspokes
+        breaks_start <- -1
+        breaks_end <- 1
+        breaks_step <- 0.5
+        radar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+        radar_labels <- tibble(name = levels(df_radar[["name"]])[6],
+                               breaks = radar_breaks)
+        
+        list_radar[[j]] <- ggplot(df_radar,
+                                  aes(x = name, 
+                                      ymin = negative, 
+                                      ymax = positive, 
+                                      group = species, 
+                                      fill = species,
+                                      col = species)) + 
+          geom_ribbon(alpha = 0.2) +
+          geom_line(data = radar_zeroline,
+                    inherit.aes = FALSE,
+                    mapping = aes(x = name, y = y, group = 1),
+                    linetype = "dashed",
+                    size = 0.5) + 
+          geom_text(data = radar_labels,
+                    inherit.aes = FALSE,
+                    mapping = aes(x = name,
+                                  y = breaks,
+                                  label = breaks),
+                    size = 2.5,
+                    nudge_y = 0.1) + 
+          coord_radar(start = radar_start) +
+          scale_x_discrete(expand = expansion(),
+                           labels = c("CbN", "Cx", "CxN", "IB", "MB", "P", "MY", "CbCx", "CbN")) + 
+          scale_y_continuous(breaks = seq(-1, 1, by = 0.5), limits = c(-1, 1.2)) +
+          scale_fill_discrete(labels = c("Human", "Mouse")) + 
+          scale_color_discrete(labels = c("Human", "Mouse")) + 
+          labs(x = NULL,
+               fill = NULL, 
+               col = NULL,
+               title = str_to_title(j)) + 
+          theme_bw() +
+          theme(legend.position = "bottom",
+                legend.direction = "horizontal",
+                axis.text.x = element_text(size = 6, face = "bold"),
+                axis.ticks.x = element_blank(),
+                axis.line.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks.y = element_blank(),
+                axis.title.y = element_blank(),
+                plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
+        
+      }
+      
+      p_radar <- (list_radar[[1]] | list_radar[[2]]) +
+        plot_annotation(title = paste0("Human ", nk, "-", hk, " and mouse ", nk, "-", mk))
+      
+      outfile <- paste0("radar_plot_H", nk, "-", hk, "_M", nk, "-", mk, ".pdf")
+      outfile <- file.path(output_dir, outfile)
+      pdf(file = outfile,
+          width = unit(8, "in"),
+          height = unit(5, "in"))
+      print(p_radar)
+      dev.off()
+      
+    }
+  }
+}
 ```
-
-```{r}
-p_radar_abs <- ggplot(radar_abs,
-                      aes(x = name, 
-                          ymin = negative, 
-                          ymax = positive, 
-                          group = species, 
-                          fill = species,
-                          col = species)) + 
-  geom_ribbon(alpha = 0.2) +
-  geom_line(data = radar_zeroline,
-            inherit.aes = FALSE,
-            mapping = aes(x = name, y = y, group = 1),
-            linetype = "dashed",
-            size = 0.5) + 
-  geom_text(data = radar_labels,
-            inherit.aes = FALSE,
-            mapping = aes(x = name,
-                          y = breaks,
-                          label = breaks),
-            size = 2.5,
-            nudge_y = 0.1) + 
-  coord_radar(start = radar_start) +
-  scale_x_discrete(expand = expansion(),
-                   labels = c("CbN", "Cx", "CxN", "IB", "MB", "P", "MY", "CbCx", "CbN")) + 
-  scale_y_continuous(breaks = seq(-1, 1, by = 0.5), limits = c(-1, 1.2)) +
-  scale_fill_discrete(labels = c("Human", "Mouse")) + 
-  scale_color_discrete(labels = c("Human", "Mouse")) + 
-  labs(x = NULL,
-       fill = NULL, 
-       col = NULL,
-       title = "Absolute effect sizes") + 
-  theme_bw() +
-  theme(legend.position = "bottom",
-        legend.direction = "horizontal",
-        axis.text.x = element_text(size = 6, face = "bold"),
-        axis.ticks.x = element_blank(),
-        axis.line.x = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.title.y = element_blank(),
-        plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
-```
-
-```{r}
-p_radar_rel <- ggplot(radar_rel,
-                      aes(x = name, 
-                          ymin = negative, 
-                          ymax = positive, 
-                          group = species, 
-                          fill = species,
-                          col = species)) + 
-  geom_ribbon(alpha = 0.2) +
-  geom_line(data = radar_zeroline,
-            inherit.aes = FALSE,
-            mapping = aes(x = name, y = y, group = 1),
-            linetype = "dashed",
-            size = 0.5) + 
-  geom_text(data = radar_labels,
-            inherit.aes = FALSE,
-            mapping = aes(x = name,
-                          y = breaks,
-                          label = breaks),
-            size = 2.5,
-            nudge_y = 0.1) + 
-  coord_radar(start = radar_start) +
-  scale_x_discrete(expand = expansion(),
-                   labels = c("CbN", "Cx", "CxN", "IB", "MB", "P", "MY", "CbCx", "CbN")) + 
-  scale_y_continuous(breaks = seq(-1, 1, by = 0.5), limits = c(-1, 1.2)) +
-  scale_fill_discrete(labels = c("Human", "Mouse")) + 
-  scale_color_discrete(labels = c("Human", "Mouse")) + 
-  labs(x = NULL,
-       fill = NULL, 
-       col = NULL,
-       title = "Relative effect sizes") + 
-  theme_bw() +
-  theme(legend.position = "bottom",
-        legend.direction = "horizontal",
-        axis.text.x = element_text(size = 6, face = "bold"),
-        axis.ticks.x = element_blank(),
-        axis.line.x = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.title.y = element_blank(),
-        plot.margin = margin(t = 0, b = 0, r = 0, l = 0))
-```
-
-```{r}
-(p_radar_abs | p_radar_rel) +
-  plot_annotation(title = "Neuroanatomical composition of cluster centroid images")
-```
-
