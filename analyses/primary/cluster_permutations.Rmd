@@ -1,0 +1,591 @@
+---
+title: "Human and mouse cluster similarity permutation analysis"
+author: "Antoine Beauchamp"
+date: '`r Sys.Date()`'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(ggalluvial))
+```
+
+```{r functions}
+source("../../src/utils.R")
+# source("../../src/processing.R")
+# source("../../src/analysis.R")
+# source("../../src/tree_tools.R")
+```
+
+```{r directories}
+#Output directory
+output_dir <- "outputs/cluster_permutations/"
+
+#Similarity pipeline
+version <- "v2"
+pipeline_dir <- "../../data/cross_species/"
+pipeline_dir <- file.path(pipeline_dir, version)
+
+#Human parameters
+human_resolution <- 0.8
+human_es_method <- "normative-growth"
+human_es_df <- 3
+human_cluster_map_method <- "mean"
+
+#Mouse parameters
+mouse_resolution <- 0.2
+mouse_cluster_map_method <- human_cluster_map_method
+
+#Similarity parameters
+metric <- "correlation"
+
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                human_resolution = human_resolution,
+                                human_es_method = human_es_method,
+                                human_es_df = human_es_df,
+                                human_cluster_map_method = human_cluster_map_method,
+                                metric = metric)
+params
+```
+
+```{r parameters}
+#Parameter set ID
+params_id <- 405
+
+#Human parameter set ID
+human_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_id)
+
+#Mouse parameter set ID
+mouse_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(mouse_id)
+
+#Permutation directory and files
+permutation_dir <- file.path(pipeline_dir, params_id, "permutations", "similarity")
+permutation_files <- list.files(permutation_dir, full.names = TRUE)
+
+#Permutation IDs
+permutation_ids <- permutation_files %>% 
+  basename() %>% 
+  str_extract("[0-9]+") %>% 
+  as.numeric() %>% 
+  unique() %>% 
+  sort()
+
+#Output directory
+output_dir <- file.path(output_dir, version, params_id)
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
+
+```{r}
+# jacobians <- c("absolute", "relative")
+jacobians <- "relative"
+
+np <- length(permutation_ids)
+
+list_permutations <- vector(mode = "list", length = length(jacobians))
+names(list_permutations) <- jacobians
+for (j in jacobians) {
+  
+  df_sim <- tibble()
+  for (p in 1:np) {
+    
+    infile <- permutation_files %>% 
+      str_subset(str_c("permutation_", permutation_ids[p], "_", j))
+    
+    df_sim_tmp <- infile %>% 
+      read_csv(show_col_types = FALSE) %>% 
+      mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
+      unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
+      unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
+      mutate(permutation = permutation_ids[p]) 
+    
+    df_sim <- bind_rows(df_sim, df_sim_tmp)
+  }
+  
+  df_sim <- df_sim %>% 
+    mutate(jacobians = j)
+  
+  list_permutations[[j]] <- df_sim
+  
+}
+
+df_permutations <- reduce(.x = list_permutations, .f = bind_rows)
+```
+
+```{r fig.width = 10, fig.height = 5}
+ggplot(df_permutations, 
+       aes(x = similarity,
+           y = ..density..)) + 
+  geom_histogram(fill = "grey70",
+                 col = "black",
+                 binwidth = 0.02) + 
+  facet_grid(~jacobians) + 
+  coord_cartesian(xlim = c(0, 1)) + 
+  scale_x_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  labs(title = "Null distribution of mouse-human cluster correlations",
+       x = "Correlation",
+       y = "Density") + 
+  theme_bw()
+```
+
+```{r}
+similarity_dir <- file.path(pipeline_dir, params_id, "similarity")
+similarity_files <- list.files(similarity_dir, full.names = TRUE)
+
+similarity <- vector(mode = "list", length = length(jacobians))
+names(similarity) <- jacobians
+for (j in jacobians) {
+  similarity[[j]] <- similarity_files %>% 
+    str_subset(j) %>% 
+    read_csv(show_col_types = FALSE) %>% 
+    mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
+    unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
+    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE)
+}
+```
+
+```{r}
+df_similarity <- similarity[["relative"]]
+```
+
+```{r}
+human_nk_max <- max(df_similarity[["human_nk"]])
+mouse_nk_max <- max(df_similarity[["mouse_nk"]])
+
+df_sim_pvals <- tibble()
+for (h_nk in 2:human_nk_max) {
+  for (m_nk in (h_nk-1):(h_nk+1)){
+    
+    if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
+      
+      df_sim_nk <- df_similarity %>% 
+        select(human_cluster_id, human_nk, human_k,
+               mouse_cluster_id, mouse_nk, mouse_k,
+               similarity) %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        mutate(pval = 0)
+      
+      sim_perm_nk <- df_permutations %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        pull(similarity) %>% 
+        sort()
+      
+      for (i in 1:nrow(df_sim_nk)) {
+        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
+        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+      }
+      
+      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      
+    }
+  }
+}
+
+alpha <- 0.05
+df_sim_pvals <- df_sim_pvals %>% 
+  mutate(significant = ifelse(pval < 0.05, 1, 0))
+```
+
+```{r}
+df_significant_counts <- df_sim_pvals %>% 
+  group_by(human_nk, mouse_nk) %>% 
+  summarise(n = sum(significant), 
+            .groups = "drop")
+
+p_significant_counts <- ggplot(df_significant_counts, 
+                               aes(x = factor(human_nk), 
+                                   y = fct_rev(factor(mouse_nk)),
+                                   fill = factor(n))) + 
+  geom_tile(col = "grey50") +
+  scale_fill_manual(values = brewer.pal(n = 9, name = "OrRd")[c(1, 3, 5, 9)],
+                    limits = factor(0:3)) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  labs(x = "Human cluster solution (nk)",
+       y = "Mouse cluster solution (nk)",
+       fill = "Number of significant pairs") + 
+  theme_bw() + 
+  theme(axis.ticks = element_blank())
+
+outfile <- paste0("significant_cluster_pairs.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(8, "in"))
+print(p_significant_counts)
+dev.off()
+```
+
+```{r}
+df_similarity_diag <- df_similarity %>% 
+  filter(human_nk == mouse_nk)
+
+cluster_lvls <- df_similarity_diag %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  distinct() %>% 
+  arrange(human_nk, human_k) %>% 
+  pull(human_cluster_id)
+
+df_similarity_diag <- df_similarity_diag %>% 
+  mutate(human_cluster_id = factor(human_cluster_id, levels = cluster_lvls),
+         mouse_cluster_id = factor(mouse_cluster_id, levels = cluster_lvls))
+
+#Heatmap colour range
+heatmap_range <- c(min(df_similarity_diag[["similarity"]]), max(df_similarity_diag[["similarity"]]))
+
+#Heatmap palette
+heatmap_colours <- rev(brewer.pal(n = 7, name = "RdYlBu"))
+palette_length <- 255
+heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
+
+ggplot(df_similarity_diag, 
+       aes(x = human_cluster_id, 
+           y = fct_rev(mouse_cluster_id),
+           fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  scale_fill_gradientn(colors = heatmap_palette) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  labs(x = "Human clusters",
+       y = "Mouse clusters",
+       fill = "Similarity") + 
+  theme_bw()
+```
+```{r}
+df_similarity_diag <- df_similarity %>% 
+  filter(human_nk == mouse_nk)
+
+cluster_lvls <- df_similarity_diag %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  distinct() %>% 
+  arrange(human_nk, human_k) %>% 
+  pull(human_cluster_id)
+
+df_similarity_diag <- df_similarity_diag %>% 
+  mutate(human_cluster_id = factor(human_cluster_id, levels = cluster_lvls),
+         mouse_cluster_id = factor(mouse_cluster_id, levels = cluster_lvls))
+
+#Heatmap colour range
+heatmap_range <- c(min(df_similarity_diag[["similarity"]]), max(df_similarity_diag[["similarity"]]))
+
+#Heatmap palette
+heatmap_colours <- rev(brewer.pal(n = 7, name = "RdYlBu"))
+palette_length <- 255
+heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
+
+pvals <- c(0.01, 0.05, 0.1)
+pvals_log10 <- -log10(pvals)
+
+for (h_nk in 2:human_nk_max) {
+  
+  df_similarity_nk_tmp <- df_sim_pvals %>% 
+    filter(human_nk == h_nk)  
+  
+  df_permutations_nk_tmp <- df_permutations %>% 
+    filter(human_nk == h_nk)
+  
+  m_nk_range <- unique(df_similarity_nk_tmp[["mouse_nk"]])
+  
+  for (m_nk in m_nk_range) {
+    
+    df_similarity_nk <- df_similarity_nk_tmp %>% 
+      filter(mouse_nk == m_nk)
+    
+    df_permutations_nk <- df_permutations_nk_tmp %>% 
+      filter(mouse_nk == m_nk)
+    
+    p_null_dist <- ggplot(df_permutations_nk,
+                          aes(x = similarity,
+                              y = ..density..)) + 
+      geom_histogram(alpha = 1,
+                     binwidth = 0.025,
+                     fill = "grey90",
+                     col = "grey50",
+                     size = 0.2) + 
+      geom_vline(data = df_similarity_nk,
+                 mapping = aes(xintercept = similarity,
+                               col = similarity),
+                 linetype = "dotted",
+                 size = 0.75) +
+      coord_cartesian(xlim = c(0, 1)) + 
+      scale_x_continuous(breaks = seq(0, 1, by = 0.1),
+                         expand = expansion(mult = 0)) +
+      scale_y_continuous(expand = expansion(mult = 0)) + 
+      scale_color_gradientn(colors = heatmap_palette) + 
+      labs(title = "Null distribution of mouse-human cluster correlations",
+           x = "Correlation",
+           y = "Density",
+           color = "Correlation") + 
+      theme_bw()
+    
+    p_pvals <- ggplot(df_similarity_nk,
+                      aes(x = similarity,
+                          y = -log10(pval))) + 
+      geom_line() +
+      geom_point(aes(fill = similarity),
+                 shape = 21,
+                 size = 2) +
+      geom_hline(yintercept = pvals_log10,
+                 linetype = "dashed") +
+      annotate(geom = "text",
+               x = 0.01,
+               y = pvals_log10+0.15,
+               label = str_c("p = ", pvals), hjust = 0,
+               size = 2.5) + 
+      coord_cartesian(xlim = c(0, 1),
+                      ylim = c(0, 3)) +
+      scale_x_continuous(breaks = seq(0, 1, by = 0.1),
+                         expand = expansion(mult = 0)) + 
+      scale_fill_gradientn(colors = heatmap_palette) + 
+      labs(title = "Cluster correlation upper-tail probabilities",
+           x = "Correlation",
+           y = "-log10(p)",
+           fill = "Correlation") +
+      theme_bw() + 
+      theme(plot.margin = margin(t = 0, r = 0, b = 0, l = 0))
+    
+    df_similarity_nk <- df_similarity_nk %>% 
+      mutate(label = ifelse(pval <= 0.1, pval, NA),
+             label = round(label, 2),
+             label = as.character(label))
+    
+    p_heatmap <- ggplot(df_similarity_nk, 
+                        aes(x = factor(human_k),
+                            y = fct_rev(factor(mouse_k)),
+                            fill = similarity)) +
+      geom_tile(col = "grey50") + 
+      geom_text(aes(label = label),
+                size = 3) + 
+      labs(x = "Human clusters",
+           y = "Mouse clusters",
+           fill = "Correlation",
+           title = "Mouse-human cluster correlation matrix",
+           caption = "Annotations correspond to tail probabilities") + 
+      scale_fill_gradientn(colors = heatmap_palette) + 
+      scale_x_discrete(expand = expansion(mult = 0)) + 
+      scale_y_discrete(expand = expansion(mult = 0)) + 
+      theme_bw()
+    
+    p_significance <- (((p_null_dist / p_pvals) | plot_spacer() | p_heatmap) + 
+                         plot_layout(widths = c(1.5, 0.05, 1),
+                                     heights = c(1, 1),
+                                     guides = "collect") + 
+                         plot_annotation(title = "Statistical significance of relative mouse-human cluster correlations",
+                                         tag_levels = "A", tag_suffix = "."))
+    
+    outfile <- paste0("cluster_significance_H", h_nk, "_M", m_nk, ".pdf")
+    outfile <- file.path(output_dir, outfile)
+    pdf(file = outfile,
+        width = unit(10, 'inch'),
+        height = unit(5.5, 'inch'))
+    print(p_significance)
+    dev.off()
+    
+  }
+}
+```
+
+```{r}
+human_param_id <- params[["human_id"]]
+human_pipeline_dir <- "../../data/human/derivatives/v2/"
+human_pipeline_dir <- file.path(human_pipeline_dir, human_param_id)
+
+human_cluster_resolution <- params[["human_cluster_resolution"]]
+human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
+human_cluster_dir <- file.path(human_pipeline_dir, "clusters", str_c("resolution_", human_cluster_resolution))
+
+human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
+df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
+```
+
+
+```{r}
+df_human_clusters_long <- df_human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+df_sim_pvals_human_diag <- df_sim_pvals %>% 
+  filter(human_nk == mouse_nk) %>% 
+  select(nk = human_nk,
+         k = human_k, 
+         significant) %>%
+  group_by(nk, k) %>% 
+  summarise(significant = sum(significant), 
+            .groups = "drop") %>% 
+  mutate(nk = factor(nk),
+         k = factor(k))
+
+df_human_clusters_sig <- df_human_clusters_long %>% 
+  left_join(df_sim_pvals_human_diag,
+            by = c("nk", "k")) %>% 
+  mutate(significant = factor(significant))
+
+ggplot(df_human_clusters_sig,
+       aes(x = nk,
+           stratum = k,
+           fill = significant,
+           alluvium = ID)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum() + 
+  scale_fill_manual(values = c("grey50", brewer.pal(n = 9, name = "OrRd")[9]),
+                    limits = factor(0:1)) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients",
+       fill = "Number of significant matches",
+       title = "Human clusters with significant matches") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank(),
+        legend.position = "bottom",
+        legend.direction = "horizontal")
+```
+
+```{r}
+df_human_clusters_long <- df_human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+df_sim_pvals_human_diag <- df_sim_pvals %>% 
+  filter(human_nk == mouse_nk) %>% 
+  select(nk = human_nk,
+         k = human_k, 
+         pval) %>% 
+  group_by(nk, k) %>% 
+  summarise(pval = min(pval), .groups = "drop") %>% 
+  mutate(nk = factor(nk),
+         k = factor(k),
+         pval = -log10(pval),
+         pval = ifelse(is.infinite(pval), NA, pval),
+         pval = ifelse(is.na(pval), max(pval, na.rm = TRUE), pval))
+
+df_human_clusters_pval <- df_human_clusters_long %>% 
+  left_join(df_sim_pvals_human_diag,
+            by = c("nk", "k")) 
+
+ggplot(df_human_clusters_pval,
+       aes(x = nk,
+           stratum = k,
+           fill = pval,
+           alluvium = ID)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum() + 
+  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9]) +
+  labs(x = "Number of clusters",
+       y = "Number of patients",
+       fill = "-log10(p)",
+       title = "Human cluster minimal p-values") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+```
+
+```{r}
+mouse_param_id <- params[["mouse_id"]]
+mouse_pipeline_dir <- "../../data/mouse/derivatives/v2/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_param_id)
+
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
+
+mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
+df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+colnames(df_mouse_clusters) <- c("ID", str_c("nk", 2:10))
+
+df_mouse_clusters_long <- df_mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+df_sim_pvals_mouse_diag <- df_sim_pvals %>% 
+  filter(human_nk == mouse_nk) %>% 
+  select(nk = mouse_nk,
+         k = mouse_k, 
+         significant) %>%
+  group_by(nk, k) %>% 
+  summarise(significant = sum(significant), 
+            .groups = "drop") %>% 
+  mutate(nk = factor(nk),
+         k = factor(k))
+
+df_mouse_clusters_sig <- df_mouse_clusters_long %>% 
+  left_join(df_sim_pvals_mouse_diag,
+            by = c("nk", "k")) %>% 
+  mutate(significant = factor(significant))
+
+ggplot(df_mouse_clusters_sig,
+       aes(x = nk,
+           stratum = k,
+           fill = significant,
+           alluvium = ID)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum() + 
+  scale_fill_manual(colors = c("grey50", brewer.pal(n = 9, name = "OrRd")[9]),
+                    limits = factor(0:1)) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients",
+       fill = "Number of significant matches",
+       title = "Mouse clusters with significant matches") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank(),
+        legend.position = "bottom",
+        legend.direction = "horizontal")
+```
+
+```{r}
+df_sim_pvals_mouse_diag <- df_sim_pvals %>% 
+  filter(mouse_nk == mouse_nk) %>% 
+  select(nk = mouse_nk,
+         k = mouse_k, 
+         pval) %>% 
+  group_by(nk, k) %>% 
+  summarise(pval = min(pval), .groups = "drop") %>% 
+  mutate(nk = factor(nk),
+         k = factor(k),
+         pval = -log10(pval),
+         pval = ifelse(is.infinite(pval), NA, pval),
+         pval = ifelse(is.na(pval), max(pval, na.rm = TRUE), pval))
+
+df_mouse_clusters_pval <- df_mouse_clusters_long %>% 
+  left_join(df_sim_pvals_mouse_diag,
+            by = c("nk", "k")) 
+
+ggplot(df_mouse_clusters_pval,
+       aes(x = nk,
+           stratum = k,
+           fill = pval,
+           alluvium = ID)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum() + 
+  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[3:9]) +
+  labs(x = "Number of clusters",
+       y = "Number of models",
+       fill = "-log10(p)",
+       title = "Mouse cluster minimal p-values") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+```
+
+

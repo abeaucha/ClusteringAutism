@@ -1,0 +1,242 @@
+---
+title: "Human and mouse cluster centroid maps"
+author: "Antoine Beauchamp"
+date: '`r Sys.Date()`'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r functions}
+source("../../src/utils.R")
+source("../../src/processing.R")
+source("../../src/analysis.R")
+```
+
+```{r parameters}
+#Output directory
+output_dir <- "outputs/cluster_centroid_maps/"
+
+#Similarity pipeline
+version <- "v2"
+pipeline_dir <- "../../data/cross_species/"
+pipeline_dir <- file.path(pipeline_dir, version)
+
+#Human parameters
+human_resolution <- 0.8
+human_es_method <- "normative-growth"
+human_es_df <- 3
+human_cluster_map_method <- "mean"
+
+#Mouse parameters
+mouse_resolution <- 0.2
+mouse_cluster_map_method <- human_cluster_map_method
+
+#Similarity parameters
+metric <- "correlation"
+
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                human_resolution = human_resolution,
+                                human_es_method = human_es_method,
+                                human_es_df = human_es_df,
+                                human_cluster_map_method = human_cluster_map_method,
+                                metric = metric)
+params
+```
+
+```{r directories}
+#Parameter set ID
+params_id <- 405
+
+#Jacobians
+jacobians <- c("absolute", "relative")
+
+#Human parameter set ID
+human_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_id)
+
+#Mouse parameter set ID
+mouse_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(mouse_id)
+
+#Human pipeline directory
+human_pipeline_dir <- "../../data/human/derivatives/"
+human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
+
+#Human cluster map directories
+human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
+human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
+human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
+names(human_cluster_map_dirs) <- jacobians
+
+#Mouse pipeline directory
+mouse_pipeline_dir <- "../../data/mouse/derivatives/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
+
+#Mouse cluster map directories
+mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
+mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
+names(mouse_cluster_map_dirs) <- jacobians 
+
+#Output directory
+output_dir <- file.path(output_dir, version, params_id)
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
+
+```{r images-params}
+mouse_anat_file <- "../../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
+mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_anat_vol <- mincArray(mouse_anat)
+
+#Human anatomy
+human_anat_file <- "../../data/human/registration/v2/reference_files/model_0.8mm.mnc"
+human_anat <- mincGetVolume(human_anat_file)
+human_anat_vol <- mincArray(human_anat)
+
+#Cropped human images along sagittal and transverse planes
+human_slices_dim_1 <- 25:200
+human_slices_dim_3 <- 25:220
+human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
+
+#Human mask
+human_mask <- "../../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
+
+#Mouse mask
+mouse_mask <- "../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
+
+signed <- params %>% 
+  filter(id == params_id) %>% 
+  pull(signed)
+
+threshold <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold)
+
+threshold_value <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_value)
+
+threshold_symmetric <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_symmetric)
+
+nk_max <- params[["human_cluster_nk_max"]]
+```
+
+```{r human-centroids}
+for (nk in 2:nk_max) {
+  for (k in 1:nk) {
+    
+    print(paste0(nk, "-", k))
+    
+    list_human_centroids <- vector(mode = "list", length = length(jacobians))
+    list_human_overlay <- vector(mode = "list", length = length(jacobians))
+    names(list_human_centroids) <- jacobians
+    names(list_human_overlay) <- jacobians
+    for (j in jacobians) {
+      img <- import_cluster_map(imgdir = human_cluster_map_dirs[[j]],
+                                mask = human_mask,
+                                nk = nk, k = k,
+                                threshold = threshold,
+                                threshold_value = threshold_value,
+                                threshold_symmetric = threshold_symmetric)
+      
+      list_human_overlay[[j]] <- numeric(2)
+      list_human_overlay[[j]][1] <- min(abs(img[img != 0]))
+      list_human_overlay[[j]][2] <- 0.8*max(abs(img[img != 0]))
+      list_human_overlay[[j]] <- round(list_human_overlay[[j]], 2)
+      
+      img <- mincArray(img)
+      img <- img[human_slices_dim_1,,human_slices_dim_3]
+      list_human_centroids[[j]] <- img
+    }
+    
+    ss <- sliceSeries(nrow = 6, ncol = 2, begin = 50, end = 200) %>% 
+      anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
+      overlay(list_human_centroids[["absolute"]], 
+              low = list_human_overlay[["absolute"]][1],
+              high = list_human_overlay[["absolute"]][2],
+              symmetric = TRUE) %>% 
+      legend("Effect size") %>% addtitle("Absolute") %>% 
+      sliceSeries() %>% anatomy() %>% 
+      overlay(list_human_centroids[["relative"]], 
+              low = list_human_overlay[["relative"]][1],
+              high = list_human_overlay[["relative"]][2],
+              symmetric = TRUE) %>% 
+      legend("Effect size") %>% addtitle("Relative")
+    
+    outfile <- paste0("human_cluster_centroid_", nk, "-", k, ".pdf")
+    outfile <- file.path(output_dir, outfile)
+    pdf(file = outfile,
+        width = unit(6, "in"),
+        height = unit(6, "in"))
+    draw(ss)
+    dev.off()
+    
+  }
+}
+```
+
+```{r mouse-centroids}
+for (nk in 2:nk_max) {
+  for (k in 1:nk) {
+    
+    print(paste0(nk, "-", k))
+    
+    list_mouse_centroids <- vector(mode = "list", length = length(jacobians))
+    list_mouse_overlay <- vector(mode = "list", length = length(jacobians))
+    names(list_mouse_centroids) <- jacobians
+    names(list_mouse_overlay) <- jacobians
+    for (j in jacobians) {
+      img <- import_cluster_map(imgdir = mouse_cluster_map_dirs[[j]],
+                                mask = mouse_mask,
+                                nk = nk, k = k,
+                                threshold = threshold,
+                                threshold_value = threshold_value,
+                                threshold_symmetric = threshold_symmetric)
+      
+      list_mouse_overlay[[j]] <- numeric(2)
+      list_mouse_overlay[[j]][1] <- min(abs(img[img != 0]))
+      list_mouse_overlay[[j]][2] <- 0.8*max(abs(img[img != 0]))
+      list_mouse_overlay[[j]] <- round(list_mouse_overlay[[j]], 2)
+      
+      list_mouse_centroids[[j]] <- mincArray(img)
+    }
+    
+    ss <- sliceSeries(nrow = 6, ncol = 2, begin = 10, end = 50) %>% 
+      anatomy(mouse_anat_vol, low = 700, high = 1400) %>% 
+      overlay(list_mouse_centroids[["absolute"]], 
+              low = list_mouse_overlay[["absolute"]][1],
+              high = list_mouse_overlay[["absolute"]][2],
+              symmetric = TRUE) %>% 
+      legend("Effect size") %>% addtitle("Absolute") %>% 
+      sliceSeries() %>% anatomy() %>% 
+      overlay(list_mouse_centroids[["relative"]], 
+              low = list_mouse_overlay[["relative"]][1],
+              high = list_mouse_overlay[["relative"]][2],
+              symmetric = TRUE) %>% 
+      legend("Effect size") %>% addtitle("Relative")
+    
+    outfile <- paste0("mouse_cluster_centroid_", nk, "-", k, ".pdf")
+    outfile <- file.path(output_dir, outfile)
+    pdf(file = outfile,
+        width = unit(6, "in"),
+        height = unit(6, "in"))
+    draw(ss)
+    dev.off()
+    
+  }
+}
+```
