@@ -46,6 +46,7 @@ mouse_cluster_map_method <- human_cluster_map_method
 #Similarity parameters
 metric <- "correlation"
 
+#Identify matching parameter sets
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
                                 human_resolution = human_resolution,
@@ -59,6 +60,9 @@ params
 ```{r directories}
 #Parameter set ID
 params_id <- 405
+
+#Jacobians
+jacobians <- c("absolute", "relative")
 
 #Human parameter set ID
 human_params_id <- params %>% 
@@ -87,7 +91,7 @@ if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
 ```{r import}
-jacobians <- c("absolute", "relative")
+#Import absolute and relative similarity data
 similarity_files <- list.files(pipeline_dir, full.names = TRUE)
 similarity <- vector(mode = "list", length = length(jacobians))
 names(similarity) <- jacobians
@@ -105,17 +109,24 @@ for (i in 1:length(similarity)) {
 # Mouse-human cluster similarity
 
 ```{r similarity-matrices}
+#Maximum number of clusters
 nk_max <- params[["human_cluster_nk_max"]]
 
+#Generate heatmap colour palette
 heatmap_colours <- rev(brewer.pal(n = 7, name = "RdYlBu"))
 palette_length <- 255
 heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
 
+#Iterate over cluster solutions
 for (nk in 2:nk_max) {
+  
+  #Iterate over jacobians
   similarity_nk <- vector(mode = "list", length = length(similarity))
   names(similarity_nk) <- names(similarity)
   for (i in 1:length(similarity_nk)) {
     
+    
+    #Filter similarity data for given cluster
     df_sim <- similarity[[i]] %>% 
       filter(human_nk == nk,
              mouse_nk == nk) %>% 
@@ -126,11 +137,12 @@ for (nk in 2:nk_max) {
     
     similarity_nk[[i]] <- df_sim
     
+    #Heatmap colour scale range and breaks
     heatmap_range <- c(min(df_sim[["similarity"]]), max(df_sim[["similarity"]]))
     heatmap_range_dist <- heatmap_range[2] - heatmap_range[1]
-    
     heatmap_breaks <- seq(heatmap_range[1], heatmap_range[2], length.out = palette_length)
     
+    #Plot similarity matrix
     p_sim <- ggplot(df_sim, 
                     aes(x = human_cluster_id, 
                         y = fct_rev(mouse_cluster_id), 
@@ -146,6 +158,7 @@ for (nk in 2:nk_max) {
       theme_bw() + 
       theme(axis.ticks = element_blank())
     
+    #Export plot
     outfile <- paste0("similarity_matrix_nk_", nk, "_", jacobians[i], ".pdf")
     outfile <- file.path(output_dir, outfile)
     pdf(file = outfile, 
@@ -156,6 +169,7 @@ for (nk in 2:nk_max) {
     
   }
   
+  #Combine absolute and relative similarity values
   df_sim_combined <- bind_rows(similarity_nk[["absolute"]] %>% 
                                  mutate(jacobians = "absolute"),
                                similarity_nk[["relative"]] %>% 
@@ -163,6 +177,7 @@ for (nk in 2:nk_max) {
     group_by(human_cluster_id, mouse_cluster_id) %>% 
     summarise(similarity = mean(similarity), .groups = "drop")
   
+  #Plot combined similarity matrix
   p_sim_combined <- ggplot(df_sim_combined, 
                            aes(x = human_cluster_id, 
                                y = fct_rev(mouse_cluster_id), 
@@ -178,6 +193,7 @@ for (nk in 2:nk_max) {
     theme_bw() + 
     theme(axis.ticks = element_blank())
   
+  #Export plot
   outfile <- paste0("similarity_matrix_nk_", nk, "_combined.pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile, 
@@ -189,9 +205,10 @@ for (nk in 2:nk_max) {
 ```
 
 
-# Mouse and human polar plots
+# Mouse-human neuroanatomical radar plots
 
-```{r}
+```{r radar-import}
+#Mouse anatomy
 mouse_anat_file <- "../../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
 mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
@@ -224,24 +241,6 @@ mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_",
 mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
 names(mouse_cluster_map_dirs) <- jacobians  
 
-signed <- params %>% 
-  filter(id == params_id) %>% 
-  pull(signed)
-
-threshold <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold)
-
-threshold_value <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_value)
-
-threshold_symmetric <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_symmetric)
-```
-
-```{r}
 #Import mouse atlas labels
 mouse_labels_file <- "../../data/mouse/atlas/DSURQE_CCFv3_labels_200um.mnc"
 mouse_labels <- mincGetVolume(mouse_labels_file)
@@ -279,9 +278,24 @@ df_spokes <- read_csv(neuro_file, show_col_types = FALSE)
 colnames(df_spokes) <- str_to_lower(colnames(df_spokes))
 df_spokes <- df_spokes %>% 
   filter(!(name %in% c("White matter", "Ventricles")))
+
+#Threshold method
+threshold <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold)
+
+#Threshold value
+threshold_value <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_value)
+
+#Threshold symmetric option
+threshold_symmetric <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_symmetric)
 ```
 
-```{r}
+```{r radar-args}
 #Cluster map directories
 cluster_dirs_abs <- c("human" = human_cluster_map_dirs[[1]], 
                       "mouse" = mouse_cluster_map_dirs[[1]])
@@ -289,6 +303,7 @@ cluster_dirs_abs <- c("human" = human_cluster_map_dirs[[1]],
 cluster_dirs_rel <- c("human" = human_cluster_map_dirs[[2]], 
                       "mouse" = mouse_cluster_map_dirs[[2]])
 
+#Combine cluster map directories
 cluster_dirs <- list(cluster_dirs_abs, cluster_dirs_rel)
 names(cluster_dirs) <- jacobians
 
@@ -309,9 +324,11 @@ masks <- list("human" = human_mask,
               "mouse" = mouse_mask)
 ```
 
-```{r}
+```{r radar-plot}
+#Maximum nk
 nk_max <- params[["human_cluster_nk_max"]]
 
+#Iterate over diagonal nk similarity values
 for (nk in 2:nk_max) {
   for (hk in 1:nk) {
     for (mk in 1:nk) {
@@ -326,10 +343,12 @@ for (nk in 2:nk_max) {
       k <- list("human" = hk,
                 "mouse" = mk)
       
+      #Iterate over jacobians
       list_radar <- vector(mode = "list", length = length(jacobians))
       names(list_radar) <- jacobians
       for (j in jacobians) {
         
+        #Prepare radar chart data frame
         df_radar <- prepare_radar_chart(cluster_dirs = cluster_dirs[[j]],
                                         nk = nk_list, k = k,
                                         trees = trees,
@@ -341,6 +360,7 @@ for (nk in 2:nk_max) {
                                         threshold_value = threshold_value,
                                         threshold_symmetric = threshold_symmetric)
         
+        #Replace NANs with 0
         df_radar <- df_radar %>% 
           mutate(positive = ifelse(is.nan(positive), 0, positive))
         
@@ -358,6 +378,7 @@ for (nk in 2:nk_max) {
         radar_labels <- tibble(name = levels(df_radar[["name"]])[6],
                                breaks = radar_breaks)
         
+        #Radar plot for given jacobians
         list_radar[[j]] <- ggplot(df_radar,
                                   aes(x = name, 
                                       ymin = negative, 
@@ -401,9 +422,11 @@ for (nk in 2:nk_max) {
         
       }
       
+      #Combine plots for absolute and relative jacobians
       p_radar <- (list_radar[[1]] | list_radar[[2]]) +
         plot_annotation(title = paste0("Human ", nk, "-", hk, " and mouse ", nk, "-", mk))
       
+      #Export plot
       outfile <- paste0("radar_plot_H", nk, "-", hk, "_M", nk, "-", mk, ".pdf")
       outfile <- file.path(output_dir, outfile)
       pdf(file = outfile,
