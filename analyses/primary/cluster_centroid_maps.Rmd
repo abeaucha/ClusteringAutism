@@ -96,6 +96,7 @@ if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
 ```{r images-params}
+#Mouse anatomy
 mouse_anat_file <- "../../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
 mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
@@ -116,36 +117,40 @@ human_mask <- "../../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
 #Mouse mask
 mouse_mask <- "../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
 
-signed <- params %>% 
-  filter(id == params_id) %>% 
-  pull(signed)
-
+#Threshold method
 threshold <- params %>% 
   filter(id == params_id) %>% 
   pull(threshold)
 
+#Threshold value
 threshold_value <- params %>% 
   filter(id == params_id) %>% 
   pull(threshold_value)
 
+#Threshold symmetric option
 threshold_symmetric <- params %>% 
   filter(id == params_id) %>% 
   pull(threshold_symmetric)
 
+#Max nk
 nk_max <- params[["human_cluster_nk_max"]]
 ```
 
 ```{r human-centroids}
+#Iterate over cluster solutions
 for (nk in 2:nk_max) {
   for (k in 1:nk) {
     
     print(paste0(nk, "-", k))
     
+    #Iterate over jacobians
     list_human_centroids <- vector(mode = "list", length = length(jacobians))
     list_human_overlay <- vector(mode = "list", length = length(jacobians))
     names(list_human_centroids) <- jacobians
     names(list_human_overlay) <- jacobians
     for (j in jacobians) {
+      
+      #Import centroid image for specific cluster using threshold
       img <- import_cluster_map(imgdir = human_cluster_map_dirs[[j]],
                                 mask = human_mask,
                                 nk = nk, k = k,
@@ -153,16 +158,19 @@ for (nk in 2:nk_max) {
                                 threshold_value = threshold_value,
                                 threshold_symmetric = threshold_symmetric)
       
+      #Compute slice series overlay thresholds
       list_human_overlay[[j]] <- numeric(2)
       list_human_overlay[[j]][1] <- min(abs(img[img != 0]))
       list_human_overlay[[j]][2] <- 0.8*max(abs(img[img != 0]))
       list_human_overlay[[j]] <- round(list_human_overlay[[j]], 2)
       
+      #Crop image
       img <- mincArray(img)
       img <- img[human_slices_dim_1,,human_slices_dim_3]
       list_human_centroids[[j]] <- img
     }
     
+    #Slice series for absolute and relative centroid
     ss <- sliceSeries(nrow = 6, ncol = 2, begin = 50, end = 200) %>% 
       anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
       overlay(list_human_centroids[["absolute"]], 
@@ -177,6 +185,7 @@ for (nk in 2:nk_max) {
               symmetric = TRUE) %>% 
       legend("Effect size") %>% addtitle("Relative")
     
+    #Export plot
     outfile <- paste0("human_cluster_centroid_", nk, "-", k, ".pdf")
     outfile <- file.path(output_dir, outfile)
     pdf(file = outfile,
@@ -190,16 +199,20 @@ for (nk in 2:nk_max) {
 ```
 
 ```{r mouse-centroids}
+#Iterate over cluster solutions
 for (nk in 2:nk_max) {
   for (k in 1:nk) {
     
     print(paste0(nk, "-", k))
     
+    #Iterate over jacobians
     list_mouse_centroids <- vector(mode = "list", length = length(jacobians))
     list_mouse_overlay <- vector(mode = "list", length = length(jacobians))
     names(list_mouse_centroids) <- jacobians
     names(list_mouse_overlay) <- jacobians
     for (j in jacobians) {
+      
+      #Import centroid image for specific cluster using threshold
       img <- import_cluster_map(imgdir = mouse_cluster_map_dirs[[j]],
                                 mask = mouse_mask,
                                 nk = nk, k = k,
@@ -207,6 +220,7 @@ for (nk in 2:nk_max) {
                                 threshold_value = threshold_value,
                                 threshold_symmetric = threshold_symmetric)
       
+      #Compute slice series overlay thresholds
       list_mouse_overlay[[j]] <- numeric(2)
       list_mouse_overlay[[j]][1] <- min(abs(img[img != 0]))
       list_mouse_overlay[[j]][2] <- 0.8*max(abs(img[img != 0]))
@@ -215,6 +229,7 @@ for (nk in 2:nk_max) {
       list_mouse_centroids[[j]] <- mincArray(img)
     }
     
+    #Slice series for absolute and relative centroid
     ss <- sliceSeries(nrow = 6, ncol = 2, begin = 10, end = 50) %>% 
       anatomy(mouse_anat_vol, low = 700, high = 1400) %>% 
       overlay(list_mouse_centroids[["absolute"]], 
@@ -229,6 +244,7 @@ for (nk in 2:nk_max) {
               symmetric = TRUE) %>% 
       legend("Effect size") %>% addtitle("Relative")
     
+    #Export plot
     outfile <- paste0("mouse_cluster_centroid_", nk, "-", k, ".pdf")
     outfile <- file.path(output_dir, outfile)
     pdf(file = outfile,
