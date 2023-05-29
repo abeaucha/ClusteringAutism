@@ -45,6 +45,7 @@ mouse_cluster_map_method <- human_cluster_map_method
 #Similarity parameters
 metric <- "correlation"
 
+#Identify matching parameter sets
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
                                 human_resolution = human_resolution,
@@ -86,22 +87,28 @@ output_dir <- file.path(output_dir, version, params_id)
 if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
-```{r}
+```{r import-perms}
+#Jacobians to use
 # jacobians <- c("absolute", "relative")
 jacobians <- "relative"
 
+#Number of permutations
 np <- length(permutation_ids)
 
+#Iterate over jacobians
 list_permutations <- vector(mode = "list", length = length(jacobians))
 names(list_permutations) <- jacobians
 for (j in jacobians) {
   
+  #Iterate over permutations
   df_sim <- tibble()
   for (p in 1:np) {
     
+    #Permutation similarity data
     infile <- permutation_files %>% 
       str_subset(str_c("permutation_", permutation_ids[p], "_", j))
     
+    #Import permutation similarity data
     df_sim_tmp <- infile %>% 
       read_csv(show_col_types = FALSE) %>% 
       mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
@@ -112,9 +119,11 @@ for (j in jacobians) {
       unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
       mutate(permutation = permutation_ids[p]) 
     
+    #Collate permutation data
     df_sim <- bind_rows(df_sim, df_sim_tmp)
   }
   
+  #Include jacobians information
   df_sim <- df_sim %>% 
     mutate(jacobians = j)
   
@@ -122,11 +131,14 @@ for (j in jacobians) {
   
 }
 
+#Reduce permutations data frames into one
 df_permutations <- reduce(.x = list_permutations, .f = bind_rows)
 ```
 
-```{r fig.width = 10, fig.height = 5}
-ggplot(df_permutations, 
+```{r null-dist, fig.width = 10, fig.height = 5}
+#Plot of empirical null distribution across all permutations
+#UNSURE IF I NEED THIS
+p_null_dist <- ggplot(df_permutations, 
        aes(x = similarity,
            y = ..density..)) + 
   geom_histogram(fill = "grey70",
@@ -139,6 +151,8 @@ ggplot(df_permutations,
        x = "Correlation",
        y = "Density") + 
   theme_bw()
+
+p_null_dist
 ```
 
 ```{r}
@@ -158,13 +172,12 @@ for (j in jacobians) {
     unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
     unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE)
 }
-```
 
-```{r}
 df_similarity <- similarity[["relative"]]
 ```
 
 ```{r}
+#Mouse and human max nk
 human_nk_max <- max(df_similarity[["human_nk"]])
 mouse_nk_max <- max(df_similarity[["mouse_nk"]])
 
