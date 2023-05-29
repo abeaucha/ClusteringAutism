@@ -1,0 +1,182 @@
+---
+title: "Human cluster genetics"
+author: "Antoine Beauchamp"
+date: '`r Sys.Date()`'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(readxl))
+suppressPackageStartupMessages(library(RColorBrewer))
+# suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(ggalluvial))
+# suppressPackageStartupMessages(library(RMINC))
+# suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r functions}
+source("../../src/utils.R")
+# source("../../src/processing.R")
+# source("../../src/analysis.R")
+```
+
+```{r parameters}
+#Output directory
+output_dir <- "outputs/human_cluster_genetics/"
+
+#Human directories
+version <- "v2"
+
+registration_dir <- "../../data/human/registration/"
+registration_dir <- file.path(registration_dir, version)
+
+pipeline_dir <- "../../data/human/derivatives/"
+pipeline_dir <- file.path(pipeline_dir, version)
+
+#Human parameters
+resolution <- 0.8
+es_method <- "normative-growth"
+es_df <- 3
+cluster_map_method <- "mean"
+
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                resolution = resolution,
+                                es_method = es_method,
+                                es_df = es_df,
+                                cluster_map_method = cluster_map_method)
+params
+```
+
+```{r}
+#Parameter set ID
+params_id <- 700
+
+#Pipeline directory
+pipeline_dir <- file.path(pipeline_dir, params_id)
+
+#Cluster resolution
+cluster_resolution <- params[["cluster_resolution"]]
+cluster_resolution <- sprintf("%.1f", cluster_resolution)
+
+#Cluster directory
+cluster_dir <- file.path(pipeline_dir, "clusters", paste0("resolution_", cluster_resolution))
+
+#Output directory
+output_dir <- file.path(output_dir, version, params_id)
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
+
+```{r}
+genetics <- file.path(registration_dir, "subject_info", "POND_variants.xlsx")
+genetics <- read_excel(genetics)
+genetics <- genetics %>% 
+  filter(!(SUBJECT_ID_INT %in% c("SK0664-003", "SK1016-003", "QAM-22961A2"))) %>% 
+  select(POND_ID,
+         `SIGNIFICANT VARIANT TYPE`,
+         `SIGNIFICANT VARIANT`,
+         `CLASSIFICATION`) %>%
+  filter(str_detect(POND_ID, "POND-[a-zA-Z]+.*", negate = TRUE),
+         str_detect(POND_ID, ";", negate = TRUE)) %>% 
+  mutate(POND_ID = str_remove(POND_ID, "-"))
+
+demographics <- file.path(registration_dir, "subject_info", "demographics.csv")
+demographics <- read_csv(demographics, show_col_types = FALSE)
+
+clusters <- file.path(cluster_dir, "clusters.csv")
+clusters <- read_csv(clusters, show_col_types = FALSE)
+clusters <- clusters %>% 
+  left_join(demographics %>% 
+              select(Subject_ID, file),
+            by = c("ID" = "file")) %>% 
+  mutate(Subject_ID = str_remove(Subject_ID, "POND_"))
+
+clusters_genetics <- clusters %>% 
+  left_join(genetics, by = c("Subject_ID" = "POND_ID")) %>% 
+  mutate(gene_identified = ifelse(is.na(CLASSIFICATION), 0, 1)) %>% 
+  distinct()
+```
+```{r}
+df_clusters_long <- clusters_genetics %>% 
+  select(ID, contains("nk"), gene_identified) %>% 
+  pivot_longer(cols = c(-ID, -gene_identified),names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+df_clusters_gene_counts <- df_clusters_long %>% 
+  group_by(nk, k) %>% 
+  summarise(ngenes = sum(gene_identified), .groups = "drop")
+
+df_clusters_long <- df_clusters_long %>% 
+  left_join(df_clusters_gene_counts, by = c("nk", "k"))
+
+df_clusters_long <- df_clusters_long %>% 
+  mutate(ngenes = ifelse(ngenes == 0, NA, ngenes))
+
+p_sankey_genes <- ggplot(df_clusters_long, 
+                         aes(x = nk, stratum = k,
+                             alluvium = ID,
+                             fill = ngenes)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum() + 
+  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9], 
+                       breaks = seq(0, 12, 2)) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients",
+       fill = "Identified variants",
+       title = "Human clusters with identified genetic variants") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+
+outfile <- "sankey_gene_variants.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_sankey_genes)
+dev.off()
+```
+
+```{r}
+df_variants_long <- df_clusters_long %>% 
+  select(ID, nk, k) %>% 
+  left_join(clusters_genetics %>% 
+              select(ID, Subject_ID, 
+                     gene_identified,
+                     `SIGNIFICANT VARIANT`, 
+                     `SIGNIFICANT VARIANT TYPE`,
+                     CLASSIFICATION),
+            by = "ID") %>% 
+  filter(gene_identified > 0) %>% 
+  select(-ID, -gene_identified) %>% 
+  arrange(nk, k) %>% 
+  unite("cluster", nk, k, sep = "-")
+
+outfile <- "cluster_variants_long.csv"
+outfile <- file.path(output_dir, outfile)
+write_csv(df_variants_long, outfile)
+```
+
+```{r}
+df_variants <- clusters_genetics %>% 
+  filter(gene_identified > 0) %>% 
+  select(Subject_ID, contains("nk"),
+         `SIGNIFICANT VARIANT`, 
+         `SIGNIFICANT VARIANT TYPE`,
+         CLASSIFICATION) %>% 
+  arrange(nk2, nk3, nk4, nk5)
+
+outfile <- "cluster_variants.csv"
+outfile <- file.path(output_dir, outfile)
+write_csv(df_variants, outfile)
+```
+
+
+
