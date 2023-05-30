@@ -13,10 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(readxl))
 suppressPackageStartupMessages(library(RColorBrewer))
-# suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(ggalluvial))
-# suppressPackageStartupMessages(library(RMINC))
-# suppressPackageStartupMessages(library(MRIcrotome))
 ```
 
 ```{r functions}
@@ -77,7 +74,7 @@ genetics <- file.path(registration_dir, "subject_info", "POND_variants.xlsx")
 genetics <- read_excel(genetics)
 genetics <- genetics %>% 
   filter(!(SUBJECT_ID_INT %in% c("SK0664-003", "SK1016-003", "QAM-22961A2"))) %>% 
-  select(POND_ID,
+  select(POND_ID, DATE_RECEIVED,
          `SIGNIFICANT VARIANT TYPE`,
          `SIGNIFICANT VARIANT`,
          `CLASSIFICATION`) %>%
@@ -178,5 +175,264 @@ outfile <- file.path(output_dir, outfile)
 write_csv(df_variants, outfile)
 ```
 
+```{r}
+genetics %>% 
+  mutate(gene_identified = ifelse(is.na(CLASSIFICATION), 0, 1)) %>% 
+  select(POND_ID, gene_identified) %>% 
+  distinct() %>% 
+  group_by(gene_identified) %>% 
+  summarise(count = n(),
+            frac = n()/nrow(.))
+```
 
 
+```{r}
+genetics_tmp <- genetics %>% 
+  mutate(has_genetics = TRUE,
+         gene_identified = ifelse(is.na(CLASSIFICATION), FALSE, TRUE))
+
+demographics_tmp <- demographics %>% 
+  mutate(Subject_ID = str_remove(Subject_ID, "POND_"),
+         has_imaging = TRUE) %>% 
+  filter(DX != "Control")
+
+data_full <- full_join(demographics_tmp, genetics_tmp, by = c("Subject_ID" = "POND_ID")) %>% 
+  mutate(has_genetics = ifelse(is.na(has_genetics), FALSE, TRUE),
+         has_imaging = ifelse(is.na(has_imaging), FALSE, TRUE),
+         Dataset = ifelse(is.na(Dataset), "POND", Dataset)) 
+
+data_full %>% 
+  filter(has_imaging) %>% 
+  group_by(has_genetics) %>% 
+  count()
+```
+
+```{r}
+data_full_pond <- filter(data_full, Dataset == "POND") %>% 
+  mutate(category = case_when(has_imaging & !has_genetics ~ "imaging only",
+                              !has_imaging & has_genetics ~ "genetics only",
+                              has_imaging & has_genetics ~ "both"),
+         category = factor(category, levels = c("imaging only", "genetics only", "both")))
+
+data_full_pond %>% 
+  group_by(category) %>% 
+  count()
+```
+
+
+```{r}
+pond_metadata <- file.path(registration_dir, "subject_info", "pond-metadata-20230111.xlsx")
+pond_metadata <- read_excel(pond_metadata)
+```
+
+```{r}
+tmp <- data_full_pond %>% 
+  left_join(pond_metadata, by = c("Subject_ID" = "Subject")) %>% 
+  select(Subject_ID, POND_DATE, category) %>% 
+  mutate(POND_DATE = as.Date(POND_DATE)) %>% 
+  filter(!is.na(POND_DATE))
+
+ggplot(tmp, aes(x = factor(year(POND_DATE)), fill = fct_rev(category))) + 
+  geom_bar() + 
+  labs(x = "Year",
+       y = "Number of patients",
+       title = "POND imaging and genetics over time",
+       fill = "Available data") + 
+  theme_bw()
+```
+
+Clearly seems like the discrepancy isn't due to date. 
+
+```{r}
+data_imaging_pond <- data_full_pond %>% 
+  filter(has_imaging)
+
+ggplot(data_imaging_pond, aes(x = Site, fill = has_genetics)) + 
+  geom_bar()
+```
+
+
+```{r}
+tmp <- data_full_pond %>% 
+  left_join(pond_metadata, by = c("Subject_ID" = "Subject")) %>% 
+  filter(!is.na(PRIMARY_DIAGNOSIS))
+  
+p <- ggplot(tmp, aes(x = category, fill = PRIMARY_DIAGNOSIS)) + 
+  geom_bar() + 
+  theme_bw()
+
+outfile <- "/projects/abeauchamp/POND_genetics_imaging.pdf"
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(8, "in"))
+print(p)
+dev.off()
+```
+```{r}
+tmp %>% 
+  group_by(category, PRIMARY_DIAGNOSIS) %>% 
+  count() %>% 
+  arrange(category)
+```
+
+```{r}
+tmp %>% 
+  filter(category == "genetics only") %>% 
+  group_by(PRIMARY_DIAGNOSIS) %>% 
+  summarise(n(), n()/nrow(.))
+```
+
+```{r}
+tmp %>% 
+  filter(category == "both") %>% 
+  group_by(PRIMARY_DIAGNOSIS) %>% 
+  summarise(n(), n()/nrow(.))
+```
+
+```{r}
+tmp %>% 
+  filter(category == "imaging only") %>% 
+  group_by(PRIMARY_DIAGNOSIS) %>% 
+  summarise(n(), n()/nrow(.))
+```
+
+
+
+
+```{r}
+tmp_long <- tmp %>% 
+  select(-POND_YEAR) %>% 
+  rename(imaging = has_imaging, 
+         genetics = has_genetics) %>% 
+  pivot_longer(cols = c(imaging, genetics), 
+               names_to = "feature", 
+               values_to = "measured")
+
+ggplot(tmp_long, aes(x = POND_DATE, y = measured, col = feature)) + 
+  geom_jitter()
+```
+
+
+
+```{r}
+intersect(demographics_tmp$Subject_ID, genetics_tmp$POND_ID)
+```
+
+
+
+
+# -------------
+
+```{r}
+library(RMINC)
+library(MRIcrotome)
+
+anat <- file.path(registration_dir, "reference_files", "model_0.8mm.mnc")
+anat <- mincGetVolume(anat)
+
+mask <- file.path(registration_dir, "reference_files", "mask_0.8mm.mnc")
+mask <- mincGetVolume(mask)
+
+demo_lt_5 <- demographics %>% 
+  filter(Age <= 5, Sex == "Male") %>% 
+  sample_n(size = 5)
+
+files_lt_5 <- demo_lt_5[["file"]]
+
+demo_gt_20 <- demographics %>% 
+  filter(Age >= 20, Sex == "Male") %>% 
+  sample_n(size = 5)
+
+demo_gt_20[["file"]]
+
+jacobians <- c("absolute", "relative")
+jacobians_dir <- file.path(registration_dir, "jacobians_resampled", "resolution_0.8", jacobians)
+names(jacobians_dir) <- jacobians
+
+
+imgs_lt_5 <- vector(mode = "list", length = length(jacobians))
+imgs_gt_20 <- vector(mode = "list", length = length(jacobians))
+names(imgs_lt_5) <- jacobians
+names(imgs_gt_20) <- jacobians
+for (j in jacobians) {
+  
+  infiles_lt_5 <- file.path(jacobians_dir[[j]], files_lt_5)
+  infiles_gt_20 <- file.path(jacobians_dir[[j]], files_gt_20)
+  
+  imgs_lt_5[[j]] <- vector(mode = "list", length = 5)
+  imgs_gt_20[[j]] <- vector(mode = "list", length = 5)
+  for (i in 1:5) {
+    img_lt_5 <- mincGetVolume(infiles_lt_5[[i]])
+    img_lt_5[mask < 0.5] <- 0
+    imgs_lt_5[[j]][[i]] <- mincArray(img_lt_5)
+    
+    img_gt_20 <- mincGetVolume(infiles_gt_20[[i]])
+    img_gt_20[mask < 0.5] <- 0
+    imgs_gt_20[[j]][[i]] <- mincArray(img_gt_20)
+  }
+  
+}
+
+
+```
+
+```{r fig.width = 5, fig.height = 10}
+sliceSeries(nrow = 10, ncol = 1, begin = 50, end = 200) %>% 
+  anatomy(mincArray(anat), low = 3, high = 7) %>% 
+  overlay(imgs_lt_5[["absolute"]][[1]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_lt_5[["absolute"]][[2]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_lt_5[["absolute"]][[3]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_lt_5[["absolute"]][[4]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_lt_5[["absolute"]][[5]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  draw()
+```
+
+```{r fig.width = 5, fig.height = 10}
+sliceSeries(nrow = 10, ncol = 1, begin = 50, end = 200) %>% 
+  anatomy(mincArray(anat), low = 3, high = 7) %>% 
+  overlay(imgs_lt_5[["relative"]][[1]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_lt_5[["relative"]][[2]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_lt_5[["relative"]][[3]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_lt_5[["relative"]][[4]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_lt_5[["relative"]][[5]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  draw()
+```
+
+```{r fig.width = 5, fig.height = 10}
+sliceSeries(nrow = 10, ncol = 1, begin = 50, end = 200) %>% 
+  anatomy(mincArray(anat), low = 3, high = 7) %>% 
+  overlay(imgs_gt_20[["absolute"]][[1]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_gt_20[["absolute"]][[2]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_gt_20[["absolute"]][[3]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_gt_20[["absolute"]][[4]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_gt_20[["absolute"]][[5]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  draw()
+```
+
+
+```{r fig.width = 5, fig.height = 10}
+sliceSeries(nrow = 10, ncol = 1, begin = 50, end = 200) %>% 
+  anatomy(mincArray(anat), low = 3, high = 7) %>% 
+  overlay(imgs_gt_20[["relative"]][[1]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_gt_20[["relative"]][[2]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_gt_20[["relative"]][[3]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_gt_20[["relative"]][[4]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(imgs_gt_20[["relative"]][[5]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+  draw()
+```

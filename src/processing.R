@@ -20,10 +20,10 @@ import_image <- function(img, mask = NULL, flatten = TRUE) {
       stop("Input image and mask contain a different number of voxels.")
     }
     if (flatten) {
-      img <- img[mask == 1]
+      img <- img[mask > 0.5]
     } else {
       mask <- mincArray(mask)
-      img[mask == 0] <- 0
+      img[mask < 0.5] <- 0
     }
   }
   return(img)
