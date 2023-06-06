@@ -15,7 +15,9 @@ input_dirs = [os.path.join(input_dir, d, 'anat', '')
               for d in os.listdir(input_dir) if 'sub' in d]
 
 # Copy T1w images
-for d in input_dirs:
+for i, d in enumerate(input_dirs):
+    if (i+1)%50 == 0:
+        print('{} of {}'.format(i+1, len(input_dirs)))
     if os.path.exists(d):
         files = [f for f in os.listdir(d) if 'T1w' in f]
         files = [f for f in files if 'nii.gz' in f]
