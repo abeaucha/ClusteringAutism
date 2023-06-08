@@ -1,0 +1,49 @@
+---
+title: "Human demographics"
+author: "Antoine Beauchamp"
+date: '`r Sys.Date()`'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+# suppressPackageStartupMessages(library(readxl))
+# suppressPackageStartupMessages(library(RColorBrewer))
+# suppressPackageStartupMessages(library(ggalluvial))
+```
+
+```{r functions}
+# source("../../src/utils.R")
+# source("../../src/processing.R")
+# source("../../src/analysis.R")
+```
+
+```{r parameters}
+#Output directory
+output_dir <- "outputs/human_demographics/"
+
+#Human data version
+version <- "v2"
+
+#Registration directory
+registration_dir <- "../../data/human/registration/"
+registration_dir <- file.path(registration_dir, version)
+
+#Demographics directory
+demographics_dir <- file.path(registration_dir, "subject_info")
+
+```
+
+```{r}
+demographics <- file.path(demographics_dir, "demographics.csv")
+demographics <- read_csv(demographics, show_col_types = FALSE)
+
+demographics
+```
+
+
+
