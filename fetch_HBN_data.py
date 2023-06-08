@@ -1,8 +1,13 @@
 #!.venv/bin/python3
 
 # Packages
+import multiprocessing as mp
 import os
 from shutil import copyfile
+from tqdm import tqdm
+
+# Functions
+def copier(paths): copyfile(src = paths[0], dst = paths[1])
 
 # Directories
 input_dir = '/projects/bilal/HBN/'
@@ -10,20 +15,31 @@ output_dir = 'data/human/HBN/'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-# Input sub-directories
-input_dirs = [os.path.join(input_dir, d, 'anat', '')
-              for d in os.listdir(input_dir) if 'sub' in d]
+# HBN subject directories
+subjects = [d for d in os.listdir(input_dir) if 'sub' in d]
 
-# Copy T1w images
-for i, d in enumerate(input_dirs):
-    if (i+1)%50 == 0:
-        print('{} of {}'.format(i+1, len(input_dirs)))
-    if os.path.exists(d):
-        files = [f for f in os.listdir(d) if 'T1w' in f]
-        files = [f for f in files if 'nii.gz' in f]
-        if len(files) != 0:
-            for f in files:
-                src = os.path.join(d, f)
-                dst = os.path.join(output_dir, f)
-                copyfile(src = src, dst = dst)
+# Collate input file paths
+input_files = []
+for i, s in enumerate(subjects):
+    imgdir = os.path.join(input_dir, s, 'anat')
+    if os.path.exists(imgdir):
+        imgfiles = [f for f in os.listdir(imgdir) if 'T1w' in f]
+        imgfiles = [f for f in imgfiles if 'nii.gz' in f]
+        imgfiles = [f for f in imgfiles if 'VNav' not in f]
+        if len(imgfiles) > 0:
+            for file in imgfiles:
+                input_files.append(os.path.join(imgdir, file))
 
+# Output file paths
+output_files = [os.path.join(output_dir, os.path.basename(f)) for f in input_files]
+
+# Zip input and outputs
+paths = list(zip(input_files, output_files))
+
+# Copy images
+pool = mp.Pool(8)
+results = []
+for result in tqdm(pool.imap(copier, paths), total = len(paths)):
+    results.append(result)
+pool.close()
+pool.join()
