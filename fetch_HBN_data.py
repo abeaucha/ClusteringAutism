@@ -31,7 +31,8 @@ for i, s in enumerate(subjects):
                 input_files.append(os.path.join(imgdir, file))
 
 # Output file paths
-output_files = [os.path.join(output_dir, os.path.basename(f)) for f in input_files]
+output_files = [os.path.join(output_dir, os.path.basename(f))
+                for f in input_files]
 
 # Zip input and outputs
 paths = list(zip(input_files, output_files))

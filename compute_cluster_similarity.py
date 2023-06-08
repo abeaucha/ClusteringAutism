@@ -3,20 +3,28 @@
 # cluster_similarity.py
 # Author: Antoine Beauchamp
 # Created: March 15th, 2023
+# Edited: June 8th, 2023
 
 """
 Pipeline to evaluate pairwise cluster similarity.
 
 Description
 -----------
+This pipeline evaluates the pairwise gene expression similarity of mouse and
+human clusters on the basis of the cluster centroid images. The centroid images
+are obtained by specifying the mouse and human processing pipeline directories
+as well as parameter set IDs in the command line arguments. Additional paths
+must be specified to the mouse and human gene expression data directories.
+
+Parameters governing the evaluation of the similarity computations are mappable.
 """
 
 # Packages -------------------------------------------------------------------
 
 import argparse
-from pipelines import compute_cluster_similarity
-from itertools import product
 from functools import reduce
+from itertools import product
+from pipelines import compute_cluster_similarity
 
 
 # Command line arguments -----------------------------------------------------
@@ -31,47 +39,49 @@ def parse_args():
         '--pipeline-dir',
         type = str,
         default = 'data/cross_species/v2/',
-        help = "Path to pipeline output directory."
+        help = "Path to the pipeline output directory."
     )
     
     parser.add_argument(
         '--human-pipeline-dir',
         type = str,
         default = 'data/human/derivatives/v2/',
-        help = "Path to human pipeline directory."
+        help = "Path to the human processing pipeline directory."
     )
 
     parser.add_argument(
         '--mouse-pipeline-dir',
         type = str,
         default = 'data/mouse/derivatives/v2/',
-        help = "Path to mouse pipeline directory."
+        help = "Path to the mouse processing pipeline directory."
     )
     
     parser.add_argument(
         '--human-params-id',
         type = str,
-        help = "Human pipeline ID"
+        help = ("ID specifying the human processing pipeline parameter "
+                "set to use.")
     )
     
     parser.add_argument(
         '--mouse-params-id',
         type = str,
-        help = "Mouse pipeline ID"
+        help = ("ID specifying the mouse processing pipeline parameter "
+                "set to use.")
     )
     
     parser.add_argument(
         '--human-expr-dir',
         type = str,
         default = 'data/human/expression/',
-        help = "Path to human expression directory."
+        help = "Path to the human gene expression directory."
     )
 
     parser.add_argument(
         '--mouse-expr-dir',
         type = str,
         default = 'data/mouse/expression/',
-        help = "Path to mouse expression directory."
+        help = "Path to mouse gene expression directory."
     )
 
     parser.add_argument(
@@ -85,7 +95,7 @@ def parse_args():
         '--mouse-mask',
         type = str,
         default = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
-        help = ("Path to mouse mask (.mnc) used to construct the gene "
+        help = ("Path to mouse mask (.mnc) used to construct the mouse gene "
                 "expression matrix.")
     )
 
@@ -102,7 +112,8 @@ def parse_args():
         type = str,
         default = 'average-latent-space',
         choices = ['average-latent-space', 'latent-space', 'homologous-genes'],
-        help = "Gene expression space to use when computing similarity."
+        help = ("The gene expression space to use to evaluate the similarity "
+                "between clusters.")
     )
 
     parser.add_argument(
@@ -128,7 +139,8 @@ def parse_args():
         nargs = '*',
         type = str,
         default = ['correlation'],
-        help = "Similarity metric."
+        help = ("The metric used to evaluate the similarity between cluster "
+                "gene expression signature.")
     )
 
     parser.add_argument(
@@ -145,7 +157,8 @@ def parse_args():
         type = str,
         default = 'top_n',
         choices = ['none', 'top_n', 'intensity'],
-        help = "Method used to threshold mouse and human images."
+        help = ("Method used to threshold mouse and human cluster centroid "
+                "images prior to constructing gene expression signatures.")
     )
 
     parser.add_argument(
@@ -153,7 +166,8 @@ def parse_args():
         nargs = '*',
         type = float,
         default = [0.2],
-        help = "Value used to threshold mouse and human images."
+        help = ("Value used to threshold mouse and human images. Ignored if "
+                "--threshold is 'none'")
     )
 
     parser.add_argument(
@@ -161,8 +175,8 @@ def parse_args():
         nargs = '*',
         type = str,
         default = ['true'],
-        help = ("Option to apply threshold symmetrically to positive and "
-                "negative values.")
+        help = ("Option to apply the threshold symmetrically to positive and "
+                "negative image values.")
     )
 
     parser.add_argument(
@@ -170,7 +184,7 @@ def parse_args():
         nargs = '*',
         type = str,
         default = ['absolute', 'relative'],
-        help = "Jacobians to use"
+        help = "Jacobians to use."
     )
 
     parser.add_argument(

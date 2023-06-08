@@ -7,9 +7,9 @@
 #
 # Description
 # -----------
-# This script creates a cluster centroid image for each cluster. The centroid
-# images are computed by aggregating the voxel-wise values for all images in a
-# cluster.
+# This script creates a cluster centroid image for each cluster in the input
+# file. The centroid images are computed by aggregating the voxel-wise values
+# for all images in a cluster.
 
 
 # Packages -------------------------------------------------------------------
@@ -27,7 +27,8 @@ option_list <- list(
               help = "Path to the file (.csv) containing cluster assignments."),
   make_option("--imgdir",
               type = "character",
-              help = "Path to directory containing images."),
+              help = paste("Path to the directory containing the individual",
+                           "images (.mnc).")),
   make_option("--mask",
               type = "character",
               help = "Path to a mask image (.mnc)."),
@@ -37,8 +38,8 @@ option_list <- list(
   make_option("--method",
               type = "character",
               default = "mean",
-              help = paste("Method used to compute the centroid images.",
-                           "[default %default]")),
+              help = paste("One of {mean, median} specifying how to compute",
+                           "the centroid images. [default %default]")),
   make_option("--nproc",
               type = "numeric",
               default = 2,
