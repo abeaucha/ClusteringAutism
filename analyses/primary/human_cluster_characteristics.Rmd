@@ -172,3 +172,281 @@ pond_genetics %>%
   sort()
 ```
 
+
+```{r}
+clusters
+```
+
+```{r}
+pond_clinical <- "../../data/human/registration/v2/subject_info/POND_clinical_scores.csv"
+pond_clinical <- read_csv(pond_clinical, show_col_types = FALSE)
+
+View(pond_clinical)
+```
+
+
+
+```{r}
+colnames(pond_clinical) %>% 
+  str_subset("CB68.*TOT")
+```
+
+What's the best way to look at this?
+
+```{r}
+pond_clinical_subset <- pond_clinical %>% 
+  select(SUBJECT, 
+         CB68IPPER,
+         CB68EPPER,
+         CB68TPPER,
+         FULL_IQ_SUMMARY,
+         SBFULLIQ,
+         WISC_IV_FSIQ_PERCENT,
+         WISC_V_FSIQ_PERCENT,
+         WPPSI_IV47_FSIQ_PR,
+         SCQTOT,
+         SCQTOT_C,
+         ADHD_I_SUB,
+         ADHD_HI_SUB,
+         TPOCS_TOT)
+
+head(pond_clinical_subset)
+```
+
+```{r}
+clusters_clinical <- clusters %>% 
+  left_join(demographics, by = c("ID" = "file")) %>% 
+  mutate(Subject_ID = str_remove(Subject_ID, "POND_")) %>% 
+  filter(Dataset == "POND") %>% 
+  mutate(Subject_ID = as.numeric(Subject_ID)) %>% 
+  left_join(pond_clinical_subset, by = c("Subject_ID" = "SUBJECT"))
+```
+
+```{r}
+tmp1 <- clusters_clinical %>% 
+  select(Subject_ID,
+         CB68IPPER,
+         CB68EPPER,
+         CB68TPPER,
+         FULL_IQ_SUMMARY,
+         SBFULLIQ,
+         WISC_IV_FSIQ_PERCENT,
+         WISC_V_FSIQ_PERCENT,
+         WPPSI_IV47_FSIQ_PR,
+         SCQTOT,
+         SCQTOT_C,
+         ADHD_I_SUB,
+         ADHD_HI_SUB,
+         TPOCS_TOT)
+
+scales <-  c("FULL_IQ_SUMMARY","SBFULLIQ", "WISC_IV_FSIQ_PERCENT", "WISC_V_FSIQ_PERCENT", "WPPSI_IV47_FSIQ_PR",
+             "CB68IPPER", "CB68EPPER", "CB68TPPER",
+             "SCQTOT", "SCQTOT_C",
+             "ADHD_I_SUB",
+             "ADHD_HI_SUB",
+             "TPOCS_TOT")
+
+tmp1 <- tmp1 %>% 
+  pivot_longer(cols = -Subject_ID, names_to = "Scale", values_to = "Score") %>% 
+  mutate(Exists = ifelse(is.na(Score), 0, 1),
+         Subject_ID = factor(Subject_ID),
+         Scale = factor(Scale, levels = scales),
+         Exists = factor(Exists))
+```
+
+
+```{r fig.width = 20, fig.height = 4}
+ggplot(tmp1, aes(x = Subject_ID, y = fct_rev(Scale), fill = Exists)) + 
+  geom_tile(show.legend = FALSE, col = "grey30") +
+  labs(x = "Participants",
+       y = "Clinical Assessments",
+       title = "POND participant clinical assessment completion") + 
+  scale_fill_manual(values = c("white", "red")) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  theme_bw() + 
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+```
+
+
+
+```{r}
+tmp2 <- clusters_clinical %>% 
+  select(nk2, nk5, nk9,         
+         CB68IPPER,
+         CB68EPPER,
+         CB68TPPER,
+         SCQTOT,
+         SCQTOT_C,
+         ADHD_I_SUB,
+         ADHD_HI_SUB,
+         TPOCS_TOT,
+         FULL_IQ_SUMMARY,
+         SBFULLIQ,
+         WISC_IV_FSIQ_PERCENT,
+         WISC_V_FSIQ_PERCENT)
+```
+
+
+```{r}
+tmp2_long <- tmp2 %>% 
+  pivot_longer(cols = c(nk2, nk5, nk9), names_to = "nk", values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
+         k = factor(k, levels = 1:9))
+```
+
+```{r}
+cols <- colnames(tmp2_long)[!(colnames(tmp2_long) %in% c("nk", "k"))]
+
+outfile <- "cluster_clinical_scores.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(8, "in"))
+
+for (col in cols) {
+  
+  p <- tmp2_long %>% 
+    mutate(k = fct_rev(k)) %>% 
+    ggplot(aes_string(x = col, y = "k")) + 
+    geom_jitter(width = 0.3, col = "grey70") + 
+    geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+    facet_wrap(~nk, ncol = 3) + 
+    labs(x = "Score",
+         y = "k",
+         title = col) + 
+    theme_bw()
+  
+  print(p)
+}
+
+dev.off()
+```
+
+
+```{r}
+p1 <- tmp2_long %>% 
+  ggplot(aes(x = CB68TPPER, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  coord_cartesian(xlim = c(0, 100)) +
+  labs(x = "Percentile rank",
+       y = "k",
+       title = "CB68 Total Problems") + 
+  theme_bw()
+
+outfile <- "test.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(8, "in"))
+print(p1)
+print(p2)
+dev.off()
+```
+
+```{r}
+p2 <- tmp2_long %>% 
+  ggplot(aes(x = CB68TPPER, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  coord_cartesian(xlim = c(0, 100)) +
+  labs(x = "Percentile rank",
+       y = "k",
+       title = "CB68 Total Problems") + 
+  theme_bw()
+```
+
+
+```{r}
+tmp2_long %>% 
+  ggplot(aes(x = CB68IPPER, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  coord_cartesian(xlim = c(0, 100)) +
+  labs(x = "Percentile rank",
+       y = "k",
+       title = "CB68 Internalizing Problems") + 
+  theme_bw()
+```
+
+
+```{r}
+tmp2_long %>% 
+  ggplot(aes(x = CB68EPPER, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  coord_cartesian(xlim = c(0, 100)) +
+  labs(x = "Percentile rank",
+       y = "k",
+       title = "CB68 Externalizing Problems") + 
+  theme_bw()
+```
+
+```{r}
+tmp2_long %>% 
+  ggplot(aes(x = FULL_IQ_SUMMARY, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  labs(x = "Score",
+       y = "k",
+       title = "Full IQ summary") + 
+  theme_bw()
+```
+
+```{r}
+tmp2_long %>% 
+  ggplot(aes(x = SCQTOT, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  labs(x = "Score",
+       y = "k",
+       title = "SCQ total score") + 
+  theme_bw()
+```
+
+```{r}
+tmp2_long %>% 
+  ggplot(aes(x = ADHD_I_SUB, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  labs(x = "Score",
+       y = "k",
+       title = "SWAN 'ADHD_I") + 
+  theme_bw()
+```
+
+
+```{r}
+tmp2_long %>% 
+  ggplot(aes(x = ADHD_HI_SUB, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  labs(x = "Score",
+       y = "k",
+       title = "SWAN 'ADHD_HI") + 
+  theme_bw()
+```
+
+```{r}
+tmp2_long %>% 
+  ggplot(aes(x = TPOCS_TOT, y = fct_rev(k))) + 
+  geom_jitter(width = 0.3, col = "grey70") + 
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
+  facet_wrap(~nk, ncol = 3) + 
+  labs(x = "Score",
+       y = "k",
+       title = "TOCS total score") + 
+  theme_bw()
+```
+
+
