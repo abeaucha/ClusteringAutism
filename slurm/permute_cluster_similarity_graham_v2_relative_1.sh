@@ -22,8 +22,8 @@ python3 permute_cluster_similarity.py \
 	--mouse-mask data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 	--human-mask data/human/registration/v2/reference_files/mask_0.8mm.mnc \
 	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_study_v2.csv \
-	--npermutations 3 \
-	--permutations-start 50 \
+	--npermutations 4 \
+	--permutations-start 53 \
 	--jacobians relative \
 	--nproc $SLURM_CPUS_PER_TASK
 tf=$(date)
