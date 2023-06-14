@@ -27,6 +27,7 @@ from pipelines import compute_cluster_similarity
 
 
 # Command line arguments -----------------------------------------------------
+
 def parse_args():
     """Parse command line arguments"""
 
