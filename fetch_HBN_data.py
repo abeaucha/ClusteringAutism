@@ -7,8 +7,8 @@
 Fetch Healthy Brain Network T1w images from Bilal's directory
 """
 
-
 # Packages -------------------------------------------------------------------
+
 import multiprocessing as mp
 import os
 from shutil import copyfile
@@ -16,10 +16,12 @@ from tqdm import tqdm
 
 
 # Functions ------------------------------------------------------------------
+
 def copier(paths): copyfile(src = paths[0], dst = paths[1])
 
 
 # Main -----------------------------------------------------------------------
+
 if __name__ == '__main__':
 
     # Directories

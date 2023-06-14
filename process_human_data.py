@@ -73,7 +73,8 @@ def parse_args():
         nargs='*',
         type=str,
         default=['POND', 'SickKids'],
-        help=("List of strings indicating which datasets to include in processing.")
+        help=("List of strings indicating which datasets to include in "
+              "processing.")
     )
 
     parser.add_argument(
@@ -169,7 +170,8 @@ def parse_args():
         nargs='*',
         type=int,
         default=[10],
-        help=("The number of nearest-neighbours to use in similarity network fusion.")
+        help=("The number of nearest-neighbours to use in similarity network "
+              "fusion.")
     )
 
     parser.add_argument(
@@ -177,7 +179,7 @@ def parse_args():
         nargs='*',
         type=float,
         default=[0.5],
-        help=("The variance for the local model in similarity network fusion.")
+        help="The variance for the local model in similarity network fusion."
     )
 
     parser.add_argument(
@@ -185,22 +187,24 @@ def parse_args():
         nargs='*',
         type=int,
         default=[20],
-        help=("The number of iterations for the diffusion process in similarity network fusion.")
+        help=("The number of iterations for the diffusion process in "
+              "similarity network fusion.")
     )
 
     parser.add_argument(
         '--cluster-file',
         type=str,
         default='clusters.csv',
-        help=("The basename of the file (.csv) in which to store cluster assignments.")
+        help=("The basename of the file (.csv) in which to store cluster "
+              "assignments.")
     )
 
     parser.add_argument(
         '--cluster-affinity-file',
         type=str,
         default='affinity.csv',
-        help=("The basename of the file (.csv) in which to store the affinity matrix "
-             "produced by similarity network fusion.")
+        help=("The basename of the file (.csv) in which to store the affinity "
+              "matrix produced by similarity network fusion.")
     )
 
     # Cluster maps arguments ---------------------------------------------------
@@ -209,7 +213,7 @@ def parse_args():
         nargs='*',
         type=str,
         default=['mean'],
-        help=("The method to use to compute cluster centroid images.")
+        help="The method to use to compute cluster centroid images."
     )
 
     args = vars(parser.parse_args())
@@ -218,6 +222,7 @@ def parse_args():
 
 
 # Pipeline --------------------------------------------------------------------
+
 if __name__ == '__main__':
 
     args = parse_args()
