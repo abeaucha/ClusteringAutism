@@ -1,4 +1,6 @@
 #!/bin/bash
+# coordinates_to_tags.sh
+# Author: Antoine Beauchamp
 # Convert a CSV of coordinates to Tag point format
 
 outdir=data/human/expression/

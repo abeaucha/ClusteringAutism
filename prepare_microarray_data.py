@@ -1,11 +1,27 @@
 #!.venv/bin/python3
+# ----------------------------------------------------------------------------
+# prepare_microarray_data.py
+# Author: Antoine Beauchamp
 
-# Packages
+"""
+Prepare the AHBA microarray sample coordinates for the similarity pipelines.
+
+Description
+-----------
+This script transforms the AHBA microarray coordinates from the
+MNI ICBM NLIN SYM 09c input space to the consensus average space of the
+study. It also creates label and mask image in the study space for the
+microarray samples.
+"""
+
+# Packages -------------------------------------------------------------------
+
 import os
 import transcriptomic
 from pyminc.volumes.factory import volumeFromFile
 
-# Global variables
+# Global variables -----------------------------------------------------------
+
 # Directories
 expr_dir = 'data/human/expression'
 registration_dir = 'data/human/registration/'
@@ -20,9 +36,10 @@ annotations = 'AHBA_microarray_sample_annotations.csv'
 template = 'model_0.8mm.mnc'
 # transforms = ['average_to_icbm_nlin_sym_09c0GenericAffine.mat', 
 #               'average_to_icbm_nlin_sym_09c1Warp.nii.gz']
-transforms = ['to_target_0GenericAffine.mat', 
+transforms = ['to_target_0GenericAffine.mat',
               'to_target_1Warp.nii']
 
+# Main -----------------------------------------------------------------------
 if __name__ == '__main__':
 
     # Paths to expression inputs
@@ -32,15 +49,16 @@ if __name__ == '__main__':
     # Paths to registration inputs
     registration_dir = os.path.join(registration_dir, version)
     template = os.path.join(registration_dir, 'reference_files', template)
-    transforms = [os.path.join(registration_dir, 'average_to_MNI', i) for i in
-                  transforms]
+    transforms = [os.path.join(registration_dir, 'average_to_MNI', i)
+                  for i in transforms]
 
     # Fetch microarray coordinates and transform to study space
     print("Fetching microarray coordinates...")
-    coords = transcriptomic.prepare_microarray_coordinates(metadata = metadata,
-                                                           annotations = annotations,
-                                                           transforms = tuple(
-                                                               transforms))
+    coords = transcriptomic.prepare_microarray_coordinates(
+        metadata = metadata,
+        annotations = annotations,
+        transforms = tuple(transforms)
+    )
 
     # Rename coordinates file
     coords_new = coords.replace('.csv', '_{}.csv'.format(version))

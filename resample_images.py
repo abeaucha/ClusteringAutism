@@ -91,6 +91,7 @@ if __name__ == '__main__':
                 for file in os.listdir(imgdir)
                 if '.mnc' in file]
 
+    # Resample images
     outfiles = utils.resample_images(infiles = imgfiles,
                                      isostep = isostep,
                                      outdir = outdir,

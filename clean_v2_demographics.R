@@ -1,7 +1,6 @@
 # ----------------------------------------------------------------------------
 # clean_v2_demographics.R
 # Author: Antoine Beauchamp
-# Edited: June 8th, 2023
 #
 # Clean human demographics information for v2 registration run.
 #

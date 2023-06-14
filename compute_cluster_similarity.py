@@ -1,9 +1,8 @@
 #!.venv/bin/python3
 # ----------------------------------------------------------------------------
-# cluster_similarity.py
+# compute_cluster_similarity.py
 # Author: Antoine Beauchamp
 # Created: March 15th, 2023
-# Edited: June 8th, 2023
 
 """
 Pipeline to evaluate pairwise cluster similarity.
@@ -88,15 +87,15 @@ def parse_args():
         '--human-mask',
         type = str,
         default = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
-        help = "Path to human mask (.mnc)."
+        help = "Path to the human mask (.mnc)."
     )
     
     parser.add_argument(
         '--mouse-mask',
         type = str,
         default = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
-        help = ("Path to mouse mask (.mnc) used to construct the mouse gene "
-                "expression matrix.")
+        help = ("Path to the mouse mask (.mnc) used to construct the mouse "
+                "gene expression matrix.")
     )
 
     parser.add_argument(

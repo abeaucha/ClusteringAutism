@@ -3,10 +3,8 @@
 # Author: Antoine Beauchamp
 # Created: June 23rd, 2022
 #
-# Brief description
-#
-# Description
-# -----------
+# Fetch AHBA microarray sample coordinates from Gabe Devenyi's GitHub
+
 
 # Packages -------------------------------------------------------------------
 
@@ -36,12 +34,12 @@ option_list <- list(
 
 # Functions ------------------------------------------------------------------
 
-#' Get microarray sample coordinates
+#' Fetch microarray sample coordinates
 #'
 #' @param metadata (character scalar) Path to the .csv file containing 
 #' AHBA sample metadata.
 #'
-#' @return (tibble) 
+#' @return (tibble) Table of microarray sample coordinates
 fetch_microarray_coordinates <- function(metadata) {
   
   metadata <- suppressMessages(read_csv(metadata))

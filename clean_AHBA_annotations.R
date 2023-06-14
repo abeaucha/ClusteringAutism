@@ -1,7 +1,6 @@
 # ----------------------------------------------------------------------------
 # clean_AHBA_annotations.R
 # Author: Antoine Beauchamp
-# Edited: June 8th, 2023
 #
 # Clean data frame indicating which AHBA microarray samples have neuroanatomical
 # annotations that are consistent with the corresponding MNI coordinates.
