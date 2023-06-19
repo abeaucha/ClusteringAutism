@@ -1,5 +1,5 @@
 ---
-title: "Human and mouse cluster diagnostics"
+title: "Human and mouse cluster diagnostics and optimization"
 author: "Antoine Beauchamp"
 date: '`r Sys.Date()`'
 output: pdf_document

@@ -24,28 +24,28 @@ source("../../src/utils.R")
 ```
 
 ```{r directories}
-#Output directory
+# Output directory
 output_dir <- "outputs/cluster_permutations/"
 
-#Similarity pipeline
+# Similarity pipeline
 version <- "v2"
 pipeline_dir <- "../../data/cross_species/"
 pipeline_dir <- file.path(pipeline_dir, version)
 
-#Human parameters
+# Human parameters
 human_resolution <- 0.8
 human_es_method <- "normative-growth"
 human_es_df <- 3
 human_cluster_map_method <- "mean"
 
-#Mouse parameters
+# Mouse parameters
 mouse_resolution <- 0.2
 mouse_cluster_map_method <- human_cluster_map_method
 
-#Similarity parameters
+# Similarity parameters
 metric <- "correlation"
 
-#Identify matching parameter sets
+# Identify matching parameter sets
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
                                 human_resolution = human_resolution,
@@ -57,24 +57,24 @@ params
 ```
 
 ```{r parameters}
-#Parameter set ID
+# Parameter set ID
 params_id <- 405
 
-#Human parameter set ID
+# Human parameter set ID
 human_params_id <- params %>% 
   filter(id == params_id) %>% 
   pull(human_id)
 
-#Mouse parameter set ID
+# Mouse parameter set ID
 mouse_params_id <- params %>% 
   filter(id == params_id) %>% 
   pull(mouse_id)
 
-#Permutation directory and files
+# Permutation directory and files
 permutation_dir <- file.path(pipeline_dir, params_id, "permutations", "similarity")
 permutation_files <- list.files(permutation_dir, full.names = TRUE)
 
-#Permutation IDs
+# Permutation IDs
 permutation_ids <- permutation_files %>% 
   basename() %>% 
   str_extract("[0-9]+") %>% 
@@ -82,35 +82,35 @@ permutation_ids <- permutation_files %>%
   unique() %>% 
   sort()
 
-permutation_ids <- permutation_ids[1:52]
+permutation_ids <- permutation_ids[1:60]
 
-#Output directory
+# Output directory
 output_dir <- file.path(output_dir, version, params_id)
 if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
 ```{r import-perms}
-#Jacobians to use
+# Jacobians to use
 jacobians <- c("absolute", "relative")
-# jacobians <- "relative"
+#  jacobians <- "relative"
 
-#Number of permutations
+# Number of permutations
 np <- length(permutation_ids)
 
-#Iterate over jacobians
+# Iterate over jacobians
 list_permutations <- vector(mode = "list", length = length(jacobians))
 names(list_permutations) <- jacobians
 for (j in jacobians) {
   
-  #Iterate over permutations
+  # Iterate over permutations
   df_sim <- tibble()
   for (p in 1:np) {
     
-    #Permutation similarity data
+    # Permutation similarity data
     infile <- permutation_files %>% 
       str_subset(str_c("permutation_", permutation_ids[p], "_", j))
     
-    #Import permutation similarity data
+    # Import permutation similarity data
     df_sim_tmp <- infile %>% 
       read_csv(show_col_types = FALSE) %>% 
       mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
@@ -121,11 +121,11 @@ for (j in jacobians) {
       unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
       mutate(permutation = permutation_ids[p]) 
     
-    #Collate permutation data
+    # Collate permutation data
     df_sim <- bind_rows(df_sim, df_sim_tmp)
   }
   
-  #Include jacobians information
+  # Include jacobians information
   df_sim <- df_sim %>% 
     mutate(jacobians = j)
   
@@ -133,12 +133,12 @@ for (j in jacobians) {
   
 }
 
-#Reduce permutations data frames into one
+# Reduce permutations data frames into one
 df_permutations <- reduce(.x = list_permutations, .f = bind_rows)
 ```
 
 ```{r plot-null-dist, fig.width = 10, fig.height = 5}
-#Plot of empirical null distribution across all permutations
+# Plot of empirical null distribution across all permutations
 p_null_dist <- ggplot(df_permutations, 
                       aes(x = similarity,
                           y = ..density..,
@@ -288,29 +288,32 @@ print(p_significant_counts)
 dev.off()
 ```
 
-```{r}
+```{r plot-diag-matrices}
+# Filter for diagonal nk
 df_similarity_diag <- df_similarity %>% 
   filter(human_nk == mouse_nk)
 
+# Cluster ID levels
 cluster_lvls <- df_similarity_diag %>% 
   select(human_cluster_id, human_nk, human_k) %>% 
   distinct() %>% 
   arrange(human_nk, human_k) %>% 
   pull(human_cluster_id)
 
+# Convert cluster IDs to factor
 df_similarity_diag <- df_similarity_diag %>% 
   mutate(human_cluster_id = factor(human_cluster_id, levels = cluster_lvls),
          mouse_cluster_id = factor(mouse_cluster_id, levels = cluster_lvls))
 
-#Heatmap colour range
+# Heatmap colour range
 heatmap_range <- c(min(df_similarity_diag[["similarity"]]), max(df_similarity_diag[["similarity"]]))
 
-#Heatmap palette
+# Heatmap palette
 heatmap_colours <- rev(brewer.pal(n = 7, name = "RdYlBu"))
 palette_length <- 255
 heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
 
-ggplot(df_similarity_diag, 
+p_diag_matrices <- ggplot(df_similarity_diag, 
        aes(x = human_cluster_id, 
            y = fct_rev(mouse_cluster_id),
            fill = similarity)) + 
@@ -321,7 +324,16 @@ ggplot(df_similarity_diag,
   labs(x = "Human clusters",
        y = "Mouse clusters",
        fill = "Similarity") + 
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 270))
+
+outfile <- paste0("similarity_matrices_diagonal.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(8, "in"))
+print(p_diag_matrices)
+dev.off()
 ```
 
 ```{r plot-pairwise-significance}
@@ -354,24 +366,29 @@ heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
 pvals <- c(0.01, 0.05, 0.1)
 pvals_log10 <- -log10(pvals)
 
+# Iterate over cluster solutions
 for (h_nk in 2:human_nk_max) {
   
+  # Filter true values for human nk
   df_similarity_nk_tmp <- df_sim_pvals %>% 
     filter(human_nk == h_nk)  
   
+  # Filter permutations for human nk
   df_permutations_nk_tmp <- df_permutations %>% 
     filter(human_nk == h_nk)
   
   m_nk_range <- unique(df_similarity_nk_tmp[["mouse_nk"]])
-  
   for (m_nk in m_nk_range) {
-    
+
+    # Filter true values for mouse nk    
     df_similarity_nk <- df_similarity_nk_tmp %>% 
       filter(mouse_nk == m_nk)
     
+    # Filter permutations for mouse nk
     df_permutations_nk <- df_permutations_nk_tmp %>% 
       filter(mouse_nk == m_nk)
     
+    # Plot of null distribution for nk solution
     p_null_dist <- ggplot(df_permutations_nk,
                           aes(x = similarity,
                               y = ..density..)) + 
@@ -396,6 +413,7 @@ for (h_nk in 2:human_nk_max) {
            color = "Correlation") + 
       theme_bw()
     
+    # Plot of p-values for nk solution
     p_pvals <- ggplot(df_similarity_nk,
                       aes(x = similarity,
                           y = -log10(pval))) + 
@@ -422,11 +440,13 @@ for (h_nk in 2:human_nk_max) {
       theme_bw() + 
       theme(plot.margin = margin(t = 0, r = 0, b = 0, l = 0))
     
+    # Create labels based on p-values
     df_similarity_nk <- df_similarity_nk %>% 
       mutate(label = ifelse(pval <= 0.1, pval, NA),
              label = round(label, 2),
              label = as.character(label))
     
+    # Plot of similarity matrix for nk solution
     p_heatmap <- ggplot(df_similarity_nk, 
                         aes(x = factor(human_k),
                             y = fct_rev(factor(mouse_k)),
@@ -444,6 +464,7 @@ for (h_nk in 2:human_nk_max) {
       scale_y_discrete(expand = expansion(mult = 0)) + 
       theme_bw()
     
+    # Combine plots into one
     p_significance <- (((p_null_dist / p_pvals) | plot_spacer() | p_heatmap) + 
                          plot_layout(widths = c(1.5, 0.05, 1),
                                      heights = c(1, 1),
@@ -463,7 +484,7 @@ for (h_nk in 2:human_nk_max) {
 }
 ```
 
-```{r}
+```{r plot-human-sankey-sig}
 # Human pipeline directory
 human_param_id <- params[["human_id"]]
 human_pipeline_dir <- "../../data/human/derivatives/v2/"
@@ -522,7 +543,7 @@ p_human_sig_sankey <- ggplot(df_human_clusters_sig,
         legend.position = "bottom",
         legend.direction = "horizontal")
 
-outfile <- "human_sankey_significant_clusters.pdf"
+outfile <- "human_sankey_significant.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
@@ -531,14 +552,8 @@ print(p_human_sig_sankey)
 dev.off()
 ```
 
-```{r}
-df_human_clusters_long <- df_human_clusters %>% 
-  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = str_remove(nk_name, "nk"),
-         nk = as.numeric(nk),
-         nk = factor(nk),
-         k = factor(k))
-
+```{r plot-human-sankey-pvals}
+# Compute minimum human p-values for nk diagonal
 df_sim_pvals_human_diag <- df_sim_pvals %>% 
   filter(human_nk == mouse_nk) %>% 
   select(nk = human_nk,
@@ -552,6 +567,7 @@ df_sim_pvals_human_diag <- df_sim_pvals %>%
          pval = ifelse(is.infinite(pval), NA, pval),
          pval = ifelse(is.na(pval), max(pval, na.rm = TRUE), pval))
 
+# Join human cluster information with p-values
 df_human_clusters_pval <- df_human_clusters_long %>% 
   left_join(df_sim_pvals_human_diag,
             by = c("nk", "k")) 
@@ -580,17 +596,23 @@ print(p_human_pval_sankey)
 dev.off()
 ```
 
-```{r}
+```{r plot-mouse-sankey-sig}
+# Mouse pipeline parameter set ID
 mouse_param_id <- params[["mouse_id"]]
+
+# Mouse pipeline directory
 mouse_pipeline_dir <- "../../data/mouse/derivatives/v2/"
 mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_param_id)
 
+# Mouse cluster directory
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
 
+# Import mouse clusters
 mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
 df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
 colnames(df_mouse_clusters) <- c("ID", str_c("nk", 2:10))
 
+# Convert mouse clusters to long format
 df_mouse_clusters_long <- df_mouse_clusters %>% 
   pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
   mutate(nk = str_remove(nk_name, "nk"),
@@ -598,6 +620,7 @@ df_mouse_clusters_long <- df_mouse_clusters %>%
          nk = factor(nk),
          k = factor(k))
 
+# Count p-values for nk diagonal
 df_sim_pvals_mouse_diag <- df_sim_pvals %>% 
   filter(human_nk == mouse_nk) %>% 
   select(nk = mouse_nk,
@@ -609,6 +632,7 @@ df_sim_pvals_mouse_diag <- df_sim_pvals %>%
   mutate(nk = factor(nk),
          k = factor(k))
 
+# Combine clusters with significance information
 df_mouse_clusters_sig <- df_mouse_clusters_long %>% 
   left_join(df_sim_pvals_mouse_diag,
             by = c("nk", "k")) %>% 
@@ -632,7 +656,7 @@ p_mouse_sig_sankey <- ggplot(df_mouse_clusters_sig,
         legend.position = "bottom",
         legend.direction = "horizontal")
 
-outfile <- "mouse_sankey_significant_clusters.pdf"
+outfile <- "mouse_sankey_significant.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
@@ -641,7 +665,8 @@ print(p_mouse_sig_sankey)
 dev.off()
 ```
 
-```{r}
+```{r plot-mouse-sankey-pvals}
+# Compute minimum mouse p-values for nk diagonal
 df_sim_pvals_mouse_diag <- df_sim_pvals %>% 
   filter(mouse_nk == mouse_nk) %>% 
   select(nk = mouse_nk,
@@ -655,6 +680,7 @@ df_sim_pvals_mouse_diag <- df_sim_pvals %>%
          pval = ifelse(is.infinite(pval), NA, pval),
          pval = ifelse(is.na(pval), max(pval, na.rm = TRUE), pval))
 
+# Combine clusters with p-value information
 df_mouse_clusters_pval <- df_mouse_clusters_long %>% 
   left_join(df_sim_pvals_mouse_diag,
             by = c("nk", "k")) 
