@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# calculate_human_effect_sizes.R
+# propensity_matching_normalization.R
 # Author: Antoine Beauchamp
 # Created: May 9th, 2022
 #

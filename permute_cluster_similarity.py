@@ -5,10 +5,20 @@
 # Created: March 16th, 2023
 
 """
-Brief description.
+Pipeline to compute permuted cluster similarity values.
 
 Description
 -----------
+This pipeline iteratively permutes the cluster assignments for the human
+participants and evaluates the pairwise mouse-human cluster similarity values
+using the permuted human clusters. The number of permutations can be specified
+as well as the permutation to begin with. Each permutation has a fixed random
+seed corresponding to the permutation integer. The pipeline is mappable over
+absolute and relative Jacobians.
+
+Note that cluster similarity parameters are inherited from the output of
+a mouse-human cluster similarity pipeline. Thus, the similarity pipeline but
+be completed before running permutations.
 """
 
 # Packages -------------------------------------------------------------------
@@ -30,56 +40,57 @@ def parse_args():
         '--pipeline-dir',
         type = str,
         default = 'data/cross_species/v2/',
-        help = "Path to pipeline output directory."
+        help = "Path to the pipeline output directory."
     )
 
     parser.add_argument(
         '--params-id',
         type = str,
-        help = "Parameter set ID for similarity."
+        help = ("ID specifying the mouse-human cluster similarity pipeline "
+                "parameter set to use.")
     )
 
     parser.add_argument(
         '--human-pipeline-dir',
         type = str,
         default = 'data/human/derivatives/v2/',
-        help = "Path to human pipeline directory."
+        help = "Path to the human processing pipeline directory."
     )
 
     parser.add_argument(
         '--mouse-pipeline-dir',
         type = str,
         default = 'data/mouse/derivatives/v2/',
-        help = "Path to mouse pipeline directory."
+        help = "Path to the mouse processing pipeline directory."
     )
 
     parser.add_argument(
         '--human-expr-dir',
         type = str,
         default = 'data/human/expression/',
-        help = "Path to human expression directory."
+        help = "Path to the human gene expression directory."
     )
 
     parser.add_argument(
         '--mouse-expr-dir',
         type = str,
         default = 'data/mouse/expression/',
-        help = "Path to mouse expression directory."
+        help = "Path to mouse gene expression directory."
     )
 
     parser.add_argument(
         '--human-mask',
         type = str,
         default = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
-        help = "Path to human mask (.mnc)."
+        help = "Path to the human mask (.mnc)."
     )
 
     parser.add_argument(
         '--mouse-mask',
         type = str,
         default = 'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc',
-        help = ("Path to mouse mask (.mnc) used to construct the gene "
-                "expression matrix.")
+        help = ("Path to the mouse mask (.mnc) used to construct the mouse "
+                "gene expression matrix.")
     )
 
     parser.add_argument(
@@ -134,5 +145,6 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     args['jacobians'] = tuple(args['jacobians'])
-    args['keep_cluster_maps'] = True if args['keep_cluster_maps'] == 'true' else False
+    args['keep_cluster_maps'] = (True if args['keep_cluster_maps'] == 'true'
+                                 else False)
     permute_cluster_similarity(**args)

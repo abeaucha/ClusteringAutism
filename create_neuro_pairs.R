@@ -19,7 +19,7 @@ option_list <- list(
   make_option("--outdir",
               type = "character",
               default = "data/",
-              help = paste("Directory in which to save the CSV file.",
+              help = paste("Directory in which to save the output files (.csv)",
                            "[default %default]"))
 )
 
