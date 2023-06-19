@@ -306,7 +306,8 @@ df_similarity_diag <- df_similarity_diag %>%
          mouse_cluster_id = factor(mouse_cluster_id, levels = cluster_lvls))
 
 # Heatmap colour range
-heatmap_range <- c(min(df_similarity_diag[["similarity"]]), max(df_similarity_diag[["similarity"]]))
+heatmap_range <- c(min(df_similarity_diag[["similarity"]]), 
+                   max(df_similarity_diag[["similarity"]]))
 
 # Heatmap palette
 heatmap_colours <- rev(brewer.pal(n = 7, name = "RdYlBu"))
@@ -314,9 +315,9 @@ palette_length <- 255
 heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
 
 p_diag_matrices <- ggplot(df_similarity_diag, 
-       aes(x = human_cluster_id, 
-           y = fct_rev(mouse_cluster_id),
-           fill = similarity)) + 
+                          aes(x = human_cluster_id, 
+                              y = fct_rev(mouse_cluster_id),
+                              fill = similarity)) + 
   geom_tile(col = "grey50") + 
   scale_fill_gradientn(colors = heatmap_palette) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
@@ -379,7 +380,7 @@ for (h_nk in 2:human_nk_max) {
   
   m_nk_range <- unique(df_similarity_nk_tmp[["mouse_nk"]])
   for (m_nk in m_nk_range) {
-
+    
     # Filter true values for mouse nk    
     df_similarity_nk <- df_similarity_nk_tmp %>% 
       filter(mouse_nk == m_nk)
@@ -517,7 +518,8 @@ df_sim_pvals_human_diag <- df_sim_pvals %>%
   summarise(significant = sum(significant), 
             .groups = "drop") %>% 
   mutate(nk = factor(nk),
-         k = factor(k))
+         k = factor(k),
+         significant = ifelse(significant > 0, 1, 0))
 
 # Combine significance information with cluster assignment
 df_human_clusters_sig <- df_human_clusters_long %>% 
@@ -526,17 +528,17 @@ df_human_clusters_sig <- df_human_clusters_long %>%
   mutate(significant = factor(significant))
 
 p_human_sig_sankey <- ggplot(df_human_clusters_sig,
-       aes(x = nk,
-           stratum = k,
-           fill = significant,
-           alluvium = ID)) + 
+                             aes(x = nk,
+                                 stratum = k,
+                                 fill = significant,
+                                 alluvium = ID)) + 
   geom_flow(stat = "alluvium", aes.flow = "forward") + 
   geom_stratum() + 
   scale_fill_manual(values = c("grey50", brewer.pal(n = 9, name = "OrRd")[9]),
-                    limits = factor(0:1)) + 
+                    limits = factor(0:1), labels = c("No", "Yes")) + 
   labs(x = "Number of clusters",
        y = "Number of patients",
-       fill = "Number of significant matches",
+       fill = "Has a significant match",
        title = "Human clusters with significant matches") + 
   theme_bw() + 
   theme(panel.grid.major.x = element_blank(),
@@ -565,7 +567,8 @@ df_sim_pvals_human_diag <- df_sim_pvals %>%
          k = factor(k),
          pval = -log10(pval),
          pval = ifelse(is.infinite(pval), NA, pval),
-         pval = ifelse(is.na(pval), max(pval, na.rm = TRUE), pval))
+         pval = ifelse(is.na(pval), max(pval, na.rm = TRUE), pval),
+         pval = ifelse(pval > 3, 3, pval))
 
 # Join human cluster information with p-values
 df_human_clusters_pval <- df_human_clusters_long %>% 
@@ -573,13 +576,15 @@ df_human_clusters_pval <- df_human_clusters_long %>%
             by = c("nk", "k")) 
 
 p_human_pval_sankey <- ggplot(df_human_clusters_pval,
-       aes(x = nk,
-           stratum = k,
-           fill = pval,
-           alluvium = ID)) + 
+                              aes(x = nk,
+                                  stratum = k,
+                                  fill = pval,
+                                  alluvium = ID)) + 
   geom_flow(stat = "alluvium", aes.flow = "forward") + 
   geom_stratum() + 
-  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9]) +
+  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9],
+                       limits = c(0.3, 3),
+                       breaks = seq(0, 3, by = 0.5)) +
   labs(x = "Number of clusters",
        y = "Number of patients",
        fill = "-log10(p)",
@@ -630,7 +635,8 @@ df_sim_pvals_mouse_diag <- df_sim_pvals %>%
   summarise(significant = sum(significant), 
             .groups = "drop") %>% 
   mutate(nk = factor(nk),
-         k = factor(k))
+         k = factor(k),
+         significant = ifelse(significant > 0, 1, 0))
 
 # Combine clusters with significance information
 df_mouse_clusters_sig <- df_mouse_clusters_long %>% 
@@ -639,17 +645,17 @@ df_mouse_clusters_sig <- df_mouse_clusters_long %>%
   mutate(significant = factor(significant))
 
 p_mouse_sig_sankey <- ggplot(df_mouse_clusters_sig,
-       aes(x = nk,
-           stratum = k,
-           fill = significant,
-           alluvium = ID)) + 
+                             aes(x = nk,
+                                 stratum = k,
+                                 fill = significant,
+                                 alluvium = ID)) + 
   geom_flow(stat = "alluvium", aes.flow = "forward") + 
   geom_stratum() + 
   scale_fill_manual(values = c("grey50", brewer.pal(n = 9, name = "OrRd")[9]),
-                    limits = factor(0:1)) + 
+                    limits = factor(0:1), labels = c("No", "Yes")) + 
   labs(x = "Number of clusters",
        y = "Number of patients",
-       fill = "Number of significant matches",
+       fill = "Has a significant match",
        title = "Mouse clusters with significant matches") + 
   theme_bw() + 
   theme(panel.grid.major.x = element_blank(),
@@ -668,7 +674,7 @@ dev.off()
 ```{r plot-mouse-sankey-pvals}
 # Compute minimum mouse p-values for nk diagonal
 df_sim_pvals_mouse_diag <- df_sim_pvals %>% 
-  filter(mouse_nk == mouse_nk) %>% 
+  filter(mouse_nk == human_nk) %>% 
   select(nk = mouse_nk,
          k = mouse_k, 
          pval) %>% 
@@ -678,7 +684,9 @@ df_sim_pvals_mouse_diag <- df_sim_pvals %>%
          k = factor(k),
          pval = -log10(pval),
          pval = ifelse(is.infinite(pval), NA, pval),
-         pval = ifelse(is.na(pval), max(pval, na.rm = TRUE), pval))
+         pval = ifelse(is.na(pval), max(pval, na.rm = TRUE), pval),
+         pval = ifelse(pval > 3, 3, pval),
+         pval = ifelse(pval < 0.3, 0.3, pval))
 
 # Combine clusters with p-value information
 df_mouse_clusters_pval <- df_mouse_clusters_long %>% 
@@ -686,13 +694,15 @@ df_mouse_clusters_pval <- df_mouse_clusters_long %>%
             by = c("nk", "k")) 
 
 p_mouse_pval_sankey <- ggplot(df_mouse_clusters_pval,
-       aes(x = nk,
-           stratum = k,
-           fill = pval,
-           alluvium = ID)) + 
+                              aes(x = nk,
+                                  stratum = k,
+                                  fill = pval,
+                                  alluvium = ID)) + 
   geom_flow(stat = "alluvium", aes.flow = "forward") + 
   geom_stratum() + 
-  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[3:9]) +
+  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[3:9],
+                       limits = c(0.3, 3),
+                       breaks = seq(0, 3, by = 0.5)) +
   labs(x = "Number of clusters",
        y = "Number of models",
        fill = "-log10(p)",
