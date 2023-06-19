@@ -23,7 +23,7 @@ python3 permute_cluster_similarity.py \
 	--human-mask data/human/registration/v2/reference_files/mask_0.8mm.mnc \
 	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_study_v2.csv \
 	--npermutations 4 \
-	--permutations-start 57 \
+	--permutations-start 61 \
 	--jacobians relative \
 	--nproc $SLURM_CPUS_PER_TASK
 tf=$(date)
