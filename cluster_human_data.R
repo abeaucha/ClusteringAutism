@@ -32,7 +32,7 @@ option_list <- list(
   make_option("--file2",
               type = "character",
               help = paste("Path to file (.csv) containing second effect size",
-                           "matrix."),
+                           "matrix.")),
   make_option("--rownames",
               type = "character",
               help = "Column in the input files containing row names."),
