@@ -12,7 +12,7 @@ source activate_venv.sh
 ti=$(date)
 echo "Start time: $ti"
 python3 permute_cluster_similarity.py \
-	--pipeline-dir data/cross_species/v2/ \
+	--pipeline-dir data/cross_species/v2/relative/ \
 	--params-id 405 \
 	--human-pipeline-dir data/human/derivatives/v2/ \
 	--mouse-pipeline-dir data/mouse/derivatives/v2/ \
@@ -22,7 +22,7 @@ python3 permute_cluster_similarity.py \
 	--human-mask data/human/registration/v2/reference_files/mask_0.8mm.mnc \
 	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_study_v2.csv \
 	--npermutations 4 \
-	--permutations-start 49 \
+	--permutations-start 85 \
 	--jacobians relative \
 	--nproc $SLURM_CPUS_PER_TASK
 tf=$(date)
