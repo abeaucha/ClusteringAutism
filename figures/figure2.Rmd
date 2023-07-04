@@ -1,0 +1,103 @@
+---
+title: "Figure 2"
+author: "Antoine Beauchamp"
+date: '2023-07-04'
+output: html_document
+---
+
+# Initialization
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r functions}
+source("../src/utils.R")
+```
+
+```{r parameters}
+# Output directory
+output_dir <- "figure2/"
+
+# Similarity pipeline
+version <- "v2"
+pipeline_dir <- "../data/cross_species/"
+pipeline_dir <- file.path(pipeline_dir, version)
+
+# Human parameters
+human_resolution <- 0.8
+human_es_method <- "normative-growth"
+human_es_df <- 3
+human_cluster_map_method <- "mean"
+
+# Mouse parameters
+mouse_resolution <- 0.2
+mouse_cluster_map_method <- human_cluster_map_method
+
+# Similarity parameters
+metric <- "correlation"
+
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                human_resolution = human_resolution,
+                                human_es_method = human_es_method,
+                                human_es_df = human_es_df,
+                                human_cluster_map_method = human_cluster_map_method,
+                                metric = metric)
+params
+```
+
+```{r directories}
+# Parameter set ID
+params_id <- 405
+
+# Jacobians
+jacobians <- c("absolute", "relative")
+
+# Human parameter set ID
+human_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_id)
+
+# Mouse parameter set ID
+mouse_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(mouse_id)
+
+# Human pipeline directory
+human_pipeline_dir <- "../data/human/derivatives/"
+human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
+
+# Human cluster map directories
+human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
+human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
+human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
+names(human_cluster_map_dirs) <- jacobians
+
+# Mouse pipeline directory
+mouse_pipeline_dir <- "../data/mouse/derivatives/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
+
+# Mouse cluster map directories
+mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
+mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
+names(mouse_cluster_map_dirs) <- jacobians 
+
+# Output directory
+output_dir <- file.path(output_dir, version, params_id)
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
+
+# Neuroanatomy
+
+```{r}
+
+```
+
