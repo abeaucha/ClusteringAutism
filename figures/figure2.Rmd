@@ -15,10 +15,14 @@ knitr::opts_chunk$set(echo = TRUE)
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
 ```
 
 ```{r functions}
 source("../src/utils.R")
+source("../src/processing.R")
+source("../src/analysis.R")
 ```
 
 ```{r parameters}
@@ -88,16 +92,159 @@ mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
 mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
 mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
 mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
-names(mouse_cluster_map_dirs) <- jacobians 
+names(mouse_cluster_map_dirs) <- jacobians
+
+mouse_cluster_map_dirs_50um <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, "resolution_0.05")
+mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, jacobians)
+names(mouse_cluster_map_dirs_50um) <- jacobians
 
 # Output directory
-output_dir <- file.path(output_dir, version, params_id)
-if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+# output_dir <- file.path(output_dir, version, params_id)
+# if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
 # Neuroanatomy
 
 ```{r}
+# Mouse anatomy
+mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
+mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_anat_vol <- mincArray(mouse_anat)
+
+# Human anatomy
+human_anat_file <- "../data/human/registration/v2/reference_files/model_0.8mm.mnc"
+human_anat <- mincGetVolume(human_anat_file)
+human_anat_vol <- mincArray(human_anat)
+
+# Cropped human images along sagittal and transverse planes
+human_slices_dim_1 <- 25:200
+human_slices_dim_3 <- 25:220
+human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
+
+# Human mask
+human_mask_file <- "../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
+human_mask <- mincGetVolume(human_mask_file)
+
+# Mouse mask
+mouse_mask_file <- "../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
+mouse_mask <- mincGetVolume(mouse_mask_file)
+
+# Threshold method
+threshold <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold)
+
+# Threshold value
+threshold_value <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_value)
+
+# Threshold symmetric option
+threshold_symmetric <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_symmetric)
+
+nk <- 2
+```
+
+```{r}
+#Iterate over jacobians
+list_mouse_centroids <- vector(mode = "list", length = length(jacobians))
+list_mouse_overlay <- vector(mode = "list", length = length(jacobians))
+names(list_mouse_centroids) <- jacobians
+names(list_mouse_overlay) <- jacobians
+for (j in jacobians) {
+  
+  list_mouse_centroids[[j]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    
+    #Import centroid image for specific cluster using threshold
+    img <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[[j]],
+                              mask = mouse_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    #Crop image
+    list_mouse_centroids[[j]][[k]] <- mincArray(img)
+    
+    
+  }
+}
+```
+
+```{r}
+#Iterate over jacobians
+list_human_centroids <- vector(mode = "list", length = length(jacobians))
+list_human_overlay <- vector(mode = "list", length = length(jacobians))
+names(list_human_centroids) <- jacobians
+names(list_human_overlay) <- jacobians
+for (j in jacobians) {
+  
+  list_human_centroids[[j]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    
+    #Import centroid image for specific cluster using threshold
+    img <- import_cluster_map(imgdir = human_cluster_map_dirs[[j]],
+                              mask = human_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    #Crop image
+    img <- mincArray(img)
+    img <- img[human_slices_dim_1,,human_slices_dim_3]
+    list_human_centroids[[j]][[k]] <- img
+    
+  }
+}
+```
+
+```{r}
+mouse_slices <- c(18, 41, 85, 174, 196)
+fig2_ss_mouse_grob <- sliceSeries(nrow = 5, ncol = 1, slice = mouse_slices) %>% 
+  anatomy(mouse_anat_vol, low = 800, high = 1400) %>% 
+  overlay(list_mouse_centroids[["relative"]][[1]], low = 0.29, high = 0.6, symmetric = TRUE) %>% 
+  sliceSeries(nrow = 5, ncol = 1, slice = mouse_slices) %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["relative"]][[2]], low = 0.29, high = 0.6, symmetric = TRUE) %>%   
+  grobify()
+```
+
+```{r}
+human_slices <- c(61, 105, 127, 152, 214)
+fig2_ss_human_grob <- sliceSeries(nrow = 5, ncol = 1, slice = human_slices) %>% 
+  anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
+  overlay(list_human_centroids[["relative"]][[1]], low = 0.2, high = 0.67, symmetric = TRUE) %>% 
+  sliceSeries(nrow = 5, ncol = 1, slice = human_slices) %>% anatomy() %>% 
+  overlay(list_human_centroids[["relative"]][[2]], low = 0.2, high = 0.67, symmetric = TRUE) %>%   
+  grobify()
+```
+
+
+```{r}
+fig2_widths_in <- unit(c(2.5, 2.5, 3.5), "in")
+fig2_heights_in <- unit(c(5, 2.5), "in")
+
+fig2_grob <- arrangeGrob(fig2_ss_mouse_grob,
+                         fig2_ss_human_grob,
+                         layout_matrix = rbind(c(1, 2,  NA),
+                                               c(NA, NA, NA)),
+                         widths = fig2_widths_in,
+                         heights = fig2_heights_in)
+
+fig2_width <- unit(8.5, "in")
+fig2_height <- unit(7.5, "in")
+
+fig2_outfile <- "figure2.pdf"
+fig2_outfile <- file.path(output_dir, fig2_outfile)
+pdf(file = fig2_outfile,
+    width = fig2_width,
+    height = fig2_height)
+grid.draw(fig2_grob)
+dev.off()
 
 ```
 
