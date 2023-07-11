@@ -377,7 +377,7 @@ tabulate_labels_in_img <- function(img, labels, defs, mask = NULL, sign = NULL) 
 
 
 #Radar coordinate system for ggplot2
-coord_radar <- function (theta = "x", start = 0, direction = 1) {
+coord_radar <- function (theta = "x", start = 0, direction = 1, clip = "on") {
   
   theta <- match.arg(theta, c("x", "y"))
   r <- if (theta == "x") 
@@ -403,6 +403,7 @@ coord_radar <- function (theta = "x", start = 0, direction = 1) {
   }
   
   ggproto("CoordRadar", CoordPolar, theta = theta, r = r, start = start, 
+          clip = clip,
           direction = sign(direction),
           is_linear = function(coord) TRUE,
           render_bg = function(self, scale_details, theme) {
