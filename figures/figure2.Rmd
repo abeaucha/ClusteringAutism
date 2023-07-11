@@ -61,6 +61,9 @@ params
 # Parameter set ID
 params_id <- 405
 
+# Update pipeline directory with parameter set ID
+pipeline_dir <- file.path(pipeline_dir, params_id)
+
 # Jacobians
 jacobians <- c("absolute", "relative")
 
@@ -104,9 +107,9 @@ names(mouse_cluster_map_dirs_50um) <- jacobians
 # if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
-# Neuroanatomy
+# Neuroanatomy slice series
 
-```{r}
+```{r fig2-ss-files}
 # Mouse anatomy
 mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
 mouse_anat <- mincGetVolume(mouse_anat_file)
@@ -145,11 +148,12 @@ threshold_symmetric <- params %>%
   filter(id == params_id) %>% 
   pull(threshold_symmetric)
 
+# Number of clusters
 nk <- 2
 ```
 
-```{r}
-#Iterate over jacobians
+```{r fig2-ss-mouse-import}
+# Iterate over jacobians  
 list_mouse_centroids <- vector(mode = "list", length = length(jacobians))
 list_mouse_overlay <- vector(mode = "list", length = length(jacobians))
 names(list_mouse_centroids) <- jacobians
@@ -159,7 +163,7 @@ for (j in jacobians) {
   list_mouse_centroids[[j]] <- vector(mode = "list", length = nk)
   for (k in 1:nk) {
     
-    #Import centroid image for specific cluster using threshold
+    # Import centroid image for specific cluster using threshold
     img <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[[j]],
                               mask = mouse_mask_file,
                               nk = nk, k = k,
@@ -167,16 +171,75 @@ for (j in jacobians) {
                               threshold_value = threshold_value,
                               threshold_symmetric = threshold_symmetric)
     
-    #Crop image
     list_mouse_centroids[[j]][[k]] <- mincArray(img)
-    
     
   }
 }
 ```
 
-```{r}
-#Iterate over jacobians
+```{r fig2-mouse-ss}
+# Mouse slices
+mouse_slices <- c(18, 41, 85, 174, 196)
+
+# Mouse anatomy thresholds
+mouse_anat_low <- 800
+mouse_anat_high <- 2000
+
+# Mouse overlay thresholds
+mouse_overlay_low <- 0.29
+mouse_overlay_high <- 0.6
+
+# Iterate over slices
+fig2_ss_mouse_grobs_1 <- vector(mode = "list", length = length(mouse_slices))
+fig2_ss_mouse_grobs_2 <- vector(mode = "list", length = length(mouse_slices))
+for (s in 1:length(mouse_slices)) {
+  
+  # Slice series for k = 1
+  fig2_ss_mouse_grobs_1[[s]] <- sliceSeries(nrow = 1, ncol = 1, slice = mouse_slices[s]) %>% 
+    anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+    overlay(list_mouse_centroids[["relative"]][[1]], 
+            low = mouse_overlay_low, high = mouse_overlay_high, 
+            symmetric = TRUE) %>% 
+    grobify()
+  
+  # Slice series for k = 2
+  fig2_ss_mouse_grobs_2[[s]] <- sliceSeries(nrow = 1, ncol = 1, slice = mouse_slices[s]) %>% 
+    anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+    overlay(list_mouse_centroids[["relative"]][[2]], 
+            low = mouse_overlay_low, high = mouse_overlay_high, 
+            symmetric = TRUE) %>% 
+    grobify()
+  
+}
+
+# Mouse slice series grob
+fig2_ss_mouse_grob <- arrangeGrob(fig2_ss_mouse_grobs_1[[1]],
+                                  fig2_ss_mouse_grobs_2[[1]],
+                                  fig2_ss_mouse_grobs_1[[2]],
+                                  fig2_ss_mouse_grobs_2[[2]],
+                                  fig2_ss_mouse_grobs_1[[3]],
+                                  fig2_ss_mouse_grobs_2[[3]],
+                                  fig2_ss_mouse_grobs_1[[4]],
+                                  fig2_ss_mouse_grobs_2[[4]],
+                                  fig2_ss_mouse_grobs_1[[5]],
+                                  fig2_ss_mouse_grobs_2[[5]],
+                                  layout_matrix = matrix(1:10, 
+                                                         nrow = 5, ncol = 2, 
+                                                         byrow = TRUE),
+                                  widths = unit(rep(1, 2), "in"),
+                                  heights = unit(rep(1, 5), "in"))
+
+outfile <- "figure2_ss_mouse.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(4, "in"),
+    height = unit(10, "in"))
+grid.draw(fig2_ss_mouse_grob)
+dev.off()
+```
+
+```{r fig2-ss-human-import}
+# Iterate over jacobians
 list_human_centroids <- vector(mode = "list", length = length(jacobians))
 list_human_overlay <- vector(mode = "list", length = length(jacobians))
 names(list_human_centroids) <- jacobians
@@ -186,7 +249,7 @@ for (j in jacobians) {
   list_human_centroids[[j]] <- vector(mode = "list", length = nk)
   for (k in 1:nk) {
     
-    #Import centroid image for specific cluster using threshold
+    # Import centroid image for specific cluster using threshold
     img <- import_cluster_map(imgdir = human_cluster_map_dirs[[j]],
                               mask = human_mask_file,
                               nk = nk, k = k,
@@ -194,7 +257,7 @@ for (j in jacobians) {
                               threshold_value = threshold_value,
                               threshold_symmetric = threshold_symmetric)
     
-    #Crop image
+    # Crop image
     img <- mincArray(img)
     img <- img[human_slices_dim_1,,human_slices_dim_3]
     list_human_centroids[[j]][[k]] <- img
@@ -203,41 +266,293 @@ for (j in jacobians) {
 }
 ```
 
-```{r}
-mouse_slices <- c(18, 41, 85, 174, 196)
-fig2_ss_mouse_grob <- sliceSeries(nrow = 5, ncol = 1, slice = mouse_slices) %>% 
-  anatomy(mouse_anat_vol, low = 800, high = 1400) %>% 
-  overlay(list_mouse_centroids[["relative"]][[1]], low = 0.29, high = 0.6, symmetric = TRUE) %>% 
-  sliceSeries(nrow = 5, ncol = 1, slice = mouse_slices) %>% anatomy() %>% 
-  overlay(list_mouse_centroids[["relative"]][[2]], low = 0.29, high = 0.6, symmetric = TRUE) %>%   
-  grobify()
-```
-
-```{r}
+```{r fig2-human-ss}
+# Human slices
 human_slices <- c(61, 105, 127, 152, 214)
-fig2_ss_human_grob <- sliceSeries(nrow = 5, ncol = 1, slice = human_slices) %>% 
-  anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
-  overlay(list_human_centroids[["relative"]][[1]], low = 0.2, high = 0.67, symmetric = TRUE) %>% 
-  sliceSeries(nrow = 5, ncol = 1, slice = human_slices) %>% anatomy() %>% 
-  overlay(list_human_centroids[["relative"]][[2]], low = 0.2, high = 0.67, symmetric = TRUE) %>%   
-  grobify()
+
+# Human anatomy thresholds
+human_anat_low <- 3
+human_anat_high <- 10
+
+# Human overlay thresholds
+human_overlay_low <- 0.2
+human_overlay_high <- 0.67
+
+# Iterate over slices
+fig2_ss_human_grobs_1 <- vector(mode = "list", length = length(human_slices))
+fig2_ss_human_grobs_2 <- vector(mode = "list", length = length(human_slices))
+for (s in 1:length(human_slices)) {
+  
+  # Slice series for k = 1
+  fig2_ss_human_grobs_1[[s]] <- sliceSeries(nrow = 1, ncol = 1, slice = human_slices[s]) %>% 
+    anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
+    overlay(list_human_centroids[["relative"]][[1]], 
+            low = human_overlay_low, high = human_overlay_high, 
+            symmetric = TRUE) %>% 
+    grobify()
+  
+  # Slice series for k = 2
+  fig2_ss_human_grobs_2[[s]] <- sliceSeries(nrow = 1, ncol = 1, slice = human_slices[s]) %>% 
+    anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
+    overlay(list_human_centroids[["relative"]][[2]], 
+            low = human_overlay_low, high = human_overlay_high, 
+            symmetric = TRUE) %>% 
+    grobify()
+  
+}
+
+# Human slice series grob
+fig2_ss_human_grob <- arrangeGrob(fig2_ss_human_grobs_1[[1]],
+                                  fig2_ss_human_grobs_2[[1]],
+                                  fig2_ss_human_grobs_1[[2]],
+                                  fig2_ss_human_grobs_2[[2]],
+                                  fig2_ss_human_grobs_1[[3]],
+                                  fig2_ss_human_grobs_2[[3]],
+                                  fig2_ss_human_grobs_1[[4]],
+                                  fig2_ss_human_grobs_2[[4]],
+                                  fig2_ss_human_grobs_1[[5]],
+                                  fig2_ss_human_grobs_2[[5]],
+                                  layout_matrix = matrix(1:10, 
+                                                         nrow = 5, ncol = 2, 
+                                                         byrow = TRUE),
+                                  widths = unit(rep(1, 2), 'in'),
+                                  heights = unit(rep(1, 5), 'in'))
+
+outfile <- "figure2_ss_human.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(4, "in"),
+    height = unit(10, "in"))
+grid.draw(fig2_ss_mouse_grob)
+dev.off()
 ```
 
+```{r fig2-ss-labels}
+# Cluster labels text grob
+fig2_ss_labels_text <- textGrob(label = paste0("k = ", 1:2), 
+                                x = c(0.25, 0.75),
+                                gp = gpar(col = "grey85"))
 
-```{r}
-fig2_widths_in <- unit(c(2.5, 2.5, 3.5), "in")
-fig2_heights_in <- unit(c(5, 2.5), "in")
+# Cluster labels background rect grob
+fig2_ss_labels_rect <- rectGrob(gp = gpar(fill = "black"))
 
-fig2_grob <- arrangeGrob(fig2_ss_mouse_grob,
+# Cluster labels grob
+fig2_ss_labels_grob <- gTree(children = gList(fig2_ss_labels_rect, 
+                                              fig2_ss_labels_text))
+```
+
+# Molecular pathways polar plot
+
+```{r fig2-pathways-import}
+# Base directory for pathway data files
+pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
+
+# Threshold for StrinDB 
+stringdb_threshold <- 950
+pathways_dir <- file.path(pathways_dir, stringdb_threshold)
+
+# Prefix for pathway data files
+pathways_file_prefix <- "NewBader_enrichment_clusterneighbourhood_vs_brain_all"
+
+# Iterate over clusters
+list_pathways <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  pathways_file <- paste(pathways_file_prefix, nk, k, stringdb_threshold, sep = "_")
+  pathways_file <- paste0(pathways_file, ".csv")
+  pathways_file <- file.path(pathways_dir, pathways_file)
+  list_pathways[[k]] <- read_csv(pathways_file, show_col_types = FALSE)
+}
+
+# Reduce pathway data into one data frame
+df_pathways <- reduce(.x = list_pathways, .f = bind_rows)
+
+# List of desired pathway terms
+pathway_terms <- c("Chromatin organization",
+                   "Gene expression (transcription)",
+                   "Generic transcription pathway",
+                   "Mapk family signaling cascades",
+                   "Mtor signalling",
+                   "Protein-protein interactions at synapses",
+                   "Signaling by hedgehog",
+                   "Signaling by notch",
+                   "Signaling by wnt",
+                   "Transmission across chemical synapses")
+
+# Filter pathway data for desired terms
+df_pathways <- df_pathways %>% 
+  rename(pathway = Title) %>% 
+  filter(pathway %in% pathway_terms) %>% 
+  mutate(cluster = factor(cluster))
+```
+
+```{r fig2-pathways-polar-plot}
+# Add an empty factor level 
+# This is required to close the polar plot
+polar_plot_lvls <- c(" ", pathway_terms)
+
+# Add the empty factor level to the data
+df_polar_plot_tmp <- df_pathways %>% 
+  mutate(pathway = as.character(pathway)) %>% 
+  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+  mutate(pathway = " ")
+df_polar_plot <- bind_rows(df_pathways, df_polar_plot_tmp)
+
+# Refactor the categories to include the new levels
+df_polar_plot[["pathway"]] <- factor(df_polar_plot[["pathway"]],
+                                     levels = polar_plot_lvls)
+
+# Polar plot parameters
+nspokes <- length(unique(df_polar_plot$pathway)) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+breaks_end <- 15
+breaks_step <- 5
+polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+polar_labels <- tibble(pathway = levels(df_polar_plot$pathway)[2],
+                       breaks = polar_breaks)
+
+# Generate polar plot
+fig2_polar <- ggplot(df_polar_plot, 
+                     aes(x = pathway, 
+                         ymin = 0, ymax = E, 
+                         group = cluster, 
+                         fill = cluster, 
+                         col = cluster)) + 
+  geom_ribbon(alpha = 0.2) + 
+  geom_text(data = polar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = pathway, 
+                          y = breaks, 
+                          label = breaks)) + 
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion()) + 
+  labs(x = NULL,
+       fill = "k",
+       col = "k") + 
+  theme_bw() + 
+  theme(axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = c(0.92, 0.22),
+        plot.margin = margin(t = 0, l = 0, b = 0, unit = "in"))
+# ,
+# panel.border = element_blank())
+
+# Extract polar plot grob
+fig2_polar_grob <- grid.force(ggplotGrob(fig2_polar))
+
+outfile <- "figure2_polar.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(10, "in"))
+print(fig2_polar)
+dev.off()
+```
+
+# Mouse-human cluster similarity matrix
+
+```{r fig2-similarity-import}
+# Path to mouse-human similarity directory
+similarity_dir <- file.path(pipeline_dir, "similarity")
+
+# Iterate over jacobians
+list_similarity <- vector(mode = "list", length = length(jacobians))
+names(list_similarity) <- jacobians
+for (j in jacobians) {
+  
+  # Build the path to the similarity file
+  similarity_file <- paste0("similarity_", j, ".csv")
+  similarity_file <- file.path(similarity_dir, similarity_file)
+  
+  # Import the similarity data and extract cluster information
+  list_similarity[[j]] <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+    mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
+    unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
+    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE)
+  
+}
+
+# Filter similarity data for desired cluster numbers
+list_similarity_nk <- vector(mode = "list", length = length(list_similarity))
+names(list_similarity_nk) <- names(list_similarity)
+for (j in jacobians) {
+  list_similarity_nk[[j]] <- list_similarity[[j]] %>% 
+    filter(human_nk == nk,
+           mouse_nk == nk) %>% 
+    mutate(jacobians = j)
+}
+
+# Combine absolute and relative jacobian similarity into one
+df_similarity_nk <- list_similarity_nk %>% 
+  reduce(.f = bind_rows) %>% 
+  group_by(human_cluster_id, mouse_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+```
+
+```{r fig2-similarity-heatmap}
+fig2_heatmap <- ggplot(df_similarity_nk, 
+       aes(x = human_cluster_id, y = mouse_cluster_id, fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  labs(x = "Human clusters",
+       y = "Mouse clusters",
+       fill = "Correlation") + 
+  # scale_fill_gradientn(colors = heatmap_palette) +
+  scale_x_discrete(expand = expansion(mult = 0), position = "top",
+                   labels = c("k = 1", "k = 2")) + 
+  scale_y_discrete(expand = expansion(mult = 0),
+                   labels = c("k = 1", "k = 2")) + 
+  theme_bw() + 
+  theme(axis.ticks = element_blank())
+
+fig2_heatmap_grob <- grid.force(ggplotGrob(fig2_heatmap))
+
+outfile <- "figure2_heatmap.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(10, "in"))
+grid.draw(fig2_heatmap)
+dev.off()
+```
+
+# Cluster similarity permutations
+
+# Figure
+
+```{r fig2}
+# Figure grid dimensions in inches
+fig2_widths <- c(2.0, 0.2, 2.0, 0.3, 3.0, 1.0)
+fig2_heights <- c(0.2, 2.5, 2.5, 2.3)
+
+fig2_widths_in <- unit(fig2_widths, "in")
+fig2_heights_in <- unit(fig2_heights, "in")
+
+# Figure grob
+fig2_grob <- arrangeGrob(fig2_ss_labels_grob,
+                         rectGrob(gp = gpar(fill = "black")),
+                         fig2_ss_labels_grob,
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_polar_grob)),
+                         fig2_ss_mouse_grob,
                          fig2_ss_human_grob,
-                         layout_matrix = rbind(c(1, 2,  NA),
-                                               c(NA, NA, NA)),
+                         layout_matrix = rbind(c(01, 02, 03, NA, 04, NA),
+                                               c(05, 02, 06, NA, 04, NA),
+                                               c(05, 02, 06, NA, NA, NA),
+                                               c(NA, NA, NA, NA, NA, NA)),
                          widths = fig2_widths_in,
                          heights = fig2_heights_in)
 
+# Figure dimensions
 fig2_width <- unit(8.5, "in")
 fig2_height <- unit(7.5, "in")
 
+# Render figure
 fig2_outfile <- "figure2.pdf"
 fig2_outfile <- file.path(output_dir, fig2_outfile)
 pdf(file = fig2_outfile,
@@ -245,6 +560,5 @@ pdf(file = fig2_outfile,
     height = fig2_height)
 grid.draw(fig2_grob)
 dev.off()
-
 ```
 
