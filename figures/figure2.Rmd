@@ -343,6 +343,44 @@ fig2_ss_labels_grob <- gTree(children = gList(fig2_ss_labels_rect,
                                               fig2_ss_labels_text))
 ```
 
+```{r fig2}
+# Figure grid dimensions in inches
+fig2_widths <- c(1.5, 0.2, 1.5, 0.3, 5.0)
+fig2_heights <- c(0.2, 2.5, 2.5, 2.3)
+
+fig2_widths_in <- unit(fig2_widths, "in")
+fig2_heights_in <- unit(fig2_heights, "in")
+
+# Figure grob
+fig2_grob <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_ss_labels_grob)),
+                         rectGrob(gp = gpar(fill = "black")),
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_ss_labels_grob)),
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_tmp_grob)),
+                         # gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_heatmap_grob)),
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_ss_mouse_grob)),
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_ss_human_grob)),
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_density_grob)),
+                         layout_matrix = rbind(c(01, 02, 03, NA, 04),
+                                               c(05, 02, 06, NA, 04),
+                                               c(05, 02, 06, NA, 07),
+                                               c(NA, NA, NA, NA, NA)),
+                         widths = fig2_widths_in,
+                         heights = fig2_heights_in)
+
+# Figure dimensions
+fig2_width <- unit(8.5, "in")
+fig2_height <- unit(7.5, "in")
+
+# Render figure
+fig2_outfile <- "figure2.pdf"
+fig2_outfile <- file.path(output_dir, fig2_outfile)
+pdf(file = fig2_outfile,
+    width = fig2_width,
+    height = fig2_height)
+grid.draw(fig2_grob)
+dev.off()
+```
+
 
 # Panel: Molecular pathways polar plot
 
@@ -439,8 +477,9 @@ fig2_polar <- ggplot(df_polar_plot,
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
-        legend.position = c(0.92, 0.22),
-        plot.margin = margin(t = 0, l = 0, b = 0, unit = "in"))
+        legend.position = c(0.92, 0.22))
+# ,
+        # plot.margin = margin(t = 0, l = 0, b = 0, unit = "in"))
 # ,
 # panel.border = element_blank())
 
@@ -521,21 +560,19 @@ df_similarity_nk <- list_similarity_nk %>%
 ```{r fig2-similarity-heatmap}
 fig2_heatmap <- ggplot(df_similarity_nk, 
                        aes(x = human_cluster_id, 
-                           y = mouse_cluster_id, 
+                           y = fct_rev(mouse_cluster_id), 
                            fill = similarity)) + 
   geom_tile(col = "grey50") + 
   labs(x = "Human clusters",
        y = "Mouse clusters",
        fill = "Correlation") + 
   # scale_fill_gradientn(colors = heatmap_palette) +
-  scale_x_discrete(expand = expansion(mult = 0), position = "top",
-                   labels = c("k = 1", "k = 2")) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "bottom",
+                   labels = c("1", "2")) + 
   scale_y_discrete(expand = expansion(mult = 0),
-                   labels = c("k = 1", "k = 2")) + 
+                   labels = rev(c("1", "2"))) + 
   theme_bw() + 
   theme(axis.ticks = element_blank())
-
-fig2_heatmap_grob <- grid.force(ggplotGrob(fig2_heatmap))
 
 outfile <- "figure2_heatmap.pdf"
 outfile <- file.path(output_dir, outfile)
@@ -544,6 +581,9 @@ pdf(file = outfile,
     height = unit(10, "in"))
 print(fig2_heatmap)
 dev.off()
+
+fig2_heatmap <- fig2_heatmap + theme(legend.position = "none")
+fig2_heatmap_grob <- grid.force(ggplotGrob(fig2_heatmap))
 ```
 
 
@@ -646,6 +686,10 @@ fig2_density <- ggplot(df_permutations,
        y = "Density") + 
   theme_bw()
 
+# Convert ggplot to grob
+fig2_density_grob <- grid.force(ggplotGrob(fig2_density))
+
+# Export panel plot
 outfile <- "figure2_density.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile, 
@@ -655,6 +699,21 @@ print(fig2_density)
 dev.off()
 ```
 
+
+```{r}
+library(patchwork)
+
+fig2_tmp <- (fig2_polar | fig2_heatmap) +
+  plot_layout(widths = c(1, 1))
+
+# fig2_tmp <- (fig2_heatmap | fig2_density) +
+  # plot_layout(widths = c(1, 1))
+
+fig2_tmp_grob <- grid.force(patchworkGrob(fig2_tmp))
+
+fig2_tmp
+
+```
 
 # Figure
 
@@ -667,12 +726,13 @@ fig2_widths_in <- unit(fig2_widths, "in")
 fig2_heights_in <- unit(fig2_heights, "in")
 
 # Figure grob
-fig2_grob <- arrangeGrob(fig2_ss_labels_grob,
+fig2_grob <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_ss_labels_grob)),
                          rectGrob(gp = gpar(fill = "black")),
-                         fig2_ss_labels_grob,
-                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_polar_grob)),
-                         fig2_ss_mouse_grob,
-                         fig2_ss_human_grob,
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_ss_labels_grob)),
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_heatmap_grob)),
+                         # gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_polar_grob)),
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_ss_mouse_grob)),
+                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_ss_human_grob)),
                          layout_matrix = rbind(c(01, 02, 03, NA, 04, NA),
                                                c(05, 02, 06, NA, 04, NA),
                                                c(05, 02, 06, NA, NA, NA),
