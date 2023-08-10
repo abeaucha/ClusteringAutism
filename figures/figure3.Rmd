@@ -665,7 +665,7 @@ global_max <- df_overlay_thresholds %>%
   pull(value) %>% 
   max()
 
-print(c(global_min,))
+print(c(global_min, global_max))
 ```
 
 
@@ -947,6 +947,220 @@ grid.draw(fig3_ss_grob)
 dev.off()
 ```
 
+# Panel: Molecular pathways polar plots
+
+```{r fig2-pathways-import}
+# Base directory for pathway data files
+pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
+
+# Threshold for StrinDB 
+stringdb_threshold <- 950
+pathways_dir <- file.path(pathways_dir, stringdb_threshold)
+
+# Prefix for pathway data files
+pathways_file_prefix <- "NewBader_enrichment_clusterneighbourhood_vs_brain_all"
+
+# List of desired pathway terms
+pathway_terms <- c("Chromatin organization",
+                   "Gene expression (transcription)",
+                   "Generic transcription pathway",
+                   "Mapk family signaling cascades",
+                   "Mtor signalling",
+                   "Protein-protein interactions at synapses",
+                   "Signaling by hedgehog",
+                   "Signaling by notch",
+                   "Signaling by wnt",
+                   "Transmission across chemical synapses")
+
+# Iterate over clusters
+list_pathways <- vector(mode = "list", length = length(nk))
+names(list_pathways) <- nk
+for (i in 1:length(list_pathways)) {
+  
+  list_pathways[[i]] <- vector(mode = "list", length = nk[i])
+  for (k in 1:nk[i]) {
+    pathways_file <- paste(pathways_file_prefix, nk[i], k, stringdb_threshold, sep = "_")
+    pathways_file <- paste0(pathways_file, ".csv")
+    pathways_file <- file.path(pathways_dir, pathways_file)
+    list_pathways[[i]][[k]] <- read_csv(pathways_file, show_col_types = FALSE)
+  }
+  
+  list_pathways[[i]] <- list_pathways[[i]] %>% 
+    reduce(.f = bind_rows) %>% 
+    rename(pathway = Title) %>% 
+    filter(pathway %in% pathway_terms) %>% 
+    mutate(cluster = factor(cluster))
+}
+```
+
+```{r fig2-pathways-polar-plot}
+# Add an empty factor level 
+# This is required to close the polar plot
+polar_plot_lvls <- c(" ", pathway_terms)
+
+list_polar_plots <- vector(mode = "list", length = length(list_pathways))
+names(list_polar_plots) <- names(list_pathways)
+for (i in 1:length(list_polar_plots)) {
+  
+  df_polar_tmp <- list_pathways[[i]] %>% 
+  mutate(pathway = as.character(pathway)) %>% 
+  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+  mutate(pathway = " ")
+  
+  list_polar_plots[[i]] <- list_pathways[[i]] %>% 
+    bind_rows(df_polar_tmp) %>% 
+    mutate(pathway = factor(pathway, levels = polar_plot_lvls))
+  
+}
+
+# Polar plot parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+breaks_end <- 15
+breaks_step <- 5
+polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                       breaks = polar_breaks)
+```
+
+```{r fig3-pathways-polar-plot-1}
+# Generate polar plot
+fig3_polar_1 <- ggplot(list_polar_plots[[1]], 
+                     aes(x = pathway, 
+                         ymin = 0, ymax = E, 
+                         group = cluster, 
+                         fill = cluster, 
+                         col = cluster)) + 
+  geom_ribbon(alpha = 0.2) + 
+  geom_text(data = polar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = pathway, 
+                          y = breaks, 
+                          label = breaks)) + 
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_continuous(breaks = polar_breaks) + 
+  labs(x = NULL,
+       fill = "k",
+       col = "k") + 
+  theme_bw() + 
+  theme(axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "none")
+
+# Extract polar plot grob
+fig3_polar_1_grob <- grid.force(ggplotGrob(fig3_polar_1))
+fig3_polar_1_panel_grob <- getGrob(fig3_polar_1_grob, "panel.7-5-7-5")
+
+fig3_polar_1_grob <- gTree(children = gList(fig3_polar_1_panel_grob,
+                              textGrob("Test",
+                                       x = 0.5, y = 0.8)))
+
+grid.newpage()
+grid.draw(fig3_polar_1_grob)
+```
+
+
+```{r fig3-pathways-polar-plot-1}
+# outfile <- "figure3_polar_1.pdf"
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile, 
+#     width = unit(10, "in"),
+#     height = unit(10, "in"))
+# print(fig3_polar_1)
+# dev.off()
+```
+
+```{r fig3-pathways-polar-plot-2}
+# Generate polar plot
+fig3_polar_2 <- ggplot(list_polar_plots[[2]], 
+                     aes(x = pathway, 
+                         ymin = 0, ymax = E, 
+                         group = cluster, 
+                         fill = cluster, 
+                         col = cluster)) + 
+  geom_ribbon(alpha = 0.2) + 
+  geom_text(data = polar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = pathway, 
+                          y = breaks, 
+                          label = breaks)) + 
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion()) + 
+  labs(x = NULL,
+       fill = "k",
+       col = "k") + 
+  theme_bw() + 
+  theme(axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank())
+
+# Extract polar plot grob
+fig3_polar_2_grob <- grid.force(ggplotGrob(fig3_polar_2))
+fig3_polar_2_panel_grob <- getGrob(fig3_polar_2_grob, "panel.7-5-7-5")
+fig3_polar_2_legend_grob <- getGrob(fig3_polar_2_grob, "guides.3-3-3-3")
+
+outfile <- "figure3_polar_2.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(10, "in"))
+print(fig3_polar_2)
+dev.off()
+```
+
+```{r}
+fig3_width <- 8.5
+fig3_polar_width <- fig3_width - fig3_heatmap_width - 0.2
+fig3_polar_height <- fig3_ss_height
+
+fig3_polar_height_nopadding <- fig3_polar_height - 3*fig3_padding_width
+fig3_polar_panel_height <- fig3_polar_height_nopadding/2
+fig3_polar_panel_width <- fig3_polar_panel_height
+
+fig3_polar_heights <- c(fig3_padding_width, fig3_polar_panel_height, fig3_padding_width, fig3_polar_panel_height, fig3_padding_width)
+
+fig3_polar_widths <- c(fig3_polar_panel_width, fig3_polar_width - fig3_polar_panel_width)
+
+fig3_polar_heights_in <- unit(fig3_polar_heights, "inch")
+fig3_polar_widths_in <- unit(fig3_polar_widths, "inch")
+
+# fig3_polar_widths 
+
+fig3_polar_grob <- arrangeGrob(rectGrob(gp = gpar(fill = NA)),
+                               fig3_polar_1_panel_grob,
+                               fig3_polar_2_legend_grob,
+                               rectGrob(gp = gpar(fill = NA)),
+                               fig3_polar_2_panel_grob,
+                               rectGrob(gp = gpar(fill = NA)),
+                               layout_matrix = rbind(c(01, 01),
+                                                     c(02, 03),
+                                                     c(04, 03),
+                                                     c(05, 03),
+                                                     c(06, 06)),
+                               widths = fig3_polar_widths_in,
+                               heights = fig3_polar_heights_in)
+
+outfile <- "figure3_polar.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig3_polar_width, "in"),
+    height = unit(fig3_polar_height, "in"))
+grid.draw(fig3_polar_grob)
+dev.off()
+
+```
+
+
+
 
 # Figure
 
@@ -961,12 +1175,15 @@ fig3_heights_in <- unit(fig3_heights, "in")
 
 # With gridlines
 fig3_grob <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig3_heatmap_grob)),
+                         rectGrob(gp = gpar(fill = NA)),
                          gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig3_permutations_grob)),
                          rectGrob(gp = gpar(fill = NA)),
                          fig3_ss_grob,
-                         layout_matrix = rbind(c(01, NA, 02),
-                                               c(03, 03, 03),
-                                               c(04, NA, NA)),
+                         rectGrob(gp = gpar(fill = NA)),
+                         fig3_polar_grob,
+                         layout_matrix = rbind(c(01, 02, 03),
+                                               c(04, 04, 04),
+                                               c(05, 06, 07)),
                          widths = fig3_widths_in,
                          heights = fig3_heights_in)
 
