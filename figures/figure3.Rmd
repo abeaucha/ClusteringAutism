@@ -317,15 +317,35 @@ fig3_heatmap_heights <- c(0.25, 0.25, fig3_heatmap_1_panel_height, 0.2, fig3_hea
 fig3_heatmap_widths_in <- unit(fig3_heatmap_widths, "in")
 fig3_heatmap_heights_in <- unit(fig3_heatmap_heights, "in")
 
-fig3_heatmap_grob <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_1_xtitle_grob)),
-                                 gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_1_xaxis_grob)),
-                                 gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_2_xaxis_grob)),
-                                 gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_1_ytitle_grob)),
-                                 gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_1_yaxis_grob)),
+# Heatmap grob with gridlines
+fig3_heatmap_grob_grid <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_1_xtitle_grob)),
+                                      gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_1_xaxis_grob)),
+                                      gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_2_xaxis_grob)),
+                                      gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_1_ytitle_grob)),
+                                      gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_1_yaxis_grob)),
+                                      fig3_heatmap_1_panel_grob, 
+                                      gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_2_yaxis_grob)),
+                                      gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_2_panel_grob)),
+                                      gTree(children = gList(rectGrob(gp = gpar(fill = NA)), heatmap_scale_grob)),
+                                      layout_matrix = rbind(c(01, 01, 01, 01, 01, 01),
+                                                            c(NA, NA, 02, NA, NA, 03),
+                                                            c(04, 05, 06, NA, 07, 08),
+                                                            c(NA, NA, NA, NA, 07, 08),
+                                                            c(NA, NA, 09, NA, 07, 08),
+                                                            c(NA, NA, NA, NA, 07, 08)),
+                                      widths = fig3_heatmap_widths_in,
+                                      heights = fig3_heatmap_heights_in)
+
+# Heatmap grob
+fig3_heatmap_grob <- arrangeGrob(fig3_heatmap_1_xtitle_grob,
+                                 fig3_heatmap_1_xaxis_grob,
+                                 fig3_heatmap_2_xaxis_grob,
+                                 fig3_heatmap_1_ytitle_grob,
+                                 fig3_heatmap_1_yaxis_grob,
                                  fig3_heatmap_1_panel_grob, 
-                                 gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_2_yaxis_grob)),
-                                 gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_heatmap_2_panel_grob)),
-                                 gTree(children = gList(rectGrob(gp = gpar(fill = NA)), heatmap_scale_grob)),
+                                 fig3_heatmap_2_yaxis_grob,
+                                 fig3_heatmap_2_panel_grob,
+                                 heatmap_scale_grob,
                                  layout_matrix = rbind(c(01, 01, 01, 01, 01, 01),
                                                        c(NA, NA, 02, NA, NA, 03),
                                                        c(04, 05, 06, NA, 07, 08),
@@ -670,9 +690,15 @@ print(c(global_min, global_max))
 
 
 ```{r}
+ss_nslices <- 7
+
 # Human slices
-human_slices <- c(61, 105, 127, 152, 214)
-mouse_slices <- c(18, 41, 85, 174, 196)
+# human_slices <- c(61, 105, 127, 152, 214)
+human_slices <- floor(seq(60, 220, length.out = ss_nslices))
+
+# Mouse slices
+# mouse_slices <- c(18, 41, 85, 174, 196)
+mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
 
 # Human anatomy thresholds
 human_anat_low <- 3
@@ -763,7 +789,7 @@ for (s in 1:length(human_slices)) {
 
 ```{r}
 # Number of rows and columns in slice series
-ss_nrow <- 5
+ss_nrow <- ss_nslices
 ss_ncol <- 2
 
 # Full width of slice series panel
@@ -784,12 +810,16 @@ fig3_ss_1_grob <- arrangeGrob(fig3_ss_1_mouse_grobs[[1]],
                               fig3_ss_1_mouse_grobs[[3]],
                               fig3_ss_1_mouse_grobs[[4]],
                               fig3_ss_1_mouse_grobs[[5]],
+                              fig3_ss_1_mouse_grobs[[6]],
+                              fig3_ss_1_mouse_grobs[[7]],
                               fig3_ss_1_human_grobs[[1]],
                               fig3_ss_1_human_grobs[[2]],
                               fig3_ss_1_human_grobs[[3]],
                               fig3_ss_1_human_grobs[[4]],
                               fig3_ss_1_human_grobs[[5]],
-                              layout_matrix = matrix(1:10,
+                              fig3_ss_1_human_grobs[[6]],
+                              fig3_ss_1_human_grobs[[7]],
+                              layout_matrix = matrix(1:(ss_nrow*ss_ncol),
                                                      nrow = ss_nrow, ncol = ss_ncol,
                                                      byrow = FALSE),
                               widths = unit(rep(1, ss_ncol)/ss_ncol, "npc"),
@@ -800,12 +830,16 @@ fig3_ss_2_grob <- arrangeGrob(fig3_ss_2_mouse_grobs[[1]],
                               fig3_ss_2_mouse_grobs[[3]],
                               fig3_ss_2_mouse_grobs[[4]],
                               fig3_ss_2_mouse_grobs[[5]],
+                              fig3_ss_2_mouse_grobs[[6]],
+                              fig3_ss_2_mouse_grobs[[7]],
                               fig3_ss_2_human_grobs[[1]],
                               fig3_ss_2_human_grobs[[2]],
                               fig3_ss_2_human_grobs[[3]],
                               fig3_ss_2_human_grobs[[4]],
                               fig3_ss_2_human_grobs[[5]],
-                              layout_matrix = matrix(1:10,
+                              fig3_ss_2_human_grobs[[6]],
+                              fig3_ss_2_human_grobs[[7]],
+                              layout_matrix = matrix(1:(ss_nrow*ss_ncol),
                                                      nrow = ss_nrow, ncol = ss_ncol,
                                                      byrow = FALSE),
                               widths = unit(rep(1, ss_ncol)/ss_ncol, "npc"),
@@ -816,12 +850,16 @@ fig3_ss_3_grob <- arrangeGrob(fig3_ss_3_mouse_grobs[[1]],
                               fig3_ss_3_mouse_grobs[[3]],
                               fig3_ss_3_mouse_grobs[[4]],
                               fig3_ss_3_mouse_grobs[[5]],
+                              fig3_ss_3_mouse_grobs[[6]],
+                              fig3_ss_3_mouse_grobs[[7]],
                               fig3_ss_3_human_grobs[[1]],
                               fig3_ss_3_human_grobs[[2]],
                               fig3_ss_3_human_grobs[[3]],
                               fig3_ss_3_human_grobs[[4]],
                               fig3_ss_3_human_grobs[[5]],
-                              layout_matrix = matrix(1:10,
+                              fig3_ss_3_human_grobs[[6]],
+                              fig3_ss_3_human_grobs[[7]],
+                              layout_matrix = matrix(1:(ss_nrow*ss_ncol),
                                                      nrow = ss_nrow, ncol = ss_ncol,
                                                      byrow = FALSE),
                               widths = unit(rep(1, ss_ncol)/ss_ncol, "npc"),
@@ -1003,9 +1041,9 @@ names(list_polar_plots) <- names(list_pathways)
 for (i in 1:length(list_polar_plots)) {
   
   df_polar_tmp <- list_pathways[[i]] %>% 
-  mutate(pathway = as.character(pathway)) %>% 
-  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
-  mutate(pathway = " ")
+    mutate(pathway = as.character(pathway)) %>% 
+    filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+    mutate(pathway = " ")
   
   list_polar_plots[[i]] <- list_pathways[[i]] %>% 
     bind_rows(df_polar_tmp) %>% 
@@ -1027,69 +1065,61 @@ polar_labels <- tibble(pathway = polar_plot_lvls[2],
 ```{r fig3-pathways-polar-plot-1}
 # Generate polar plot
 fig3_polar_1 <- ggplot(list_polar_plots[[1]], 
-                     aes(x = pathway, 
-                         ymin = 0, ymax = E, 
-                         group = cluster, 
-                         fill = cluster, 
-                         col = cluster)) + 
+                       aes(x = pathway, 
+                           ymin = 0, ymax = E, 
+                           group = cluster, 
+                           fill = cluster, 
+                           col = cluster)) + 
   geom_ribbon(alpha = 0.2) + 
-  geom_text(data = polar_labels,
-            inherit.aes = FALSE,
-            mapping = aes(x = pathway, 
-                          y = breaks, 
-                          label = breaks)) + 
+  # geom_text(data = polar_labels,
+  #           inherit.aes = FALSE,
+  #           mapping = aes(x = pathway, 
+  #                         y = breaks, 
+  #                         label = breaks)) + 
   coord_radar(start = theta_start, clip = "off") + 
   scale_x_discrete(expand = expansion()) + 
-  scale_y_continuous(breaks = polar_breaks) + 
+  # scale_y_continuous(breaks = polar_breaks) + 
   labs(x = NULL,
        fill = "k",
        col = "k") + 
   theme_bw() + 
   theme(axis.ticks.x = element_blank(),
         axis.line.x = element_blank(),
-        axis.text.x = element_blank(),
+        axis.text.x = element_text(size = 6),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
+        panel.border = element_blank(),
         legend.position = "none")
 
 # Extract polar plot grob
 fig3_polar_1_grob <- grid.force(ggplotGrob(fig3_polar_1))
 fig3_polar_1_panel_grob <- getGrob(fig3_polar_1_grob, "panel.7-5-7-5")
+fig3_polar_1_panel_grob[["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_terms
 
-fig3_polar_1_grob <- gTree(children = gList(fig3_polar_1_panel_grob,
-                              textGrob("Test",
-                                       x = 0.5, y = 0.8)))
-
-grid.newpage()
-grid.draw(fig3_polar_1_grob)
-```
-
-
-```{r fig3-pathways-polar-plot-1}
-# outfile <- "figure3_polar_1.pdf"
-# outfile <- file.path(output_dir, outfile)
-# pdf(file = outfile, 
-#     width = unit(10, "in"),
-#     height = unit(10, "in"))
-# print(fig3_polar_1)
-# dev.off()
+outfile <- "figure3_polar_1.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(10, "in"))
+print(fig3_polar_1)
+dev.off()
 ```
 
 ```{r fig3-pathways-polar-plot-2}
 # Generate polar plot
 fig3_polar_2 <- ggplot(list_polar_plots[[2]], 
-                     aes(x = pathway, 
-                         ymin = 0, ymax = E, 
-                         group = cluster, 
-                         fill = cluster, 
-                         col = cluster)) + 
+                       aes(x = pathway, 
+                           ymin = 0, ymax = E, 
+                           group = cluster, 
+                           fill = cluster, 
+                           col = cluster)) + 
   geom_ribbon(alpha = 0.2) + 
-  geom_text(data = polar_labels,
-            inherit.aes = FALSE,
-            mapping = aes(x = pathway, 
-                          y = breaks, 
-                          label = breaks)) + 
+  # geom_text(data = polar_labels,
+  #           inherit.aes = FALSE,
+  #           mapping = aes(x = pathway, 
+  #                         y = breaks, 
+  #                         label = breaks)) + 
   coord_radar(start = theta_start, clip = "off") + 
   scale_x_discrete(expand = expansion()) + 
   labs(x = NULL,
@@ -1098,14 +1128,16 @@ fig3_polar_2 <- ggplot(list_polar_plots[[2]],
   theme_bw() + 
   theme(axis.ticks.x = element_blank(),
         axis.line.x = element_blank(),
-        axis.text.x = element_blank(),
+        axis.text.x = element_text(size = 8),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
-        axis.title.y = element_blank())
+        axis.title.y = element_blank(),
+        panel.border = element_blank())
 
 # Extract polar plot grob
 fig3_polar_2_grob <- grid.force(ggplotGrob(fig3_polar_2))
 fig3_polar_2_panel_grob <- getGrob(fig3_polar_2_grob, "panel.7-5-7-5")
+fig3_polar_2_panel_grob[["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_terms
 fig3_polar_2_legend_grob <- getGrob(fig3_polar_2_grob, "guides.3-3-3-3")
 
 outfile <- "figure3_polar_2.pdf"
@@ -1118,34 +1150,58 @@ dev.off()
 ```
 
 ```{r}
+# Full width of figure
 fig3_width <- 8.5
-fig3_polar_width <- fig3_width - fig3_heatmap_width - 0.2
+
+# Full dimensions of polar plots panel
+fig3_polar_width <- fig3_width - fig3_heatmap_width - fig3_padding_width
 fig3_polar_height <- fig3_ss_height
 
-fig3_polar_height_nopadding <- fig3_polar_height - 3*fig3_padding_width
+# Height of polar plots panel without padding
+# fig3_polar_height_nopadding <- fig3_polar_height - 3*fig3_padding_width
+fig3_polar_height_nopadding <- fig3_polar_height - 0.1
+
+# Dimensions of individual plot panels
 fig3_polar_panel_height <- fig3_polar_height_nopadding/2
 fig3_polar_panel_width <- fig3_polar_panel_height
 
-fig3_polar_heights <- c(fig3_padding_width, fig3_polar_panel_height, fig3_padding_width, fig3_polar_panel_height, fig3_padding_width)
+# Grid cell dimensions
+fig3_polar_heights <- c(fig3_polar_panel_height, 0.1, fig3_polar_panel_height)
+fig3_polar_widths <- c(0.4, fig3_polar_panel_width, 0.1, 0.9)
 
-fig3_polar_widths <- c(fig3_polar_panel_width, fig3_polar_width - fig3_polar_panel_width)
+if (sum(fig3_polar_widths) != fig3_polar_width) {
+  stop()
+}
 
+# Grid cell dimensions with units
 fig3_polar_heights_in <- unit(fig3_polar_heights, "inch")
 fig3_polar_widths_in <- unit(fig3_polar_widths, "inch")
 
 # fig3_polar_widths 
 
-fig3_polar_grob <- arrangeGrob(rectGrob(gp = gpar(fill = NA)),
+# Polar plots grob with gridlines
+fig3_polar_grob_grid <- arrangeGrob(rectGrob(gp = gpar(fill = NA)),
+                                    fig3_polar_1_panel_grob,
+                                    rectGrob(gp = gpar(fill = NA)),
+                                    gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig3_polar_2_legend_grob)),
+                                    rectGrob(gp = gpar(fill = NA)),
+                                    fig3_polar_2_panel_grob,
+                                    layout_matrix = rbind(c(01, 02, 03, 04),
+                                                          c(01, 05, 03, 04),
+                                                          c(01, 06, 03, 04)),
+                                    widths = fig3_polar_widths_in,
+                                    heights = fig3_polar_heights_in)
+
+# Polar plots grob
+fig3_polar_grob <- arrangeGrob(zeroGrob(),
                                fig3_polar_1_panel_grob,
+                               zeroGrob(),
                                fig3_polar_2_legend_grob,
-                               rectGrob(gp = gpar(fill = NA)),
+                               zeroGrob(),
                                fig3_polar_2_panel_grob,
-                               rectGrob(gp = gpar(fill = NA)),
-                               layout_matrix = rbind(c(01, 01),
-                                                     c(02, 03),
-                                                     c(04, 03),
-                                                     c(05, 03),
-                                                     c(06, 06)),
+                               layout_matrix = rbind(c(01, 02, 03, 04),
+                                                     c(01, 05, 03, 04),
+                                                     c(01, 06, 03, 04)),
                                widths = fig3_polar_widths_in,
                                heights = fig3_polar_heights_in)
 
@@ -1174,12 +1230,58 @@ fig3_widths_in <- unit(fig3_widths, "in")
 fig3_heights_in <- unit(fig3_heights, "in")
 
 # With gridlines
-fig3_grob <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig3_heatmap_grob)),
-                         rectGrob(gp = gpar(fill = NA)),
-                         gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig3_permutations_grob)),
-                         rectGrob(gp = gpar(fill = NA)),
+fig3_grob_grid <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig3_heatmap_grob_grid)),
+                              rectGrob(gp = gpar(fill = NA)),
+                              gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig3_permutations_grob)),
+                              rectGrob(gp = gpar(fill = NA)),
+                              fig3_ss_grob,
+                              rectGrob(gp = gpar(fill = NA)),
+                              fig3_polar_grob_grid,
+                              layout_matrix = rbind(c(01, 02, 03),
+                                                    c(04, 04, 04),
+                                                    c(05, 06, 07)),
+                              widths = fig3_widths_in,
+                              heights = fig3_heights_in)
+
+# Figure dimensions
+# Correct dimensions
+fig3_width <- unit(sum(fig3_widths), "inch")
+fig3_height <- unit(sum(fig3_heights), "inch")
+
+fig3_grob_grid <- gTree(children = gList(rectGrob(width = fig3_width,
+                                                  height = fig3_height,
+                                                  gp = gpar(fill = NA)), 
+                                         fig3_grob_grid))
+
+fig3_width_tmp <- unit(10.0, "in")
+fig3_height_tmp <- unit(10.0, "in")
+
+# Render figure
+fig3_outfile <- "figure3_with_grid.pdf"
+fig3_outfile <- file.path(output_dir, fig3_outfile)
+pdf(file = fig3_outfile,
+    width = fig3_width_tmp,
+    height = fig3_height_tmp)
+grid.draw(fig3_grob)
+dev.off()
+```
+
+```{r}
+fig3_widths <- c(fig3_heatmap_width, 0.2, 4.0)
+fig3_heights <- c(fig3_heatmap_height, 0.2, fig3_ss_height)
+# fig3_widths <- c(4.3, 0.2, 4.0)
+# fig3_heights <- c(3.5, 0.2, 3.5)
+
+fig3_widths_in <- unit(fig3_widths, "in")
+fig3_heights_in <- unit(fig3_heights, "in")
+
+# With gridlines
+fig3_grob <- arrangeGrob(fig3_heatmap_grob,
+                         zeroGrob(),
+                         fig3_permutations_grob,
+                         zeroGrob(),
                          fig3_ss_grob,
-                         rectGrob(gp = gpar(fill = NA)),
+                         zeroGrob(),
                          fig3_polar_grob,
                          layout_matrix = rbind(c(01, 02, 03),
                                                c(04, 04, 04),
@@ -1187,22 +1289,10 @@ fig3_grob <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)),f
                          widths = fig3_widths_in,
                          heights = fig3_heights_in)
 
-# fig3_grob <- arrangeGrob(fig3_heatmap_grob,
-#                          fig3_permutations_grob,
-#                          layout_matrix = rbind(c(01, NA, 02),
-#                                                c(NA, NA, NA)),
-#                          widths = fig3_widths_in,
-#                          heights = fig3_heights_in)
-
 # Figure dimensions
-#Correct dimensions
+# Correct dimensions
 fig3_width <- unit(sum(fig3_widths), "inch")
 fig3_height <- unit(sum(fig3_heights), "inch")
-
-fig3_grob <- gTree(children = gList(rectGrob(width = fig3_width,
-                                             height = fig3_height,
-                                             gp = gpar(fill = NA)), 
-                                    fig3_grob))
 
 fig3_width_tmp <- unit(10.0, "in")
 fig3_height_tmp <- unit(10.0, "in")
@@ -1216,5 +1306,4 @@ pdf(file = fig3_outfile,
 grid.draw(fig3_grob)
 dev.off()
 ```
-
 
