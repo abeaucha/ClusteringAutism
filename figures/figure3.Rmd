@@ -1253,8 +1253,8 @@ fig3_grob_grid <- gTree(children = gList(rectGrob(width = fig3_width,
                                                   gp = gpar(fill = NA)), 
                                          fig3_grob_grid))
 
-fig3_width_tmp <- unit(10.0, "in")
-fig3_height_tmp <- unit(10.0, "in")
+fig3_width_tmp <- unit(8.5, "in")
+fig3_height_tmp <- unit(11.0, "in")
 
 # Render figure
 fig3_outfile <- "figure3_with_grid.pdf"
@@ -1262,7 +1262,7 @@ fig3_outfile <- file.path(output_dir, fig3_outfile)
 pdf(file = fig3_outfile,
     width = fig3_width_tmp,
     height = fig3_height_tmp)
-grid.draw(fig3_grob)
+grid.draw(fig3_grob_grid)
 dev.off()
 ```
 
@@ -1294,8 +1294,8 @@ fig3_grob <- arrangeGrob(fig3_heatmap_grob,
 fig3_width <- unit(sum(fig3_widths), "inch")
 fig3_height <- unit(sum(fig3_heights), "inch")
 
-fig3_width_tmp <- unit(10.0, "in")
-fig3_height_tmp <- unit(10.0, "in")
+fig3_width_tmp <- unit(8.5, "in")
+fig3_height_tmp <- unit(11.0, "in")
 
 # Render figure
 fig3_outfile <- "figure3.pdf"
