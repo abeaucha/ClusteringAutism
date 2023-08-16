@@ -15,8 +15,12 @@ knitr::opts_chunk$set(echo = TRUE)
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(grid))
 suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(viridisLite))
 ```
 
 ```{r functions}
@@ -68,9 +72,6 @@ pipeline_dir <- file.path(pipeline_dir, params_id)
 # Jacobians
 jacobians <- c("absolute", "relative")
 
-# Number of clusters
-nk <- 2
-
 # Human parameter set ID
 human_params_id <- params %>% 
   filter(id == params_id) %>% 
@@ -110,6 +111,7 @@ names(mouse_cluster_map_dirs_50um) <- jacobians
 # Panel: Mouse-human cluster similarity matrices
 
 ```{r}
+# Number of clusters
 nk <- c(5, 9)
 ```
 
@@ -182,10 +184,6 @@ similarity_min <- map_dbl(.x = list_similarity_nk, .f = function(x){min(x[["simi
 
 similarity_max <- max(similarity_max)
 similarity_min <- min(similarity_min)
-
-library(RColorBrewer)
-library(viridis)
-library(viridisLite)
 
 heatmap_scale_values <- seq(similarity_min, similarity_max, length.out = 255)
 heatmap_scale_values <- (heatmap_scale_values - similarity_min)/(similarity_max - similarity_min)
@@ -506,8 +504,6 @@ fig3_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity,
        y = "-log10(p)",
        col = "nk") + 
   theme_bw()
-
-library(patchwork)
 
 fig3_permutations <- (fig3_permutations_density / fig3_permutations_pvals) +
   plot_layout(heights = c(1, 1.5)) &
