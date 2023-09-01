@@ -79,13 +79,18 @@ demographics <- read_csv(demographics, show_col_types = FALSE)
 ```{r}
 clusters <- file.path(cluster_dir, "clusters.csv")
 clusters <- read_csv(clusters, show_col_types = FALSE)
+```
 
+# 2-cluster total volume
+
+
+```{r}
 clusters_vol <- clusters %>% 
   mutate(absolute = 0,
          relative = 0)
 ```
 
-```{r}
+```{r eval = FALSE}
 # res <- params[["resolution"]]
 res <- 3.0
 
@@ -108,7 +113,7 @@ for (j in jacobians) {
 }
 ```
 
-```{r}
+```{r eval = FALSE}
 p_cluster_vol <- ggplot(clusters_vol, aes(x = factor(nk2), y = absolute)) + 
   geom_jitter(col = "grey70") + 
   geom_boxplot(alpha = 0.5) + 
@@ -125,7 +130,8 @@ pdf(file = outfile,
 print(p_cluster_vol)
 dev.off()
 ```
-```{r}
+
+```{r eval = FALSE}
 df_model <- clusters_vol %>% 
   select(cluster = nk2, volume = absolute) %>% 
   mutate(cluster = factor(cluster))
@@ -133,12 +139,89 @@ df_model <- clusters_vol %>%
 summary(lm(volume ~ cluster, data = df_model))
 ```
 
+# Cluster diagnoses
+
+
 ```{r}
-df_fxs <- demographics %>% 
+demographics <- demographics %>% 
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner))
+
+cluster_demographics <- clusters %>% 
+  left_join(demographics, by = c("ID" = "file"))
+
+df_diagnoses <- tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD", "Anxiety", "Sub-threshold ADHD", "Intellectual Disability only", "Tourette Syndrome", "Other", "Fragile X"),
+                       DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", "ADHD", "Other", "Other", "Other", "Other"))
+
+cluster_demographics <- cluster_demographics %>% 
+  left_join(df_diagnoses, by = "DX")
+```
+
+
+```{r}
+dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
+
+nk_max <- 10
+chi2_pvals <- numeric(nk_max-1)
+for (nk in 2:nk_max) {
+
+  df_tmp <- cluster_demographics %>% 
+    select(k = paste0("nk", nk), DX_new) %>% 
+    mutate(k = factor(k),
+           DX_new = factor(DX_new, levels = dx_lvls))
+  
+  chi2 <- chisq.test(x = df_tmp$k, y = df_tmp$DX_new, simulate.p.value = TRUE, B = 1e5)
+    
+  diagnoses_grid <- expand_grid(DX_new = df_diagnoses$DX_new,
+                                 k = 1:nk)
+  
+  
+  df_prop_nk <- cluster_demographics %>% 
+    select(k = paste0("nk", nk), DX_new) %>% 
+    group_by(k) %>% 
+    mutate(n_per_k = n()) %>% 
+    group_by(k, DX_new) %>% 
+    mutate(n_per_k_per_dx = n(),
+           prop_per_k_per_dx = n_per_k_per_dx/n_per_k) %>% 
+    ungroup() %>% 
+    distinct() %>% 
+    right_join(diagnoses_grid, by = c("k", "DX_new")) %>% 
+    mutate(prop_per_k_per_dx = ifelse(is.na(prop_per_k_per_dx), 0, prop_per_k_per_dx),
+           k = factor(k),
+           DX_new = factor(DX_new, levels = dx_lvls))
+  
+  p_dx_nk <- ggplot(df_prop_nk, 
+         aes(x = k, y = prop_per_k_per_dx, fill = DX_new)) +
+    geom_col(position = "dodge") +
+    labs(x = "k",
+         y = "Proportion per cluster",
+         fill = "Diagnosis",
+         caption = paste("Chi-squared test p-value:", round(chi2$p.value, 4))) + 
+    theme_bw() 
+  
+  outfile <- paste0("dx_proportions_nk_", nk, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(10, "inch"),
+      height = unit(5, "inch"))
+  print(p_dx_nk)
+  dev.off()
+  
+  
+}
+```
+
+
+## Fragile X
+
+```{r}
+df_fxs <- cluster_demographics %>% 
   filter(DX == "Fragile X")
 
-clusters %>% 
-  semi_join(df_fxs, by = c("ID" = "file"))
+df_fxs
 ```
 
 ```{r}
@@ -150,9 +233,12 @@ ind_fmr1 <- str_detect(mouse_clusters[["ID"]], "Fmr1")
 mouse_clusters[ind_fmr1,]
 ```
 
+Human FXS patient and mouse models are in matching clusters in nk = 2, 3, 4, 5. Then we have H6-1 to M6-6, which is not significant. After that the two mouse models aren't even in the same cluster. H7-1 and M7-5 have p = 0.09. No significant match at nk = 8, 9, or 10.
+
+
 ```{r}
-genetics <- file.path(registration_dir, "subject_info", "POND_variants.xlsx")
-pond_genetics <- read_excel(genetics)
+pond_genetics <- file.path(registration_dir, "subject_info", "POND_variants.xlsx")
+pond_genetics <- read_excel(pond_genetics)
 
 fxs_id <- df_fxs[["Subject_ID"]] %>% 
   str_remove("POND_")
@@ -161,21 +247,10 @@ pond_genetics %>%
   filter(POND_ID == fxs_id)
 ```
 
-```{r}
-fxs_id
-```
+No identified variant for the FXS patient.
 
 
-```{r}
-pond_genetics %>%
-  pull(POND_ID) %>% 
-  sort()
-```
-
-
-```{r}
-clusters
-```
+# POND clinical scores
 
 ```{r}
 pond_clinical <- "../../data/human/registration/v2/subject_info/POND_clinical_scores.csv"

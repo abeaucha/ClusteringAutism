@@ -34,21 +34,21 @@ def parse_args():
         '--input-dir',
         type = str,
         default = '/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/Clusters_Paper/',
-        help = ("Path to input directory.")
+        help = "Path to input directory."
     )
     
     parser.add_argument(
         '--pipeline-dir',
         type = str,
         default = 'data/mouse/derivatives/v2/',
-        help = ("Path to output directory.")
+        help = "Path to output directory."
     )
     
     parser.add_argument(
         '--resolution',
         type = int,
         default = 200,
-        help = ("Resolution (um) of images to link.")
+        help = "Resolution (um) of images to link."
     )
     
     parser.add_argument(
@@ -56,21 +56,21 @@ def parse_args():
         nargs = '*',
         type = str,
         default = ['mean'],
-        help = ("Method used to aggregate cluster maps.")
+        help = "Method used to aggregate cluster maps."
     )
     
     parser.add_argument(
         '--transform',
         type = str,
         default = 'data/mouse/registration/MICe_scanbase.xfm',
-        help = ("Path to transform file (.xfm).")
+        help = "Path to transform file (.xfm)."
     )
     
     parser.add_argument(
         '--transform-like',
         type = str,
         default = 'data/mouse/atlas/average_template_200um.mnc',
-        help = ("Path to transform likefile (.mnc).")
+        help = "Path to transform likefile (.mnc)."
     )
     
     parser.add_argument(
@@ -78,13 +78,13 @@ def parse_args():
         type = str,
         default = 'true',
         choices = ['true', 'false'],
-        help = ("Option to run in parallel.")
+        help = "Option to run in parallel."
     )
     
     parser.add_argument(
         '--nproc',
         type = int,
-        help = ("Number of processors to use in parallel.")
+        help = "Number of processors to use in parallel."
     )
     
     args = vars(parser.parse_args())

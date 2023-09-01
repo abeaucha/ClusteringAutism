@@ -73,6 +73,9 @@ if __name__ == '__main__':
     parallel = True if args['parallel'] == 'true' else False
     nproc = args['nproc']
 
+    if isostep is None:
+        raise Exception("Argument --isostep must be specified")
+
     # Parallel checks
     if parallel:
         if nproc is None:

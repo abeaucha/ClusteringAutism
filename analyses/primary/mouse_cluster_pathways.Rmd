@@ -1,0 +1,228 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(rcartocolor))
+suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(RColorBrewer))
+```
+
+```{r functions}
+source("../../src/analysis.R")
+```
+
+
+```{r}
+#Output directory
+output_dir <- "outputs/mouse_cluster_pathways/"
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+
+nk_max <- 10
+```
+
+
+```{r fig2-pathways-import}
+# Base directory for pathway data files
+pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
+
+# Threshold for StrinDB 
+stringdb_threshold <- 950
+pathways_dir <- file.path(pathways_dir, stringdb_threshold)
+
+# Prefix for pathway data files
+pathways_file_prefix <- "NewBader_enrichment_clusterneighbourhood_vs_brain_all"
+
+# List of desired pathway terms
+pathway_terms <- c("Chromatin organization",
+                   "Gene expression (transcription)",
+                   "Generic transcription pathway",
+                   "Mapk family signaling cascades",
+                   "Mtor signalling",
+                   "Protein-protein interactions at synapses",
+                   "Signaling by hedgehog",
+                   "Signaling by notch",
+                   "Signaling by wnt",
+                   "Transmission across chemical synapses")
+
+# Iterate over clusters
+list_pathways <- vector(mode = "list", length = nk_max-1)
+names(list_pathways) <- 2:nk_max
+for (nk in 2:nk_max) {
+  
+  list_pathways[[as.character(nk)]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    pathways_file <- paste(pathways_file_prefix, nk, k, stringdb_threshold, sep = "_")
+    pathways_file <- paste0(pathways_file, ".csv")
+    pathways_file <- file.path(pathways_dir, pathways_file)
+    list_pathways[[as.character(nk)]][[k]] <- read_csv(pathways_file, show_col_types = FALSE)
+  }
+  
+  list_pathways[[as.character(nk)]] <- list_pathways[[as.character(nk)]] %>% 
+    reduce(.f = bind_rows) %>% 
+    rename(pathway = Title) %>% 
+    filter(pathway %in% pathway_terms) %>% 
+    mutate(cluster = factor(cluster))
+}
+```
+
+```{r}
+polar_plot_lvls <- c(" ", pathway_terms)
+
+list_polar_plots <- vector(mode = "list", length = length(list_pathways))
+names(list_polar_plots) <- names(list_pathways)
+for (i in 1:length(list_pathways)) {
+  
+  df_polar_plot_tmp <- list_pathways[[i]] %>% 
+    mutate(pathway = as.character(pathway)) %>% 
+    filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+    mutate(pathway = " ")
+  
+  list_polar_plots[[i]] <- list_pathways[[i]] %>% 
+    bind_rows(df_polar_plot_tmp) %>% 
+    mutate(pathway = factor(pathway, levels = polar_plot_lvls))
+  
+}
+```
+
+
+```{r}
+# Polar plot parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+breaks_step <- 5
+
+palette <- carto_pal(n = 12, name = "Bold")
+
+for (i in 1:length(list_polar_plots)) {
+  
+  E_max <- ceiling(max(list_polar_plots[[i]][["E"]]))
+  breaks_end <- E_max - E_max %% 5 + 5
+  polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+  polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                         breaks = polar_breaks)
+  
+  polar_plot <- ggplot(list_polar_plots[[i]], 
+                       aes(x = pathway, 
+                           ymin = 0, ymax = E, 
+                           group = cluster, 
+                           fill = cluster, 
+                           col = cluster)) + 
+    geom_ribbon(alpha = 0.2) + 
+    geom_text(data = polar_labels,
+              inherit.aes = FALSE,
+              mapping = aes(x = pathway,
+                            y = breaks,
+                            label = breaks)) +
+    coord_radar(start = theta_start, clip = "off") + 
+    scale_x_discrete(expand = expansion()) + 
+    scale_y_continuous(breaks = polar_breaks) +
+    scale_fill_manual(values = palette[1:(i+1)]) +
+    scale_colour_manual(values = palette[1:(i+1)]) +
+    labs(x = NULL,
+         fill = "k",
+         col = "k") + 
+    theme_bw() + 
+    theme(axis.ticks.x = element_blank(),
+          axis.line.x = element_blank(),
+          axis.text.x = element_text(size = 6),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.title.y = element_blank(),
+          panel.border = element_blank(),
+          legend.position = "bottom")
+  
+  outfile <- paste0("pathways_polar_nk_", names(list_polar_plots)[i], ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(6, "in"),
+      height = unit(6, "in"))
+  print(polar_plot)
+  dev.off()
+  
+}
+```
+
+
+```{r}
+# Import mouse clusters
+# mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
+mouse_cluster_file <- "../../data/mouse/derivatives/v2/107/clusters/clusters.csv"
+df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+colnames(df_mouse_clusters) <- c("ID", str_c("nk", 2:10))
+
+# Convert mouse clusters to long format
+df_mouse_clusters_long <- df_mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+```
+
+```{r}
+for (i in 1:length(pathway_terms)) {
+  list_tmp <- vector(mode = "list", length = length(list_pathways))
+  for (j in 1:length(list_pathways)) {
+    
+    list_tmp[[j]] <- list_pathways[[j]] %>% 
+      filter(pathway == pathway_terms[i]) %>% 
+      rename(k = cluster) %>% 
+      mutate(nk = names(list_pathways)[j]) %>% 
+      unite(col = "cluster_id", nk, k, 
+            sep = "-", remove = FALSE)
+  }
+  
+  df_tmp <- reduce(.x = list_tmp, .f = bind_rows) %>% 
+    select(-ID) %>% 
+    mutate(nk = factor(nk, levels = 2:10),
+           k = factor(k, levels = 1:10),
+           E = ifelse(E > 20, 20, E))
+  
+  df_tmp_2 <- df_mouse_clusters_long %>% 
+    left_join(df_tmp, by = c("nk", "k"))
+  
+  p_sankey_pathway <- ggplot(df_tmp_2, 
+                             aes(x = nk, stratum = k,
+                                 fill = E,
+                                 alluvium = ID)) + 
+    geom_flow(stat = "alluvium", aes.flow = "forward") + 
+    geom_stratum() + 
+    scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[3:9],
+                         limits = c(0, 20)) + 
+    # limits = c(0.3, 3),
+    # breaks = seq(0, 3, by = 0.5)) +
+    labs(x = "Number of clusters",
+         y = "Number of models",
+         fill = "Enrichment (clamped)",
+         title = pathway_terms[i]) + 
+    theme_bw() + 
+    theme(panel.grid.major.x = element_blank())
+  
+  outfile <- "pathways_sankey_" %>% 
+    str_c(pathway_terms[i] %>% 
+            str_to_lower() %>% 
+            str_remove_all("[()]") %>% 
+            str_replace_all(" ", "_")) %>% 
+    str_c(".pdf")
+  outfile <- file.path(output_dir, outfile)
+  
+  pdf(file = outfile,
+      width = unit(10, "inch"),
+      height = unit(5, "inch"))
+  print(p_sankey_pathway)
+  dev.off()
+  
+}
+```
+
+

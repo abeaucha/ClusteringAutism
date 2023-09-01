@@ -16,3 +16,5 @@ analyses/auxiliary/
 analyses/primary/outputs
 analyses/troubleshooting/
 figures/*.pdf
+figures/figure2/
+figures/figure3/

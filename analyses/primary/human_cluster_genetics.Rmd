@@ -98,7 +98,8 @@ clusters_genetics <- clusters %>%
   mutate(gene_identified = ifelse(is.na(CLASSIFICATION), 0, 1)) %>% 
   distinct()
 ```
-```{r}
+
+```{r eval = FALSE}
 df_clusters_long <- clusters_genetics %>% 
   select(ID, contains("nk"), gene_identified) %>% 
   pivot_longer(cols = c(-ID, -gene_identified),names_to = "nk_name", values_to = "k") %>% 
@@ -117,28 +118,28 @@ df_clusters_long <- df_clusters_long %>%
 df_clusters_long <- df_clusters_long %>% 
   mutate(ngenes = ifelse(ngenes == 0, NA, ngenes))
 
-p_sankey_genes <- ggplot(df_clusters_long, 
-                         aes(x = nk, stratum = k,
-                             alluvium = ID,
-                             fill = ngenes)) + 
-  geom_flow(stat = "alluvium", aes.flow = "forward") + 
-  geom_stratum() + 
-  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9], 
-                       breaks = seq(0, 12, 2)) + 
-  labs(x = "Number of clusters",
-       y = "Number of patients",
-       fill = "Identified variants",
-       title = "Human clusters with identified genetic variants") + 
-  theme_bw() + 
-  theme(panel.grid.major.x = element_blank())
-
-outfile <- "sankey_gene_variants.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile, 
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(p_sankey_genes)
-dev.off()
+# p_sankey_genes <- ggplot(df_clusters_long, 
+#                          aes(x = nk, stratum = k,
+#                              alluvium = ID,
+#                              fill = ngenes)) + 
+#   geom_flow(stat = "alluvium", aes.flow = "forward") + 
+#   geom_stratum() + 
+#   scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9], 
+#                        breaks = seq(0, 12, 2)) + 
+#   labs(x = "Number of clusters",
+#        y = "Number of patients",
+#        fill = "Identified variants",
+#        title = "Human clusters with identified genetic variants") + 
+#   theme_bw() + 
+#   theme(panel.grid.major.x = element_blank())
+# 
+# outfile <- "sankey_gene_variants.pdf"
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile, 
+#     width = unit(10, "in"),
+#     height = unit(5, "in"))
+# print(p_sankey_genes)
+# dev.off()
 ```
 
 ```{r}
@@ -162,18 +163,225 @@ write_csv(df_variants_long, outfile)
 ```
 
 ```{r}
+fxs_file <- demographics %>% 
+  filter(DX == "Fragile X") %>% 
+  pull(file)
+
 df_variants <- clusters_genetics %>% 
-  filter(gene_identified > 0) %>% 
-  select(Subject_ID, contains("nk"),
-         `SIGNIFICANT VARIANT`, 
-         `SIGNIFICANT VARIANT TYPE`,
-         CLASSIFICATION) %>% 
-  arrange(nk2, nk3, nk4, nk5)
+  filter(gene_identified > 0 | ID == fxs_file) %>% 
+  select(Subject_ID, ID, contains("nk"),
+         significant_variant = `SIGNIFICANT VARIANT`, 
+         significant_variant_type = `SIGNIFICANT VARIANT TYPE`,
+         classification = CLASSIFICATION) %>% 
+  mutate(significant_variant = ifelse(ID == fxs_file, "FMR1", significant_variant),
+         classification = ifelse(significant_variant == "FMR1", "Diagnosis", classification)) %>% 
+  select(-ID) %>% 
+  arrange(nk2, nk3)
 
 outfile <- "cluster_variants.csv"
 outfile <- file.path(output_dir, outfile)
 write_csv(df_variants, outfile)
 ```
+
+# Comparison with mouse models
+
+```{r}
+mouse_clusters <- "../../data/mouse/derivatives/v2/107/clusters/clusters.csv"
+mouse_clusters <- read_csv(mouse_clusters, show_col_types = FALSE)
+colnames(mouse_clusters) <- c("ID", str_c("nk", 2:10))
+
+
+```
+
+## 22q11
+
+```{r}
+df_variants <- df_variants %>% 
+  rename(variant = `SIGNIFICANT VARIANT`)
+```
+
+```{r}
+gene_str <- "22q11"
+
+df_variants %>% 
+  filter(str_detect(variant, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+
+```{r}
+mouse_clusters %>% 
+  filter(str_detect(ID, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+Matches: 2, 3, 4, 5
+No match 6-10
+
+## PTEN
+
+```{r}
+gene_str <- "PTEN"
+
+df_variants %>% 
+  filter(str_detect(variant, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+
+
+```{r}
+gene_str <- "Pten"
+
+mouse_clusters %>% 
+  filter(str_detect(ID, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+
+Matches: 2
+Non-matches: 3-10
+
+## TSC1
+
+```{r}
+gene_str <- "TSC1"
+
+df_variants %>% 
+  filter(str_detect(variant, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+
+```{r}
+gene_str <- "Tsc1"
+
+mouse_clusters %>% 
+  filter(str_detect(ID, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+Matches: None
+Non-matches: 2-10
+
+## NRXN1
+
+```{r}
+gene_str <- "NRXN1"
+
+df_variants %>% 
+  filter(str_detect(variant, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+
+```{r}
+gene_str <- "Nrxn1"
+
+mouse_clusters %>% 
+  filter(str_detect(ID, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+Matches: None
+Non-matches: All
+
+
+## NLGN1
+
+```{r}
+gene_str <- "NLGN1"
+
+df_variants %>% 
+  filter(str_detect(variant, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+
+```{r}
+gene_str <- "Nl1"
+
+mouse_clusters %>% 
+  filter(str_detect(ID, gene_str)) %>% 
+  select(contains("nk")) %>% 
+  pivot_longer(cols = everything(), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-",
+        remove = FALSE) %>% 
+  arrange(nk) %>% 
+  pull(cluster_id)
+```
+Matches: 3, 6 (0.09), 7 (0.08), 8 (0.1)
+Non-matches:  2, 4, 5, 9, 10
+
+
+
+# Some old stuff
 
 ```{r}
 genetics %>% 
@@ -256,7 +464,7 @@ ggplot(data_imaging_pond, aes(x = Site, fill = has_genetics)) +
 tmp <- data_full_pond %>% 
   left_join(pond_metadata, by = c("Subject_ID" = "Subject")) %>% 
   filter(!is.na(PRIMARY_DIAGNOSIS))
-  
+
 p <- ggplot(tmp, aes(x = category, fill = PRIMARY_DIAGNOSIS)) + 
   geom_bar() + 
   theme_bw()
