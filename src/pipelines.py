@@ -658,7 +658,7 @@ def permute_cluster_similarity(pipeline_dir, params_id,
     # Get parameter set with specified ID
     params_metadata = os.path.join(pipeline_dir, 'metadata.csv')
     if not os.path.exists(params_metadata):
-        raise OSError("File not found: {}".params_metadata)
+        raise OSError("File not found: {}".format(params_metadata))
     params = utils.fetch_params_metadata(params_metadata, id = str(params_id))
 
     # Pipeline directory
@@ -821,7 +821,7 @@ def permute_cluster_similarity_lite(
     # Get parameter set with specified ID
     params_metadata = os.path.join(pipeline_dir, 'metadata.csv')
     if not os.path.exists(params_metadata):
-        raise OSError("File not found: {}".params_metadata)
+        raise OSError("File not found: {}".format(params_metadata))
     params = utils.fetch_params_metadata(params_metadata, id = str(params_id))
 
     # Pipeline directory
