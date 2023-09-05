@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = FALSE)
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(SNFtool))
 suppressPackageStartupMessages(library(umap))
+suppressPackageStartupMessages(library(cluster))
 suppressPackageStartupMessages(library(ggalluvial))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(RColorBrewer))
@@ -285,7 +286,7 @@ dev.off()
 p_human_counts
 ```
 
-```{r human-umap}
+```{r human-umap, eval = FALSE}
 #UMAP random seed
 umap_seed <- 2
 
@@ -457,6 +458,77 @@ for (nk in 2:human_nk_max) {
 }
 ```
 
+## Human silhouette analysis
+
+```{r}
+# Convert affinity matrix to distance matrix
+mat_human_distance <- 2/(mat_human_affinity) - 2/max(mat_human_affinity)
+# mat_human_distance <- 1/(mat_human_affinity) - 1/max(mat_human_affinity)
+# mat_human_distance <- -1*log10(mat_human_affinity/max(mat_human_affinity))
+
+nk_max <- 10
+list_human_silhouette <- vector(mode = "list", length = nk_max - 1)
+for (nk in 2:nk_max) {
+  
+  nk_col <- paste0("nk", nk)
+  
+  # Calculate silhouette coefficients
+  silhouette_out <- silhouette(x = df_human_clusters[[nk_col]], 
+                               dmatrix = mat_human_distance)
+  
+  list_human_silhouette[[nk-1]] <- df_human_clusters %>% 
+    select(ID, k = all_of(nk_col)) %>% 
+    mutate(nk = nk,
+           neighbour = silhouette_out[,2],
+           coeff = silhouette_out[,3]) 
+  
+}
+
+df_human_silhouette <- reduce(.x = list_human_silhouette,
+                              .f = bind_rows)
+
+df_human_silhouette_cluster_avg <- df_human_silhouette %>% 
+  group_by(nk, k) %>% 
+  summarise(coeff = mean(coeff),
+            .groups = "drop")
+
+df_human_silhouette_total_avg <- df_human_silhouette %>% 
+  group_by(nk) %>% 
+  summarise(coeff = mean(coeff),
+            .groups = "drop")
+
+p_human_silhouette <- ggplot(df_human_silhouette,
+                             aes(x = factor(nk), y = coeff)) + 
+  geom_jitter(width = 0.25, height = 0,
+              shape = 21, fill = "grey50",
+              alpha = 0.3, size = 0.5) +
+  geom_point(data = df_human_silhouette_total_avg,
+             size = 2,
+             col = "red") + 
+  geom_line(data = df_human_silhouette_total_avg,
+            mapping = aes(group = 1),
+            col = "red",
+            size = 0.75) + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed") + 
+  coord_cartesian(ylim = c(-1,1)) +
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.2)) + 
+  labs(x = "Number of clusters",
+       y = "Silhouette coefficient",
+       title = "Silhouette analysis for human clusters") + 
+  theme_bw()
+
+#Export plot
+outfile <- paste0("human_silhouette.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_human_silhouette)
+dev.off()
+```
+
+
 
 # Mouse clusters
 
@@ -500,6 +572,9 @@ dev.off()
 ## Optimal number of mouse clusters
 
 ```{r mouse-cluster-optimal}
+#Max nk to examine
+nk_max <- 100
+
 #Mouse optimal nk
 estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
 ```
@@ -599,3 +674,74 @@ for (nk in 2:mouse_nk_max) {
   dev.off()
 }
 ```
+
+## Mouse silhouette analysis
+
+```{r}
+# Convert affinity matrix to distance matrix
+mat_mouse_distance <- 2/(mat_mouse_affinity) - 2/max(mat_mouse_affinity)
+# mat_mouse_distance <- -1*log10(mat_mouse_affinity/max(mat_mouse_affinity))
+
+nk_max <- 10
+list_mouse_silhouette <- vector(mode = "list", length = nk_max - 1)
+for (nk in 2:nk_max) {
+  
+  nk_col <- paste0("nk", nk)
+  
+  # Calculate silhouette coefficients
+  silhouette_out <- silhouette(x = df_mouse_clusters[[nk_col]], 
+                               dmatrix = mat_mouse_distance)
+  
+  list_mouse_silhouette[[nk-1]] <- df_mouse_clusters %>% 
+    select(ID, k = all_of(nk_col)) %>% 
+    mutate(nk = nk,
+           neighbour = silhouette_out[,2],
+           coeff = silhouette_out[,3]) 
+  
+}
+
+df_mouse_silhouette <- reduce(.x = list_mouse_silhouette,
+                              .f = bind_rows)
+
+df_mouse_silhouette_cluster_avg <- df_mouse_silhouette %>% 
+  group_by(nk, k) %>% 
+  summarise(coeff = mean(coeff),
+            .groups = "drop")
+
+df_mouse_silhouette_total_avg <- df_mouse_silhouette %>% 
+  group_by(nk) %>% 
+  summarise(coeff = mean(coeff),
+            .groups = "drop")
+
+p_mouse_silhouette <- ggplot(df_mouse_silhouette,
+                             aes(x = factor(nk), y = coeff)) + 
+  geom_jitter(width = 0.25, height = 0,
+              shape = 21, fill = "grey50",
+              alpha = 0.3, size = 0.5) +
+  geom_point(data = df_mouse_silhouette_total_avg,
+             size = 2,
+             col = "red") + 
+  geom_line(data = df_mouse_silhouette_total_avg,
+            mapping = aes(group = 1),
+            col = "red",
+            size = 0.75) + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed") + 
+  coord_cartesian(ylim = c(-1,1)) +
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.2)) + 
+  labs(x = "Number of clusters",
+       y = "Silhouette coefficient",
+       title = "Silhouette analysis for mouse clusters") + 
+  theme_bw()
+
+#Export plot
+outfile <- paste0("mouse_silhouette.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_mouse_silhouette)
+dev.off()
+```
+
+
