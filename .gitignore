@@ -10,6 +10,7 @@ templates/
 dev.ipynb
 dev.py
 dev.R
+test_module.sh
 analyses/cluster_similarity_old/
 analyses/auxiliary/
 analyses/primary/outputs
