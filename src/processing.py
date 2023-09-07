@@ -17,7 +17,8 @@ from warnings import warn
 
 
 def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
-                          df = 3, batch = None, nbatches = 1, nproc = None):
+                          group = 'patients', df = 3, batch = None,
+                          nbatches = 1, nproc = None):
     """
     Calculate human effect sizes using normative growth modelling.
 
@@ -34,6 +35,8 @@ def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
         Path to the directory in which to save the effect size images.
     key: str, default 'file'
         Primary key between demographics data and constructed voxel matrix.
+    group: {'patients', 'controls', 'all'}
+        Group of participants for which to compute effect sizes.
     df: int, default 3
         Degrees of freedom to use in normative model natural splines.
     batch: list of str
@@ -57,6 +60,7 @@ def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
                        mask = mask,
                        outdir = outdir,
                        key = key,
+                       group = group,
                        df = df,
                        batch = batch,
                        nproc = nproc)
@@ -288,7 +292,7 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
     outdir: str
         Path to the directory in which to save the effect size images.
     method: {'normative-growth', 'propensity-matching'}
-        Method to use to compute effect sizes. 
+        Method to use to compute effect sizes.
     parallel: bool, default False
         Option to run in parallel.
     nproc: int, default None
@@ -311,7 +315,7 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
         os.makedirs(outdir)
 
     # Compute effect sizes using propensity matching
-    if method == "propensity-matching":
+    if method == 'propensity-matching':
 
         kwargs.update({'imgdir':imgdir,
                        'demographics':demographics,
@@ -322,7 +326,7 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
         outfiles = propensity_matching_norm(**kwargs)
 
     # Compute effect sizes using normative growth modelling
-    elif method == "normative-growth":
+    elif method == 'normative-growth':
 
         kwargs.update(dict(imgdir=imgdir,
                            demographics=demographics,

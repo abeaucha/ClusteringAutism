@@ -129,9 +129,10 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
                        mask = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
                        datasets = ('POND', 'SickKids'),
                        parallel = True, nproc = None,
-                       es_method = 'normative-growth', es_nbatches = 1,
-                       es_df = 3, es_batch = ('Site', 'Scanner'),
-                       es_ncontrols = 10, es_matrix_file = 'effect_sizes.csv',
+                       es_method = 'normative-growth', es_group = 'patients',
+                       es_nbatches = 1, es_df = 3,
+                       es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
+                       es_matrix_file = 'effect_sizes.csv',
                        cluster_resolution = 3.0,
                        cluster_nk_max = 10, cluster_metric = 'correlation',
                        cluster_K = 10, cluster_sigma = 0.5, cluster_t = 20,
@@ -162,6 +163,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
         Number of processors to use in parallel.
     es_method: {'normative-growth', 'propensity-matching'}
         Method used to compute effect sizes.
+    es_group: {'patients', 'controls', 'all'}
+        Group of participants for which to compute effect sizes.
     es_nbatches: int, default 1
         Number of batches to use in effect size computation.
     es_df: int, default 3
@@ -262,6 +265,7 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
         dataset = '-'.join(datasets),
         resolution = resolution,
         es_method = es_method,
+        es_group = es_group,
         es_df = es_df,
         es_batch = (None if es_batch is None
                     else '-'.join(es_batch)),
@@ -336,7 +340,8 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
                          mask = mask,
                          outdir = os.path.join(es_dir, jac, ''),
                          nproc = nproc,
-                         method = es_method)
+                         method = es_method,
+                         group = es_group)
 
         if es_method == 'normative-growth':
             es_kwargs.update(

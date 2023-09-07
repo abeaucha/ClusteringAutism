@@ -32,7 +32,8 @@ option_list <- list(
               type = "character",
               help = "Path to file (.csv) containing the demographics data."),
   make_option("--mask",
-              type = "Path to the mask file (.mnc)."),
+              type = "character",
+              help = "Path to the mask file (.mnc)."),
   make_option("--outdir",
               type = "character",
               help = paste("Path to directory in which to save the effect",
@@ -42,6 +43,11 @@ option_list <- list(
               default = "file",
               help = paste("Primary key between demographics data and",
                            "constructed voxel matrix. [default %default]")),
+  make_option("--group",
+              type = "character",
+              default = "patients",
+              help = paste("Group of participants for which to compute",
+                           "effect sizes. [default %default]")),
   make_option("--df",
               type = "numeric",
               default = 3, 
@@ -170,11 +176,14 @@ imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
 mask <- args[["mask"]]
 key <- args[["key"]]
+group <- args[["group"]]
 df <- args[["df"]]
 batch <- args[["batch"]]
 outdir <- args[["outdir"]]
 nproc <- args[["nproc"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
+
+quit()
 
 # Check nproc
 if (is.null(nproc)) {
