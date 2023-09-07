@@ -11,8 +11,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(rcartocolor))
 suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(rcartocolor))
 suppressPackageStartupMessages(library(RColorBrewer))
 ```
 
@@ -26,6 +27,7 @@ source("../../src/analysis.R")
 output_dir <- "outputs/mouse_cluster_pathways/"
 if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 
+# Max number of clusters
 nk_max <- 10
 ```
 
@@ -53,7 +55,7 @@ pathway_terms <- c("Chromatin organization",
                    "Signaling by wnt",
                    "Transmission across chemical synapses")
 
-# Iterate over clusters
+# Import pathway enrichment data 
 list_pathways <- vector(mode = "list", length = nk_max-1)
 names(list_pathways) <- 2:nk_max
 for (nk in 2:nk_max) {
@@ -70,13 +72,16 @@ for (nk in 2:nk_max) {
     reduce(.f = bind_rows) %>% 
     rename(pathway = Title) %>% 
     filter(pathway %in% pathway_terms) %>% 
-    mutate(cluster = factor(cluster))
+    mutate(cluster = factor(cluster),
+           qval_log = -log10(adj.P.Val))
 }
 ```
 
 ```{r}
+# Polar plot labels
 polar_plot_lvls <- c(" ", pathway_terms)
 
+# Create polar plot data frames
 list_polar_plots <- vector(mode = "list", length = length(list_pathways))
 names(list_polar_plots) <- names(list_pathways)
 for (i in 1:length(list_pathways)) {
@@ -95,43 +100,70 @@ for (i in 1:length(list_pathways)) {
 
 
 ```{r}
-# Polar plot parameters
-nspokes <- length(polar_plot_lvls) - 1
-theta_start <- -(2*pi)/nspokes
-breaks_start <- 0
-breaks_step <- 5
-
-palette <- carto_pal(n = 12, name = "Bold")
-
 for (i in 1:length(list_polar_plots)) {
   
+  # Radial labels
   E_max <- ceiling(max(list_polar_plots[[i]][["E"]]))
-  breaks_end <- E_max - E_max %% 5 + 5
-  polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
-  polar_labels <- tibble(pathway = polar_plot_lvls[2],
-                         breaks = polar_breaks)
+  q_max <- ceiling(max(list_polar_plots[[i]][["qval_log"]]))
   
-  polar_plot <- ggplot(list_polar_plots[[i]], 
-                       aes(x = pathway, 
-                           ymin = 0, ymax = E, 
-                           group = cluster, 
-                           fill = cluster, 
-                           col = cluster)) + 
+  E_breaks_end <- E_max - E_max %% breaks_step + breaks_step
+  q_breaks_end <- q_max - q_max %% breaks_step + breaks_step
+  
+  E_polar_breaks <- seq(breaks_start, E_breaks_end, by = breaks_step)
+  q_polar_breaks <- seq(breaks_start, q_breaks_end, by = breaks_step)
+  
+  E_polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                           breaks = E_polar_breaks)
+  
+  q_polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                           breaks = q_polar_breaks)
+  
+  E_polar_plot <- ggplot(list_polar_plots[[i]], 
+                         aes(x = pathway, 
+                             ymin = 0, ymax = E, 
+                             group = cluster, 
+                             fill = cluster, 
+                             col = cluster)) + 
     geom_ribbon(alpha = 0.2) + 
-    geom_text(data = polar_labels,
+    geom_text(data = E_polar_labels,
               inherit.aes = FALSE,
               mapping = aes(x = pathway,
                             y = breaks,
                             label = breaks)) +
     coord_radar(start = theta_start, clip = "off") + 
     scale_x_discrete(expand = expansion()) + 
-    scale_y_continuous(breaks = polar_breaks) +
+    scale_y_continuous(breaks = E_polar_breaks) +
     scale_fill_manual(values = palette[1:(i+1)]) +
     scale_colour_manual(values = palette[1:(i+1)]) +
     labs(x = NULL,
          fill = "k",
          col = "k") + 
-    theme_bw() + 
+    theme_bw()
+  
+  q_polar_plot <- ggplot(list_polar_plots[[i]], 
+                         aes(x = pathway, 
+                             ymin = 0, ymax = qval_log, 
+                             group = cluster, 
+                             fill = cluster, 
+                             col = cluster)) + 
+    geom_ribbon(alpha = 0.2) + 
+    geom_text(data = q_polar_labels,
+              inherit.aes = FALSE,
+              mapping = aes(x = pathway,
+                            y = breaks,
+                            label = breaks)) +
+    coord_radar(start = theta_start, clip = "off") + 
+    scale_x_discrete(expand = expansion()) + 
+    scale_y_continuous(breaks = q_polar_breaks) +
+    scale_fill_manual(values = palette[1:(i+1)]) +
+    scale_colour_manual(values = palette[1:(i+1)]) +
+    labs(x = NULL,
+         fill = "k",
+         col = "k") + 
+    theme_bw()
+  
+  polar_plot <- (E_polar_plot | q_polar_plot) +
+    plot_layout(guides = "collect") &
     theme(axis.ticks.x = element_blank(),
           axis.line.x = element_blank(),
           axis.text.x = element_text(size = 6),
@@ -141,17 +173,18 @@ for (i in 1:length(list_polar_plots)) {
           panel.border = element_blank(),
           legend.position = "bottom")
   
+  
+  # Write to file
   outfile <- paste0("pathways_polar_nk_", names(list_polar_plots)[i], ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile,
-      width = unit(6, "in"),
+      width = unit(12, "in"),
       height = unit(6, "in"))
   print(polar_plot)
   dev.off()
   
 }
 ```
-
 
 ```{r}
 # Import mouse clusters
