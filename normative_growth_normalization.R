@@ -78,12 +78,15 @@ source("src/processing.R")
 #' @param y (numeric vector) Voxel values across study participants.
 #' @param demographics (data.frame) Demographics information for study 
 #' participants.
+#' @param group (character scalar) Group of participants for which to 
+#' compute effect sizes.
 #' @param batch (character scalar) Batch variable to residualize.
 #' @param df (numeric scalar) Degrees of freedom in natural spline 
 #' model.
 #'
 #' @return (data.frame) Model predictions for test participants.
-fit_predict_model <- function(y, demographics, batch = NULL, df = 3) {
+fit_predict_model <- function(y, demographics, group = "patients", 
+                              batch = NULL, df = 3) {
   
   if (length(y) != nrow(demographics)) {
     stop()
@@ -101,7 +104,13 @@ fit_predict_model <- function(y, demographics, batch = NULL, df = 3) {
   
   # Filters for train and test sets
   ind_fit <- demographics[["DX"]] == "Control"
-  ind_pred <- !ind_fit
+  if (group == "patients") {
+    ind_pred <- !ind_fit
+  } else if (group == "controls") {
+    ind_pred <- ind_fit
+  } else if (group == "all") {
+    ind_pred <- !logical(nrow(demographics))
+  }
   
   # Training data frame
   df_fit <- demographics[ind_fit, c("Age", "Sex")]
@@ -153,15 +162,18 @@ zscore <- function(x){
 #' @param y (numeric vector) Voxel values across study participants.
 #' @param demographics (data.frame) Demographics information for study 
 #' participants.
+#' @param group (character scalar) Group of participants for which to 
+#' compute effect sizes.
 #' @param batch (character scalar) Batch variable to residualize.
 #' @param df (numeric scalar) Degrees of freedom in natural spline 
 #' model.
 #'
 #' @return (numeric vector) Voxel normative z-scores
-compute_normative_zscore <- function(y, demographics, batch = NULL, df = 3) {
+compute_normative_zscore <- function(y, demographics, group = "patients",
+                                     batch = NULL, df = 3) {
   
   y_pred <- fit_predict_model(y = y, demographics = demographics,
-                              batch = batch, df = df)
+                              group = group, batch = batch, df = df)
   z <- pull(zscore(y_pred), "z")
   
   return(z)
@@ -182,8 +194,6 @@ batch <- args[["batch"]]
 outdir <- args[["outdir"]]
 nproc <- args[["nproc"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
-
-quit()
 
 # Check nproc
 if (is.null(nproc)) {
@@ -212,7 +222,8 @@ if (!is.null(batch)) {
   batch <- str_split(batch, pattern = "-")[[1]]
   batch_check <- batch %in% colnames(demographics)
   if (!all(batch_check)) {
-    stop("Batch columns not found in demographics:\n", str_flatten(batch, collapse = "\n"))
+    stop("Batch columns not found in demographics:\n",
+         str_flatten(batch, collapse = "\n"))
   }
 }
 
@@ -232,6 +243,7 @@ sink(nullfile())
 voxels <- mcMincApply(filenames = imgfiles, 
                       fun = compute_normative_zscore,
                       demographics = demographics,
+                      group = group,
                       batch = batch,
                       df = df,
                       mask = mask,
@@ -244,7 +256,13 @@ sink(NULL)
 # Export images
 if (verbose) {message("Exporting normalized images...")}
 if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
-outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]
+if (group == "patients") {
+  outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]  
+} else if (group == "controls") {
+  outfiles <- demographics[demographics[["DX"]] == "Control", key][[1]]
+} else if (group == "all") {
+  outfiles <- demographics[[key]]
+}
 outfiles <- file.path(outdir, outfiles)
 matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
                  margin = 2, nproc = nproc)
