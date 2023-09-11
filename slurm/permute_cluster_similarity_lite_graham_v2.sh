@@ -23,8 +23,8 @@ python3 permute_cluster_similarity_lite.py \
 	--human-microarray-coords data/human/expression/AHBA_microarray_coordinates_study_v2.csv \
 	--human-nk 2 \
 	--mouse-nk 4 \
-	--npermutations 50 \
-	--permutations-start 51 \
+	--npermutations 11 \
+	--permutations-start 89 \
 	--nproc $SLURM_CPUS_PER_TASK
 tf=$(date)
 echo "End time: $tf"
