@@ -21,6 +21,7 @@ python3 process_human_data.py \
   --nproc $SLURM_CPUS_PER_TASK \
   --es-method normative-growth \
   --es-nbatches 8 \
+  --es-group controls \
   --es-df 3 \
   --es-batch Site-Scanner \
   --cluster-resolution 3.0 \
