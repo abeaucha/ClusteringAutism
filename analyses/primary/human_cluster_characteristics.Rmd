@@ -167,16 +167,16 @@ dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
 nk_max <- 10
 chi2_pvals <- numeric(nk_max-1)
 for (nk in 2:nk_max) {
-
+  
   df_tmp <- cluster_demographics %>% 
     select(k = paste0("nk", nk), DX_new) %>% 
     mutate(k = factor(k),
            DX_new = factor(DX_new, levels = dx_lvls))
   
   chi2 <- chisq.test(x = df_tmp$k, y = df_tmp$DX_new, simulate.p.value = TRUE, B = 1e5)
-    
+  
   diagnoses_grid <- expand_grid(DX_new = df_diagnoses$DX_new,
-                                 k = 1:nk)
+                                k = 1:nk)
   
   
   df_prop_nk <- cluster_demographics %>% 
@@ -194,7 +194,7 @@ for (nk in 2:nk_max) {
            DX_new = factor(DX_new, levels = dx_lvls))
   
   p_dx_nk <- ggplot(df_prop_nk, 
-         aes(x = k, y = prop_per_k_per_dx, fill = DX_new)) +
+                    aes(x = k, y = prop_per_k_per_dx, fill = DX_new)) +
     geom_col(position = "dodge") +
     labs(x = "k",
          y = "Proportion per cluster",
@@ -269,21 +269,20 @@ colnames(pond_clinical) %>%
 What's the best way to look at this?
 
 ```{r}
-pond_clinical_subset <- pond_clinical %>% 
-  select(SUBJECT, 
-         CB68IPPER,
-         CB68EPPER,
-         CB68TPPER,
-         FULL_IQ_SUMMARY,
-         SBFULLIQ,
-         WISC_IV_FSIQ_PERCENT,
-         WISC_V_FSIQ_PERCENT,
-         WPPSI_IV47_FSIQ_PR,
-         SCQTOT,
-         SCQTOT_C,
-         ADHD_I_SUB,
-         ADHD_HI_SUB,
-         TPOCS_TOT)
+clinical_scales <- c("CB68IPPER",
+                     "CB68EPPER",
+                     "CB68TPPER",
+                     "FULL_IQ_SUMMARY",
+                     "VERBAL_IQ_SUMMARY",
+                     "PREFORM_IQ_SUMMARY",
+                     "SBFULLIQ",
+                     "SCQTOT",
+                     "SCQTOT_C",
+                     "ADHD_I_SUB",
+                     "ADHD_HI_SUB",
+                     "TPOCS_TOT")
+
+pond_clinical_subset <- pond_clinical[, c("SUBJECT", clinical_scales)]
 
 head(pond_clinical_subset)
 ```
@@ -295,7 +294,194 @@ clusters_clinical <- clusters %>%
   filter(Dataset == "POND") %>% 
   mutate(Subject_ID = as.numeric(Subject_ID)) %>% 
   left_join(pond_clinical_subset, by = c("Subject_ID" = "SUBJECT"))
+
+# Convert cluster data to long format
+clusters_long <- clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk", values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+# Number of participants per cluster
+cluster_counts <- clusters_long %>% 
+  group_by(cluster_id, nk, k) %>% 
+  count() %>% 
+  ungroup() %>% 
+  arrange(nk, k)
 ```
+
+```{r}
+nk_max <- max(cluster_counts["nk"])
+
+df_anova <- expand_grid(nk = 2:nk_max,
+                        scale = clinical_scales) %>% 
+  mutate(Fval = 0, pval = 0, npatients = 0)
+for (i in 1:nrow(df_anova)) {
+  
+  nk <- df_anova[[i, "nk"]]
+  s <- df_anova[[i, "scale"]]
+  
+  labels <- clusters_clinical[[paste0("nk", nk)]]
+  scores <- clusters_clinical[[s]]
+  
+  missing <- is.na(scores)
+  labels <- labels[!missing]
+  scores <- scores[!missing]
+  
+  anova <- summary(aov(scores ~ factor(labels)))
+  df_anova[[i, "Fval"]] = anova[[1]][[1,"F value"]]
+  df_anova[[i, "pval"]] = anova[[1]][[1,"Pr(>F)"]]
+  df_anova[[i, "npatients"]] = length(labels)
+  
+}
+
+
+min_groupsize <- 50
+df_anova_large <- expand_grid(nk = 2:nk_max,
+                              scale = clinical_scales) %>% 
+  mutate(Fval = 0, pval = 0, npatients = 0)
+for (i in 1:nrow(df_anova_large)) {
+
+    nk <- df_anova_large[[i, "nk"]]
+  s <- df_anova_large[[i, "scale"]]
+  
+  ind_nk <- cluster_counts[["nk"]] == nk
+  cluster_counts_nk <- cluster_counts[ind_nk,]
+  ind_groupsize <- cluster_counts_nk[["n"]] > min_groupsize
+  labels_pass <- cluster_counts_nk[ind_groupsize, "k"][[1]]
+  
+  labels <- clusters_clinical[[paste0("nk", nk)]]
+  scores <- clusters_clinical[[s]]
+  
+  missing <- is.na(scores)
+  labels <- labels[!missing]
+  scores <- scores[!missing]
+  
+  labels_filter <- labels %in% labels_pass
+  labels <- labels[labels_filter]
+  scores <- scores[labels_filter]
+  
+  anova <- summary(aov(scores ~ factor(labels)))
+  df_anova_large[[i, "Fval"]] = anova[[1]][[1,"F value"]]
+  df_anova_large[[i, "pval"]] = anova[[1]][[1,"Pr(>F)"]]
+  df_anova_large[[i, "npatients"]] = length(labels)
+  
+}
+```
+
+```{r}
+df_anova_p <- df_anova %>% 
+  mutate(nk = factor(nk), 
+         scale = factor(scale, levels = clinical_scales),
+         pval_log = -log10(pval),
+         significant = ifelse(pval < 0.05, "*", NA))
+
+df_anova_large_p <- df_anova_large %>% 
+  mutate(nk = factor(nk), 
+         scale = factor(scale, levels = clinical_scales),
+         pval_log = -log10(pval),
+         significant = ifelse(pval < 0.05, "*", NA))
+  
+library(RColorBrewer)
+
+ggplot(df_anova_p,
+       aes(x = nk, y = scale, fill = pval_log)) + 
+  geom_tile(col = "black") +
+  geom_text(mapping = aes(label = significant)) + 
+  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds")) +
+  labs(x = "nk",
+       y = "Clinical scale",
+       fill = "-log10(p)")
+```
+```{r}
+ggplot(df_anova_large_p,
+       aes(x = nk, y = scale, fill = pval_log)) + 
+  geom_tile(col = "black") +
+  geom_text(mapping = aes(label = significant)) + 
+  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds")) +
+  labs(x = "nk",
+       y = "Clinical scale",
+       fill = "-log10(p)")
+```
+```{r}
+npatients_tot <- nrow(clusters_clinical)
+
+df_scale_completion <- df_anova_p %>% 
+  select(scale, completed = npatients) %>% 
+  distinct() %>% 
+  mutate(missing = npatients_tot - completed) %>% 
+  pivot_longer(cols = -scale, names_to = "classification", values_to = "n") %>% 
+  mutate(completed = ifelse(classification == "completed", TRUE, FALSE))
+
+ggplot(df_scale_completion,
+       aes(x = n, y = scale, fill = completed)) + 
+  geom_col(col = "black") +
+  scale_fill_manual(values = c("grey70", brewer.pal(n = 9, name = "Reds")[8])) +
+  scale_x_continuous(expand = expansion(),
+                     breaks = seq(0, 600, by = 50)) +
+  scale_y_discrete(expand = expansion()) +
+  labs(x = "Number of patients",
+       y = "Clinical scale",
+       fill = "Completed")
+```
+```{r}
+library(ggbeeswarm)
+```
+
+
+```{r}
+clusters_clinical %>% 
+  select(k = nk2, y = SCQTOT_C) %>% 
+  ggplot(aes(x = factor(k), y = y)) + 
+  geom_beeswarm(col = "grey50") + 
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.3) +
+  theme_bw()
+```
+
+```{r}
+clusters_clinical %>% 
+  select(k = nk6, y = SCQTOT_C) %>% 
+  ggplot(aes(x = factor(k), y = y)) + 
+  geom_beeswarm(col = "grey50") + 
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.3) +
+  theme_bw()
+```
+
+
+```{r}
+clusters_clinical %>% 
+  select(k = nk2, y = PREFORM_IQ_SUMMARY) %>% 
+  ggplot(aes(x = factor(k), y = y)) + 
+  geom_beeswarm(col = "grey50") + 
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.3) +
+  theme_bw()
+```
+
+```{r}
+clusters_clinical %>% 
+  select(k = nk2, y = VERBAL_IQ_SUMMARY) %>% 
+  ggplot(aes(x = factor(k), y = y)) + 
+  geom_beeswarm(col = "grey50") + 
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.3) +
+  theme_bw()
+```
+
+```{r}
+clusters_clinical %>% 
+  select(k = nk2, y = FULL_IQ_SUMMARY) %>% 
+  ggplot(aes(x = factor(k), y = y)) + 
+  geom_beeswarm(col = "grey50") + 
+  geom_boxplot(outlier.shape = NA,
+               alpha = 0.3) +
+  theme_bw()
+```
+
+
 
 ```{r}
 tmp1 <- clusters_clinical %>% 
