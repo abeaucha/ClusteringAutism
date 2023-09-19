@@ -55,7 +55,8 @@ params
 
 ```{r directories}
 #Parameter set ID
-params_id <- 405
+# params_id <- 405
+params_id <- 654
 
 #Jacobians
 jacobians <- c("absolute", "relative")
@@ -133,7 +134,9 @@ threshold_symmetric <- params %>%
   pull(threshold_symmetric)
 
 #Max nk
-nk_max <- params[["human_cluster_nk_max"]]
+nk_max <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_cluster_nk_max)
 ```
 
 ```{r human-centroids}
