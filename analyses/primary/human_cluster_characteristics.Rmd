@@ -60,7 +60,9 @@ params_id <- 700
 pipeline_dir <- file.path(pipeline_dir, params_id)
 
 #Cluster resolution
-cluster_resolution <- params[["cluster_resolution"]]
+cluster_resolution <- params %>% 
+  filter(id == params_id) %>% 
+  pull(cluster_resolution)
 cluster_resolution <- sprintf("%.1f", cluster_resolution)
 
 #Cluster directory
@@ -237,14 +239,14 @@ Human FXS patient and mouse models are in matching clusters in nk = 2, 3, 4, 5. 
 
 
 ```{r}
-pond_genetics <- file.path(registration_dir, "subject_info", "POND_variants.xlsx")
-pond_genetics <- read_excel(pond_genetics)
-
-fxs_id <- df_fxs[["Subject_ID"]] %>% 
-  str_remove("POND_")
-
-pond_genetics %>% 
-  filter(POND_ID == fxs_id)
+# pond_genetics <- file.path(registration_dir, "subject_info", "POND_variants.xlsx")
+# pond_genetics <- read_excel(pond_genetics)
+# 
+# fxs_id <- df_fxs[["Subject_ID"]] %>% 
+#   str_remove("POND_")
+# 
+# pond_genetics %>% 
+#   filter(POND_ID == fxs_id)
 ```
 
 No identified variant for the FXS patient.
@@ -253,47 +255,98 @@ No identified variant for the FXS patient.
 # POND clinical scores
 
 ```{r}
-pond_clinical <- "../../data/human/registration/v2/subject_info/POND_clinical_scores.csv"
+pond_clinical <- "../../data/human/registration/v2/subject_info/POND_clinical_scores_20230915.csv"
 pond_clinical <- read_csv(pond_clinical, show_col_types = FALSE)
+pond_clinical <- pond_clinical[,-1]
 
-View(pond_clinical)
+pond_clinical <- pond_clinical %>% 
+  select(-contains("NSI"), 
+         -contains("ETHNCTY"),
+         -contains("EDUC"),
+         -HSHLD_INCOME_STD,
+         -PRMY_CGVR_STD)
+
+# View(pond_clinical)
+
+colnames(pond_clinical)
 ```
 
+What are these scales? 
+
+- CB68IPTS: CBCL (6-18 years) internalizing problems T-score
+- CB68EPTS: CBCL (6-18 years) externalizing problems T-score
+- CBIPTS: CBCL (1.5-5 years) internalizing problems T-score
+- CBEPTS: CBCL (1.5-5 years) externalizing problems T-score
+- AB21GCCS: ABAS-II (5-21 years) GAC composite score
+- BOT2_BLTC_SS: BOT 2 bilateral coordination - scale score
+- BOT2_BAL_SS: BOT 2 balance - scale score
+- BOT2_BDYC_STDS: BOT 2 body coordinate - standard score
+- KKID_TOT: Kid-KINDL interview total quality of life score
+- KKDO_TOT: Kiddo-KINDL interview total quality of life score
+- KKDY_TOT: Kiddy-KINDL interview total quality of life score
+- NEPSYII_A34_AR_SS: NEPSY-II (ages 3-4) AR scaled score
+- NEPSYII_A34_TM_SS: NEPSY-II (ages 3-4) TM scaled score
+- NEPSYII_A516_AR_SS: NEPSY-II (ages 5-16) AR scaled score
+- NEPSYII_A516_MF_SS: NEPSY-II (ages 5-16) MF scaled score
+- NEPSYII_A516_MFD_SS: NEPSY-II (ages 5-16) MFD scaled score
+- NEPSYII_A516_MF_MFD_CCS: NEPSY-II (ages 5-16) MF vs. MFD contrast scaled score
+- NEPSYII_A516_TM_SS: NEPSY-II (ages 5-16) TM scaled score
+- NEPSYII-A716_AS_TCSSC: NEPSY-II (ages 5-16) AS total correct sorts scaled score
+- NEPSYII-A718_AS_CSS: NEPSY-II (ages 5-16) AS combined scaled score
+- OWLLCSS: OWLS LC standard score
+- OWLOESS: OWLS OE standard score
+- OWLOCSS: OWLS oral composite (OC) standard score
+- OWL2LCSS: OWLS-II LC standard score (age only)
+- OWL2OESS: OWLS-II OE standard score (age only)
+- OWL2OLCSS: OWLS-II oral language composite (OLC) standard score
+- RBSALLT: RBS-R overall score
+- SCQTOT: SCQ Lifetime total score
+- SSP_TACTILE_RS: Short Sensory Profile 1 tactile sensitivity raw score
+- SSP_TASTE_SMELL_RS: Short Sensory Profile 1 taste/smell sensitivity raw score
+- SSP_MOVEMENT_RS: Short Sensory Profile 1 movement sensitivity raw score
+- SSP_UNDERRESP_SEEKS_RS: Short Sensory Profile 1 underresponsive/seek sensation raw score
+- SSP_AUD_FILTER_RS: Short Sensory Profile 1 auditory filtering raw score
+- SSP_LOW_ENRGY_WEAK_RS: Short Sensory Profile 1 low energy/weak raw score
+- SSP_VIS_AUD_RS: Short Sensory Profile 1 visual/audio sensitivity raw score
+- SSP_TOTAL_RS: Short Sensory Profile 1 total raw score
+- S0B_TGT_ACCURACY: Spatial 0-back percentage target trials identified as such
+- S0B_NONTGT_ACCURACY: Spatial 0-back percentage of non-target trials identified as such
+- S1B_TFT_ACCURACY: Spatial 1-back percentage target trials identified as such
+- S1B_NONTFT_ACCURACY: Spatial 1-back percentage of non-target trials identified as such
+- S2B_TFT_ACCURACY: Spatial 2-back percentage target trials identified as such
+- S2B_NONTFT_ACCURACY: Spatial 2-back percentage of non-target trials identified as such
+- MT_ST_PCRT: STOP Task percent correct response total
+- MT_ST_MCRTT: STOP Task mean correct response total
+- MT_ST_CRTSDT: STOP Task standard deviation of total correct response times
+- MT_ST_PSIT: STOP Task percent stopping inhibition of all trials
+- MT_ST_SSRTT: STOP Task signal stop reaction time of all trials
+- MT_ST_ITSSRT: STOP Task interpolated stop-signal response time
+- MT_ST_PSRRT: STOP Task post signal-response RT mean
+- ADHD_I_SUB: SWAN Rating Scale total number of items 1-9 with score of -2 or -3
+- ADHD_HI_SUB: SWAN Rating Scale total number of items 10-18 with score of -2 or -3
+- TPOCS_TOT: TOCS sum of items 1 to 21
 
 
 ```{r}
-colnames(pond_clinical) %>% 
-  str_subset("CB68.*TOT")
-```
+pond_clinical <- pond_clinical %>% 
+  select(-site, -SUB_ID, -DOB, 
+         -PRIMARY_DIAGNOSIS, -RESEARCH_CONFIRM_DIAG,
+         -SWANPDOC, -TPOCSPDOC) %>% 
+  rename(Subject_ID = subject)
 
-What's the best way to look at this?
-
-```{r}
-clinical_scales <- c("CB68IPPER",
-                     "CB68EPPER",
-                     "CB68TPPER",
-                     "FULL_IQ_SUMMARY",
-                     "VERBAL_IQ_SUMMARY",
-                     "PREFORM_IQ_SUMMARY",
-                     "SBFULLIQ",
-                     "SCQTOT",
-                     "SCQTOT_C",
-                     "ADHD_I_SUB",
-                     "ADHD_HI_SUB",
-                     "TPOCS_TOT")
-
-pond_clinical_subset <- pond_clinical[, c("SUBJECT", clinical_scales)]
-
-head(pond_clinical_subset)
+clinical_scales <- pond_clinical %>% 
+  select(-Subject_ID) %>% 
+  colnames()
 ```
 
 ```{r}
 clusters_clinical <- clusters %>% 
-  left_join(demographics, by = c("ID" = "file")) %>% 
+  rename(file = ID) %>% 
+  left_join(demographics, by = "file") %>% 
   mutate(Subject_ID = str_remove(Subject_ID, "POND_")) %>% 
   filter(Dataset == "POND") %>% 
   mutate(Subject_ID = as.numeric(Subject_ID)) %>% 
-  left_join(pond_clinical_subset, by = c("Subject_ID" = "SUBJECT"))
+  left_join(pond_clinical, by = "Subject_ID")
 
 # Convert cluster data to long format
 clusters_long <- clusters %>% 
@@ -312,15 +365,82 @@ cluster_counts <- clusters_long %>%
 ```
 
 ```{r}
+npatients <- nrow(clusters_clinical)
+
+scales_completed <- clusters_clinical %>% 
+  select(Subject_ID, all_of(clinical_scales)) %>% 
+  pivot_longer(cols = -Subject_ID, names_to = "scale", values_to = "score") %>% 
+  mutate(missing = is.na(score)) %>% 
+  group_by(scale) %>% 
+  summarise(ncompleted = sum(!missing),
+            pcompleted = ncompleted/npatients,
+            .groups = "drop") 
+
+tmp <- scales_completed %>% 
+  select(-ncompleted) %>% 
+  mutate(scale = factor(scale, levels = clinical_scales),
+         pmissing = 1 - pcompleted) %>% 
+  rename(completed = pcompleted,
+         missing = pmissing) %>% 
+  pivot_longer(cols = -scale, names_to = "status", values_to = "percent") %>% 
+  mutate(status = factor(status, levels = c("missing", "completed")))
+
+ggplot(tmp, aes(x = percent, y = fct_rev(scale),
+                fill = status)) + 
+  geom_col(width = 1,
+           col = "grey50") + 
+  scale_fill_manual(values = c("grey90", "green3")) +
+  labs(x = "Percentage", y = "Scale", fill = NULL) +
+  scale_x_continuous(expand = expansion()) + 
+  theme_bw()
+```
+
+```{r}
+completion_threshold <- 20
+clinical_scales_thresh <- scales_completed %>% 
+  filter(ncompleted > completion_threshold) %>% 
+  pull(scale)
+
+clusters_clinical_thresh <- clusters_clinical %>% 
+  select(Subject_ID, contains("nk"), all_of(clinical_scales_thresh))
+```
+
+```{r}
+for (s in 1:length(clinical_scales_thresh)) {
+  p_scale_dist <- clusters_clinical_thresh %>% 
+    select(x = clinical_scales_thresh[s]) %>% 
+    filter(!is.na(x)) %>% 
+    ggplot(aes(x = x)) + 
+    geom_histogram() +
+    labs(x = "Score",
+         y = "Count",
+         title = clinical_scales_thresh[s]) + 
+    theme_bw()
+  
+  outfile <- paste0("clinical_scores_dist_", clinical_scales_thresh[s], ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(8, "inch"),
+      height = unit(4, "inch"))
+  print(p_scale_dist)
+  dev.off()
+}
+```
+
+
+
+```{r}
 nk_max <- max(cluster_counts["nk"])
 
-df_anova <- expand_grid(nk = 2:nk_max,
-                        scale = clinical_scales) %>% 
-  mutate(Fval = 0, pval = 0, npatients = 0)
-for (i in 1:nrow(df_anova)) {
+min_group <- 50
+
+df_kw <- expand_grid(nk = 2:nk_max,
+                     scale = clinical_scales_thresh) %>% 
+  mutate(chi2 = 0, pval = 0, npatients = 0)
+for (i in 1:nrow(df_kw)) {
   
-  nk <- df_anova[[i, "nk"]]
-  s <- df_anova[[i, "scale"]]
+  nk <- df_kw[[i, "nk"]]
+  s <- df_kw[[i, "scale"]]
   
   labels <- clusters_clinical[[paste0("nk", nk)]]
   scores <- clusters_clinical[[s]]
@@ -329,46 +449,78 @@ for (i in 1:nrow(df_anova)) {
   labels <- labels[!missing]
   scores <- scores[!missing]
   
-  anova <- summary(aov(scores ~ factor(labels)))
-  df_anova[[i, "Fval"]] = anova[[1]][[1,"F value"]]
-  df_anova[[i, "pval"]] = anova[[1]][[1,"Pr(>F)"]]
-  df_anova[[i, "npatients"]] = length(labels)
-  
-}
-
-
-min_groupsize <- 50
-df_anova_large <- expand_grid(nk = 2:nk_max,
-                              scale = clinical_scales) %>% 
-  mutate(Fval = 0, pval = 0, npatients = 0)
-for (i in 1:nrow(df_anova_large)) {
-
-    nk <- df_anova_large[[i, "nk"]]
-  s <- df_anova_large[[i, "scale"]]
-  
-  ind_nk <- cluster_counts[["nk"]] == nk
-  cluster_counts_nk <- cluster_counts[ind_nk,]
-  ind_groupsize <- cluster_counts_nk[["n"]] > min_groupsize
-  labels_pass <- cluster_counts_nk[ind_groupsize, "k"][[1]]
-  
-  labels <- clusters_clinical[[paste0("nk", nk)]]
-  scores <- clusters_clinical[[s]]
-  
-  missing <- is.na(scores)
-  labels <- labels[!missing]
-  scores <- scores[!missing]
-  
-  labels_filter <- labels %in% labels_pass
-  labels <- labels[labels_filter]
-  scores <- scores[labels_filter]
-  
-  anova <- summary(aov(scores ~ factor(labels)))
-  df_anova_large[[i, "Fval"]] = anova[[1]][[1,"F value"]]
-  df_anova_large[[i, "pval"]] = anova[[1]][[1,"Pr(>F)"]]
-  df_anova_large[[i, "npatients"]] = length(labels)
+  labels_count <- table(labels)
+  test_ngroups <- length(labels_count) > 1
+  test_groupsize <- all(labels_count > min_group)
+  test <- test_ngroups & test_groupsize
+  if (test) {
+    kw <- kruskal.test(x = scores, g = factor(labels))
+    df_kw[[i, "chi2"]] <- kw[["statistic"]]
+    df_kw[[i, "pval"]] <- kw[["p.value"]]
+  } else {
+    df_kw[[i, "chi2"]] <- NA
+    df_kw[[i, "pval"]] <- NA
+  }
+  df_kw[[i, "npatients"]] <- length(labels)
   
 }
 ```
+
+
+```{r}
+# for (i in 1:nrow(df_anova)) {
+#   
+#   nk <- df_anova[[i, "nk"]]
+#   s <- df_anova[[i, "scale"]]
+#   
+#   labels <- clusters_clinical[[paste0("nk", nk)]]
+#   scores <- clusters_clinical[[s]]
+#   
+#   missing <- is.na(scores)
+#   labels <- labels[!missing]
+#   scores <- scores[!missing]
+#   
+#   anova <- summary(aov(scores ~ factor(labels)))
+#   df_anova[[i, "Fval"]] = anova[[1]][[1,"F value"]]
+#   df_anova[[i, "pval"]] = anova[[1]][[1,"Pr(>F)"]]
+#   df_anova[[i, "npatients"]] = length(labels)
+#   
+# }
+# 
+# 
+# min_groupsize <- 50
+# df_anova_large <- expand_grid(nk = 2:nk_max,
+#                               scale = clinical_scales) %>% 
+#   mutate(Fval = 0, pval = 0, npatients = 0)
+# for (i in 1:nrow(df_anova_large)) {
+# 
+#     nk <- df_anova_large[[i, "nk"]]
+#   s <- df_anova_large[[i, "scale"]]
+#   
+#   ind_nk <- cluster_counts[["nk"]] == nk
+#   cluster_counts_nk <- cluster_counts[ind_nk,]
+#   ind_groupsize <- cluster_counts_nk[["n"]] > min_groupsize
+#   labels_pass <- cluster_counts_nk[ind_groupsize, "k"][[1]]
+#   
+#   labels <- clusters_clinical[[paste0("nk", nk)]]
+#   scores <- clusters_clinical[[s]]
+#   
+#   missing <- is.na(scores)
+#   labels <- labels[!missing]
+#   scores <- scores[!missing]
+#   
+#   labels_filter <- labels %in% labels_pass
+#   labels <- labels[labels_filter]
+#   scores <- scores[labels_filter]
+#   
+#   anova <- summary(aov(scores ~ factor(labels)))
+#   df_anova_large[[i, "Fval"]] = anova[[1]][[1,"F value"]]
+#   df_anova_large[[i, "pval"]] = anova[[1]][[1,"Pr(>F)"]]
+#   df_anova_large[[i, "npatients"]] = length(labels)
+#   
+# }
+```
+
 
 ```{r}
 df_anova_p <- df_anova %>% 
@@ -404,6 +556,8 @@ ggplot(df_anova_large_p,
        y = "Clinical scale",
        fill = "-log10(p)")
 ```
+
+
 ```{r}
 npatients_tot <- nrow(clusters_clinical)
 
