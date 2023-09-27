@@ -17,6 +17,9 @@ suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
 suppressPackageStartupMessages(library(grid))
 suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(viridisLite))
+suppressPackageStartupMessages(library(RColorBrewer))
 ```
 
 ```{r functions}
@@ -148,25 +151,15 @@ threshold_symmetric <- params %>%
 # Cluster solutions
 nk_mouse <- 4
 nk_human <- 2
-```
 
-```{r}
-# df_similarity_nk %>% 
-#   arrange(nk, desc(similarity)) 
-```
-
-```{r}
-# df_ss_clusters <- df_similarity_nk %>% 
-#   top_n(n = 2, wt = similarity) %>% 
-#   select(mouse_cluster_id, human_cluster_id) %>% 
-#   separate(mouse_cluster_id, into = c("mouse_nk", "mouse_k"), remove = FALSE) %>% 
-#   separate(human_cluster_id, into = c("human_nk", "human_k"), remove = FALSE) %>% 
-#   arrange(mouse_cluster_id)
+# Black rectangle grob
+fig2_ss_black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
+fig2_empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
 ```
 
 ```{r fig-ss-mouse-resample}
 # Mouse images need to be resampled to 50um
-run <- TRUE
+run <- FALSE
 if (run) {
   for (j in jacobians) {
     
@@ -197,6 +190,7 @@ list_mouse_centroids <- vector(mode = "list", length = length(jacobians))
 names(list_mouse_centroids) <- jacobians
 for (j in jacobians) {
   
+  # Iterate over clusters in nk solution
   list_mouse_centroids[[j]] <- vector(mode = "list", length = nk_mouse)
   names(list_mouse_centroids[[j]]) <- paste(nk_mouse, 1:nk_mouse, sep = "-")
   for (k in 1:nk_mouse) {
@@ -221,6 +215,7 @@ list_human_centroids <- vector(mode = "list", length = length(jacobians))
 names(list_human_centroids) <- jacobians
 for (j in jacobians) {
   
+  # Iterate over clusters in nk solution
   list_human_centroids[[j]] <- vector(mode = "list", length = nk_human)
   names(list_human_centroids[[j]]) <- paste(nk_human, 1:nk_human, sep = "-")
   for (k in 1:nk_human) {
@@ -233,7 +228,7 @@ for (j in jacobians) {
                                     threshold_value = threshold_value,
                                     threshold_symmetric = threshold_symmetric)
     
-    # Crop image
+    # Crop image to remove black space
     img_human <- mincArray(img_human)
     img_human <- img_human[human_slices_dim_1,,human_slices_dim_3]
     list_human_centroids[[j]][[k]] <- img_human
@@ -243,54 +238,58 @@ for (j in jacobians) {
 ```
 
 ```{r fig2-ss-mouse-thresholds}
+# Data frame to store mouse image thresholds
 df_mouse_thresholds <- tibble(nk = rep(nk_mouse, nk_mouse),
                               k = 1:nk_mouse) %>% 
   unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
   mutate(threshold_min = 0, 
          threshold_max = 0)
 
+# Get min/max thresholds for each mouse image
 for (i in 1:nrow(df_mouse_thresholds)) {
-  
   mouse_img_abs <- abs(list_mouse_centroids[["relative"]][[i]])
   mouse_img_abs <- mouse_img_abs[mouse_img_abs > 0]
   df_mouse_thresholds[[i, "threshold_max"]] <- max(mouse_img_abs)
   df_mouse_thresholds[[i, "threshold_min"]] <- min(mouse_img_abs)
-  
 }
 ```
 
 ```{r fig2-ss-human-thresholds}
+# Data frame to store human image thresholds
 df_human_thresholds <- tibble(nk = rep(nk_human, nk_human),
                               k = 1:nk_human) %>% 
   unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
   mutate(threshold_min = 0, 
          threshold_max = 0)
 
+# Get min/max thresholds for each human image
 for (i in 1:nrow(df_human_thresholds)) {
-  
   human_img_abs <- abs(list_human_centroids[["relative"]][[i]])
   human_img_abs <- human_img_abs[human_img_abs > 0]
   df_human_thresholds[[i, "threshold_max"]] <- max(human_img_abs)
   df_human_thresholds[[i, "threshold_min"]] <- min(human_img_abs)
-  
 }
 ```
 
 ```{r fig2-ss-thresholds}
+# Compute global min/max mouse thresholds
 mouse_min <- min(df_mouse_thresholds$threshold_min)
 mouse_max <- max(df_mouse_thresholds$threshold_max)
 
+# Compute global min/max human thresholds
 human_min <- min(df_human_thresholds$threshold_min)
 human_max <- max(df_human_thresholds$threshold_max)
 
+# Compute global thresholds
 global_min <- min(c(mouse_min, human_min))
 global_max <- max(c(mouse_max, human_max))
 
+# Print thresholds
 print(c(global_min, global_max))
 ```
 
-
-```{r}
+```{r fig2-ss-params}
+# Number of slices per ss
 ss_nslices <- 5
 
 # Human slices
@@ -317,40 +316,13 @@ mouse_anat_high <- 2000
 # mouse_overlay_low <- 0.29
 # mouse_overlay_high <- 0.6
 
+# Overlay thresholds from previous code chunk
 overlay_low <- 0.19
 overlay_high <- 1.6
 ```
 
-```{r}
-fig2_ss_human_slice_grobs <- vector(mode = "list", length = nk_human)
-names(fig2_ss_human_slice_grobs) <- names(list_human_centroids[["relative"]])
-for (k in 1:nk_human) {
-  fig2_ss_human_slice_grobs[[k]] <- vector(mode = "list", length = length(human_slices))
-  for (s in 1:length(human_slices)) {
-    fig2_ss_human_slice_grobs[[k]][[s]] <- sliceSeries(nrow = 1, ncol = 1, slice = human_slices[s]) %>% 
-      anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-      overlay(list_human_centroids[["relative"]][[k]],
-              low = overlay_low, high = overlay_high,
-              symmetric = TRUE) %>% 
-      grobify()
-  }
-}
-
-# Number of rows and columns in slice series
-ss_nrow <- ss_nslices
-ss_ncol <- 1
-
-fig2_ss_human_grobs <- vector(mode = "list", length = nk_human)
-names(fig2_ss_human_grobs) <- names(fig2_ss_human_slice_grobs)
-for (k in 1:nk_human) {
-  fig2_ss_human_grobs[[k]] <- arrangeGrob(grobs = fig2_ss_human_slice_grobs[[k]],
-                                          layout_matrix = matrix(1:ss_nrow),
-                                          widths = unit(rep(1, ss_ncol)/ss_ncol, "npc"),
-                                          heights = unit(rep(1, ss_nrow)/ss_nrow, "npc"))
-}
-```
-
-```{r}
+```{r fig2-ss-mouse-imgs}
+# For each mouse cluster, create a set of coronal slices
 fig2_ss_mouse_slice_grobs <- vector(mode = "list", length = nk_mouse)
 names(fig2_ss_mouse_slice_grobs) <- names(list_mouse_centroids[["relative"]])
 for (k in 1:nk_mouse) {
@@ -369,6 +341,7 @@ for (k in 1:nk_mouse) {
 ss_nrow <- ss_nslices
 ss_ncol <- 1
 
+# Combine mouse coronal slices into a slice series
 fig2_ss_mouse_grobs <- vector(mode = "list", length = nk_mouse)
 names(fig2_ss_mouse_grobs) <- names(fig2_ss_mouse_slice_grobs)
 for (k in 1:nk_mouse) {
@@ -379,38 +352,166 @@ for (k in 1:nk_mouse) {
 }
 ```
 
+```{r fig2-ss-human-imgs}
+# For each human cluster, create a set of coronal slices
+fig2_ss_human_slice_grobs <- vector(mode = "list", length = nk_human)
+names(fig2_ss_human_slice_grobs) <- names(list_human_centroids[["relative"]])
+for (k in 1:nk_human) {
+  fig2_ss_human_slice_grobs[[k]] <- vector(mode = "list", length = length(human_slices))
+  for (s in 1:length(human_slices)) {
+    fig2_ss_human_slice_grobs[[k]][[s]] <- sliceSeries(nrow = 1, ncol = 1, slice = human_slices[s]) %>% 
+      anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
+      overlay(list_human_centroids[["relative"]][[k]],
+              low = overlay_low, high = overlay_high,
+              symmetric = TRUE) %>% 
+      grobify()
+  }
+}
 
-```{r}
-fig2_ss_width <- 8.5
+# Number of rows and columns in slice series
+ss_nrow <- ss_nslices
+ss_ncol <- 1
 
+# Combine human coronal slices into a slice series
+fig2_ss_human_grobs <- vector(mode = "list", length = nk_human)
+names(fig2_ss_human_grobs) <- names(fig2_ss_human_slice_grobs)
+for (k in 1:nk_human) {
+  fig2_ss_human_grobs[[k]] <- arrangeGrob(grobs = fig2_ss_human_slice_grobs[[k]],
+                                          layout_matrix = matrix(1:ss_nrow),
+                                          widths = unit(rep(1, ss_ncol)/ss_ncol, "npc"),
+                                          heights = unit(rep(1, ss_nrow)/ss_nrow, "npc"))
+}
+```
+
+```{r fig2-ss-mouse-labels}
+fig2_ss_mouse_labels <- str_c(nk_mouse, 1:nk_mouse, sep = "-")
+fig2_ss_mouse_labels_width <- 1/nk_mouse
+fig2_ss_mouse_labels_x <- fig2_ss_mouse_labels_width/2 + 0:(nk_mouse-1)*fig2_ss_mouse_labels_width
+fig2_ss_mouse_labels_grob <- gTree(children = gList(fig2_ss_black_rect_grob,
+                                                    textGrob(label = fig2_ss_mouse_labels,
+                                                             x = fig2_ss_mouse_labels_x,
+                                                             gp = gpar(fontsize = 10,
+                                                                       col = "white"))))
+```
+
+```{r fig2-ss-human-labels}
+fig2_ss_human_labels <- str_c(nk_human, 1:nk_human, sep = "-")
+fig2_ss_human_labels_width <- 1/nk_human
+fig2_ss_human_labels_x <- fig2_ss_human_labels_width/2 + 0:(nk_human-1)*fig2_ss_human_labels_width
+fig2_ss_human_labels_grob <- gTree(children = gList(fig2_ss_black_rect_grob,
+                                                    textGrob(label = fig2_ss_human_labels,
+                                                             x = fig2_ss_human_labels_x,
+                                                             gp = gpar(fontsize = 10,
+                                                                       col = "white"))))
+```
+
+```{r fig2-ss-legend}
+# Global properties for legend
+fig2_ss_legend_scale_y <- 0.5
+fig2_ss_legend_scale_height <- 0.9
+fig2_ss_legend_labels_y <- fig2_ss_legend_scale_y + 0.5*fig2_ss_legend_scale_height*c(-1, 1)
+fig2_ss_legend_labels_fontsize <- 8
+fig2_ss_legend_labels_colour <- "white"
+
+# Positive scale raster grob
+fig2_ss_legend_pos_scale_palette <- rev(MRIcrotome:::defaultCol())
+fig2_ss_legend_pos_scale_raster_grob <- rasterGrob(image = cbind(fig2_ss_legend_pos_scale_palette),
+                                                   y = fig2_ss_legend_scale_y,
+                                                   width = 1, height = fig2_ss_legend_scale_height)
+fig2_ss_legend_pos_scale_raster_grob <- gTree(children = gList(fig2_ss_black_rect_grob, 
+                                                               fig2_ss_legend_pos_scale_raster_grob))
+
+# Positive scale labels
+fig2_ss_legend_pos_labels <- c(overlay_low, overlay_high)
+fig2_ss_legend_pos_labels_grob <- textGrob(label = fig2_ss_legend_pos_labels,
+                                           y = fig2_ss_legend_labels_y,
+                                           gp = gpar(fontsize = fig2_ss_legend_labels_fontsize,
+                                                     col = fig2_ss_legend_labels_colour))
+fig2_ss_legend_pos_labels_grob <- gTree(children = gList(fig2_ss_black_rect_grob, 
+                                                         fig2_ss_legend_pos_labels_grob))
+
+# Negative scale raster grob
+fig2_ss_legend_neg_scale_palette <- MRIcrotome:::defaultRCol()
+fig2_ss_legend_neg_scale_raster_grob <- rasterGrob(image = cbind(fig2_ss_legend_neg_scale_palette),
+                                                   y = fig2_ss_legend_scale_y,
+                                                   width = 1, height = fig2_ss_legend_scale_height)
+fig2_ss_legend_neg_scale_raster_grob <- gTree(children = gList(fig2_ss_black_rect_grob, 
+                                                               fig2_ss_legend_neg_scale_raster_grob))
+
+# Negative scale labels
+fig2_ss_legend_neg_labels <- -1*rev(fig2_ss_legend_pos_labels)
+fig2_ss_legend_neg_labels_grob <- textGrob(label = fig2_ss_legend_neg_labels,
+                                           y = fig2_ss_legend_labels_y,
+                                           gp = gpar(fontsize = fig2_ss_legend_labels_fontsize,
+                                                     col = fig2_ss_legend_labels_colour))
+fig2_ss_legend_neg_labels_grob <- gTree(children = gList(fig2_ss_black_rect_grob, 
+                                                         fig2_ss_legend_neg_labels_grob))
+
+# Legend grob
+fig2_ss_legend_grob <- arrangeGrob(fig2_ss_legend_pos_scale_raster_grob,
+                                   fig2_ss_legend_pos_labels_grob,
+                                   fig2_ss_black_rect_grob,
+                                   fig2_ss_legend_neg_scale_raster_grob,
+                                   fig2_ss_legend_neg_labels_grob,
+                                   layout_matrix = rbind(c(01, 02),
+                                                         c(03, 03),
+                                                         c(04, 05)),
+                                   heights = unit(c(0.49, 0.02, 0.49), "npc"))
+
+```
+
+```{r fig2-ss-grob}
+# Total panel width
+fig2_ss_width <- 5.0
+
+# Legend width
+fig2_ss_legend_width <- 0.5
+
+# Padding width
 fig2_padding_width <- 0.4
 
-fig2_ss_width_nopadding <- fig2_ss_width - fig2_padding_width
+# Total width of slice series without padding
+fig2_ss_width_nopadding <- fig2_ss_width - fig2_padding_width - fig2_ss_legend_width
 
+# Number of slice series
 n_ss <- length(fig2_ss_human_grobs) + length(fig2_ss_mouse_grobs)
 
+# Width of one slice series
 fig2_ss_width_1 <- fig2_ss_width_nopadding/n_ss
 
+# Height of slice series
 fig2_ss_height <- fig2_ss_width_1*ss_nrow
 
-fig2_ss_widths <- c(rep(fig2_ss_width_1, nk_human), fig2_padding_width, rep(fig2_ss_width_1, nk_mouse))
-fig2_ss_heights <- fig2_ss_height
+# Grid widths and heights
+fig2_ss_widths <- c(rep(fig2_ss_width_1, nk_human), fig2_padding_width, rep(fig2_ss_width_1, nk_mouse), fig2_ss_legend_width)
+fig2_ss_heights <- c(0.25, fig2_ss_height)
 
+# Widths and heights in inches
 fig2_ss_widths_in <- unit(fig2_ss_widths, "inch")
 fig2_ss_heights_in <- unit(fig2_ss_heights, "inch")
 
-fig2_ss_grobs_list <- c(fig2_ss_human_grobs,
-                        list(rectGrob(gp = gpar(fill = "black"))),
-                        fig2_ss_mouse_grobs)
+# List of grobs
+fig2_ss_grobs_list <- c(
+  list(fig2_ss_human_labels_grob), #1
+  list(fig2_ss_black_rect_grob),   #2
+  list(fig2_ss_mouse_labels_grob), #3
+  list(fig2_ss_black_rect_grob),   #4
+  fig2_ss_human_grobs,             #5-6
+  list(fig2_ss_black_rect_grob),   #7
+  fig2_ss_mouse_grobs,             #8-11
+  list(fig2_ss_legend_grob)        #12
+)
 
+# Slice series grob
 fig2_ss_grob <- arrangeGrob(grobs = fig2_ss_grobs_list,
+                            layout_matrix = rbind(c(01, 01, 02, 03, 03, 03, 03, 04),
+                                                  c(05, 06, 07, 08, 09, 10, 11, 12)),
                             widths = fig2_ss_widths_in,
                             heights = fig2_ss_heights_in)
 
-
+# Slice series width and height
 fig2_ss_width <- sum(fig2_ss_widths)
 fig2_ss_height <- sum(fig2_ss_heights)
-
 
 outfile <- "figure2_ss.pdf"
 outfile <- file.path(output_dir, outfile)
@@ -421,295 +522,59 @@ grid.draw(fig2_ss_grob)
 dev.off()
 ```
 
+```{r fig2-grob}
+# Grid widths and heights
+fig2_widths <- c(fig2_ss_width, 0.2, 2.8)
+fig2_heights <- c(fig2_ss_height, 0.2, 3.0)
+# fig2_heights <- c(2.0, 0.2, fig2_ss_height*(0.25), fig2_ss_height*(1-0.25))
+
+# Widths and heights in inches
+fig2_widths_in <- unit(fig2_widths, "in")
+fig2_heights_in <- unit(fig2_heights, "in")
+
+# With gridlines
+fig2_grob_grid <- arrangeGrob(gTree(children = gList(fig2_empty_rect_grob, fig2_ss_grob)),
+                              fig2_empty_rect_grob,
+                              fig2_empty_rect_grob,
+                              fig2_empty_rect_grob,
+                              fig2_empty_rect_grob,
+                              fig2_empty_rect_grob,
+                              fig2_empty_rect_grob,
+                              layout_matrix = rbind(c(01, 02, 03),
+                                                    c(04, 04, 04), 
+                                                    c(05, 06, 07)),
+                              widths = fig2_widths_in,
+                              heights = fig2_heights_in)
 
 
-```{r}
-fig2_ss_human_grobs <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = human_slices) %>%
-  anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-  overlay(list_human_centroids[["relative"]][[1]],
-          low = overlay_low, high = overlay_high,
-          symmetric = TRUE) %>% 
-  sliceSeries(nrow = ss_nslices, ncol = 1, slices = human_slices) %>%
-  anatomy() %>% 
-  overlay(list_human_centroids[["relative"]][[2]],
-          low = overlay_low, high = overlay_high,
-          symmetric = TRUE) %>% 
-  grobify()
+# Figure dimensions
+# Correct dimensions
+fig2_width <- unit(sum(fig2_widths), "inch")
+fig2_height <- unit(sum(fig2_heights), "inch")
 
-grid.newpage()
-grid.draw(fig2_ss_human_grobs)
-```
+fig2_grob_grid <- gTree(children = gList(rectGrob(width = fig2_width,
+                                                  height = fig2_height,
+                                                  gp = gpar(fill = NA)), 
+                                         fig2_grob_grid))
 
+page_width <- unit(8.5, "in")
+page_height <- unit(11.0, "in")
 
-```{r}
-fig2_ss_mouse_grobs <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-  overlay(list_mouse_centroids[["relative"]][[1]], 
-          low = overlay_low, high = overlay_high, 
-          symmetric = TRUE) %>% 
-  sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy() %>% 
-  overlay(list_mouse_centroids[["relative"]][[2]], 
-          low = overlay_low, high = overlay_high, 
-          symmetric = TRUE) %>% 
-  sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy() %>% 
-  overlay(list_mouse_centroids[["relative"]][[3]], 
-          low = overlay_low, high = overlay_high, 
-          symmetric = TRUE) %>% 
-  sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy() %>% 
-  overlay(list_mouse_centroids[["relative"]][[4]], 
-          low = overlay_low, high = overlay_high, 
-          symmetric = TRUE) %>% 
-  grobify()
-
-grid.newpage()
-grid.draw(fig2_ss_mouse_grobs)
-```
-
-```{r}
-# Full width
-fig2_ss_width <- 8.5
-
-# Width of padding between individual slice series
-fig2_padding_width <- 0.2
-
-fig2_ss_width_nopadding <- fig2_ss_width - fig2_padding_width
-
-fig2_ss_mouse_width <- fig2_ss_width_nopadding*nk_mouse/(nk_mouse + nk_human)
-
-fig2_ss_human_width <- fig2_ss_width_nopadding*nk_human/(nk_mouse + nk_human)
-
-fig2_ss_height <- fig2_ss_width_nopadding*ss_nslices/(nk_mouse + nk_human)
-
-fig2_ss_widths <- c(fig2_ss_human_width, 0.2, fig2_ss_mouse_width)
-fig2_ss_heights <- c(fig2_ss_height)
-
-fig2_ss_widths_in <- unit(fig2_ss_widths, "inch")
-fig2_ss_heights_in <- unit(fig2_ss_heights, "inch")
-
-fig2_ss_grob <- arrangeGrob(fig2_ss_human_grobs,
-                            rectGrob(),
-                            fig2_ss_mouse_grobs,
-                            layout_matrix = rbind(c(01, 02, 03)),
-                            widths = fig2_ss_widths_in,
-                            heights = fig2_ss_heights_in)
-
-fig2_ss_width <- sum(fig2_ss_widths)
-fig2_ss_height <- sum(fig2_ss_heights)
-
-outfile <- "figure2_ss.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig2_ss_width, "in"),
-    height = unit(fig2_ss_height, "in"))
-grid.draw(fig2_ss_grob)
-dev.off()
-```
-
-
-```{r}
-fig2_ss_widths <- c(fig2_ss_width_nopadding/2, 0.2, fig2_ss_width_nopadding/2)
-fig2_ss_heights <- c(0.25, fig2_ss_height_nolabels, 0.5)
-
-fig2_ss_widths_in <- unit(fig2_ss_widths, "inch")
-fig2_ss_heights_in <- unit(fig2_ss_heights, "inch")
-
-
-#Whatever one slice series width ends up being, the height must be width*(1/2)*(5)
-
-fig2_ss_grob <- arrangeGrob(fig2_ss_1_labels_grob,
-                            rectGrob(gp = gpar(fill = "black")),
-                            fig2_ss_2_labels_grob,
-                            fig2_ss_1_grob,
-                            fig2_ss_2_grob,
-                            fig2_ss_scale_grob,
-                            layout_matrix = rbind(c(01, 02, 03),
-                                                  c(04, 02, 05),
-                                                  c(06, 06, 06)),
-                            widths = fig2_ss_widths_in,
-                            heights = fig2_ss_heights_in)
-
-fig2_ss_width <- sum(fig2_ss_widths)
-fig2_ss_height <- sum(fig2_ss_heights)
-
-outfile <- "figure2_ss.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig2_ss_width, "in"),
-    height = unit(fig2_ss_height, "in"))
-grid.draw(fig2_ss_grob)
-dev.off()
-```
-
-```{r}
-# Number of rows and columns in slice series
-ss_nrow <- ss_nslices
-ss_ncol <- 2
-
-# Full width of slice series panel
-# fig2_ss_width <- fig2_heatmap_width
-fig2_ss_width <- 3.0
-
-# Width of padding between individual slice series
-fig2_padding_width <- 0.2
-
-# Width of slice series panel without padding
-fig2_ss_width_nopadding <- fig2_ss_width - fig2_padding_width
-
-# Height of slice series without labels
-# Computed so that each slice has an aspect ratio of 1
-fig2_ss_height_nolabels <- (fig2_ss_width_nopadding/2)*(ss_nrow/ss_ncol)
-
-fig2_ss_1_grob <- arrangeGrob(fig2_ss_1_mouse_grobs[[1]],
-                              fig2_ss_1_mouse_grobs[[2]],
-                              fig2_ss_1_mouse_grobs[[3]],
-                              fig2_ss_1_mouse_grobs[[4]],
-                              fig2_ss_1_mouse_grobs[[5]],
-                              fig2_ss_1_human_grobs[[1]],
-                              fig2_ss_1_human_grobs[[2]],
-                              fig2_ss_1_human_grobs[[3]],
-                              fig2_ss_1_human_grobs[[4]],
-                              fig2_ss_1_human_grobs[[5]],
-                              layout_matrix = matrix(1:(ss_nrow*ss_ncol),
-                                                     nrow = ss_nrow, ncol = ss_ncol,
-                                                     byrow = FALSE),
-                              widths = unit(rep(1, ss_ncol)/ss_ncol, "npc"),
-                              heights = unit(rep(1, ss_nrow)/ss_nrow, "npc"))
-
-fig2_ss_2_grob <- arrangeGrob(fig2_ss_2_mouse_grobs[[1]],
-                              fig2_ss_2_mouse_grobs[[2]],
-                              fig2_ss_2_mouse_grobs[[3]],
-                              fig2_ss_2_mouse_grobs[[4]],
-                              fig2_ss_2_mouse_grobs[[5]],
-                              fig2_ss_2_human_grobs[[1]],
-                              fig2_ss_2_human_grobs[[2]],
-                              fig2_ss_2_human_grobs[[3]],
-                              fig2_ss_2_human_grobs[[4]],
-                              fig2_ss_2_human_grobs[[5]],
-                              layout_matrix = matrix(1:(ss_nrow*ss_ncol),
-                                                     nrow = ss_nrow, ncol = ss_ncol,
-                                                     byrow = FALSE),
-                              widths = unit(rep(1, ss_ncol)/ss_ncol, "npc"),
-                              heights = unit(rep(1, ss_nrow)/ss_nrow, "npc"))
-
-```
-
-```{r}
-fig2_ss_1_labels <- c(df_ss_clusters[[1, "mouse_cluster_id"]],
-                      df_ss_clusters[[1, "human_cluster_id"]])
-
-fig2_ss_1_labels_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
-                                                textGrob(label = fig2_ss_1_labels,
-                                                         x = c(0.25, 0.75),
-                                                         gp = gpar(fontsize = 10,
-                                                                   col = "white"))))
-```
-
-```{r}
-fig2_ss_2_labels <- c(df_ss_clusters[[2, "mouse_cluster_id"]],
-                      df_ss_clusters[[2, "human_cluster_id"]])
-
-fig2_ss_2_labels_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
-                                                textGrob(label = fig2_ss_2_labels,
-                                                         x = c(0.25, 0.75),
-                                                         gp = gpar(fontsize = 10,
-                                                                   col = "white"))))
-```
-
-
-```{r}
-fig2_ss_scale_x <- 0.5
-fig2_ss_scale_width <- 0.9
-fig2_ss_labels_x <- fig2_ss_scale_x + 0.5*fig2_ss_scale_width*c(-1, 1)
-fig2_ss_labels_fontsize <- 8
-fig2_ss_labels_colour <- "white"
-
-fig2_ss_scale_pos_palette <- MRIcrotome:::defaultCol()
-fig2_ss_scale_pos_raster_grob <- rasterGrob(image = rbind(fig2_ss_scale_pos_palette),
-                                            x = fig2_ss_scale_x,
-                                            height = 1, width = fig2_ss_scale_width)
-fig2_ss_scale_pos_raster_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")), 
-                                                        fig2_ss_scale_pos_raster_grob))
-
-fig2_ss_scale_pos_labels <- c(overlay_low, overlay_high)
-fig2_ss_scale_pos_labels_grob <- textGrob(label = fig2_ss_scale_pos_labels,
-                                          x = fig2_ss_labels_x,
-                                          gp = gpar(fontsize = fig2_ss_labels_fontsize,
-                                                    col = fig2_ss_labels_colour))
-fig2_ss_scale_pos_labels_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")), 
-                                                        fig2_ss_scale_pos_labels_grob))
-
-fig2_ss_scale_neg_palette <- rev(MRIcrotome:::defaultRCol())
-fig2_ss_scale_neg_raster_grob <- rasterGrob(image = rbind(fig2_ss_scale_neg_palette),
-                                            x = fig2_ss_scale_x,
-                                            height = 1, width = fig2_ss_scale_width)
-fig2_ss_scale_neg_raster_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")), 
-                                                        fig2_ss_scale_neg_raster_grob))
-
-fig2_ss_scale_neg_labels <- -1*rev(fig2_ss_scale_pos_labels)
-fig2_ss_scale_neg_labels_grob <- textGrob(label = fig2_ss_scale_neg_labels,
-                                          x = fig2_ss_labels_x,
-                                          gp = gpar(fontsize = fig2_ss_labels_fontsize,
-                                                    col = fig2_ss_labels_colour))
-fig2_ss_scale_neg_labels_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")), 
-                                                        fig2_ss_scale_neg_labels_grob))
-
-fig2_ss_scale_grob <- arrangeGrob(fig2_ss_scale_neg_raster_grob,
-                                  rectGrob(gp = gpar(fill = "black")),
-                                  fig2_ss_scale_pos_raster_grob,
-                                  fig2_ss_scale_neg_labels_grob,
-                                  fig2_ss_scale_pos_labels_grob,
-                                  layout_matrix = rbind(c(01, 02, 03),
-                                                        c(04, 02, 05)),
-                                  widths = unit(c(0.49, 0.02, 0.49), "npc"))
-```
-
-
-```{r}
-fig2_ss_widths <- c(fig2_ss_width_nopadding/2, 0.2, fig2_ss_width_nopadding/2)
-fig2_ss_heights <- c(0.25, fig2_ss_height_nolabels, 0.5)
-
-fig2_ss_widths_in <- unit(fig2_ss_widths, "inch")
-fig2_ss_heights_in <- unit(fig2_ss_heights, "inch")
-
-
-#Whatever one slice series width ends up being, the height must be width*(1/2)*(5)
-
-fig2_ss_grob <- arrangeGrob(fig2_ss_1_labels_grob,
-                            rectGrob(gp = gpar(fill = "black")),
-                            fig2_ss_2_labels_grob,
-                            fig2_ss_1_grob,
-                            fig2_ss_2_grob,
-                            fig2_ss_scale_grob,
-                            layout_matrix = rbind(c(01, 02, 03),
-                                                  c(04, 02, 05),
-                                                  c(06, 06, 06)),
-                            widths = fig2_ss_widths_in,
-                            heights = fig2_ss_heights_in)
-
-fig2_ss_width <- sum(fig2_ss_widths)
-fig2_ss_height <- sum(fig2_ss_heights)
-
-outfile <- "figure2_ss.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig2_ss_width, "in"),
-    height = unit(fig2_ss_height, "in"))
-grid.draw(fig2_ss_grob)
+# Render figure
+fig2_outfile <- "figure2_with_grid.pdf"
+fig2_outfile <- file.path(output_dir, fig2_outfile)
+pdf(file = fig2_outfile,
+    width = page_width,
+    height = page_height)
+grid.draw(fig2_grob_grid)
 dev.off()
 ```
 
 
 # Panel: Mouse-human cluster similarity matrices
 
-```{r}
-# Number of clusters
-nk <- 2
-```
 
-```{r}
+```{r fig2-sim-import}
 # Path to mouse-human similarity directory
 similarity_dir <- file.path(pipeline_dir, "similarity")
 
@@ -752,32 +617,26 @@ for (j in jacobians) {
 }
 
 # Filter similarity data for desired cluster numbers
-list_similarity_nk <- vector(mode = "list", length = length(nk))
-names(list_similarity_nk) <- nk
-for (i in 1:length(list_similarity_nk)) {
-  
-  list_similarity_nk[[i]] <- vector(mode = "list", length = length(jacobians))
-  names(list_similarity_nk[[i]]) <- jacobians
-  for (j in jacobians) {
-    list_similarity_nk[[i]][[j]] <- list_similarity[[j]] %>% 
-      filter(human_nk == nk[i],
-             mouse_nk == nk[i]) %>% 
-      mutate(jacobians = j)
-  }
-  
-  list_similarity_nk[[i]] <- list_similarity_nk[[i]] %>% 
-    reduce(.f = bind_rows) %>% 
-    group_by(human_cluster_id, mouse_cluster_id) %>% 
-    summarise(similarity = mean(similarity), .groups = "drop")
+list_similarity_nk <- vector(mode = "list", length = length(jacobians))
+names(list_similarity_nk) <- jacobians
+for (j in jacobians) {
+  list_similarity_nk[[j]] <- list_similarity[[j]] %>% 
+    filter(human_nk == nk_human,
+           mouse_nk == nk_mouse) %>% 
+    mutate(jacobians = j)
 }
+
+# Combine absolute and relative jacobian similarities
+df_similarity_nk <- list_similarity_nk %>% 
+  reduce(.f = bind_rows) %>% 
+  group_by(human_cluster_id, mouse_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
 ```
 
-```{r}
-similarity_max <- map_dbl(.x = list_similarity_nk, .f = function(x){max(x[["similarity"]])})
-similarity_min <- map_dbl(.x = list_similarity_nk, .f = function(x){min(x[["similarity"]])})
-
-similarity_max <- max(similarity_max)
-similarity_min <- min(similarity_min)
+```{r fig2-sim-heatmap-palette}
+similarity_max <- max(df_similarity_nk[["similarity"]])
+similarity_min <- min(df_similarity_nk[["similarity"]])
 
 heatmap_scale_values <- seq(similarity_min, similarity_max, length.out = 255)
 heatmap_scale_values <- (heatmap_scale_values - similarity_min)/(similarity_max - similarity_min)
@@ -790,8 +649,8 @@ heatmap_scale_colours <- magma(n = 255, begin = 0.3)
 heatmap_scale_palette <- colorRampPalette(heatmap_scale_colours)(255)
 ```
 
-```{r fig2-similarity-heatmap}
-fig2_heatmap <- ggplot(list_similarity_nk[[1]], 
+```{r fig2-sim-heatmap}
+fig2_heatmap <- ggplot(df_similarity_nk, 
                        aes(x = human_cluster_id, 
                            y = fct_rev(mouse_cluster_id), 
                            fill = similarity)) + 
@@ -801,23 +660,105 @@ fig2_heatmap <- ggplot(list_similarity_nk[[1]],
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values) +
-  scale_x_discrete(expand = expansion(mult = 0), position = "bottom",
-                   labels = as.character(1:nk[1])) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top",
+                   labels = as.character(1:nk_human)) + 
   scale_y_discrete(expand = expansion(mult = 0),
-                   labels = rev(as.character(1:nk[1]))) + 
+                   labels = rev(as.character(1:nk_mouse))) + 
   theme_bw() + 
-  theme(axis.ticks = element_blank())
-
-# outfile <- paste0("figure3_heatmap_nk", nk[1], ".pdf")
-# outfile <- file.path(output_dir, outfile)
-# pdf(file = outfile, 
-#     width = unit(10, "in"),
-#     height = unit(10, "in"))
-# print(fig2_heatmap_1)
-# dev.off()
+  theme(axis.ticks = element_blank(),
+        legend.title.align = 1)
 
 fig2_heatmap_grob <- grid.force(ggplotGrob(fig2_heatmap))
+fig2_heatmap_panel_grob <- getGrob(fig2_heatmap_grob, "panel.7-5-7-5")
+fig2_heatmap_legend_grob <- getGrob(fig2_heatmap_grob, "guides.3-3-3-3")
+fig2_heatmap_xtitle_grob <- getGrob(fig2_heatmap_grob, "axis-t.6-5-6-5")
+fig2_heatmap_xtext_grob <- getGrob(fig2_heatmap_grob, "xlab-t.5-5-5-5")
+fig2_heatmap_ytitle_grob <- getGrob(fig2_heatmap_grob, "axis-l.7-4-7-4")
+fig2_heatmap_ytext_grob <- getGrob(fig2_heatmap_grob, "ylab-l.7-3-7-3")
 ```
+
+
+```{r fig2-sim-heatmap}
+# fig2_heatmap_legend_raster_grob <- fig2_heatmap_legend_grob$children$`bar.4-2-4-2`
+# fig2_heatmap_legend_raster_grob$height <- unit(1.0, "npc")
+# 
+# fig2_heatmap_legend_grob$children$`label.4-4-4-4`$children$GRID.text.1060$y
+# 
+# fig2_heatmap_widths <- c(0.1, 0.1, 0.6, 0.2)
+# fig2_heatmap_heights <- c(0.1, 0.1, 0.8)
+# 
+# tmp <- arrangeGrob(fig2_heatmap_xtitle_grob,
+#                    fig2_heatmap_xtext_grob,
+#                    fig2_heatmap_ytitle_grob,
+#                    fig2_heatmap_ytext_grob,
+#                    fig2_heatmap_panel_grob,
+#                    fig2_heatmap_legend_raster_grob,
+#                    layout_matrix = rbind(c(NA, NA, 01, NA),
+#                                          c(NA, NA, 02, NA),
+#                                          c(03, 04, 05, 06)),
+#                    widths = fig2_heatmap_widths,
+#                    heights = fig2_heatmap_heights)
+# 
+# outfile <- paste0("tmp.pdf")
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile,
+#     width = unit(10, "in"),
+#     height = unit(10, "in"))
+# grid.draw(tmp)
+# dev.off()
+# 
+# fig2_heatmap_legend_grob$children$`bar.4-2-4-2`
+
+```
+
+```{r fig2-grob}
+# Grid widths and heights
+fig2_widths <- c(fig2_ss_width, 0.2, 2.8)
+fig2_heights <- c(fig2_ss_height, 0.2, 3.0)
+# fig2_heights <- c(2.0, 0.2, fig2_ss_height*(0.25), fig2_ss_height*(1-0.25))
+
+# Widths and heights in inches
+fig2_widths_in <- unit(fig2_widths, "in")
+fig2_heights_in <- unit(fig2_heights, "in")
+
+# With gridlines
+fig2_grob_grid <- arrangeGrob(gTree(children = gList(fig2_empty_rect_grob, fig2_ss_grob)),
+                              fig2_empty_rect_grob,
+                              gTree(children = gList(fig2_empty_rect_grob, fig2_heatmap_grob)),
+                              fig2_empty_rect_grob,
+                              fig2_empty_rect_grob,
+                              fig2_empty_rect_grob,
+                              fig2_empty_rect_grob,
+                              layout_matrix = rbind(c(01, 02, 03),
+                                                    c(04, 04, 04), 
+                                                    c(05, 06, 07)),
+                              widths = fig2_widths_in,
+                              heights = fig2_heights_in)
+
+
+# Figure dimensions
+# Correct dimensions
+fig2_width <- unit(sum(fig2_widths), "inch")
+fig2_height <- unit(sum(fig2_heights), "inch")
+
+fig2_grob_grid <- gTree(children = gList(rectGrob(width = fig2_width,
+                                                  height = fig2_height,
+                                                  gp = gpar(fill = NA)), 
+                                         fig2_grob_grid))
+
+page_width <- unit(8.5, "in")
+page_height <- unit(11.0, "in")
+
+# Render figure
+fig2_outfile <- "figure2_with_grid.pdf"
+fig2_outfile <- file.path(output_dir, fig2_outfile)
+pdf(file = fig2_outfile,
+    width = page_width,
+    height = page_height)
+grid.draw(fig2_grob_grid)
+dev.off()
+```
+
 
 # Panel: Mouse-human cluster similarity permutations
 
