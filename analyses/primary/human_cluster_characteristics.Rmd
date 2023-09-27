@@ -13,6 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(readxl))
 suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(ggbeeswarm))
 ```
 
 ```{r functions}
@@ -406,6 +408,44 @@ clusters_clinical_thresh <- clusters_clinical %>%
 ```
 
 ```{r}
+# for (s in 1:length(clinical_scales_thresh)) {
+#   p_scale_dist <- clusters_clinical_thresh %>% 
+#     select(x = clinical_scales_thresh[s]) %>% 
+#     filter(!is.na(x)) %>% 
+#     ggplot(aes(x = x)) + 
+#     geom_histogram() +
+#     labs(x = "Score",
+#          y = "Count",
+#          title = clinical_scales_thresh[s]) + 
+#     theme_bw()
+#   
+#   outfile <- paste0("clinical_scores_dist_", clinical_scales_thresh[s], ".pdf")
+#   outfile <- file.path(output_dir, outfile)
+#   pdf(file = outfile,
+#       width = unit(8, "inch"),
+#       height = unit(4, "inch"))
+#   print(p_scale_dist)
+#   dev.off()
+# }
+```
+
+AB21GCCS: 999
+OWL2OESS: 999
+OWL2OLCSS: 999
+RBSALLT: 999
+SSP_LOW_ENRGY_WEAK_RS: 0
+
+Don't want to remove these categorically. Only at time of analysis. Maybe just set the 999 values to NA?
+
+```{r}
+for (s in clinical_scales_thresh) {
+  scores <- clusters_clinical_thresh[[s]]
+  scores[scores == 999] <- NA
+  clusters_clinical_thresh[[s]] <- scores
+}
+```
+
+```{r}
 for (s in 1:length(clinical_scales_thresh)) {
   p_scale_dist <- clusters_clinical_thresh %>% 
     select(x = clinical_scales_thresh[s]) %>% 
@@ -428,11 +468,105 @@ for (s in 1:length(clinical_scales_thresh)) {
 ```
 
 
+```{r}
+nk <- 2
+for (s in 1:length(clinical_scales_thresh)) {
+  
+  df_plot <- clusters_clinical_thresh %>% 
+    select(k = all_of(paste0("nk", nk)),
+           scores = all_of(clinical_scales_thresh[s])) %>% 
+    filter(!is.na(scores)) %>% 
+    mutate(k = factor(k))
+  
+  df_plot_summary <- df_plot %>% 
+    group_by(k) %>% 
+    summarise(scores_med = median(scores),
+              scores_lwr = quantile(scores, probs = 0.25),
+              scores_upr = quantile(scores, probs = 0.75))
+  
+  p_nk2_scales <- ggplot(df_plot, 
+         aes(x = k, y = scores)) + 
+    geom_beeswarm(col = "grey50") + 
+    geom_crossbar(data = df_plot_summary,
+                  mapping = aes(y = scores_med, 
+                                ymin = scores_lwr, 
+                                ymax = scores_upr),
+                  fill = "grey70",
+                  alpha = 0.3) +
+      labs(y = "Scores",
+           title = clinical_scales_thresh[s]) + 
+      theme_bw()
+    
+    outfile <- paste0("clinical_scores_nk_2_", clinical_scales_thresh[s], ".pdf")
+    outfile <- file.path(output_dir, outfile)
+    pdf(file = outfile,
+        width = unit(8, "inch"),
+        height = unit(6, "inch"))
+    print(p_nk2_scales)
+    dev.off()
+  
+}
+```
+
+```{r}
+df_wilcoxon <- tibble(nk = 2, 
+                      scale = clinical_scales_thresh) %>% 
+  mutate(uval = 0, pval = 0, npatients = 0)
+for (i in 1:nrow(df_wilcoxon)) {
+ 
+    nk <- df_wilcoxon[[i, "nk"]]
+    s <- df_wilcoxon[[i, "scale"]]
+  
+    labels <- clusters_clinical_thresh[[paste0("nk", nk)]]
+    scores <- clusters_clinical_thresh[[s]]
+    
+    missing <- is.na(scores)
+    labels <- labels[!missing]
+    scores <- scores[!missing]
+    
+    labels_count <- table(labels)
+    test_ngroups <- length(labels_count) > 1
+    if (test_ngroups) {
+      wilcoxon <- wilcox.test(scores ~ factor(labels))
+      df_wilcoxon[[i, "uval"]] <- wilcoxon[["statistic"]]
+      df_wilcoxon[[i, "pval"]] <- wilcoxon[["p.value"]]
+    } else {
+      df_wilcoxon[[i, "uval"]] <- NA
+      df_wilcoxon[[i, "pval"]] <- NA
+    }
+    df_wilcoxon[[i, "npatients"]] <- length(labels)
+}
+
+```
+```{r}
+df_wilcoxon_p <- df_wilcoxon %>% 
+  mutate(pval_log = -log10(pval),
+         scale = factor(scale, levels = clinical_scales_thresh))
+
+pval_thresh <- c(0.1, 0.05, 0.01)
+pval_thresh_log <- -log10(pval_thresh)
+
+p_nk2_pvals <- ggplot(df_wilcoxon_p, 
+       aes(x = pval_log, y = scale)) + 
+  geom_point() +
+  geom_vline(xintercept = pval_thresh_log,
+             linetype = "dashed") +
+  labs(x = "-log10(p)",
+       y = "Clinical scale") + 
+  theme_bw()
+
+outfile <- paste0("clinical_scores_nk_2_wilcoxon_pvals.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "inch"),
+    height = unit(8, "inch"))
+print(p_nk2_pvals)
+dev.off()
+```
+
 
 ```{r}
 nk_max <- max(cluster_counts["nk"])
-
-min_group <- 50
 
 df_kw <- expand_grid(nk = 2:nk_max,
                      scale = clinical_scales_thresh) %>% 
@@ -442,8 +576,8 @@ for (i in 1:nrow(df_kw)) {
   nk <- df_kw[[i, "nk"]]
   s <- df_kw[[i, "scale"]]
   
-  labels <- clusters_clinical[[paste0("nk", nk)]]
-  scores <- clusters_clinical[[s]]
+  labels <- clusters_clinical_thresh[[paste0("nk", nk)]]
+  scores <- clusters_clinical_thresh[[s]]
   
   missing <- is.na(scores)
   labels <- labels[!missing]
@@ -451,9 +585,7 @@ for (i in 1:nrow(df_kw)) {
   
   labels_count <- table(labels)
   test_ngroups <- length(labels_count) > 1
-  test_groupsize <- all(labels_count > min_group)
-  test <- test_ngroups & test_groupsize
-  if (test) {
+  if (test_ngroups) {
     kw <- kruskal.test(x = scores, g = factor(labels))
     df_kw[[i, "chi2"]] <- kw[["statistic"]]
     df_kw[[i, "pval"]] <- kw[["p.value"]]
@@ -465,6 +597,49 @@ for (i in 1:nrow(df_kw)) {
   
 }
 ```
+
+```{r}
+df_kw_p <- df_kw %>% 
+  mutate(nk = factor(nk),
+         scale = factor(scale, levels = clinical_scales_thresh),
+         pval_log = -log10(pval),
+         significant = ifelse(pval < 0.05, "*", ""))
+
+p_kw_pvals <- ggplot(df_kw_p,
+       aes(x = nk, y = scale, fill = pval_log)) + 
+  geom_tile(col = "black") +
+  geom_text(mapping = aes(label = significant)) + 
+  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds")) +
+  labs(x = "nk",
+       y = "Clinical scale",
+       fill = "-log10(p)")
+
+outfile <- paste0("clinical_scores_kruskalwallis_pvals.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "inch"),
+    height = unit(8, "inch"))
+print(p_kw_pvals)
+dev.off()
+```
+```{r}
+df_kw_p_sig <- df_kw_p %>% 
+  filter(pval < 0.05)
+
+for (i in 1:nrow(df_kw_p_sig)) {
+  
+  i <- 1
+  
+  nk <- df_kw[[i, "nk"]]
+  s <- df_kw[[i, "scale"]]
+}
+```
+
+
+```{r}
+clusters_clinical_thresh
+```
+
 
 
 ```{r}
@@ -546,6 +721,7 @@ ggplot(df_anova_p,
        y = "Clinical scale",
        fill = "-log10(p)")
 ```
+
 ```{r}
 ggplot(df_anova_large_p,
        aes(x = nk, y = scale, fill = pval_log)) + 
