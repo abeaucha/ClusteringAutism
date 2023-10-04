@@ -1,0 +1,317 @@
+---
+title: "Figure 4"
+subtitle: "Clustering Autism"
+author: "Antoine Beauchamp"
+date: "2023-10-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(ggnewscale))
+# suppressPackageStartupMessages(library(RMINC))
+# suppressPackageStartupMessages(library(MRIcrotome))
+# suppressPackageStartupMessages(library(grid))
+# suppressPackageStartupMessages(library(gridExtra))
+# suppressPackageStartupMessages(library(patchwork))
+# suppressPackageStartupMessages(library(viridis))
+# suppressPackageStartupMessages(library(viridisLite))
+suppressPackageStartupMessages(library(RColorBrewer))
+```
+
+```{r functions}
+source("../src/utils.R")
+# source("../src/processing.R")
+# source("../src/analysis.R")
+```
+
+```{r pipeline-params}
+# Output directory
+output_dir <- "figure4/"
+
+# Human processing pipeline
+version <- "v2"
+pipeline_dir <- "../data/human/derivatives/"
+pipeline_dir <- file.path(pipeline_dir, version)
+
+# Human registration directory
+registration_dir <- "../data/human/registration/"
+registration_dir <- file.path(registration_dir, version)
+
+# Human parameters
+resolution <- 0.8
+es_method <- "normative-growth"
+es_group <- "patients"
+es_df <- 3
+cluster_map_method <- "mean"
+
+# Fetch parameter set
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                resolution = resolution,
+                                es_method = es_method,
+                                es_df = es_df,
+                                es_group = es_group,
+                                cluster_map_method = cluster_map_method)
+params
+```
+
+```{r paths}
+# Parameter set ID
+params_id <- 700
+
+# Update pipeline directory with parameter set ID
+pipeline_dir <- file.path(pipeline_dir, params_id)
+
+nk_max <- params %>% 
+  filter(id == params_id) %>% 
+  pull(cluster_nk_max)
+
+
+# Get cluster resolution 
+cluster_res <- params %>% 
+  filter(id == params_id) %>% 
+  pull(cluster_resolution)
+
+# Cluster resolution as string
+cluster_res_str <- sprintf("%.1f", cluster_res)
+cluster_res_str <- paste("resolution", cluster_res_str, sep = "_")
+
+# Cluster directory
+cluster_dir <- file.path(pipeline_dir, "clusters", cluster_res_str)
+
+# Path to cluster assignment file
+clusters_file <- file.path(cluster_dir, "clusters.csv")
+
+# Path to demographics data
+demographics_file <- file.path(registration_dir, "subject_info", "demographics.csv")
+```
+
+```{r}
+# Import patient cluster assignments
+clusters <- read_csv(clusters_file, show_col_types = FALSE)
+clusters <- rename(clusters, file = ID)
+
+# Import cohort demographics
+demographics <- read_csv(demographics_file, show_col_types = FALSE)
+
+# Filter demographics for set used in analysis
+demographics <- demographics %>% 
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner))
+
+# Join demographics information to cluster assignments
+cluster_demographics <- clusters %>% 
+  left_join(demographics, by = "file")
+
+# Re-map diagnoses to broader categories
+df_diagnoses <- tibble(DX = c("ASD", 
+                              "OCD", 
+                              "ADHD", 
+                              "Sub-threshold OCD", 
+                              "Anxiety", 
+                              "Sub-threshold ADHD",
+                              "Intellectual Disability only",
+                              "Tourette Syndrome",
+                              "Other", 
+                              "Fragile X"),
+                       DX_new = c("ASD",
+                                  "OCD",
+                                  "ADHD",
+                                  "OCD",
+                                  "Other",
+                                  "ADHD",
+                                  "Other",
+                                  "Other", 
+                                  "Other", 
+                                  "Other"))
+
+# Get re-mapped diagnoses
+cluster_demographics <- cluster_demographics %>% 
+  left_join(df_diagnoses, by = "DX")
+```
+
+```{r}
+# Extract diagnoses and convert cluster assigments to long format
+cluster_dx_long <- cluster_demographics %>% 
+  select(ID = file, contains("nk"), DX = DX_new) %>% 
+  pivot_longer(cols = c(-ID, -DX), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", nk, k, 
+        sep = "-", remove = FALSE) %>% 
+  select(ID, cluster_id, nk, k, DX)
+
+# Compute per cluster diagnostic proportions
+cluster_dx_freq <- cluster_dx_long %>%
+  select(-ID) %>% 
+  group_by(nk, k) %>% 
+  mutate(n_per_k = n()) %>% 
+  group_by(nk, k, DX) %>% 
+  mutate(n_per_dx_per_k = n()) %>% 
+  ungroup() %>% 
+  mutate(prop_dx_per_k = n_per_dx_per_k/n_per_k) %>% 
+  distinct()
+
+# Full grid of cluster labels and diagnoses
+cluster_dx_grid <- expand_grid(cluster_id = unique(cluster_dx_freq$cluster_id),
+                               DX = unique(df_diagnoses$DX_new)) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), 
+           sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k))
+
+# Include diagnoses where cluster proportion is null
+cluster_dx_freq <- cluster_dx_freq %>% 
+  right_join(cluster_dx_grid, by = c("cluster_id", "nk", "k", "DX")) %>% 
+  mutate(n_per_k = ifelse(is.na(n_per_k), 0, n_per_k),
+         n_per_dx_per_k = ifelse(is.na(n_per_dx_per_k), 0, n_per_dx_per_k),
+         prop_dx_per_k = ifelse(is.na(prop_dx_per_k), 0, prop_dx_per_k)) 
+
+cluster_dx_prop <- cluster_dx_freq %>% 
+  select(cluster_id, nk, k, DX, prop_dx_per_k) %>% 
+  mutate(DX = paste("prop", DX, sep = "_")) %>% 
+  pivot_wider(id = c(cluster_id, nk, k), names_from = "DX", values_from = "prop_dx_per_k")
+
+cluster_dx_prop
+```
+
+
+
+```{r}
+cluster_dx_prop_ids <- cluster_dx_long %>% 
+  left_join(cluster_dx_prop,
+            by = c("cluster_id", "nk", "k"))# %>% 
+  # mutate(nk = factor(nk, levels = 2:nk_max),
+         # k = factor(k, levels = 1:nk_max))
+
+
+dx <- unique(cluster_dx_prop_ids$DX)
+
+df_cluster_dx_chi2 <- expand_grid(nk = 2:nk_max,
+                                  DX = dx) %>% 
+  mutate(chi2 = 0, pval = 0)
+for (i in 1:nrow(df_cluster_dx_chi2)) {
+  
+  df_chi2_test <- cluster_dx_prop_ids %>% 
+    filter(nk == df_cluster_dx_chi2[[i, "nk"]]) %>% 
+    mutate(isDX = ifelse(DX == df_cluster_dx_chi2[[i, "DX"]], TRUE, FALSE),
+           isDX = factor(isDX),
+           k = factor(k))
+
+  chi2 <- chisq.test(x = df_chi2_test[["k"]],
+                     y = df_chi2_test[["isDX"]], 
+                     simulate.p.value = TRUE, 
+                     B = 1e5)  
+
+  df_cluster_dx_chi2[[i, "chi2"]] <- chi2[["statistic"]]
+  df_cluster_dx_chi2[[i, "pval"]] <- chi2[["p.value"]]
+}
+
+df_cluster_dx_chi2 <- df_cluster_dx_chi2 %>% 
+  mutate(nk = factor(nk, levels = 2:nk_max),
+         pval_lab = sprintf("%.3f", pval),
+         pval_lab = paste("p", "=", pval_lab))
+```
+
+```{r}
+alluvial_palette <- brewer.pal(n = 9, name = "OrRd")
+for (i in 1:length(dx)) {
+  
+  cluster_dx_alluvial <- cluster_dx_prop_ids %>% 
+    select(ID, nk, k, DX, prop = contains(paste0("prop_", dx[i]))) %>% 
+    mutate(isDX = ifelse(DX == dx[i], TRUE, FALSE),
+           nk = factor(nk, levels = 2:nk_max),
+           k = factor(k, levels = 1:nk_max))
+  
+  cluster_dx_chi2_alluvial <- df_cluster_dx_chi2 %>% 
+    filter(DX == dx[i])
+
+  p_cluster_dx_alluvial <- ggplot(data = cluster_dx_alluvial, 
+         mapping = aes(x = nk, stratum = k, alluvium = ID)) + 
+    geom_flow(mapping = aes(fill = isDX,
+                            alpha = isDX),
+              stat = "alluvium", aes.flow = "forward",
+              show.legend = FALSE) +
+    scale_alpha_manual(values = c(0, 0.5)) + 
+    scale_fill_manual(values = c(NA, "grey70")) + 
+    new_scale_fill() + 
+    geom_stratum(mapping = aes(fill = prop)) + 
+    scale_fill_gradientn(colors = alluvial_palette[2:9],
+                         limits = c(0, 1)) + 
+    geom_text(data = cluster_dx_chi2_alluvial,
+              inherit.aes = FALSE,
+              mapping = aes(x = nk, label = pval_lab),
+              y = 750) +
+    scale_y_continuous(breaks = seq(0, 700, by = 100), 
+                       minor_breaks = seq(0, 700, by = 50),
+                       limits = c(0, 750)) + 
+    labs(x = "Number of clusters",
+         y = "Number of patients",
+         fill = "Proportion",
+         title = paste("Proportion of patients with", dx[i])) + 
+    theme_bw() + 
+    theme(panel.grid.major.x = element_blank())
+  
+  # Export human ss plot
+  outfile <- paste0("sankey_human_dx_", dx[i], ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(10, "in"),
+      height = unit(5, "in"))
+  print(p_cluster_dx_alluvial)
+  dev.off()
+}
+```
+
+
+```{r}
+max(cluster_dx_prop$prop_ASD)
+min(cluster_dx_prop$prop_ASD)
+
+
+
+ggplot(data = cluster_dx_prop_ids, 
+       mapping = aes(x = nk, stratum = k, alluvium = ID)) + 
+  geom_flow(mapping = aes(fill = isASD,
+                          alpha = isASD),
+            stat = "alluvium", aes.flow = "forward",
+            show.legend = FALSE) +
+  scale_alpha_manual(values = c(0, 0.5)) + 
+  scale_fill_manual(values = c(NA, "grey70")) + 
+  new_scale_fill() + 
+  geom_stratum(mapping = aes(fill = prop_ASD)) + 
+  scale_fill_gradientn(colors = alluvial_palette[2:9],
+                       limits = c(0.3, 1.0)) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients",
+       fill = "Proportion") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+```
+
+```{r}
+cluster_dx_prop %>% 
+  arrange(prop_ASD)
+```
+
+
+```{r}
+cluster_dx_freq %>% 
+  arrange(desc(prop_dx_per_k))
+  
+  filter(DX == "ASD", nk >= 7) %>% 
+  arrange(nk, k)
+```
+
