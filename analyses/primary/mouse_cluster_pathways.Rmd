@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+suppressPackageStartupMessages(library(pheatmap))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(ggalluvial))
 suppressPackageStartupMessages(library(patchwork))
@@ -98,19 +99,41 @@ for (i in 1:length(list_pathways)) {
 }
 ```
 
+```{r}
+library(rcartocolor)
+```
+
 
 ```{r}
+# Polar plot graphical parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+E_breaks_step <- 5
+q_breaks_step <- 1
+
+# Polar plot palette
+polar_palette <- carto_pal(n = 12, name = "Bold")
+
+# Enrichment and q-value clamping thresholds
+E_threshold <- 30
+q_threshold <- 5
+
+# Iterate over clusters
 for (i in 1:length(list_polar_plots)) {
   
   # Radial labels
   E_max <- ceiling(max(list_polar_plots[[i]][["E"]]))
   q_max <- ceiling(max(list_polar_plots[[i]][["qval_log"]]))
   
-  E_breaks_end <- E_max - E_max %% breaks_step + breaks_step
-  q_breaks_end <- q_max - q_max %% breaks_step + breaks_step
+  E_max <- ifelse(E_max > E_threshold, E_threshold, E_max)
+  q_max <- ifelse(q_max > q_threshold, q_threshold, q_max)
   
-  E_polar_breaks <- seq(breaks_start, E_breaks_end, by = breaks_step)
-  q_polar_breaks <- seq(breaks_start, q_breaks_end, by = breaks_step)
+  E_breaks_end <- E_max - E_max %% E_breaks_step + E_breaks_step
+  q_breaks_end <- q_max - q_max %% q_breaks_step + q_breaks_step
+  
+  E_polar_breaks <- seq(breaks_start, E_breaks_end, by = E_breaks_step)
+  q_polar_breaks <- seq(breaks_start, q_breaks_end, by = q_breaks_step)
   
   E_polar_labels <- tibble(pathway = polar_plot_lvls[2],
                            breaks = E_polar_breaks)
@@ -118,7 +141,12 @@ for (i in 1:length(list_polar_plots)) {
   q_polar_labels <- tibble(pathway = polar_plot_lvls[2],
                            breaks = q_polar_breaks)
   
-  E_polar_plot <- ggplot(list_polar_plots[[i]], 
+  df_polar_plot <- list_polar_plots[[i]] %>% 
+    select(cluster, pathway, E, qval_log) %>% 
+    mutate(E = ifelse(E > E_threshold, E_threshold, E),
+           qval_log = ifelse(qval_log > q_threshold, q_threshold, qval_log))
+  
+  E_polar_plot <- ggplot(df_polar_plot, 
                          aes(x = pathway, 
                              ymin = 0, ymax = E, 
                              group = cluster, 
@@ -133,14 +161,14 @@ for (i in 1:length(list_polar_plots)) {
     coord_radar(start = theta_start, clip = "off") + 
     scale_x_discrete(expand = expansion()) + 
     scale_y_continuous(breaks = E_polar_breaks) +
-    scale_fill_manual(values = palette[1:(i+1)]) +
-    scale_colour_manual(values = palette[1:(i+1)]) +
+    scale_fill_manual(values = polar_palette[1:(i+1)]) +
+    scale_colour_manual(values = polar_palette[1:(i+1)]) +
     labs(x = NULL,
          fill = "k",
          col = "k") + 
     theme_bw()
   
-  q_polar_plot <- ggplot(list_polar_plots[[i]], 
+  q_polar_plot <- ggplot(df_polar_plot, 
                          aes(x = pathway, 
                              ymin = 0, ymax = qval_log, 
                              group = cluster, 
@@ -155,8 +183,8 @@ for (i in 1:length(list_polar_plots)) {
     coord_radar(start = theta_start, clip = "off") + 
     scale_x_discrete(expand = expansion()) + 
     scale_y_continuous(breaks = q_polar_breaks) +
-    scale_fill_manual(values = palette[1:(i+1)]) +
-    scale_colour_manual(values = palette[1:(i+1)]) +
+    scale_fill_manual(values = polar_palette[1:(i+1)]) +
+    scale_colour_manual(values = polar_palette[1:(i+1)]) +
     labs(x = NULL,
          fill = "k",
          col = "k") + 
@@ -217,9 +245,9 @@ for (i in 1:length(pathway_terms)) {
   
   df_tmp <- reduce(.x = list_tmp, .f = bind_rows) %>% 
     select(-ID) %>% 
-    mutate(nk = factor(nk, levels = 2:10),
-           k = factor(k, levels = 1:10),
-           E = ifelse(E > 20, 20, E))
+    mutate(nk = factor(nk, levels = 2:nk_max),
+           k = factor(k, levels = 1:nk_max),
+           E = ifelse(E > E_threshold, E_threshold, E))
   
   df_tmp_2 <- df_mouse_clusters_long %>% 
     left_join(df_tmp, by = c("nk", "k"))
@@ -231,7 +259,7 @@ for (i in 1:length(pathway_terms)) {
     geom_flow(stat = "alluvium", aes.flow = "forward") + 
     geom_stratum() + 
     scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[3:9],
-                         limits = c(0, 20)) + 
+                         limits = c(0, E_threshold)) + 
     # limits = c(0.3, 3),
     # breaks = seq(0, 3, by = 0.5)) +
     labs(x = "Number of clusters",
@@ -258,4 +286,353 @@ for (i in 1:length(pathway_terms)) {
 }
 ```
 
+# Cluster significance by permutation testing
+
+```{r import-perms}
+# Permutation directory and files
+# permutation_dir <- file.path(pipeline_dir, params_id, "permutations", "similarity")
+permutation_dir <- "../../data/cross_species/v2/405/permutations/similarity/"
+permutation_files <- list.files(permutation_dir, full.names = TRUE)
+
+# Permutation IDs
+permutation_ids <- permutation_files %>% 
+  basename() %>% 
+  str_extract("[0-9]+") %>% 
+  as.numeric() %>% 
+  unique() %>% 
+  sort()
+
+# Jacobians to use
+jacobians <- c("absolute", "relative")
+#  jacobians <- "relative"
+
+# Number of permutations
+np <- length(permutation_ids)
+
+# Iterate over jacobians
+list_permutations <- vector(mode = "list", length = length(jacobians))
+names(list_permutations) <- jacobians
+for (j in jacobians) {
+  
+  # Iterate over permutations
+  df_sim <- tibble()
+  for (p in 1:np) {
+    
+    # Permutation similarity data
+    infile <- permutation_files %>% 
+      str_subset(str_c("permutation_", permutation_ids[p], "_", j))
+    
+    # Import permutation similarity data
+    df_sim_tmp <- infile %>% 
+      read_csv(show_col_types = FALSE) %>% 
+      mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
+      unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
+      unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
+      mutate(permutation = permutation_ids[p]) 
+    
+    # Collate permutation data
+    df_sim <- bind_rows(df_sim, df_sim_tmp)
+  }
+  
+  # Include jacobians information
+  df_sim <- df_sim %>% 
+    mutate(jacobians = j)
+  
+  list_permutations[[j]] <- df_sim
+  
+}
+
+# Reduce permutations data frames into one
+df_permutations <- reduce(.x = list_permutations, .f = bind_rows)
+
+# Average similarity values for both jacobians
+df_permutations <- df_permutations %>% 
+  group_by(permutation, 
+           human_cluster_id, human_nk, human_k, 
+           mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+```
+
+```{r import-sim}
+# Cluster similarity files
+# similarity_dir <- file.path(pipeline_dir, params_id, "similarity")
+similarity_dir <- "../../data/cross_species/v2/405/similarity/"
+similarity_files <- list.files(similarity_dir, full.names = TRUE)
+
+# Import absolute and relative similarity files
+similarity <- vector(mode = "list", length = length(jacobians))
+names(similarity) <- jacobians
+for (j in jacobians) {
+  similarity[[j]] <- similarity_files %>% 
+    str_subset(j) %>% 
+    read_csv(show_col_types = FALSE) %>% 
+    mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
+    unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
+    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
+    mutate(jacobians = j)
+}
+
+# Reduce similarity data frames into one
+df_similarity <- reduce(.x = similarity, .f = bind_rows)
+
+# Average similarity values for both jacobians
+df_similarity <- df_similarity %>% 
+  group_by(human_cluster_id, human_nk, human_k, 
+           mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+```
+
+```{r compute-pvals}
+# Mouse and human max nk
+human_nk_max <- max(df_similarity[["human_nk"]])
+mouse_nk_max <- max(df_similarity[["mouse_nk"]])
+
+# Iterate along nk diagonal +/- 1
+df_sim_pvals <- tibble()
+for (h_nk in 2:human_nk_max) {
+  for (m_nk in (h_nk-1):(h_nk+1)){
+    
+    if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
+      
+      df_sim_nk <- df_similarity %>% 
+        select(human_cluster_id, human_nk, human_k,
+               mouse_cluster_id, mouse_nk, mouse_k,
+               similarity) %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        mutate(pval = 0)
+      
+      sim_perm_nk <- df_permutations %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        pull(similarity) %>% 
+        sort()
+      
+      for (i in 1:nrow(df_sim_nk)) {
+        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
+        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+      }
+      
+      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      
+    }
+  }
+}
+
+# Evaluate significance
+alpha <- 0.05
+df_sim_pvals <- df_sim_pvals %>% 
+  mutate(significant = ifelse(pval < 0.05, 1, 0))
+```
+
+```{r}
+df_sig_nk <- df_sim_pvals %>% 
+  filter(as.character(mouse_nk) == nk,
+         mouse_nk == human_nk) %>% 
+  group_by(mouse_nk, mouse_k) %>% 
+  summarise(nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(has_match = ifelse(nsignificant > 0, TRUE, FALSE))
+```
+
+
+```{r}
+library(patchwork)
+
+heatmap_palette_cols <- c("white", brewer.pal(n = 9, name = "OrRd")[3:9])
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
+
+for (i in 1:length(list_pathways)) {
+  
+  nk <- names(list_pathways)[i]
+  nk <- as.numeric(nk)
+  
+  df_pathway_nk <- list_pathways[[i]] %>% 
+    mutate(pathway = factor(pathway, levels = pathway_terms),
+           E = ifelse(E > E_threshold, E_threshold, E))
+  
+  df_sig_nk <- df_sim_pvals %>%
+    filter(mouse_nk == nk) %>% 
+    group_by(mouse_nk, mouse_k) %>% 
+    summarise(nsignificant = sum(significant),
+              .groups = "drop") %>% 
+    mutate(has_match = ifelse(nsignificant > 0, TRUE, FALSE),
+           mouse_k = factor(mouse_k, levels = 1:nk),
+           dummy = "y") %>% 
+    select(cluster = mouse_k, has_match, dummy)
+  
+  p_heatmap_pathways <- ggplot(df_pathway_nk, 
+                               mapping = aes(x = cluster, 
+                                             y = fct_rev(pathway), 
+                                             fill = E)) + 
+    geom_tile(col = "grey50") +
+    scale_x_discrete(expand = expansion(), position = "top") + 
+    scale_y_discrete(expand = expansion()) + 
+    scale_fill_gradientn(colors = heatmap_palette,
+                         limits = c(0, E_threshold))  +
+    labs(x = "Mouse cluster",
+         y = "Biological pathway module",
+         fill = "Enrichment") +
+    theme_bw()
+  
+  p_heatmap_significance <- ggplot(df_sig_nk,
+                                   mapping = aes(x = cluster, 
+                                                 y = dummy, 
+                                                 fill = has_match)) + 
+    geom_tile(col = "grey50") +
+    scale_x_discrete(expand = expansion()) + 
+    scale_y_discrete(expand = expansion()) +
+    scale_fill_manual(values = brewer.pal(n = 9, name = "PuBu")[c(1, 9)], 
+                      labels = c("No", "Yes")) + 
+    labs(fill = "Human match") + 
+    theme_bw() +
+    theme(axis.text = element_blank(),
+          axis.title = element_blank(),
+          axis.ticks = element_blank())
+  
+  p_heatmap <- (p_heatmap_pathways / p_heatmap_significance) +
+    plot_layout(guides = "collect", heights = c(10, 1))
+  
+  heatmap_height <- length(pathway_terms)
+  heatmap_width <- nk
+  legend_width <- 1
+  
+  plot_height <- heatmap_height + 4
+  plot_width <- heatmap_width + 6
+  
+  asp <- plot_height/plot_width
+  
+  output_height <- 10
+  output_width <- output_height/asp
+  
+  output_height_in <- unit(output_height, "inch")
+  output_width_in <- unit(output_width, "inch")
+  
+  outfile <- paste0("pathways_heatmap_nk_", nk, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  
+  pdf(file = outfile,
+      width = output_width_in,
+      height = output_height_in)
+  print(p_heatmap)
+  dev.off()
+  
+}
+```
+
+
+```{r}
+list_pathways_tmp <- vector(mode = "list", length = length(list_pathways))
+for (i in 1:length(list_pathways)) {
+  nk <- as.numeric(names(list_pathways)[i])
+  list_pathways_tmp[[i]] <- list_pathways[[i]] %>% 
+    rename(k = cluster) %>% 
+    mutate(nk = nk,
+           k = as.numeric(k)) %>% 
+    unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+}
+
+df_pathways_all <- reduce(.x = list_pathways_tmp, .f = bind_rows)
+
+df_pathways_gt4 <- df_pathways_all %>% 
+  filter(nk >= 4)
+
+cluster_lvls <- df_pathways_gt4 %>% 
+  select(nk, k, cluster_id) %>% 
+  distinct() %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)
+
+df_pathways_gt4 <- df_pathways_gt4 %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls),
+         pathway = factor(pathway, levels = pathway_terms))
+
+df_pathways_gt4 <- df_pathways_gt4 %>% 
+  group_by(pathway) %>% 
+  mutate(E_norm = E/max(E))
+```
+
+```{r}
+mat_pathways_annotation <- df_sim_pvals %>%
+  filter(mouse_nk >= 4) %>% 
+  group_by(mouse_cluster_id) %>% 
+  summarise(nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(has_match = ifelse(nsignificant > 0, "Yes", "No"),
+         has_match = factor(has_match, levels = c("No", "Yes")), 
+         mouse_cluster_id = factor(mouse_cluster_id, levels = cluster_lvls)) %>% 
+  select(cluster_id = mouse_cluster_id, has_match) %>% 
+  arrange(cluster_id) %>% 
+  column_to_rownames("cluster_id")
+
+mat_pathways <- df_pathways_gt4 %>% 
+  select(pathway, cluster_id, E_norm) %>% 
+  pivot_wider(id_cols = pathway, names_from = cluster_id, values_from = E_norm) %>% 
+  column_to_rownames("pathway") %>% 
+  as.matrix()
+```
+
+
+```{r fig.width = 12, fig.height = 5}
+annotation_colours <- brewer.pal(n = 9, name = "PuBu")[c(1, 9)]
+names(annotation_colours) <- c("No", "Yes")
+list_annotation_colours <- list(has_match = annotation_colours)
+
+outfile <- "pathways_heatmap.pdf"
+outfile <- file.path(output_dir, outfile)
+
+pheatmap(mat = mat_pathways, cluster_cols = FALSE, 
+         cluster_rows = TRUE,
+         clustering_distance_rows = "euclidean",
+         cutree_rows = 4,
+         color = heatmap_palette,
+         border_color = "grey60",
+         annotation_col = mat_pathways_annotation,
+         annotation_colors = list_annotation_colours,
+         annotation_names_col = FALSE,
+         fontsize_col = 8,
+         width = 12, height = 4,
+         filename = outfile)
+```
+
+```{r}
+pathway_lvls_clust <- c("Chromatin organization",
+                        "Signaling by notch",
+                        "Generic transcription pathway",
+                        "Gene expression (transcription)",
+                        "Mtor signalling",
+                        "Signaling by hedgehog",
+                        "Signaling by wnt",
+                        "Mapk family signaling cascades",
+                        "Protein-protein interactions at synapses",
+                        "Transmission across chemical synapses")
+
+df_pathways_gt4 <- df_pathways_gt4 %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clust))
+
+ggplot(df_pathways_gt4,
+       mapping = aes(x = cluster_id, y = pathway, fill = E)) + 
+  geom_tile()
+
+ggplot(df_pathways_gt4, 
+       mapping = aes(x = cluster_id, 
+                     y = fct_rev(pathway), 
+                     fill = E)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(0, E_threshold))  +
+  labs(x = "Mouse cluster",
+       y = "Biological pathway module",
+       fill = "Enrichment") +
+  theme_bw()
+
+```
 
