@@ -851,6 +851,125 @@ print(fig2_permutations)
 dev.off()
 ```
 
+```{r fig2-sim-heatmap}
+# Heatmap plot
+fig2_heatmap <- ggplot(df_similarity_nk, 
+                       aes(x = mouse_cluster_id, 
+                           y = fct_rev(human_cluster_id), 
+                           fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  geom_text(mapping = aes(label = pval_lab),
+            size = 6, hjust = "center", vjust = "center") + 
+  labs(x = "Mouse clusters",
+       y = "Human clusters",
+       fill = "Correlation") + 
+  scale_fill_gradientn(colors = heatmap_scale_palette,
+                       values = heatmap_scale_values,
+                       breaks = seq(0, 1, by = 0.1),
+                       guide = guide_colourbar(title.position = "right",
+                                               barheight = unit(0.23, "npc"),
+                                               barwidth = unit(0.05, "npc"))) +
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() + 
+  theme(axis.ticks = element_blank(), 
+        axis.text = element_text(size = fig2_font_size, family = fig2_font_family),
+        axis.title = element_text(size = fig2_font_size, family = fig2_font_family),
+        legend.position = c(1, 0.5),
+        legend.justification = c("left", "center"),
+        legend.margin = margin(l = 4, r = 0, unit = "bigpts"),
+        legend.title = element_text(angle = 90,
+                                    hjust = 0.5,
+                                    size = fig2_font_size,
+                                    family = fig2_font_family),
+        legend.text = element_text(size = fig2_font_size-1,
+                                   family = fig2_font_family),
+        # plot.background = element_rect(colour = "black"),
+        plot.margin = margin(t = 0, l = 5, r = 5, unit = "bigpts"))
+
+
+fig2_permutations_xlims <- c(0.2, 1)
+fig2_permutations_xbreaks <- seq(0, 1, by = 0.1)
+
+fig2_permutations_density <- ggplot(df_permutations_nk,
+                                    aes(x = similarity, 
+                                        y = ..density..)) + 
+  # geom_density(bw = 1/30, 
+  #              alpha = 0.2, 
+  #              fill = "grey70",
+  #              show.legend = FALSE) + 
+  geom_histogram(binwidth = 0.015,
+                 fill = "grey70",
+                 col = "black",
+                 size = 0.3) + 
+  coord_cartesian(xlim = fig2_permutations_xlims) + 
+  scale_x_continuous(breaks = fig2_permutations_xbreaks) + 
+  labs(x = "Correlation",
+       y = "Density") + 
+  theme_bw() + 
+  theme(axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        # plot.background = element_rect(colour = "black"),
+        plot.margin = margin(t = 2.5, l = 5, b = 0, unit = "bigpts"))
+
+pvals <- c(0.05, 0.01, 0.001)
+
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
+
+fig2_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity, 
+                                                        y = pval_log,
+                                                        fill = similarity)) + 
+  geom_hline(yintercept = -log10(pvals),
+             linetype = "dashed",
+             size = 0.3) + 
+  geom_line(size = 0.3) + 
+  geom_point(shape = 21,
+             size = 2,
+             stroke = 0.5,
+             show.legend = FALSE) + 
+  coord_cartesian(xlim = fig2_permutations_xlims) + 
+  scale_x_continuous(breaks = fig2_permutations_xbreaks) + 
+  scale_y_continuous(expand = expansion(mult = 0.1),
+                     sec.axis = dup_axis(breaks = -log10(pvals),
+                                         labels = pvals, 
+                                         name = "p")) +
+  scale_fill_gradientn(colors = heatmap_scale_palette,
+                       values = heatmap_scale_values,
+                       breaks = seq(0, 1, by = 0.1)) + 
+  labs(x = "Correlation",
+       y = "-log10(p)",
+       col = "nk") + 
+  theme_bw() +
+  theme(axis.title.y.right = element_text(angle = 90, vjust = 2),
+        axis.text.y.right = element_text(size = fig2_font_size-1),
+        plot.margin = margin(t = 0, l = 5, unit = "bigpts"))
+
+fig2_similarity <- fig2_heatmap / fig2_permutations_density / fig2_permutations_pvals +
+  plot_layout(heights = c(1, 1, 1)) &
+  theme(axis.text = element_text(size = fig2_font_size, family = fig2_font_family),
+        axis.title = element_text(size = fig2_font_size, family = fig2_font_family))
+
+# Heatmap dimensions in bigpts
+fig2_similarity_width_pt <- 188
+fig2_similarity_height_pt <- 240
+
+# permutations dimensions in inches
+fig2_similarity_width_in <- unit(fig2_similarity_width_pt/pt_per_in, "in")
+fig2_similarity_height_in <- unit(fig2_similarity_height_pt/pt_per_in, "in")
+
+# Export permutations plot
+outfile <- "figure2_similarity.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig2_similarity_width_in,
+    height = fig2_similarity_height_in)
+print(fig2_similarity)
+dev.off()
+```
+
+
 # Panel: Molecular pathways polar plots
 
 ```{r fig2-pathways-import}
@@ -891,8 +1010,8 @@ df_pathways <- list_pathways %>%
   filter(pathway %in% pathway_terms) %>% 
   mutate(cluster = factor(cluster),
          nk = nk_mouse) %>% 
-    unite(col = "cluster_id", nk, cluster, 
-          sep = "-", remove = FALSE)
+  unite(col = "cluster_id", nk, cluster, 
+        sep = "-", remove = FALSE)
 ```
 
 ```{r}
@@ -958,7 +1077,7 @@ fig2_pathways <- ggplot(df_polar_plot,
                                    family = fig2_font_family),
         legend.box.margin = margin(t = -15),
         plot.margin = margin(l = 30, r = 30, t = 5)
-        )
+  )
 
 # Fix polar axis labels
 fig2_pathways_grob <- grid.force(ggplotGrob(fig2_pathways))
