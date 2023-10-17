@@ -695,7 +695,8 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
          qval_log = -log10(qval),
-         pval_lab = ifelse(pval < 0.05, "*", ""))
+         significant = ifelse(pval < 0.05, TRUE, FALSE),
+         pval_lab = ifelse(significant, "*", ""))
 ```
 
 ```{r fig2-sim-heatmap-palette}
@@ -719,139 +720,11 @@ heatmap_scale_colours <- magma(n = heatmap_palette_length, begin = 0.3)
 heatmap_scale_palette <- colorRampPalette(heatmap_scale_colours)(heatmap_palette_length)
 ```
 
-```{r fig2-sim-heatmap}
-# Heatmap plot
-fig2_heatmap <- ggplot(df_similarity_nk, 
-                       aes(x = human_cluster_id, 
-                           y = fct_rev(mouse_cluster_id), 
-                           fill = similarity)) + 
-  geom_tile(col = "grey50") + 
-  geom_text(mapping = aes(label = pval_lab),
-            size = 6, hjust = "center", vjust = "center") + 
-  labs(x = "Human clusters",
-       y = "Mouse clusters",
-       fill = "Correlation") + 
-  scale_fill_gradientn(colors = heatmap_scale_palette,
-                       values = heatmap_scale_values,
-                       breaks = seq(0, 1, by = 0.1),
-                       guide = guide_colourbar(title.position = "right",
-                                               barheight = unit(0.8, "npc"))) +
-  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
-  scale_y_discrete(expand = expansion(mult = 0)) + 
-  theme_bw() + 
-  theme(axis.ticks = element_blank(), 
-        axis.text = element_text(size = fig2_font_size, family = fig2_font_family),
-        axis.title = element_text(size = fig2_font_size, family = fig2_font_family),
-        legend.title = element_text(angle = 90, 
-                                    hjust = 0.5, 
-                                    size = fig2_font_size,
-                                    family = fig2_font_family),
-        legend.text = element_text(size = fig2_font_size,
-                                   family = fig2_font_family),
-        legend.box.margin = margin(l = -10),
-        plot.margin = margin(t = 5, l = 5, unit = "bigpts"))
-
-# Heatmap dimensions in bigpts
-fig2_heatmap_width_pt <- 188
-fig2_heatmap_height_pt <- 240
-
-# Heatmap dimensions in inches
-fig2_heatmap_width_in <- unit(fig2_heatmap_width_pt/pt_per_in, "in")
-fig2_heatmap_height_in <- unit(fig2_heatmap_height_pt/pt_per_in, "in")
-
-# Export heatmap plot
-outfile <- "figure2_heatmap.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig2_heatmap_width_in,
-    height = fig2_heatmap_height_in)
-print(fig2_heatmap)
-dev.off()
-```
-
-
-# Panel: Mouse-human cluster similarity permutations
-
-
-```{r}
-fig2_permutations_xlims <- c(0.2, 1)
-fig2_permutations_xbreaks <- seq(0, 1, by = 0.1)
-
-fig2_permutations_density <- ggplot(df_permutations_nk,
-                                    aes(x = similarity, 
-                                        y = ..density..)) + 
-  # geom_density(bw = 1/30, 
-  #              alpha = 0.2, 
-  #              fill = "grey70",
-  #              show.legend = FALSE) + 
-  geom_histogram(binwidth = 0.015,
-                 fill = "grey70",
-                 col = "black",
-                 size = 0.3) + 
-  coord_cartesian(xlim = fig2_permutations_xlims) + 
-  scale_x_continuous(breaks = fig2_permutations_xbreaks) + 
-  labs(x = "Correlation",
-       y = "Density") + 
-  theme_bw() + 
-  theme(axis.text.x = element_blank(),
-        axis.title.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        plot.margin = margin(t = 5, b = 0, r = 0))
-
-pvals <- c(0.1, 0.05, 0.01, 0.001)
-
+```{r fig2-sim-plots}
+# Clamp log p-values when infinite
 df_similarity_nk <- df_similarity_nk %>% 
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
-fig2_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity, 
-                                                        y = pval_log,
-                                                        fill = similarity)) + 
-  geom_hline(yintercept = -log10(pvals),
-             linetype = "dashed",
-             size = 0.3) + 
-  geom_line(size = 0.3) + 
-  geom_point(shape = 21,
-             size = 2,
-             stroke = 0.5,
-             show.legend = FALSE) + 
-  coord_cartesian(xlim = fig2_permutations_xlims) + 
-  scale_x_continuous(breaks = fig2_permutations_xbreaks) + 
-  scale_y_continuous(sec.axis = dup_axis(breaks = -log10(pvals),
-                                         labels = pvals,
-                                         name = "p")) +
-  scale_fill_gradientn(colors = heatmap_scale_palette,
-                       values = heatmap_scale_values,
-                       breaks = seq(0, 1, by = 0.1)) + 
-  labs(x = "Correlation",
-       y = "-log10(p)",
-       col = "nk") + 
-  theme_bw() +
-  theme(plot.margin = margin(t = 0, b = 0, r = 0))
-
-fig2_permutations <- (fig2_permutations_density / fig2_permutations_pvals) +
-  plot_layout(heights = c(1, 1.5)) &
-  theme(axis.text = element_text(size = fig2_font_size, family = fig2_font_family),
-        axis.title = element_text(size = fig2_font_size, family = fig2_font_family))
-
-# Heatmap dimensions in bigpts
-fig2_permutations_width_pt <- 188
-fig2_permutations_height_pt <- 175
-
-# permutations dimensions in inches
-fig2_permutations_width_in <- unit(fig2_permutations_width_pt/pt_per_in, "in")
-fig2_permutations_height_in <- unit(fig2_permutations_height_pt/pt_per_in, "in")
-
-# Export permutations plot
-outfile <- "figure2_permutations.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig2_permutations_width_in,
-    height = fig2_permutations_height_in)
-print(fig2_permutations)
-dev.off()
-```
-
-```{r fig2-sim-heatmap}
 # Heatmap plot
 fig2_heatmap <- ggplot(df_similarity_nk, 
                        aes(x = mouse_cluster_id, 
@@ -887,17 +760,14 @@ fig2_heatmap <- ggplot(df_similarity_nk,
         # plot.background = element_rect(colour = "black"),
         plot.margin = margin(t = 0, l = 5, r = 5, unit = "bigpts"))
 
-
+# Limits and breaks for permutations plot
 fig2_permutations_xlims <- c(0.2, 1)
 fig2_permutations_xbreaks <- seq(0, 1, by = 0.1)
 
+# Permutation distribution plot
 fig2_permutations_density <- ggplot(df_permutations_nk,
                                     aes(x = similarity, 
                                         y = ..density..)) + 
-  # geom_density(bw = 1/30, 
-  #              alpha = 0.2, 
-  #              fill = "grey70",
-  #              show.legend = FALSE) + 
   geom_histogram(binwidth = 0.015,
                  fill = "grey70",
                  col = "black",
@@ -913,11 +783,8 @@ fig2_permutations_density <- ggplot(df_permutations_nk,
         # plot.background = element_rect(colour = "black"),
         plot.margin = margin(t = 2.5, l = 5, b = 0, unit = "bigpts"))
 
+# Permutation p-value plot
 pvals <- c(0.05, 0.01, 0.001)
-
-df_similarity_nk <- df_similarity_nk %>% 
-  mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
-
 fig2_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity, 
                                                         y = pval_log,
                                                         fill = similarity)) + 
@@ -946,6 +813,7 @@ fig2_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity,
         axis.text.y.right = element_text(size = fig2_font_size-1),
         plot.margin = margin(t = 0, l = 5, unit = "bigpts"))
 
+# Combine plots using patchwork
 fig2_similarity <- fig2_heatmap / fig2_permutations_density / fig2_permutations_pvals +
   plot_layout(heights = c(1, 1, 1)) &
   theme(axis.text = element_text(size = fig2_font_size, family = fig2_font_family),
@@ -969,21 +837,68 @@ print(fig2_similarity)
 dev.off()
 ```
 
-
-# Panel: Molecular pathways polar plots
+# Panel: Mouse molecular pathways polar plot
 
 ```{r fig2-pathways-import}
-# Base directory for pathway data files
-pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
-
-# Threshold for StrinDB 
+# Threshold for StringDB 
 stringdb_threshold <- 950
-pathways_dir <- file.path(pathways_dir, stringdb_threshold)
+
+# Base directory for pathway data files
+mouse_pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
+mouse_pathways_dir <- file.path(mouse_pathways_dir, stringdb_threshold)
 
 # Prefix for pathway data files
-pathways_file_prefix <- "NewBader_enrichment_clusterneighbourhood_vs_brain_all"
+mouse_pathways_file_prefix <- "NewBader_enrichment_clusterneighbourhood_vs_brain_all"
 
-# List of desired pathway terms
+# Pathway IDs for a prior pathway set
+pathway_ids <-c("GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.1",
+                "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.5",
+                "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 71%6794362",
+                "ADHERENS JUNCTIONS INTERACTIONS%REACTOME%R-HSA-418990.2",
+                "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 71%420029",
+                "MAPK FAMILY SIGNALING CASCADES%REACTOME DATABASE ID RELEASE 71%5683057",
+                "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 71%1227986",
+                "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 71%1236394",
+                "SIGNALING BY WNT%REACTOME%R-HSA-195721.5",
+                "CA2+ PATHWAY%REACTOME DATABASE ID RELEASE 71%4086398",
+                "SIGNALING BY NOTCH%REACTOME DATABASE ID RELEASE 71%157118",
+                "MTOR SIGNALLING%REACTOME%R-HSA-165159.5",
+                "SIGNALING BY VEGF%REACTOME DATABASE ID RELEASE 71%194138",
+                "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 71%5358351",
+                "AXON GUIDANCE%REACTOME DATABASE ID RELEASE 71%422475",
+                "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 71%4839726",
+                "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.9",
+                "GENE EXPRESSION (TRANSCRIPTION)%REACTOME DATABASE ID RELEASE 71%74160",
+                "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 71%9620244",
+                "SIGNALING BY GPCR%REACTOME%R-HSA-372790.4")
+
+# Import mouse pathway enrichment files
+list_mouse_pathways <- vector(mode = "list", length = nk_mouse)
+names(list_mouse_pathways) <- paste(nk_mouse, 1:nk_mouse, sep = "-")
+for (k in 1:nk_mouse) {
+  pathways_file <- paste(mouse_pathways_file_prefix, nk_mouse, k, stringdb_threshold, sep = "_")
+  pathways_file <- paste0(pathways_file, ".csv")
+  pathways_file <- file.path(mouse_pathways_dir, pathways_file)
+  list_mouse_pathways[[k]]  <- read_csv(pathways_file, show_col_types = FALSE) %>% 
+    rename(pathway = Title,
+           k = cluster) %>% 
+    mutate(nk = nk_mouse) %>% 
+    unite(col = "cluster_id", nk, k,
+          sep = "-", remove = FALSE)
+}
+
+# Fix mouse enrichment p-values and q-values
+# REMOVE IF FIXED UPSTREAM
+for (k in 1:nk_mouse) {
+  list_mouse_pathways[[k]] <- list_mouse_pathways[[k]] %>% 
+    mutate(P.Value = P.Value/2,
+           adj.P.Val = p.adjust(P.Value, method = "fdr"))
+}
+```
+
+
+```{r fig2-pathways-plot}
+# List of desired pathway terms for polar plot
 pathway_terms <- c("Chromatin organization",
                    "Gene expression (transcription)",
                    "Generic transcription pathway",
@@ -995,34 +910,21 @@ pathway_terms <- c("Chromatin organization",
                    "Signaling by wnt",
                    "Transmission across chemical synapses")
 
-list_pathways <- vector(mode = "list", length = nk_mouse)
-names(list_pathways) <- paste(nk_mouse, 1:nk_mouse, sep = "-")
-for (k in 1:nk_mouse) {
-  pathways_file <- paste(pathways_file_prefix, nk_mouse, k, stringdb_threshold, sep = "_")
-  pathways_file <- paste0(pathways_file, ".csv")
-  pathways_file <- file.path(pathways_dir, pathways_file)
-  list_pathways[[k]] <- read_csv(pathways_file, show_col_types = FALSE)
-}
+# Reduce list of pathways to a data frame
+df_mouse_pathways <- list_mouse_pathways %>% 
+  bind_rows() %>% 
+  filter(pathway %in% pathway_terms)
 
-df_pathways <- list_pathways %>% 
-  reduce(.f = bind_rows) %>% 
-  rename(pathway = Title) %>% 
-  filter(pathway %in% pathway_terms) %>% 
-  mutate(cluster = factor(cluster),
-         nk = nk_mouse) %>% 
-  unite(col = "cluster_id", nk, cluster, 
-        sep = "-", remove = FALSE)
-```
-
-```{r}
+# An additional empty level must be added to close the polar plot
 polar_plot_lvls <- c(" ", pathway_terms)
 
-df_polar_plot_tmp <- df_pathways %>% 
+# 
+df_polar_plot_tmp <- df_mouse_pathways %>% 
   mutate(pathway = as.character(pathway)) %>% 
   filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
   mutate(pathway = " ")
 
-df_polar_plot <- df_pathways %>% 
+df_polar_plot <- df_mouse_pathways %>% 
   bind_rows(df_polar_plot_tmp) %>% 
   mutate(pathway = factor(pathway, levels = polar_plot_lvls))
 
@@ -1035,9 +937,7 @@ breaks_step <- 5
 polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
 polar_labels <- tibble(pathway = polar_plot_lvls[2],
                        breaks = polar_breaks)
-```
 
-```{r}
 # Generate polar plot
 fig2_pathways <- ggplot(df_polar_plot, 
                         aes(x = pathway, 
@@ -1100,147 +1000,384 @@ outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = fig2_pathways_width_in,
     height = fig2_pathways_height_in)
-# print(fig2_pathways)
 grid.draw(fig2_pathways_grob)
 dev.off()
 ```
 
+# Panel: Mouse-human pathway enrichment
 
-```{r}
-list_pathways_match <- vector(mode = "list", length = nrow(df_ss_clusters))
-for (i in 1:length(list_pathways_match)) {
-  list_pathways_match[[i]] <- list_pathways[[df_ss_clusters[[i, "mouse_nk"]]]] %>% 
-    filter(cluster == df_ss_clusters[[i, "mouse_k"]]) %>% 
-    mutate(nk = df_ss_clusters[[i, "mouse_nk"]]) %>% 
-    unite(col = "cluster_id", nk, cluster, 
+
+```{r fig2-human-pathways-import}
+# Base directory for human pathway data files
+human_pathways_dir <- "../analyses/primary/outputs/human_cluster_pathways/"
+human_pathways_dir <- file.path(human_pathways_dir, version, human_params_id, stringdb_threshold)
+
+# Prefix for pathway data files
+human_pathways_file_prefix <- "human_cluster_pathway_enrichment"
+
+# Import human pathway enrichment files
+list_human_pathways <- vector(mode = "list", length = nk_human)
+names(list_human_pathways) <- paste(nk_human, 1:nk_human, sep = "-")
+for (k in 1:nk_human) {
+  pathways_file <- paste(human_pathways_file_prefix, nk_human, k, stringdb_threshold, sep = "_")
+  pathways_file <- paste0(pathways_file, ".csv")
+  pathways_file <- file.path(human_pathways_dir, pathways_file)
+  list_human_pathways[[k]] <- read_csv(pathways_file, show_col_types = FALSE) %>% 
+    rename(pathway = Title) %>% 
+    mutate(nk = nk_human) %>% 
+    unite(col = "cluster_id", nk, k,
           sep = "-", remove = FALSE)
 }
-
-df_pathways_match <- reduce(.x = list_pathways_match, .f = bind_rows)
-
-polar_plot_lvls <- c(" ", pathway_terms)
-
-df_polar_plot_tmp <- df_pathways_match %>% 
-  mutate(pathway = as.character(pathway)) %>% 
-  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
-  mutate(pathway = " ")
-
-df_polar_plot <- df_pathways_match %>% 
-  bind_rows(df_polar_plot_tmp) %>% 
-  mutate(pathway = factor(pathway, levels = polar_plot_lvls))
-
-# Polar plot parameters
-nspokes <- length(polar_plot_lvls) - 1
-theta_start <- -(2*pi)/nspokes
-breaks_start <- 0
-breaks_end <- 15
-breaks_step <- 5
-polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
-polar_labels <- tibble(pathway = polar_plot_lvls[2],
-                       breaks = polar_breaks)
 ```
 
-```{r}
-# Generate polar plot
-fig2_polar <- ggplot(df_polar_plot, 
-                     aes(x = pathway, 
-                         ymin = 0, ymax = E, 
-                         group = cluster_id, 
-                         fill = cluster_id, 
-                         col = cluster_id)) + 
-  geom_ribbon(alpha = 0.2) + 
-  # geom_text(data = polar_labels,
-  #           inherit.aes = FALSE,
-  #           mapping = aes(x = pathway, 
-  #                         y = breaks, 
-  #                         label = breaks)) + 
-  coord_radar(start = theta_start, clip = "off") + 
-  scale_x_discrete(expand = expansion()) + 
-  # scale_y_continuous(breaks = polar_breaks) + 
-  labs(x = NULL,
-       fill = "k",
-       col = "k") + 
-  theme_bw() + 
-  theme(axis.ticks.x = element_blank(),
-        axis.line.x = element_blank(),
-        axis.text.x = element_text(size = 6),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.title.y = element_blank(),
-        panel.border = element_blank(),
-        legend.position = "bottom")
-
-# Extract polar plot grob
-fig2_polar_grob <- grid.force(ggplotGrob(fig2_polar))
-fig2_polar_panel_grob <- getGrob(fig2_polar_grob, "panel.7-5-7-5")
-fig2_polar_panel_grob[["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_terms
-fig2_polar_legend_grob <- getGrob(fig2_polar_grob, "guides.3-3-3-3")
-```
-
-```{r}
-# Full width of figure
-fig2_width <- 7.2
-
-# Full dimensions of polar plots panel
-fig2_polar_width <- fig2_width - fig2_ss_width - fig2_padding_width
-fig2_polar_height <- fig2_ss_height/2
-
-# Height of polar plots panel without padding
-# fig2_polar_height_nopadding <- fig2_polar_height - 0.1
-fig2_polar_height_nopadding <- fig2_ss_height/2
-
-fig2_polar_legend_height <- 0.5
-
-# Dimensions of individual plot panels
-# fig2_polar_panel_height <- fig2_polar_height_nopadding/2
-fig2_polar_panel_height <- fig2_polar_height - fig2_polar_legend_height
-fig2_polar_panel_width <- fig2_polar_panel_height
-
-# Grid cell dimensions
-fig2_polar_heights <- c(fig2_polar_panel_height, fig2_polar_legend_height)
-fig2_polar_widths <- c((fig2_polar_width - fig2_polar_panel_width)/2, fig2_polar_panel_width, (fig2_polar_width - fig2_polar_panel_width)/2)
-
-if (sum(fig2_polar_widths) != fig2_polar_width) {
-  stop()
+```{r fig2-pathways-match}
+list_human_pathways_match <- vector(mode = "list", length = length(list_human_pathways))
+names(list_human_pathways_match) <- names(list_human_pathways)
+for (k in 1:nk_human) {
+  
+  mouse_match_id <- df_similarity_nk %>% 
+    filter(human_cluster_id == paste(nk_human, k, sep = "-"),
+           significant) %>% 
+    pull(mouse_cluster_id)
+  
+  list_human_pathways_match[[k]] <- list_human_pathways[[k]] %>% 
+    mutate(cluster_id = paste0("H", cluster_id)) %>% 
+    bind_rows(list_mouse_pathways[[mouse_match_id]] %>% 
+                mutate(cluster_id = paste0("M", cluster_id))) %>% 
+    filter(ID %in% pathway_ids)
+  
 }
+```
 
-# Grid cell dimensions with units
-fig2_polar_heights_in <- unit(fig2_polar_heights, "inch")
-fig2_polar_widths_in <- unit(fig2_polar_widths, "inch")
+```{r fig2-pathways-enrichment-20}
+# pathway_palette_cols <- c("white", brewer.pal(n = 9, name = "OrRd")[3:9])
+pathway_palette_cols <- brewer.pal(n = 9, name = "OrRd")
+pathway_palette <- colorRampPalette(colors = pathway_palette_cols)(255)
 
-# Polar plots grob with gridlines
-fig2_polar_grob_grid <- arrangeGrob(rectGrob(gp = gpar(fill = NA)),
-                                    fig2_polar_panel_grob,
-                                    rectGrob(gp = gpar(fill = NA)),
-                                    gTree(children = gList(rectGrob(gp = gpar(fill = NA)), fig2_polar_legend_grob)),
-                                    layout_matrix = rbind(c(01, 02, 03),
-                                                          c(NA, 04, NA)),
-                                    widths = fig2_polar_widths_in,
-                                    heights = fig2_polar_heights_in)
+E_threshold <- 30
 
-# Polar plots grob
-# fig2_polar_grob <- arrangeGrob(zeroGrob(),
-#                                fig2_polar_1_panel_grob,
-#                                zeroGrob(),
-#                                fig2_polar_2_legend_grob,
-#                                zeroGrob(),
-#                                fig2_polar_2_panel_grob,
-#                                layout_matrix = rbind(c(01, 02, 03, 04),
-#                                                      c(01, 05, 03, 04),
-#                                                      c(01, 06, 03, 04)),
-#                                widths = fig2_polar_widths_in,
-#                                heights = fig2_polar_heights_in)
+p_pathways_match_1 <- list_human_pathways_match[[1]] %>% 
+  mutate(E = ifelse(E > E_threshold, E_threshold, E)) %>% 
+  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = E)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  labs(x = NULL,
+       y = "Pathway module",
+       fill = "Enrichment") +
+  theme_bw() +
+  theme()
 
-outfile <- "figure2_polar.pdf"
+p_pathways_match_2 <- list_human_pathways_match[[2]] %>% 
+  mutate(E = ifelse(E > E_threshold, E_threshold, E)) %>% 
+  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = E)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  labs(x = NULL,
+       y = NULL,
+       fill = "Enrichment") +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+p_pathways_match <- (p_pathways_match_1 | p_pathways_match_2) / guide_area() +
+  plot_layout(guides = "collect", heights = c(0.8, 0.2)) &
+  scale_fill_gradientn(colors = pathway_palette,
+                       limits = c(0, E_threshold),
+                       guide = guide_colourbar(title.position = "bottom",
+                                               barheight = unit(0.05, "npc"),
+                                               barwidth = unit(0.35, "npc")))  &
+  theme(axis.text = element_text(size = fig2_font_size-1),
+        axis.ticks = element_blank(),
+        axis.ticks.length = unit(0, "bigpts"),
+        axis.title = element_text(size = fig2_font_size-1,
+                                  family = fig2_font_family),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        # legend.background = element_rect(colour = "black"),
+        legend.margin = margin(),
+        legend.title = element_text(angle = 0,
+                                    hjust = 0.5,
+                                    size = fig2_font_size-1,
+                                    family = fig2_font_family),
+        legend.text = element_text(size = fig2_font_size-1,
+                                   family = fig2_font_family),
+        plot.margin = margin(r = 1.5, t = 0, b = 0, l = 1.5))
+
+# legend.position = c(1, 0.5),
+# legend.justification = c("left", "center"),
+# legend.margin = margin(l = 4, r = 0, unit = "bigpts"),
+# legend.title = element_text(angle = 90,
+#                             hjust = 0.5,
+#                             size = fig2_font_size,
+#                             family = fig2_font_family),
+# legend.text = element_text(size = fig2_font_size-1,
+#                            family = fig2_font_family),
+
+# Pathways plot dimensions in bigpts
+fig2_pathways_match_width_pt <- 170
+fig2_pathways_match_height_pt <- 175
+
+# Pathways plot dimensions in inches
+fig2_pathways_match_width_in <- unit(fig2_pathways_match_width_pt/pt_per_in, "in")
+fig2_pathways_match_height_in <- unit(fig2_pathways_match_height_pt/pt_per_in, "in")
+
+# Export pathways plot
+outfile <- "figure2_pathways_match_enrichment_20.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
-    width = unit(fig2_polar_width, "in"),
-    height = unit(fig2_polar_height, "in"))
-grid.draw(fig2_polar_grob_grid)
+    width = fig2_pathways_match_width_in,
+    height = fig2_pathways_match_height_in)
+print(p_pathways_match)
 dev.off()
-
 ```
 
+```{r fig2-pathways-significance-20}
+p_pathways_match_1 <- list_human_pathways_match[[1]] %>% 
+  mutate(significant = ifelse(adj.P.Val < 0.05, TRUE, FALSE)) %>% 
+  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = significant)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_manual(values = c("white", pathway_palette_cols[length(pathway_palette_cols)])) + 
+  labs(x = NULL,
+       y = "Biological pathway module",
+       fill = "Significant") +
+  theme_bw()
+
+p_pathways_match_2 <- list_human_pathways_match[[2]] %>% 
+  mutate(significant = ifelse(adj.P.Val < 0.05, TRUE, FALSE)) %>% 
+  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = significant)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_manual(values = c("white", pathway_palette_cols[length(pathway_palette_cols)])) + 
+  labs(x = NULL,
+       y = NULL,
+       fill = "Significant") +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+p_pathways_match <- (p_pathways_match_1 | p_pathways_match_2) +
+  plot_layout(guides = "collect")
+
+outfile <- "figure2_pathways_match_significance_20.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(6, "in"))
+print(p_pathways_match)
+dev.off()
+```
+
+```{r fig2-pathways-enrichment-10}
+E_threshold <- 30
+
+p_pathways_match_1 <- list_human_pathways_match[[1]] %>% 
+  filter(pathway %in% pathway_terms) %>% 
+  mutate(E = ifelse(E > E_threshold, E_threshold, E)) %>% 
+  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = E)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = pathway_palette,
+                       limits = c(0, E_threshold))  +
+  labs(x = NULL,
+       y = "Biological pathway module",
+       fill = "Enrichment") +
+  theme_bw()
+
+p_pathways_match_2 <- list_human_pathways_match[[2]] %>% 
+  filter(pathway %in% pathway_terms) %>% 
+  mutate(E = ifelse(E > E_threshold, E_threshold, E)) %>% 
+  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = E)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = pathway_palette,
+                       limits = c(0, E_threshold))  +
+  labs(x = NULL,
+       y = NULL,
+       fill = "Enrichment") +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+p_pathways_match <- (p_pathways_match_1 | p_pathways_match_2) +
+  plot_layout(guides = "collect")
+
+outfile <- "figure2_pathways_match_enrichment_10.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(6, "in"))
+print(p_pathways_match)
+dev.off()
+```
+
+```{r fig2-pathways-significance-10}
+p_pathways_match_1 <- list_human_pathways_match[[1]] %>% 
+  filter(pathway %in% pathway_terms) %>% 
+  mutate(significant = ifelse(adj.P.Val < 0.05, TRUE, FALSE)) %>% 
+  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = significant)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_manual(values = c("white", pathway_palette_cols[length(pathway_palette_cols)])) + 
+  labs(x = NULL,
+       y = "Biological pathway module",
+       fill = "Significant") +
+  theme_bw()
+
+p_pathways_match_2 <- list_human_pathways_match[[2]] %>% 
+  filter(pathway %in% pathway_terms) %>% 
+  mutate(significant = ifelse(adj.P.Val < 0.05, TRUE, FALSE)) %>% 
+  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = significant)) + 
+  geom_tile(col = "grey50") +
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_manual(values = c("white", pathway_palette_cols[length(pathway_palette_cols)])) + 
+  labs(x = NULL,
+       y = NULL,
+       fill = "Significant") +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+p_pathways_match <- (p_pathways_match_1 | p_pathways_match_2) +
+  plot_layout(guides = "collect")
+
+outfile <- "figure2_pathways_match_significance_10.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(6, "in"))
+print(p_pathways_match)
+dev.off()
+```
+
+## ROC curve
+
+```{r}
+df_1 <- list_human_pathways_match[[2]]
+
+alpha_mouse <- 0.05
+mouse_pass <- df_1 %>% 
+  filter(str_detect(cluster_id, "M")) %>% 
+  mutate(pass = adj.P.Val < alpha_mouse) %>% 
+  arrange(pathway) %>% 
+  pull(pass)
+
+nalpha <- 1000
+# qmin <- min(df_1$adj.P.Val)
+# qmax <- 1
+# qlog_seq <- seq(log10(qmin), log10(qmax), length.out = nalpha)
+# alpha_seq <- 10^qlog_seq
+alpha_seq <- seq(0, 1, by = 0.001) 
+
+for (k in 1:length(list_human_pathways_match)) {
+  
+  mouse_pass <- list_human_pathways_match[[k]] %>% 
+    filter(str_detect(cluster_id, "M")) %>% 
+    mutate(pass = adj.P.Val < alpha_mouse) %>% 
+    arrange(pathway) %>% 
+    pull(pass)
+  
+  df_roc <- tibble(alpha = alpha_seq,
+                   fpr = 0,
+                   tpr = 0)
+  for (i in 1:nrow(df_roc)) {
+    
+    human_pass <- list_human_pathways_match[[k]] %>% 
+      filter(str_detect(cluster_id, "H")) %>% 
+      mutate(pass = adj.P.Val <= df_roc[[i, "alpha"]]) %>% 
+      arrange(pathway) %>% 
+      pull(pass)
+    
+    df_roc[[i, "tpr"]] <- sum(human_pass & mouse_pass)/sum(mouse_pass)
+    df_roc[[i, "fpr"]] <- sum(human_pass & !mouse_pass)/sum(!mouse_pass)
+    
+  }
+  
+  p_test <- ggplot(df_roc, aes(x = fpr, y = tpr)) + 
+    annotate(geom = "segment",
+             x = 0, xend = 1,
+             y = 0, yend = 1,
+             linetype = "dashed",
+             col = "red") +
+    geom_line() + 
+    labs(x = "False positive rate (1 - specificity)",
+         y = "Sensitivity") +
+    theme_bw()
+  
+  outfile <- paste0("roc_", k, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(5, "in"),
+      height = unit(5, "in"))
+  print(p_test)
+  dev.off()
+  
+}
+```
+
+```{r}
+library(pROC)
+
+for (k in 1:length(list_human_pathways_match)) {
+  
+  predictor <- list_human_pathways_match[[k]] %>% 
+    filter(str_detect(cluster_id, "H")) %>% 
+    arrange(pathway) %>% 
+    pull(adj.P.Val)
+  
+  outcome <- list_human_pathways_match[[k]] %>% 
+    filter(str_detect(cluster_id, "M")) %>% 
+    mutate(pass = adj.P.Val < alpha_mouse) %>% 
+    arrange(pathway) %>% 
+    pull(pass)
+  
+  print(auc(outcome, predictor))
+  
+}
+```
+
+
+
+```{r}
+x1 <- list_human_pathways_match[[1]] %>% 
+  mutate(qval_log = -log10(adj.P.Val))
+
+clusters <- unique(x1[["cluster_id"]])
+
+nalpha <- 100
+alpha_max <- ceiling(max(x1$qval_log))
+# df_roc_alpha <- matrix(data = 0, nrow = nalpha, ncol = 3)
+# colnames(df_roc_alpha) <- c("alpha", clusters)
+# df_roc_alpha <- as_tibble(df_roc_alpha)
+# df_roc_alpha[["alpha"]] <- seq(0, alpha_max, length.out = nalpha)
+df_roc_alpha <- tibble(alpha = seq(0, alpha_max, length.out = nalpha),
+                       npass = 0)
+
+for (i in 1:nrow(df_roc_alpha)) {
+  l1 <- split(x1, f = x1[["cluster_id"]])
+  pass1 <- l1[[1]][["qval_log"]] >= df_roc_alpha[[i, "alpha"]]
+  pass2 <- l1[[2]][["qval_log"]] >= df_roc_alpha[[i, "alpha"]]
+  df_roc_alpha[[i, "npass"]] <- sum(pass1 & pass2)
+}
+```
+
+```{r}
+ggplot(df_roc_alpha, 
+       aes(x = alpha, y = npass)) + 
+  geom_point()
+```
 
 
 
