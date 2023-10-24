@@ -45,5 +45,22 @@ demographics <- read_csv(demographics, show_col_types = FALSE)
 demographics
 ```
 
+```{r}
+demographics <- demographics %>%
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner))
 
+nrow(demographics)
+```
+
+```{r}
+demographics %>% 
+  mutate(DX2 = ifelse(DX == "Control", "Control", "NDD")) %>% 
+  group_by(DX2) %>% 
+  summarise(nparticipants = n(),
+            fparticipants = n()/nrow(.))
+```
 

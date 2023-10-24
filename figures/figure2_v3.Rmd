@@ -2,7 +2,7 @@
 title: "Figure 2"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-10-03"
+date: "2023-10-24"
 output: html_document
 ---
 
@@ -22,6 +22,7 @@ suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(viridis))
 suppressPackageStartupMessages(library(viridisLite))
 suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(pROC))
 ```
 
 ```{r functions}
@@ -699,7 +700,7 @@ df_similarity_nk <- df_similarity_nk %>%
          pval_lab = ifelse(significant, "*", ""))
 ```
 
-```{r fig2-sim-heatmap-palette}
+```{r fig2-sim-plots-heatmap}
 # Max and min similarity values
 similarity_max <- max(df_similarity_nk[["similarity"]])
 similarity_min <- min(df_similarity_nk[["similarity"]])
@@ -718,9 +719,7 @@ heatmap_scale_colours <- magma(n = heatmap_palette_length, begin = 0.3)
 
 # Heatmap palette vector
 heatmap_scale_palette <- colorRampPalette(heatmap_scale_colours)(heatmap_palette_length)
-```
 
-```{r fig2-sim-plots}
 # Clamp log p-values when infinite
 df_similarity_nk <- df_similarity_nk %>% 
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
@@ -759,7 +758,9 @@ fig2_heatmap <- ggplot(df_similarity_nk,
                                    family = fig2_font_family),
         # plot.background = element_rect(colour = "black"),
         plot.margin = margin(t = 0, l = 5, r = 5, unit = "bigpts"))
+```
 
+```{r fig2-sim-plots-density}
 # Limits and breaks for permutations plot
 fig2_permutations_xlims <- c(0.2, 1)
 fig2_permutations_xbreaks <- seq(0, 1, by = 0.1)
@@ -782,7 +783,9 @@ fig2_permutations_density <- ggplot(df_permutations_nk,
         axis.ticks.x = element_blank(),
         # plot.background = element_rect(colour = "black"),
         plot.margin = margin(t = 2.5, l = 5, b = 0, unit = "bigpts"))
+```
 
+```{r fig2-sim-plots-pvals}
 # Permutation p-value plot
 pvals <- c(0.05, 0.01, 0.001)
 fig2_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity, 
@@ -812,7 +815,9 @@ fig2_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity,
   theme(axis.title.y.right = element_text(angle = 90, vjust = 2),
         axis.text.y.right = element_text(size = fig2_font_size-1),
         plot.margin = margin(t = 0, l = 5, unit = "bigpts"))
+```
 
+```{r fig2-sim-plots-combine}
 # Combine plots using patchwork
 fig2_similarity <- fig2_heatmap / fig2_permutations_density / fig2_permutations_pvals +
   plot_layout(heights = c(1, 1, 1)) &
@@ -837,9 +842,10 @@ print(fig2_similarity)
 dev.off()
 ```
 
+
 # Panel: Mouse molecular pathways polar plot
 
-```{r fig2-pathways-import}
+```{r fig2-pathways-mouse-import}
 # Threshold for StringDB 
 stringdb_threshold <- 950
 
@@ -896,8 +902,7 @@ for (k in 1:nk_mouse) {
 }
 ```
 
-
-```{r fig2-pathways-plot}
+```{r fig2-pathways-mouse-plot}
 # List of desired pathway terms for polar plot
 pathway_terms <- c("Chromatin organization",
                    "Gene expression (transcription)",
@@ -910,6 +915,17 @@ pathway_terms <- c("Chromatin organization",
                    "Signaling by wnt",
                    "Transmission across chemical synapses")
 
+pathway_labels <- c("Chromatin org.",
+                    "Gene expr.",
+                    "Generic transcr.",
+                    "Mapk",
+                    "Mtor",
+                    "Prot.-prot. int.",
+                    "Hedgehog",
+                    "Notch",
+                    "Wnt",
+                    "Trans. acr. synapses")
+
 # Reduce list of pathways to a data frame
 df_mouse_pathways <- list_mouse_pathways %>% 
   bind_rows() %>% 
@@ -918,12 +934,13 @@ df_mouse_pathways <- list_mouse_pathways %>%
 # An additional empty level must be added to close the polar plot
 polar_plot_lvls <- c(" ", pathway_terms)
 
-# 
+# Create a temp df for the additional empty factor level
 df_polar_plot_tmp <- df_mouse_pathways %>% 
   mutate(pathway = as.character(pathway)) %>% 
   filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
   mutate(pathway = " ")
 
+# Join the empty factor level to the true factors
 df_polar_plot <- df_mouse_pathways %>% 
   bind_rows(df_polar_plot_tmp) %>% 
   mutate(pathway = factor(pathway, levels = polar_plot_lvls))
@@ -939,12 +956,12 @@ polar_labels <- tibble(pathway = polar_plot_lvls[2],
                        breaks = polar_breaks)
 
 # Generate polar plot
-fig2_pathways <- ggplot(df_polar_plot, 
-                        aes(x = pathway, 
-                            ymin = 0, ymax = E, 
-                            group = cluster_id, 
-                            fill = cluster_id, 
-                            col = cluster_id)) + 
+fig2_pathways_mouse <- ggplot(df_polar_plot, 
+                              aes(x = pathway, 
+                                  ymin = 0, ymax = E, 
+                                  group = cluster_id, 
+                                  fill = cluster_id, 
+                                  col = cluster_id)) + 
   geom_ribbon(alpha = 0.2) + 
   # geom_text(data = polar_labels,
   #           inherit.aes = FALSE,
@@ -952,7 +969,8 @@ fig2_pathways <- ggplot(df_polar_plot,
   #                         y = breaks, 
   #                         label = breaks)) + 
   coord_radar(start = theta_start, clip = "off") + 
-  scale_x_discrete(expand = expansion()) + 
+  scale_x_discrete(expand = expansion(), 
+                   labels = pathway_labels) + 
   # scale_y_continuous(breaks = polar_breaks) + 
   scale_fill_discrete(guide = guide_legend(title.position = "bottom",
                                            hjust = 0)) +
@@ -962,7 +980,7 @@ fig2_pathways <- ggplot(df_polar_plot,
   theme_bw() + 
   theme(axis.ticks.x = element_blank(),
         axis.line.x = element_blank(),
-        axis.text.x = element_text(size = fig2_font_size-1,
+        axis.text.x = element_text(size = fig2_font_size,
                                    family = fig2_font_family),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -976,38 +994,38 @@ fig2_pathways <- ggplot(df_polar_plot,
         legend.text = element_text(size = fig2_font_size,
                                    family = fig2_font_family),
         legend.box.margin = margin(t = -15),
-        plot.margin = margin(l = 30, r = 30, t = 5)
+        plot.margin = margin(l = 10, r = 25, t = 10)
   )
 
 # Fix polar axis labels
-fig2_pathways_grob <- grid.force(ggplotGrob(fig2_pathways))
-fig2_pathways_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_terms
+fig2_pathways_mouse_grob <- grid.force(ggplotGrob(fig2_pathways_mouse))
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_labels
 
-# fig2_pathways_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- c()
-# fig2_pathways_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- c()
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- unit(c(0.50, 0.80, 1.00, 1.00, 0.80, 0.50, 0.22, 0.01, 0.01, 0.16), "npc")
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- unit(c(0.99, 0.91, 0.68, 0.35, 0.09, 0.02, 0.09, 0.35, 0.65, 0.91), "npc")
 
 # Pathways plot dimensions in bigpts
-fig2_pathways_width_pt <- 200
-fig2_pathways_height_pt <- 180
+fig2_pathways_mouse_width_pt <- 205
+fig2_pathways_mouse_height_pt <- 211
 
 # Pathways plot dimensions in inches
-fig2_pathways_width_in <- unit(fig2_pathways_width_pt/pt_per_in, "in")
-fig2_pathways_height_in <- unit(fig2_pathways_height_pt/pt_per_in, "in")
+fig2_pathways_mouse_width_in <- unit(fig2_pathways_mouse_width_pt/pt_per_in, "in")
+fig2_pathways_mouse_height_in <- unit(fig2_pathways_mouse_height_pt/pt_per_in, "in")
 
 # Export pathways plot
-outfile <- "figure2_pathways.pdf"
+outfile <- "figure2_pathways_mouse.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
-    width = fig2_pathways_width_in,
-    height = fig2_pathways_height_in)
-grid.draw(fig2_pathways_grob)
+    width = fig2_pathways_mouse_width_in,
+    height = fig2_pathways_mouse_height_in)
+grid.draw(fig2_pathways_mouse_grob)
 dev.off()
 ```
 
-# Panel: Mouse-human pathway enrichment
 
+# Panel: Mouse-human molecular pathway correspondence
 
-```{r fig2-human-pathways-import}
+```{r fig2-pathways-human-import}
 # Base directory for human pathway data files
 human_pathways_dir <- "../analyses/primary/outputs/human_cluster_pathways/"
 human_pathways_dir <- file.path(human_pathways_dir, version, human_params_id, stringdb_threshold)
@@ -1030,16 +1048,130 @@ for (k in 1:nk_human) {
 }
 ```
 
+```{r fig2-pathways-human-plot}
+# Reduce list of pathways to a data frame
+df_human_pathways <- list_human_pathways %>% 
+  bind_rows() %>% 
+  filter(pathway %in% pathway_terms)
+
+# An additional empty level must be added to close the polar plot
+polar_plot_lvls <- c(" ", pathway_terms)
+
+# Create a temp df for the additional empty factor level
+df_polar_plot_tmp <- df_human_pathways %>% 
+  mutate(pathway = as.character(pathway)) %>% 
+  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+  mutate(pathway = " ")
+
+# Join the empty factor level to the true factors
+df_polar_plot <- df_human_pathways %>% 
+  bind_rows(df_polar_plot_tmp) %>% 
+  mutate(pathway = factor(pathway, levels = polar_plot_lvls))
+
+# Polar plot parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+breaks_end <- 15
+breaks_step <- 5
+polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                       breaks = polar_breaks)
+
+# Generate polar plot
+fig2_pathways_human <- ggplot(df_polar_plot, 
+                              aes(x = pathway, 
+                                  ymin = 0, ymax = E, 
+                                  group = cluster_id, 
+                                  fill = cluster_id, 
+                                  col = cluster_id)) + 
+  geom_ribbon(alpha = 0.2) + 
+  # geom_text(data = polar_labels,
+  #           inherit.aes = FALSE,
+  #           mapping = aes(x = pathway, 
+  #                         y = breaks, 
+  #                         label = breaks)) + 
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion()) + 
+  # scale_y_continuous(breaks = polar_breaks) + 
+    # scale_fill_discrete(guide = NULL) +
+  # scale_colour_discrete(guide = NULL) + 
+  scale_fill_discrete(guide = guide_legend(title.position = "bottom",
+                                           hjust = 0)) +
+  labs(x = NULL,
+       fill = "Human cluster",
+       col = "Human cluster") + 
+  theme_bw() + 
+  theme(axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_text(size = fig2_font_size-1,
+                                   family = fig2_font_family),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        panel.border = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(12, "bigpts"),
+        legend.title = element_text(size = fig2_font_size,
+                                    family = fig2_font_family,
+                                    hjust = 0.5),
+        legend.text = element_text(size = fig2_font_size,
+                                   family = fig2_font_family),
+        legend.box.margin = margin(t = -15),
+        plot.margin = margin(l = 10, r = 25, t = 10)
+  )
+
+# Extract legend grob
+fig2_pathways_human_legend_grob <- fig2_pathways_human %>% 
+  ggplotGrob() %>% 
+  grid.force() %>% 
+  getGrob("guides.3-3-3-3")
+
+# Remove legend
+fig2_pathways_human <- fig2_pathways_human +
+  theme(legend.position = "none")
+
+# Plot grob
+fig2_pathways_human_grob <- grid.force(ggplotGrob(fig2_pathways_human))
+
+# Fix polar axis labels
+fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_labels
+
+# Re-position polar axis labels
+fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- unit(c(0.50, 0.90, 1.05, 1.05, 0.80, 0.50, 0.10, -0.04, -0.02, 0.16), "npc")
+fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- unit(c(1.02, 0.93, 0.72, 0.35, 0.08, 0.00, 0.08, 0.35, 0.65, 0.93), "npc")
+
+# Pathways plot dimensions in bigpts
+fig2_pathways_human_width_pt <- 118
+fig2_pathways_human_height_pt <- 121
+
+# Pathways plot dimensions in inches
+fig2_pathways_human_width_in <- unit(fig2_pathways_human_width_pt/pt_per_in, "in")
+fig2_pathways_human_height_in <- unit(fig2_pathways_human_height_pt/pt_per_in, "in")
+
+# Export pathways plot
+outfile <- "figure2_pathways_human.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig2_pathways_human_width_in,
+    height = fig2_pathways_human_height_in)
+grid.draw(fig2_pathways_human_grob)
+dev.off()
+```
+
 ```{r fig2-pathways-match}
+# Get mouse and human pathway enrichment for matching clusters
 list_human_pathways_match <- vector(mode = "list", length = length(list_human_pathways))
 names(list_human_pathways_match) <- names(list_human_pathways)
 for (k in 1:nk_human) {
   
+  # ID for matching mouse cluster
   mouse_match_id <- df_similarity_nk %>% 
     filter(human_cluster_id == paste(nk_human, k, sep = "-"),
            significant) %>% 
     pull(mouse_cluster_id)
   
+  # Combine human and mouse pathway enrichment
   list_human_pathways_match[[k]] <- list_human_pathways[[k]] %>% 
     mutate(cluster_id = paste0("H", cluster_id)) %>% 
     bind_rows(list_mouse_pathways[[mouse_match_id]] %>% 
@@ -1048,6 +1180,276 @@ for (k in 1:nk_human) {
   
 }
 ```
+
+```{r fig2-pathways-roc}
+# alpha_mouse <- 0.05
+
+# Sequence of alpha thresholds
+nalpha <- 1000
+alpha_seq <- seq(0, 1, length.out = nalpha) 
+
+# Iterate over mouse alpha values to establish ground truth
+# alpha_mouse <- c(0.05, 1e-2, 1e-3, 1e-4)
+alpha_mouse <- 1e-3
+for (alpha in alpha_mouse) {
+  
+  # Iterate over human clusters
+  list_pathways_roc <- vector(mode = "list", length = length(list_human_pathways_match))
+  names(list_pathways_roc) <- names(list_human_pathways_match)
+  for (k in 1:length(list_pathways_roc)) {
+    
+    # Mouse ground truth for human cluster k
+    mouse_pass <- list_human_pathways_match[[k]] %>% 
+      filter(str_detect(cluster_id, "M")) %>% 
+      mutate(pass = adj.P.Val < alpha) %>% 
+      arrange(pathway) %>% 
+      pull(pass)
+    
+    # Generate ROC curve data
+    df_roc <- tibble(alpha = alpha_seq,
+                     fpr = 0,
+                     tpr = 0)
+    for (i in 1:nrow(df_roc)) {
+      
+      # Human pathway predictions at alpha threshold
+      human_pass <- list_human_pathways_match[[k]] %>% 
+        filter(str_detect(cluster_id, "H")) %>% 
+        mutate(pass = adj.P.Val <= df_roc[[i, "alpha"]]) %>% 
+        arrange(pathway) %>% 
+        pull(pass)
+      
+      # Compute TPR and FPR
+      df_roc[[i, "tpr"]] <- sum(human_pass & mouse_pass)/sum(mouse_pass)
+      df_roc[[i, "fpr"]] <- sum(human_pass & !mouse_pass)/sum(!mouse_pass)
+      
+    }
+    
+    list_pathways_roc[[k]] <- df_roc
+    
+  }
+  
+  # Combine ROC data for both human clusters
+  df_pathways_roc <- bind_rows(list_pathways_roc, .id = "cluster_id")
+  
+  # Plot ROC curves at given mouse alpha
+  fig2_pathways_roc <- ggplot(df_pathways_roc,
+                              aes(x = fpr, y = tpr, col = cluster_id)) + 
+    annotate(geom = "segment",
+             x = 0, xend = 1,
+             y = 0, yend = 1,
+             linetype = "dashed",
+             col = "black") +
+    geom_line() +
+    labs(x = "False positive rate (1 - specificity)",
+         y = "Sensitivity") +
+    theme_bw() +
+    theme(legend.position = "none",
+          axis.text = element_text(size = fig2_font_size-1),
+          axis.title = element_text(size = fig2_font_size),
+          plot.margin = margin())
+  
+  # Export plot
+  outfile <- paste0("figure2_pathways_ROC_", sprintf("%.4f", alpha), ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(5, "in"),
+      height = unit(5, "in"))
+  print(fig2_pathways_roc)
+  dev.off()
+  
+}
+
+fig2_pathways_roc_grob <- grid.force(ggplotGrob(fig2_pathways_roc))
+```
+
+```{r}
+fig2_pathways_roc_grob <- grid.force(ggplotGrob(fig2_pathways_roc))
+
+fig2_pathways_compare_layout <- rbind(c(01),
+                                      c(02),
+                                      c(03))
+
+# fig2_pathways_compare_widths <- c(0.16, 0.84)
+fig2_pathways_compare_heights <- c(0.5, 0.4, 0.1)
+
+fig2_pathways_compare_grob <- arrangeGrob(gTree(children = gList(fig2_empty_rect_grob, fig2_pathways_human_grob)),
+                                          gTree(children = gList(fig2_empty_rect_grob, fig2_pathways_roc_grob)),
+                                          gTree(children = gList(fig2_empty_rect_grob, fig2_pathways_human_legend_grob)),
+                                          layout_matrix = fig2_pathways_compare_layout,
+                                          # widths = fig2_pathways_compare_widths,
+                                          heights = fig2_pathways_compare_heights)
+
+fig2_pathways_compare_width_pt <- 145
+fig2_pathways_compare_height_pt <- 211
+
+fig2_pathways_compare_width_in <- fig2_pathways_compare_width_pt/pt_per_in
+fig2_pathways_compare_height_in <- fig2_pathways_compare_height_pt/pt_per_in
+
+fig2_pathways_compare_width_in <- unit(fig2_pathways_compare_width_in, "in")
+fig2_pathways_compare_height_in <- unit(fig2_pathways_compare_height_in, "in")
+
+# Export pathways plot
+outfile <- "figure2_pathways_compare.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig2_pathways_compare_width_in,
+    height = fig2_pathways_compare_height_in)
+grid.draw(fig2_pathways_compare_grob)
+dev.off()
+```
+
+```{r fig2-pathways-roc-auc}
+# Sequence of alpha values for mouse ground truth
+alpha_mouse <- 1:10
+alpha_mouse <- (1/10)^alpha_mouse
+
+# Iterate over human clusters and mouse alpha values
+df_auc <- expand_grid(k = 1:nk_human,
+                      alpha = alpha_mouse,
+                      auc = 0)
+for (i in 1:nrow(df_auc)) {
+  
+  # Human cluster
+  k <- df_auc[[i, "k"]]
+  
+  # Human pathway values used to predict the mouse pathways
+  predictor <- list_human_pathways_match[[k]] %>% 
+    filter(str_detect(cluster_id, "H")) %>% 
+    arrange(pathway) %>% 
+    pull(adj.P.Val)
+  
+  # Mouse pathway ground truth at alpha
+  outcome <- list_human_pathways_match[[k]] %>% 
+    filter(str_detect(cluster_id, "M")) %>% 
+    mutate(pass = adj.P.Val < df_auc[[i, "alpha"]]) %>% 
+    arrange(pathway) %>% 
+    pull(pass)
+  
+  # Compute AUC
+  df_auc[[i, "auc"]] <- auc(outcome, predictor, quiet = TRUE)[1]
+}
+
+# Generate cluster IDs
+df_auc <- df_auc %>% 
+  mutate(cluster_id = paste(nk_human, k, sep = "-"),
+         cluster_id = factor(cluster_id))
+
+# Plot AUC over mouse alpha values
+fig2_pathways_roc_auc <- ggplot(df_auc, aes(x = -log10(alpha), y = auc, col = cluster_id)) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(ylim = c(0.5, 1)) +
+  scale_x_continuous(breaks = -log10(alpha_mouse)) + 
+  labs(y = "AUC",
+       col = "Human cluster") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+
+# Export plot
+outfile <- paste0("figure2_pathways_ROC_AUC.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(5, "in"),
+    height = unit(3, "in"))
+print(fig2_pathways_roc_auc)
+dev.off()
+```
+
+
+# Panel: Human cluster demographics
+
+
+
+# Figure
+
+```{r fig2}
+fig2_widths <- c(fig2_ss_width, 0.2, 3.5)
+fig2_heights <- c(2.0, 0.2, fig2_ss_height*(0.25), fig2_ss_height*(1-0.25))
+
+fig2_widths_in <- unit(fig2_widths, "in")
+fig2_heights_in <- unit(fig2_heights, "in")
+
+# With gridlines
+fig2_grob_grid <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig2_heatmap_grob)),
+                              rectGrob(gp = gpar(fill = NA)),
+                              gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig2_permutations_grob)),
+                              rectGrob(gp = gpar(fill = NA)),
+                              fig2_ss_grob,
+                              grid.force(ggplotGrob(fig2_polar)),
+                              layout_matrix = rbind(c(01, 02, 03),
+                                                    c(04, 02, 03),
+                                                    c(05, 02, 03),
+                                                    c(05, 02, 06)),
+                              widths = fig2_widths_in,
+                              heights = fig2_heights_in)
+
+# Figure dimensions
+# Correct dimensions
+fig2_width <- unit(sum(fig2_widths), "inch")
+fig2_height <- unit(sum(fig2_heights), "inch")
+
+fig2_grob_grid <- gTree(children = gList(rectGrob(width = fig2_width,
+                                                  height = fig2_height,
+                                                  gp = gpar(fill = NA)), 
+                                         fig2_grob_grid))
+
+fig2_width_tmp <- unit(8.5, "in")
+fig2_height_tmp <- unit(11.0, "in")
+
+# Render figure
+fig2_outfile <- "figure2_with_grid.pdf"
+fig2_outfile <- file.path(output_dir, fig2_outfile)
+pdf(file = fig2_outfile,
+    width = fig2_width_tmp,
+    height = fig2_height_tmp)
+grid.draw(fig2_grob_grid)
+dev.off()
+```
+
+
+
+```{r fig2}
+fig2_widths <- c(fig2_ss_width, 0.2, 3.5)
+fig2_heights <- c(2.0, 0.2, fig2_ss_height*(0.25), fig2_ss_height*(1-0.25))
+
+fig2_widths_in <- unit(fig2_widths, "in")
+fig2_heights_in <- unit(fig2_heights, "in")
+
+# With gridlines
+fig2_grob <- arrangeGrob(fig2_heatmap_grob,
+                         zeroGrob(),
+                         fig2_permutations_grob,
+                         zeroGrob(),
+                         fig2_ss_grob,
+                         grid.force(ggplotGrob(fig2_polar)),
+                         layout_matrix = rbind(c(01, 02, 03),
+                                               c(04, 02, 03),
+                                               c(05, 02, 03),
+                                               c(05, 02, 06)),
+                         widths = fig2_widths_in,
+                         heights = fig2_heights_in)
+
+# Figure dimensions
+# Correct dimensions
+fig2_width <- unit(sum(fig2_widths), "inch")
+fig2_height <- unit(sum(fig2_heights), "inch")
+
+
+fig2_width_tmp <- unit(8.5, "in")
+fig2_height_tmp <- unit(11.0, "in")
+
+# Render figure
+fig2_outfile <- "figure2.pdf"
+fig2_outfile <- file.path(output_dir, fig2_outfile)
+pdf(file = fig2_outfile,
+    width = fig2_width_tmp,
+    height = fig2_height_tmp)
+grid.draw(fig2_grob)
+dev.off()
+```
+
+# Additional
+
 
 ```{r fig2-pathways-enrichment-20}
 # pathway_palette_cols <- c("white", brewer.pal(n = 9, name = "OrRd")[3:9])
@@ -1171,300 +1573,5 @@ pdf(file = outfile,
     width = unit(8, "in"),
     height = unit(6, "in"))
 print(p_pathways_match)
-dev.off()
-```
-
-```{r fig2-pathways-enrichment-10}
-E_threshold <- 30
-
-p_pathways_match_1 <- list_human_pathways_match[[1]] %>% 
-  filter(pathway %in% pathway_terms) %>% 
-  mutate(E = ifelse(E > E_threshold, E_threshold, E)) %>% 
-  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = E)) + 
-  geom_tile(col = "grey50") +
-  scale_x_discrete(expand = expansion(), position = "top") + 
-  scale_y_discrete(expand = expansion()) + 
-  scale_fill_gradientn(colors = pathway_palette,
-                       limits = c(0, E_threshold))  +
-  labs(x = NULL,
-       y = "Biological pathway module",
-       fill = "Enrichment") +
-  theme_bw()
-
-p_pathways_match_2 <- list_human_pathways_match[[2]] %>% 
-  filter(pathway %in% pathway_terms) %>% 
-  mutate(E = ifelse(E > E_threshold, E_threshold, E)) %>% 
-  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = E)) + 
-  geom_tile(col = "grey50") +
-  scale_x_discrete(expand = expansion(), position = "top") + 
-  scale_y_discrete(expand = expansion()) + 
-  scale_fill_gradientn(colors = pathway_palette,
-                       limits = c(0, E_threshold))  +
-  labs(x = NULL,
-       y = NULL,
-       fill = "Enrichment") +
-  theme_bw() +
-  theme(axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank())
-
-p_pathways_match <- (p_pathways_match_1 | p_pathways_match_2) +
-  plot_layout(guides = "collect")
-
-outfile <- "figure2_pathways_match_enrichment_10.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(8, "in"),
-    height = unit(6, "in"))
-print(p_pathways_match)
-dev.off()
-```
-
-```{r fig2-pathways-significance-10}
-p_pathways_match_1 <- list_human_pathways_match[[1]] %>% 
-  filter(pathway %in% pathway_terms) %>% 
-  mutate(significant = ifelse(adj.P.Val < 0.05, TRUE, FALSE)) %>% 
-  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = significant)) + 
-  geom_tile(col = "grey50") +
-  scale_x_discrete(expand = expansion(), position = "top") + 
-  scale_y_discrete(expand = expansion()) + 
-  scale_fill_manual(values = c("white", pathway_palette_cols[length(pathway_palette_cols)])) + 
-  labs(x = NULL,
-       y = "Biological pathway module",
-       fill = "Significant") +
-  theme_bw()
-
-p_pathways_match_2 <- list_human_pathways_match[[2]] %>% 
-  filter(pathway %in% pathway_terms) %>% 
-  mutate(significant = ifelse(adj.P.Val < 0.05, TRUE, FALSE)) %>% 
-  ggplot(mapping = aes(x = cluster_id, y = pathway, fill = significant)) + 
-  geom_tile(col = "grey50") +
-  scale_x_discrete(expand = expansion(), position = "top") + 
-  scale_y_discrete(expand = expansion()) + 
-  scale_fill_manual(values = c("white", pathway_palette_cols[length(pathway_palette_cols)])) + 
-  labs(x = NULL,
-       y = NULL,
-       fill = "Significant") +
-  theme_bw() +
-  theme(axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank())
-
-p_pathways_match <- (p_pathways_match_1 | p_pathways_match_2) +
-  plot_layout(guides = "collect")
-
-outfile <- "figure2_pathways_match_significance_10.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(8, "in"),
-    height = unit(6, "in"))
-print(p_pathways_match)
-dev.off()
-```
-
-## ROC curve
-
-```{r}
-df_1 <- list_human_pathways_match[[2]]
-
-alpha_mouse <- 0.05
-mouse_pass <- df_1 %>% 
-  filter(str_detect(cluster_id, "M")) %>% 
-  mutate(pass = adj.P.Val < alpha_mouse) %>% 
-  arrange(pathway) %>% 
-  pull(pass)
-
-nalpha <- 1000
-# qmin <- min(df_1$adj.P.Val)
-# qmax <- 1
-# qlog_seq <- seq(log10(qmin), log10(qmax), length.out = nalpha)
-# alpha_seq <- 10^qlog_seq
-alpha_seq <- seq(0, 1, by = 0.001) 
-
-for (k in 1:length(list_human_pathways_match)) {
-  
-  mouse_pass <- list_human_pathways_match[[k]] %>% 
-    filter(str_detect(cluster_id, "M")) %>% 
-    mutate(pass = adj.P.Val < alpha_mouse) %>% 
-    arrange(pathway) %>% 
-    pull(pass)
-  
-  df_roc <- tibble(alpha = alpha_seq,
-                   fpr = 0,
-                   tpr = 0)
-  for (i in 1:nrow(df_roc)) {
-    
-    human_pass <- list_human_pathways_match[[k]] %>% 
-      filter(str_detect(cluster_id, "H")) %>% 
-      mutate(pass = adj.P.Val <= df_roc[[i, "alpha"]]) %>% 
-      arrange(pathway) %>% 
-      pull(pass)
-    
-    df_roc[[i, "tpr"]] <- sum(human_pass & mouse_pass)/sum(mouse_pass)
-    df_roc[[i, "fpr"]] <- sum(human_pass & !mouse_pass)/sum(!mouse_pass)
-    
-  }
-  
-  p_test <- ggplot(df_roc, aes(x = fpr, y = tpr)) + 
-    annotate(geom = "segment",
-             x = 0, xend = 1,
-             y = 0, yend = 1,
-             linetype = "dashed",
-             col = "red") +
-    geom_line() + 
-    labs(x = "False positive rate (1 - specificity)",
-         y = "Sensitivity") +
-    theme_bw()
-  
-  outfile <- paste0("roc_", k, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  pdf(file = outfile,
-      width = unit(5, "in"),
-      height = unit(5, "in"))
-  print(p_test)
-  dev.off()
-  
-}
-```
-
-```{r}
-library(pROC)
-
-for (k in 1:length(list_human_pathways_match)) {
-  
-  predictor <- list_human_pathways_match[[k]] %>% 
-    filter(str_detect(cluster_id, "H")) %>% 
-    arrange(pathway) %>% 
-    pull(adj.P.Val)
-  
-  outcome <- list_human_pathways_match[[k]] %>% 
-    filter(str_detect(cluster_id, "M")) %>% 
-    mutate(pass = adj.P.Val < alpha_mouse) %>% 
-    arrange(pathway) %>% 
-    pull(pass)
-  
-  print(auc(outcome, predictor))
-  
-}
-```
-
-
-
-```{r}
-x1 <- list_human_pathways_match[[1]] %>% 
-  mutate(qval_log = -log10(adj.P.Val))
-
-clusters <- unique(x1[["cluster_id"]])
-
-nalpha <- 100
-alpha_max <- ceiling(max(x1$qval_log))
-# df_roc_alpha <- matrix(data = 0, nrow = nalpha, ncol = 3)
-# colnames(df_roc_alpha) <- c("alpha", clusters)
-# df_roc_alpha <- as_tibble(df_roc_alpha)
-# df_roc_alpha[["alpha"]] <- seq(0, alpha_max, length.out = nalpha)
-df_roc_alpha <- tibble(alpha = seq(0, alpha_max, length.out = nalpha),
-                       npass = 0)
-
-for (i in 1:nrow(df_roc_alpha)) {
-  l1 <- split(x1, f = x1[["cluster_id"]])
-  pass1 <- l1[[1]][["qval_log"]] >= df_roc_alpha[[i, "alpha"]]
-  pass2 <- l1[[2]][["qval_log"]] >= df_roc_alpha[[i, "alpha"]]
-  df_roc_alpha[[i, "npass"]] <- sum(pass1 & pass2)
-}
-```
-
-```{r}
-ggplot(df_roc_alpha, 
-       aes(x = alpha, y = npass)) + 
-  geom_point()
-```
-
-
-
-# Figure
-
-```{r fig2}
-fig2_widths <- c(fig2_ss_width, 0.2, 3.5)
-fig2_heights <- c(2.0, 0.2, fig2_ss_height*(0.25), fig2_ss_height*(1-0.25))
-
-fig2_widths_in <- unit(fig2_widths, "in")
-fig2_heights_in <- unit(fig2_heights, "in")
-
-# With gridlines
-fig2_grob_grid <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig2_heatmap_grob)),
-                              rectGrob(gp = gpar(fill = NA)),
-                              gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig2_permutations_grob)),
-                              rectGrob(gp = gpar(fill = NA)),
-                              fig2_ss_grob,
-                              grid.force(ggplotGrob(fig2_polar)),
-                              layout_matrix = rbind(c(01, 02, 03),
-                                                    c(04, 02, 03),
-                                                    c(05, 02, 03),
-                                                    c(05, 02, 06)),
-                              widths = fig2_widths_in,
-                              heights = fig2_heights_in)
-
-# Figure dimensions
-# Correct dimensions
-fig2_width <- unit(sum(fig2_widths), "inch")
-fig2_height <- unit(sum(fig2_heights), "inch")
-
-fig2_grob_grid <- gTree(children = gList(rectGrob(width = fig2_width,
-                                                  height = fig2_height,
-                                                  gp = gpar(fill = NA)), 
-                                         fig2_grob_grid))
-
-fig2_width_tmp <- unit(8.5, "in")
-fig2_height_tmp <- unit(11.0, "in")
-
-# Render figure
-fig2_outfile <- "figure2_with_grid.pdf"
-fig2_outfile <- file.path(output_dir, fig2_outfile)
-pdf(file = fig2_outfile,
-    width = fig2_width_tmp,
-    height = fig2_height_tmp)
-grid.draw(fig2_grob_grid)
-dev.off()
-```
-
-
-
-```{r fig2}
-fig2_widths <- c(fig2_ss_width, 0.2, 3.5)
-fig2_heights <- c(2.0, 0.2, fig2_ss_height*(0.25), fig2_ss_height*(1-0.25))
-
-fig2_widths_in <- unit(fig2_widths, "in")
-fig2_heights_in <- unit(fig2_heights, "in")
-
-# With gridlines
-fig2_grob <- arrangeGrob(fig2_heatmap_grob,
-                         zeroGrob(),
-                         fig2_permutations_grob,
-                         zeroGrob(),
-                         fig2_ss_grob,
-                         grid.force(ggplotGrob(fig2_polar)),
-                         layout_matrix = rbind(c(01, 02, 03),
-                                               c(04, 02, 03),
-                                               c(05, 02, 03),
-                                               c(05, 02, 06)),
-                         widths = fig2_widths_in,
-                         heights = fig2_heights_in)
-
-# Figure dimensions
-# Correct dimensions
-fig2_width <- unit(sum(fig2_widths), "inch")
-fig2_height <- unit(sum(fig2_heights), "inch")
-
-
-fig2_width_tmp <- unit(8.5, "in")
-fig2_height_tmp <- unit(11.0, "in")
-
-# Render figure
-fig2_outfile <- "figure2.pdf"
-fig2_outfile <- file.path(output_dir, fig2_outfile)
-pdf(file = fig2_outfile,
-    width = fig2_width_tmp,
-    height = fig2_height_tmp)
-grid.draw(fig2_grob)
 dev.off()
 ```
