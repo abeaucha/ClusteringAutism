@@ -22,6 +22,7 @@ suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(viridis))
 suppressPackageStartupMessages(library(viridisLite))
 suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(rcartocolor))
 suppressPackageStartupMessages(library(pROC))
 ```
 
@@ -128,7 +129,9 @@ fig2_empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
 ```
 
 
-# Panel: Neuroanatomy slice series
+# Top row
+
+## Panel: Neuroanatomy slice series
 
 ```{r fig2-ss-files}
 # Mouse anatomy
@@ -542,7 +545,8 @@ grid.draw(fig2_ss_legend_grob)
 dev.off()
 ```
 
-# Panel: Mouse-human cluster similarity matrices
+
+## Panel: Mouse-human cluster similarity matrices
 
 ```{r fig2-sim-import}
 # Path to mouse-human similarity directory
@@ -843,7 +847,9 @@ dev.off()
 ```
 
 
-# Panel: Mouse molecular pathways polar plot
+# Bottom row
+
+## Panel: Mouse molecular pathways polar plot
 
 ```{r fig2-pathways-mouse-import}
 # Threshold for StringDB 
@@ -915,6 +921,7 @@ pathway_terms <- c("Chromatin organization",
                    "Signaling by wnt",
                    "Transmission across chemical synapses")
 
+# Pathway labels for polar plot
 pathway_labels <- c("Chromatin org.",
                     "Gene expr.",
                     "Generic transcr.",
@@ -955,6 +962,12 @@ polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
 polar_labels <- tibble(pathway = polar_plot_lvls[2],
                        breaks = polar_breaks)
 
+# Palette for mouse pathway plot
+pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
+                            carto_pal(12, "Antique")[7],
+                            carto_pal(12, "Antique")[2],
+                            carto_pal(12, "Prism")[8])
+
 # Generate polar plot
 fig2_pathways_mouse <- ggplot(df_polar_plot, 
                               aes(x = pathway, 
@@ -962,18 +975,25 @@ fig2_pathways_mouse <- ggplot(df_polar_plot,
                                   group = cluster_id, 
                                   fill = cluster_id, 
                                   col = cluster_id)) + 
-  geom_ribbon(alpha = 0.2) + 
+  geom_ribbon(mapping = aes(alpha = cluster_id,
+                            size = cluster_id)) + 
   # geom_text(data = polar_labels,
   #           inherit.aes = FALSE,
-  #           mapping = aes(x = pathway, 
-  #                         y = breaks, 
-  #                         label = breaks)) + 
+  #           mapping = aes(x = pathway,
+  #                         y = breaks,
+  #                         label = breaks)) +
   coord_radar(start = theta_start, clip = "off") + 
   scale_x_discrete(expand = expansion(), 
                    labels = pathway_labels) + 
   # scale_y_continuous(breaks = polar_breaks) + 
-  scale_fill_discrete(guide = guide_legend(title.position = "bottom",
-                                           hjust = 0)) +
+  scale_colour_manual(values = pathways_mouse_palette,
+                      guide = guide_legend(title.position = "bottom",
+                                           hjust = 0)) + 
+  scale_fill_manual(values = pathways_mouse_palette,
+                    guide = guide_legend(title.position = "bottom",
+                                         hjust = 0)) +
+  scale_size_manual(values = c(0.6, 0.4, 0.4, 0.6)) + 
+  scale_alpha_manual(values = c(0.3, 0.2, 0.2, 0.3)) +
   labs(x = NULL,
        fill = "Mouse cluster",
        col = "Mouse cluster") + 
@@ -1053,7 +1073,7 @@ dev.off()
 ```
 
 
-# Panel: Mouse-human molecular pathway correspondence
+## Panel: Mouse-human molecular pathway correspondence
 
 ```{r fig2-pathways-human-import}
 # Base directory for human pathway data files
@@ -1108,6 +1128,9 @@ polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
 polar_labels <- tibble(pathway = polar_plot_lvls[2],
                        breaks = polar_breaks)
 
+# Palette for human pathway plot
+pathways_human_palette <- pathways_mouse_palette[c(4, 1)]
+
 # Generate polar plot
 fig2_pathways_human <- ggplot(df_polar_plot, 
                               aes(x = pathway, 
@@ -1115,7 +1138,7 @@ fig2_pathways_human <- ggplot(df_polar_plot,
                                   group = cluster_id, 
                                   fill = cluster_id, 
                                   col = cluster_id)) + 
-  geom_ribbon(alpha = 0.2) + 
+  geom_ribbon(mapping = aes(alpha = cluster_id)) + 
   # geom_text(data = polar_labels,
   #           inherit.aes = FALSE,
   #           mapping = aes(x = pathway, 
@@ -1124,10 +1147,13 @@ fig2_pathways_human <- ggplot(df_polar_plot,
   coord_radar(start = theta_start, clip = "off") + 
   scale_x_discrete(expand = expansion()) + 
   # scale_y_continuous(breaks = polar_breaks) + 
-  # scale_fill_discrete(guide = NULL) +
-  # scale_colour_discrete(guide = NULL) + 
-  scale_fill_discrete(guide = guide_legend(title.position = "bottom",
-                                           hjust = 0)) +
+  scale_colour_manual(values = pathways_human_palette,
+                      guide = guide_legend(title.position = "bottom",
+                                           hjust = 0)) + 
+  scale_fill_manual(values = pathways_human_palette,
+                    guide = guide_legend(title.position = "bottom",
+                                         hjust = 0)) +
+  scale_alpha_manual(values = c(0.3, 0.3)) + 
   labs(x = NULL,
        fill = "Human cluster",
        col = "Human cluster") + 
@@ -1285,9 +1311,11 @@ for (alpha in alpha_mouse) {
     annotate(geom = "segment",
              x = 0, xend = 1,
              y = 0, yend = 1,
+             size = 0.4,
              linetype = "dashed",
              col = "black") +
     geom_line() +
+    scale_color_manual(values = pathways_human_palette) + 
     labs(x = "False positive rate (1 - specificity)",
          y = "Sensitivity") +
     theme_bw() +
@@ -1311,15 +1339,18 @@ fig2_pathways_roc_grob <- grid.force(ggplotGrob(fig2_pathways_roc))
 ```
 
 
-# Panel: Human cluster demographics
+## Panel: Human cluster demographics
 
 ```{r fig2-dx-import}
+# Human registration directory
 human_registration_dir <- "../data/human/registration/"
 human_registration_dir <- file.path(human_registration_dir, version)
 
+# Import human demographics data
 demographics <- file.path(human_registration_dir, "subject_info", "demographics.csv")
 demographics <- read_csv(demographics, show_col_types = FALSE)
 
+# Filter for participants 
 demographics <- demographics %>%
   filter(!is.na(DX),
          !is.na(Age),
@@ -1327,16 +1358,20 @@ demographics <- demographics %>%
          !is.na(Site),
          !is.na(Scanner))
 
+# Resolution used for clustering
 human_cluster_resolution <- params %>% 
   filter(id == params_id) %>% 
   pull(human_cluster_resolution)
 human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
 
+# Human clustering directory
 human_cluster_dir <- file.path(human_pipeline_dir, "clusters")
 human_cluster_dir <- file.path(human_cluster_dir, paste("resolution", human_cluster_resolution, sep = "_"))
 
+# Import human clusters
 human_clusters <- file.path(human_cluster_dir, "clusters.csv")
 human_clusters <- read_csv(human_clusters, show_col_types = FALSE)
+
 
 human_cluster_demo <- human_clusters %>% 
   left_join(demographics, by = c("ID" = "file"))
@@ -1375,12 +1410,20 @@ df_dx_nk_freq <- df_dx_nk %>%
 ```
 
 ```{r fig2-dx-plot}
+dx_palette <- brewer.pal(n = length(dx_lvls), name = "Dark2")
+
 fig2_dx <- ggplot(df_dx_nk_freq,
                   aes(x = cluster_id, y = prop_per_k_per_dx,
-                      fill = DX_new)) + 
+                      fill = DX_new, col = DX_new, alpha = DX_new)) + 
   geom_col(position = "dodge") +
-  scale_fill_discrete(guide = guide_legend(title.position = "bottom",
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  scale_colour_manual(values = dx_palette,
+                      guide = guide_legend(title.position = "bottom",
                                            hjust = 0)) +
+  scale_fill_manual(values = dx_palette,
+                    guide = guide_legend(title.position = "bottom",
+                                         hjust = 0)) +
+  scale_alpha_manual(values = rep(0.6, length(dx_lvls))) + 
   labs(x = "Human clusters",
        y = "Proportion per cluster",
        fill = "Diagnosis") + 
@@ -1445,6 +1488,9 @@ grid.draw(fig2_dx_legend_grob)
 dev.off()
 ```
 
+
+## Build bottom row
+
 ```{r fig2-panel-bottom}
 fig2_bottom_widths_pt <- c(172, 150, 188)
 fig2_bottom_heights_pt <- c(94, 78, 30)
@@ -1480,96 +1526,8 @@ grid.draw(fig2_bottom_grob)
 dev.off()
 ```
 
-# Figure
-
-```{r fig2}
-fig2_widths <- c(fig2_ss_width, 0.2, 3.5)
-fig2_heights <- c(2.0, 0.2, fig2_ss_height*(0.25), fig2_ss_height*(1-0.25))
-
-fig2_widths_in <- unit(fig2_widths, "in")
-fig2_heights_in <- unit(fig2_heights, "in")
-
-# With gridlines
-fig2_grob_grid <- arrangeGrob(gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig2_heatmap_grob)),
-                              rectGrob(gp = gpar(fill = NA)),
-                              gTree(children = gList(rectGrob(gp = gpar(fill = NA)),fig2_permutations_grob)),
-                              rectGrob(gp = gpar(fill = NA)),
-                              fig2_ss_grob,
-                              grid.force(ggplotGrob(fig2_polar)),
-                              layout_matrix = rbind(c(01, 02, 03),
-                                                    c(04, 02, 03),
-                                                    c(05, 02, 03),
-                                                    c(05, 02, 06)),
-                              widths = fig2_widths_in,
-                              heights = fig2_heights_in)
-
-# Figure dimensions
-# Correct dimensions
-fig2_width <- unit(sum(fig2_widths), "inch")
-fig2_height <- unit(sum(fig2_heights), "inch")
-
-fig2_grob_grid <- gTree(children = gList(rectGrob(width = fig2_width,
-                                                  height = fig2_height,
-                                                  gp = gpar(fill = NA)), 
-                                         fig2_grob_grid))
-
-fig2_width_tmp <- unit(8.5, "in")
-fig2_height_tmp <- unit(11.0, "in")
-
-# Render figure
-fig2_outfile <- "figure2_with_grid.pdf"
-fig2_outfile <- file.path(output_dir, fig2_outfile)
-pdf(file = fig2_outfile,
-    width = fig2_width_tmp,
-    height = fig2_height_tmp)
-grid.draw(fig2_grob_grid)
-dev.off()
-```
-
-
-
-```{r fig2}
-fig2_widths <- c(fig2_ss_width, 0.2, 3.5)
-fig2_heights <- c(2.0, 0.2, fig2_ss_height*(0.25), fig2_ss_height*(1-0.25))
-
-fig2_widths_in <- unit(fig2_widths, "in")
-fig2_heights_in <- unit(fig2_heights, "in")
-
-# With gridlines
-fig2_grob <- arrangeGrob(fig2_heatmap_grob,
-                         zeroGrob(),
-                         fig2_permutations_grob,
-                         zeroGrob(),
-                         fig2_ss_grob,
-                         grid.force(ggplotGrob(fig2_polar)),
-                         layout_matrix = rbind(c(01, 02, 03),
-                                               c(04, 02, 03),
-                                               c(05, 02, 03),
-                                               c(05, 02, 06)),
-                         widths = fig2_widths_in,
-                         heights = fig2_heights_in)
-
-# Figure dimensions
-# Correct dimensions
-fig2_width <- unit(sum(fig2_widths), "inch")
-fig2_height <- unit(sum(fig2_heights), "inch")
-
-
-fig2_width_tmp <- unit(8.5, "in")
-fig2_height_tmp <- unit(11.0, "in")
-
-# Render figure
-fig2_outfile <- "figure2.pdf"
-fig2_outfile <- file.path(output_dir, fig2_outfile)
-pdf(file = fig2_outfile,
-    width = fig2_width_tmp,
-    height = fig2_height_tmp)
-grid.draw(fig2_grob)
-dev.off()
-```
 
 # Additional
-
 
 ```{r fig2-pathways-enrichment-20}
 # pathway_palette_cols <- c("white", brewer.pal(n = 9, name = "OrRd")[3:9])
