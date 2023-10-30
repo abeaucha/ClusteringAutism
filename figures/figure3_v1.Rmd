@@ -230,6 +230,22 @@ pathway_terms <- c("Chromatin organization",
                    "Signaling by wnt",
                    "Transmission across chemical synapses")
 
+# Pathway labels for plotting
+pathway_labels <- c("Chromatin org.",
+                    "Gene expr.",
+                    "Generic transcr.",
+                    "Mapk",
+                    "Mtor",
+                    "Prot.-prot. int.",
+                    "Hedgehog",
+                    "Notch",
+                    "Wnt",
+                    "Trans. acr. synapses")
+
+# Dictionary of pathway terms and labels
+df_pathway_labels <- tibble(pathway = pathway_terms,
+                            label = pathway_labels)
+
 # Filter for desired pathways
 # Compute normalized enrichment per pathway
 df_mouse_pathways_nk_gt4 <- df_mouse_pathways_nk_gt4 %>% 
@@ -262,6 +278,12 @@ pheatmap_pathway_lvls <- pheatmap_out[["tree_row"]][["labels"]]
 pheatmap_pathway_order <- pheatmap_out[["tree_row"]][["order"]]
 pathway_lvls_clustered <- pheatmap_pathway_lvls[pheatmap_pathway_order]
 
+# Clustering order for pathway labels
+pathway_label_lvls_clustered <- df_pathway_labels %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
+  arrange(pathway) %>% 
+  pull(label)
+
 # Level at which to cut the dendrogram
 hclust_kcut <- 4
 
@@ -286,10 +308,12 @@ df_pathway_hclust <- df_pathway_hclust %>%
 # Join pathway enrichment information with pathway clusters
 df_mouse_pathways_heatmap <- df_mouse_pathways_nk_gt4 %>% 
   left_join(df_pathway_hclust, by = "pathway") %>% 
-  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) 
+  left_join(df_pathway_labels, by = "pathway") %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered),
+         label = factor(label, levels = pathway_label_lvls_clustered))
 
 # Clamped enrichment
-E_threshold <- 30
+E_threshold <- 45
 df_mouse_pathways_heatmap <- df_mouse_pathways_heatmap %>% 
   mutate(E_clamped = ifelse(E > E_threshold, E_threshold, E))
 
@@ -297,15 +321,17 @@ df_mouse_pathways_heatmap <- df_mouse_pathways_heatmap %>%
 heatmap_palette_cols <- c("white", brewer.pal(n = 9, name = "OrRd")[3:9])
 heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
 
+
 # Generate heatmap
 fig3_mouse_pathways_heatmap <- ggplot(df_mouse_pathways_heatmap, 
-                                      aes(x = cluster_id, 
+                                      aes(x = factor(k), 
                                           y = fct_rev(pathway), 
                                           fill = E_clamped)) + 
   geom_tile(col = "grey60") +
   facet_grid(pathway_cluster~nk, scales = "free", space = "free") + 
   scale_x_discrete(expand = expansion()) + 
-  scale_y_discrete(expand = expansion(), position = "right") + 
+  scale_y_discrete(expand = expansion(), 
+                   position = "right") + 
   scale_fill_gradientn(colors = heatmap_palette) +
   labs(x = "Mouse cluster",
        y = "Biological pathway module",
@@ -313,7 +339,18 @@ fig3_mouse_pathways_heatmap <- ggplot(df_mouse_pathways_heatmap,
   theme_bw() +
   theme(strip.background.y = element_blank(),
         strip.text.y = element_blank(),
-        strip.background.x = element_rect(fill = "grey90"))
+        strip.text.x = element_text(size = font_size, family = font_family,
+                                    margin = margin(b = 1, t = 1)),
+        strip.background.x = element_rect(fill = "grey90"),
+        panel.spacing = unit(3, "bigpts"),
+        axis.title = element_text(size = font_size, family = font_family),
+        axis.text.x = element_text(size = font_size, family = font_family), 
+        axis.text.y = element_text(size = font_size-1, family = font_family), 
+        axis.ticks = element_line(size = 0.25),
+        legend.title = element_text(size = font_size, family = font_family),
+        legend.text = element_text(size = font_size, family = font_family),
+        legend.position = "none",
+        plot.margin = margin(l = 0))
 
 # fig3_mouse_pathways_heatmap_width_pt <- 
 # fig3_mouse_pathways_heatmap_height_pt <- 
@@ -336,7 +373,67 @@ pdf(file = outfile,
     height = fig3_mouse_pathways_heatmap_height_in)
 print(fig3_mouse_pathways_heatmap)
 dev.off()
+
+
+fig3_mouse_pathways_heatmap_grob <- grid.force(ggplotGrob(fig3_mouse_pathways_heatmap))
+
+fig3_mouse_pathways_dendrogram_grob <- pheatmap_out[["gtable"]][["grobs"]][[1]]
+fig3_mouse_pathways_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
+
+fig3_mouse_pathways_layout <- rbind(c(01, 02),
+                                    c(03, 02),
+                                    c(04, 02))
+
+fig3_mouse_pathways_widths <- c(0.05, 0.95)
+fig3_mouse_pathways_heights <- c(0.025, 0.875, 0.1)
+fig3_mouse_pathways_heights <- c(7.5, 96, 18.5)
+
+fig3_mouse_pathways_grob <- arrangeGrob(zeroGrob(), 
+                                        fig3_mouse_pathways_heatmap_grob,
+                                        fig3_mouse_pathways_dendrogram_grob,
+                                        zeroGrob(),
+                                        layout_matrix = fig3_mouse_pathways_layout,
+                                        widths = unit(fig3_mouse_pathways_widths, "npc"),
+                                        heights = unit(fig3_mouse_pathways_heights, "bigpts"))
+
+fig3_mouse_pathways_width_pt <- 510
+fig3_mouse_pathways_height_pt <- sum(fig3_mouse_pathways_heights)
+
+fig3_mouse_pathways_width_in <- fig3_mouse_pathways_width_pt/pt_per_in
+fig3_mouse_pathways_height_in <- fig3_mouse_pathways_height_pt/pt_per_in
+
+fig3_mouse_pathways_width_in <- unit(fig3_mouse_pathways_width_in, "in")
+fig3_mouse_pathways_height_in <- unit(fig3_mouse_pathways_height_in, "in")
+
+outfile <- paste(output_plot_prefix, "mouse_pathways", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+
+pdf(file = outfile,
+    width = fig3_mouse_pathways_width_in,
+    height = fig3_mouse_pathways_height_in)
+grid.draw(fig3_mouse_pathways_grob)
+dev.off()
 ```
+```{r}
+tmp <- fig3_mouse_pathways_dendrogram_grob
+
+
+grid.newpage()
+grid.draw(tmp)
+```
+
+```{r}
+grid.ls(fig3_mouse_pathways_heatmap_grob)
+```
+
+
+```{r}
+fig3_mouse_pathways_heatmap_grob <- grid.force(ggplotGrob(fig3_mouse_pathways_heatmap))
+
+fig3_mouse_pathways_dendrogram_grob <- pheatmap_out[["gtable"]][["grobs"]][[1]]
+```
+
 
 ```{r}
 test <- fig3_mouse_pathways_heatmap
@@ -355,14 +452,32 @@ grid.draw(pheatmap_out$gtable$grobs[[1]])
 ```
 
 ```{r}
-grid.newpage()
-grid.draw(pheatmap_out$gtable$grobs[[2]])
-```
+tmp_layout <- rbind(c(1, 2))
 
-```{r}
-pheatmap_out$gtable$grobs[[2]]$children$GRID.rect.490$y[1]
-```
-```{r}
-dim(mat_mouse_pathways_nk_gt4)
+tmp_widths <- c(0.2, 0.8)
+
+tmp <- arrangeGrob(fig3_mouse_pathways_dendrogram_grob,
+                   fig3_mouse_pathways_heatmap_grob,
+                   layout_matrix = tmp_layout,
+                   widths = tmp_widths)
+
+tmp_width_pt <- 510
+tmp_height_pt <- 240
+
+tmp_width_in <- tmp_width_pt/pt_per_in
+tmp_height_in <- tmp_height_pt/pt_per_in
+
+tmp_width_in <- unit(tmp_width_in, "in")
+tmp_height_in <- unit(tmp_height_in, "in")
+
+outfile <- paste(output_plot_prefix, "tmp", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+
+pdf(file = outfile,
+    width = tmp_width_in,
+    height = tmp_height_in)
+grid.draw(tmp)
+dev.off()
 ```
 
