@@ -20,6 +20,8 @@ suppressPackageStartupMessages(library(ggalluvial))
 suppressPackageStartupMessages(library(pheatmap))
 suppressPackageStartupMessages(library(rcartocolor))
 suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(viridisLite))
 ```
 
 ```{r functions}
@@ -714,3 +716,153 @@ pdf(file = outfile,
 grid.draw(pathways_norm_grob)
 dev.off()
 ```
+
+# All pathways
+
+What is the proper way to look at this? What am I looking for? For each cluster, what are the most enriched pathways? Maybe start with one cluster to figure out what it is that I want to do. 
+
+```{r}
+df_pathways_all_nk_geq4 <- df_pathways_all %>% 
+  filter(nk >= 4)
+
+nhighest <- 20
+
+list_pathways_all_topn <- vector(mode = "list", length = length(cluster_lvls))
+for (i in 1:length(list_pathways_all_topn)) {
+  list_pathways_all_topn[[i]] <- df_pathways_all_nk_geq4 %>% 
+    filter(cluster_id == cluster_lvls[i]) %>% 
+    arrange(rank) %>% 
+    head(n = nhighest)
+}
+
+df_pathways_all_topn <- bind_rows(list_pathways_all_topn)
+
+top_pathway_lvls <- df_pathways_all_topn %>% 
+  group_by(pathway) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  pull(pathway)
+
+df_pathways_all_topn <- df_pathways_all_topn %>%
+  mutate(pathway = factor(pathway, levels = top_pathway_lvls),
+         k = factor(k),
+         nk = factor(nk),
+         cluster_id = factor(cluster_id, levels = cluster_lvls),
+         NLQ = ifelse(NLQ > 20, 20, NLQ))
+
+heatmap_topn_palette_cols <- carto_pal(n = 7, "BurgYl")
+heatmap_topn_palette <- colorRampPalette(colors = heatmap_topn_palette_cols)(255)
+
+pathways_heatmap_topn <- ggplot(df_pathways_all_topn,
+                                aes(x = k, 
+                                    y = fct_rev(pathway), 
+                                    fill = NLQ)) + 
+  geom_tile(col = "grey60") + 
+  facet_grid(.~nk, scales = "free", space = "free") +
+  scale_x_discrete(expand = expansion()) +
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_gradientn(colors = heatmap_topn_palette,
+                       limits = c(1.3, 20)) +
+  labs(y = "Biological pathway module") + 
+  theme_bw() +
+  theme(axis.text = element_text(size = 6))
+
+outfile <- paste("pathways_heatmap_top", nhighest, sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(20, "in"))
+print(pathways_heatmap_topn)
+dev.off()
+```
+
+This is a lot of pathways. Looking at the top 20 pathways in each cluster returns 165 pathways. I need to filter this down in some way. Two things I can think of: 
+1. Look only at those clusters that have human matches. 
+2. Some sort of thresholding based on the number of genes in a given pathway. Presumably the more general pathways will be associated with more genes. 
+
+
+This should be contained in one of the hypergeometric distribution parameters. 
+N is the background set, i.e. the set of all genes we're testing against. 
+n is the number of genes in the cluster neighbourhood that are also in the background set. 
+B is the number of genes in the target set, i.e. the set of genes associated with the given molecular pathway. I think this is the value I'm looking for. 
+b is the number of genes in the cluster neighbourhood that are also in the target set. 
+
+```{r}
+df_pathways_all %>% 
+  select(pathway, B) %>% 
+  distinct()
+```
+
+```{r}
+B <- sort(df_pathways_all_nk_geq4[["B"]])
+B_max <- max(B)
+B_min <- 0
+B_n <- 1e3
+B_seq <- seq(B_min, B_max, length.out = B_n)
+B_ecdf <- numeric(length(B_seq))
+for (i in 1:B_n) {B_ecdf[i] <- sum(B <= B_seq[i])/length(B)}
+
+tibble(B = B_seq,
+       cdf = B_ecdf) %>% 
+  ggplot(aes(x = B, y = cdf)) + 
+  geom_line() + 
+  geom_point(size = 0.5)
+```
+```{r}
+B_threshold_p <- 0.9
+B_threshold <- ceiling(B_seq[min(which(B_ecdf >= B_threshold_p))])
+
+nhighest <- 20
+
+list_pathways_all_topn <- vector(mode = "list", length = length(cluster_lvls))
+for (i in 1:length(list_pathways_all_topn)) {
+  list_pathways_all_topn[[i]] <- df_pathways_all_nk_geq4 %>%
+    filter(cluster_id == cluster_lvls[i],
+           B <= B_threshold) %>% 
+    arrange(rank) %>% 
+    head(n = nhighest)
+}
+
+df_pathways_all_topn <- bind_rows(list_pathways_all_topn)
+
+top_pathway_lvls <- df_pathways_all_topn %>% 
+  group_by(pathway) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% 
+  pull(pathway)
+
+df_pathways_all_topn <- df_pathways_all_topn %>%
+  mutate(pathway = factor(pathway, levels = top_pathway_lvls),
+         k = factor(k),
+         nk = factor(nk),
+         cluster_id = factor(cluster_id, levels = cluster_lvls),
+         NLQ = ifelse(NLQ > 20, 20, NLQ))
+
+heatmap_topn_palette_cols <- carto_pal(n = 7, "BurgYl")
+heatmap_topn_palette <- colorRampPalette(colors = heatmap_topn_palette_cols)(255)
+
+pathways_heatmap_topn <- ggplot(df_pathways_all_topn,
+                                aes(x = k, 
+                                    y = fct_rev(pathway), 
+                                    fill = NLQ)) + 
+  geom_tile(col = "grey60") + 
+  facet_grid(.~nk, scales = "free", space = "free") +
+  scale_x_discrete(expand = expansion()) +
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_gradientn(colors = heatmap_topn_palette,
+                       limits = c(1.3, 20)) +
+  labs(y = "Biological pathway module") + 
+  theme_bw() +
+  theme(axis.text = element_text(size = 6))
+
+outfile <- paste("pathways_heatmap_top", nhighest, "B_threshold", B_threshold_p, sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(20, "in"))
+print(pathways_heatmap_topn)
+dev.off()
+```
+
