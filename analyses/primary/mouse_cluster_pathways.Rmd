@@ -788,11 +788,7 @@ n is the number of genes in the cluster neighbourhood that are also in the backg
 B is the number of genes in the target set, i.e. the set of genes associated with the given molecular pathway. I think this is the value I'm looking for. 
 b is the number of genes in the cluster neighbourhood that are also in the target set. 
 
-```{r}
-df_pathways_all %>% 
-  select(pathway, B) %>% 
-  distinct()
-```
+Something's weird with these values. Some of the pathways have B = 0, which means there are no genes in the set? And then we're running a test on that. That doesn't make sense. 
 
 ```{r}
 B <- sort(df_pathways_all_nk_geq4[["B"]])
@@ -809,30 +805,23 @@ tibble(B = B_seq,
   geom_line() + 
   geom_point(size = 0.5)
 ```
+
 ```{r}
 B_threshold_p <- 0.9
 B_threshold <- ceiling(B_seq[min(which(B_ecdf >= B_threshold_p))])
 
 nhighest <- 20
 
-list_pathways_all_topn <- vector(mode = "list", length = length(cluster_lvls))
-for (i in 1:length(list_pathways_all_topn)) {
-  list_pathways_all_topn[[i]] <- df_pathways_all_nk_geq4 %>%
-    filter(cluster_id == cluster_lvls[i],
-           B <= B_threshold) %>% 
-    arrange(rank) %>% 
-    head(n = nhighest)
-}
+df_pathways_all_topn_Bthres <- df_pathways_all_topn %>% 
+  filter(B < B_threshold)
 
-df_pathways_all_topn <- bind_rows(list_pathways_all_topn)
-
-top_pathway_lvls <- df_pathways_all_topn %>% 
+top_pathway_lvls <- df_pathways_all_topn_Bthres %>% 
   group_by(pathway) %>% 
   count() %>% 
   arrange(desc(n)) %>% 
   pull(pathway)
 
-df_pathways_all_topn <- df_pathways_all_topn %>%
+df_pathways_all_topn_Bthres <- df_pathways_all_topn_Bthres %>%
   mutate(pathway = factor(pathway, levels = top_pathway_lvls),
          k = factor(k),
          nk = factor(nk),
@@ -842,7 +831,7 @@ df_pathways_all_topn <- df_pathways_all_topn %>%
 heatmap_topn_palette_cols <- carto_pal(n = 7, "BurgYl")
 heatmap_topn_palette <- colorRampPalette(colors = heatmap_topn_palette_cols)(255)
 
-pathways_heatmap_topn <- ggplot(df_pathways_all_topn,
+pathways_heatmap_topn <- ggplot(df_pathways_all_topn_Bthres,
                                 aes(x = k, 
                                     y = fct_rev(pathway), 
                                     fill = NLQ)) + 
