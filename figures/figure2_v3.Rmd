@@ -952,11 +952,16 @@ df_polar_plot <- df_mouse_pathways %>%
   bind_rows(df_polar_plot_tmp) %>% 
   mutate(pathway = factor(pathway, levels = polar_plot_lvls))
 
+# Clamp enrichment values to threshold
+E_threshold <- 15
+df_polar_plot <- df_polar_plot %>% 
+  mutate(E = ifelse(E > E_threshold, E_threshold, E))
+
 # Polar plot parameters
 nspokes <- length(polar_plot_lvls) - 1
 theta_start <- -(2*pi)/nspokes
 breaks_start <- 0
-breaks_end <- 15
+breaks_end <- E_threshold
 breaks_step <- 5
 polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
 polar_labels <- tibble(pathway = polar_plot_lvls[2],
@@ -985,7 +990,7 @@ fig2_pathways_mouse <- ggplot(df_polar_plot,
   coord_radar(start = theta_start, clip = "off") + 
   scale_x_discrete(expand = expansion(), 
                    labels = pathway_labels) + 
-  # scale_y_continuous(breaks = polar_breaks) + 
+  scale_y_continuous(breaks = polar_breaks) +
   scale_colour_manual(values = pathways_mouse_palette,
                       guide = guide_legend(title.position = "bottom",
                                            hjust = 0)) + 
@@ -1118,15 +1123,9 @@ df_polar_plot <- df_human_pathways %>%
   bind_rows(df_polar_plot_tmp) %>% 
   mutate(pathway = factor(pathway, levels = polar_plot_lvls))
 
-# Polar plot parameters
-nspokes <- length(polar_plot_lvls) - 1
-theta_start <- -(2*pi)/nspokes
-breaks_start <- 0
-breaks_end <- 15
-breaks_step <- 5
-polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
-polar_labels <- tibble(pathway = polar_plot_lvls[2],
-                       breaks = polar_breaks)
+# Clamp enrichment values to threshold
+df_polar_plot <- df_polar_plot %>% 
+  mutate(E = ifelse(E > E_threshold, E_threshold, E))
 
 # Palette for human pathway plot
 pathways_human_palette <- pathways_mouse_palette[c(4, 1)]
@@ -1146,7 +1145,7 @@ fig2_pathways_human <- ggplot(df_polar_plot,
   #                         label = breaks)) + 
   coord_radar(start = theta_start, clip = "off") + 
   scale_x_discrete(expand = expansion()) + 
-  # scale_y_continuous(breaks = polar_breaks) + 
+  scale_y_continuous(breaks = polar_breaks) +
   scale_colour_manual(values = pathways_human_palette,
                       guide = guide_legend(title.position = "bottom",
                                            hjust = 0)) + 
