@@ -26,6 +26,28 @@ suppressPackageStartupMessages(library(viridisLite))
 
 ```{r functions}
 source("../../src/analysis.R")
+
+#' Compute within-cluster sum of squared distances
+#'
+#' @param x (matrix) A matrix to cluster according to columns
+#' @param method (character scalar) Distance metric used for 
+#' hierarchical clustering
+#'
+#' @return (numeric vector) Within-cluster sum of squared distances
+hclust_wcss <- function(x, method = "euclidean") {
+  hc <- hclust(dist(x = t(x), method = method))
+  wcss <- numeric(ncol(x))
+  for (nk in 1:length(wcss)) {
+    labs <- cutree(hc, k = nk)
+    wcss_nk <- numeric(nk)
+    for (k in 1:nk) {
+      xk <- as.matrix(x[,labs == k])
+      wcss_nk[k] <- sum(colSums((xk - rowMeans(xk))^2))/ncol(xk)
+    }
+    wcss[nk] <- mean(wcss_nk)
+  }
+  return(wcss)
+}
 ```
 
 ```{r params}
@@ -117,12 +139,33 @@ for (nk in 2:nk_max) {
 }
 ```
 
+```{r pathway-info}
+df_pathway_info <- list_pathways[[1]] %>% 
+  filter(ID %in% pathway_ids) %>% 
+  select(ID, pathway) %>% 
+  distinct() %>% 
+  arrange(pathway)
+
+df_pathway_info[["acronym"]] <- c(
+  "Adherens junction", "Axon guid.",
+  "Ca2+", "Chromatin",
+  "Gap junction", "Gene expr.",
+  "Transcription", "LTP",
+  "Mapk", "Mtor",
+  "Prot-prot int.", "erbb2",
+  "erbb4", "gpcr",
+  "hedgehog", "notch",
+  "vegf", "wnt", 
+  "Tight junction", "Trans. synapses"
+)
+```
+
 
 # Pathway enrichment polar plots
 
 ```{r generate-polar-plots}
 # Polar plot labels
-polar_plot_lvls <- c(" ", pathway_terms)
+polar_plot_lvls <- c(" ", df_pathway_info[["pathway"]])
 
 # Create polar plot data frames
 list_polar_plots <- vector(mode = "list", length = length(list_pathways))
@@ -130,7 +173,7 @@ names(list_polar_plots) <- names(list_pathways)
 for (i in 1:length(list_polar_plots)) {
   
   df_pathways_nk <- list_pathways[[i]] %>% 
-    filter(pathway %in% pathway_terms)
+    filter(pathway %in% df_pathway_info[["pathway"]])
   
   df_polar_plot_tmp <- df_pathways_nk %>% 
     mutate(pathway = as.character(pathway)) %>% 
@@ -155,7 +198,7 @@ polar_palette <- carto_pal(n = 12, name = "Bold")
 
 # Enrichment and q-value clamping thresholds
 E_threshold <- 30
-q_threshold <- 5
+q_threshold <- 10
 
 # Iterate over clusters
 for (i in 1:length(list_polar_plots)) {
@@ -478,9 +521,9 @@ df_sim_pvals <- df_sim_pvals %>%
 ```
 
 
-## Generate heatmap
+## Enrichment heatmaps
 
-```{r pathways-heatmap-proc}
+```{r pathways-heatmap-E-proc}
 # Reduce all pathway data frames into one
 df_pathways_all <- bind_rows(list_pathways)
 
@@ -498,11 +541,12 @@ cluster_lvls <- df_pathways_nk_gt4 %>%
 # Filter for desired pathways
 # Compute normalized enrichment per pathway
 df_pathways_nk_gt4_subset <- df_pathways_nk_gt4 %>% 
-  filter(pathway %in% pathway_terms) %>% 
+  filter(pathway %in% df_pathway_info[["pathway"]]) %>% 
   mutate(cluster_id = factor(cluster_id, levels = cluster_lvls),
-         pathway = factor(pathway, levels = pathway_terms)) %>% 
+         pathway = factor(pathway, levels = df_pathway_info[["pathway"]])) %>% 
   group_by(pathway) %>% 
-  mutate(E_norm = E/max(E)) %>% 
+  mutate(E_norm = E/max(E),
+         NLQ_norm = NLQ/max(NLQ)) %>% 
   ungroup()
 
 # Convert pathway data frame into matrix 
@@ -515,7 +559,7 @@ mat_pathways_nk_gt4_subset <- df_pathways_nk_gt4_subset %>%
   as.matrix()
 ```
 
-```{r pathways-heatmap-clust}
+```{r pathways-heatmap-E-clust}
 # Generate clustered heatmap
 pheatmap_out <- pheatmap(mat = mat_pathways_nk_gt4_subset,
                          cluster_col = FALSE,
@@ -534,9 +578,35 @@ pathway_lvls_clustered <- pheatmap_pathway_lvls[pheatmap_pathway_order]
 #   mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
 #   arrange(pathway) %>% 
 #   pull(label)
+```
 
+
+```{r}
+df_pathway_hclust <- tibble(wcss = hclust_wcss(x = t(mat_pathways_nk_gt4_subset))) %>% 
+  mutate(nk = 1:nrow(.))
+
+pathway_scree_plot <- ggplot(df_pathway_hclust,
+                             mapping = aes(nk, y = wcss)) + 
+  geom_line() + 
+  geom_point() + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  labs(x = "Number of clusters",
+       y = "Within-cluster sum of squared distance") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+
+outfile <- "pathways_cluster_E_scree_plot.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(pathway_scree_plot)
+dev.off()
+```
+
+```{r pathways-heatmap-E-clust}
 # Level at which to cut the dendrogram
-hclust_kcut <- 4
+hclust_kcut <- 10
 
 # Obtain pathway cluster order at selected solution
 df_pathway_hclust <- cutree(pheatmap_out[["tree_row"]], k = hclust_kcut) %>% 
@@ -559,7 +629,7 @@ pathways_dendrogram_grob <- pheatmap_out[["gtable"]][["grobs"]][[1]]
 pathways_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
 ```
 
-```{r pathways-heatmap-human-match}
+```{r pathways-heatmap-E-human-match}
 df_sig_nk <- df_sim_pvals %>%
   group_by(mouse_nk, mouse_k) %>% 
   summarise(nsignificant = sum(significant),
@@ -591,7 +661,7 @@ human_match_heatmap <- ggplot(df_sig_nk,
         axis.ticks = element_blank())
 ```
 
-```{r pathways-heatmap-enrichment}
+```{r pathways-heatmap-E-enrichment}
 # Join pathway enrichment information with pathway clusters
 df_pathways_heatmap <- df_pathways_nk_gt4_subset %>% 
   left_join(df_pathway_hclust, by = "pathway") %>% 
@@ -625,7 +695,7 @@ pathways_heatmap <- ggplot(df_pathways_heatmap,
         strip.text = element_blank())
 ```
 
-```{r pathways-heatmap-patchwork}
+```{r pathways-heatmap-E-patchwork}
 heatmap_patchwork <- (human_match_heatmap / pathways_heatmap) +
   plot_layout(heights = c(0.06, 0.94), guides = "collect") &
   theme(plot.margin = margin(l = 0))
@@ -633,7 +703,7 @@ heatmap_patchwork <- (human_match_heatmap / pathways_heatmap) +
 heatmap_patchwork_grob <- patchworkGrob(heatmap_patchwork)
 ```
 
-```{r generate-pathways-heatmap}
+```{r generate-pathways-heatmap-E}
 # Plot layout
 pathways_layout <- rbind(c(01, 02),
                          c(03, 02),
@@ -656,14 +726,15 @@ pathways_grob <- arrangeGrob(zeroGrob(),
 
 # Plot dimensions
 pathways_width_in <- 12
-pathways_height_in <- 4
+pathways_height_in <- 5
 
 # Plot dimensions with units
 pathways_width_in <- unit(pathways_width_in, "in")
 pathways_height_in <- unit(pathways_height_in, "in")
 
 # Export plot
-outfile <- "pathways_heatmap.pdf"
+outfile <- paste("pathways_cluster_heatmap_E_k", hclust_kcut, sep = "_")
+outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = pathways_width_in,
@@ -672,7 +743,7 @@ grid.draw(pathways_grob)
 dev.off()
 ```
 
-```{r generate-pathways-heatmap-norm}
+```{r generate-pathways-heatmap-E-norm}
 # Generate heatmap
 pathways_heatmap_norm <- ggplot(df_pathways_heatmap, 
                                 aes(x = factor(k), 
@@ -688,8 +759,8 @@ pathways_heatmap_norm <- ggplot(df_pathways_heatmap,
        y = "Biological pathway module",
        fill = "Enrichment") +
   theme_bw() +
-  theme(strip.background.y = element_blank(),
-        strip.text.y = element_blank(),
+  theme(strip.background = element_blank(),
+        strip.text = element_blank(),
         plot.margin = margin(l = 0))
 
 heatmap_patchwork_norm <- (human_match_heatmap / pathways_heatmap_norm) +
@@ -707,9 +778,217 @@ pathways_norm_grob <- arrangeGrob(zeroGrob(),
                                   widths = unit(pathways_widths, "npc"),
                                   heights = unit(pathways_heights, "npc"))
 
-outfile <- "pathways_heatmap_norm.pdf"
+outfile <- paste("pathways_cluster_heatmap_E_norm_k", hclust_kcut, sep = "_")
+outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = pathways_width_in,
+    height = pathways_height_in)
+grid.draw(pathways_norm_grob)
+dev.off()
+```
 
+## Significance heatmaps
+
+```{r pathways-heatmap-q-proc}
+# Convert pathway data frame into matrix 
+mat_pathways_nk_gt4_subset <- df_pathways_nk_gt4_subset %>% 
+  select(pathway, cluster_id, NLQ_norm) %>% 
+  pivot_wider(id_cols = pathway, 
+              names_from = cluster_id, 
+              values_from = NLQ_norm) %>% 
+  column_to_rownames("pathway") %>% 
+  as.matrix()
+```
+
+```{r pathways-heatmap-q-wcss}
+df_pathway_hclust <- tibble(wcss = hclust_wcss(x = t(mat_pathways_nk_gt4_subset))) %>% 
+  mutate(nk = 1:nrow(.))
+
+pathway_scree_plot <- ggplot(df_pathway_hclust,
+                             mapping = aes(nk, y = wcss)) + 
+  geom_line() + 
+  geom_point() + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  labs(x = "Number of clusters",
+       y = "Within-cluster sum of squared distance") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+
+outfile <- "pathways_cluster_NLQ_scree_plot.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(pathway_scree_plot)
+dev.off()
+```
+
+```{r pathways-heatmap-q-clust}
+# Generate clustered heatmap
+pheatmap_out <- pheatmap(mat = mat_pathways_nk_gt4_subset,
+                         cluster_col = FALSE,
+                         cluster_rows = TRUE,
+                         clustering_distance_rows = "euclidean",
+                         cutree_rows = 4, 
+                         silent = TRUE)
+
+# Extract pathway clustering outputs
+pheatmap_pathway_lvls <- pheatmap_out[["tree_row"]][["labels"]]
+pheatmap_pathway_order <- pheatmap_out[["tree_row"]][["order"]]
+pathway_lvls_clustered <- pheatmap_pathway_lvls[pheatmap_pathway_order]
+
+# Clustering order for pathway labels
+# pathway_label_lvls_clustered <- df_pathway_labels %>% 
+#   mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
+#   arrange(pathway) %>% 
+#   pull(label)
+
+# Level at which to cut the dendrogram
+hclust_kcut <- 10
+
+# Obtain pathway cluster order at selected solution
+df_pathway_hclust <- cutree(pheatmap_out[["tree_row"]], k = hclust_kcut) %>% 
+  enframe(name = "pathway", value = "pathway_cluster") 
+
+# Relevel pathways to follow dendrogram order
+df_pathway_cluster_lvls <- df_pathway_hclust %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
+  arrange(pathway) %>% 
+  select(pathway_cluster) %>% 
+  distinct() %>% 
+  mutate(pathway_cluster_new = 1:nrow(.))
+
+df_pathway_hclust <- df_pathway_hclust %>% 
+  left_join(df_pathway_cluster_lvls, by = "pathway_cluster") %>% 
+  select(-pathway_cluster, pathway_cluster = pathway_cluster_new)
+
+# Extract dendrogram from pheatmap object
+pathways_dendrogram_grob <- pheatmap_out[["gtable"]][["grobs"]][[1]]
+pathways_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
+```
+
+```{r generate-pathways-heatmap-q}
+# Join pathway enrichment information with pathway clusters
+df_pathways_heatmap <- df_pathways_nk_gt4_subset %>% 
+  left_join(df_pathway_hclust, by = "pathway") %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered))
+
+# Clamped enrichment
+NLQ_threshold <- 30
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  mutate(NLQ_clamped = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")[2:9]
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
+
+# Generate heatmap
+pathways_heatmap <- ggplot(df_pathways_heatmap, 
+                           aes(x = factor(k), 
+                               y = fct_rev(pathway), 
+                               fill = NLQ_clamped)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(pathway_cluster~nk, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion(), 
+                   position = "right") + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(2, NLQ_threshold),
+                       na.value = "grey95") +
+  # scale_fill_distiller(palette = "OrRd",
+                       # direction = 1,
+                       # limits = c(2, NLQ_threshold),
+                       # na.value = "grey95") + 
+  labs(x = "Mouse cluster",
+       y = "Biological pathway module",
+       fill = "-log10(q)") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        strip.text = element_blank())
+
+heatmap_patchwork <- (human_match_heatmap / pathways_heatmap) +
+  plot_layout(heights = c(0.06, 0.94), guides = "collect") &
+  theme(plot.margin = margin(l = 0))
+
+heatmap_patchwork_grob <- patchworkGrob(heatmap_patchwork)
+
+# Plot layout
+pathways_layout <- rbind(c(01, 02),
+                         c(03, 02),
+                         c(04, 02))
+
+# Plot grid dimensions
+pathways_widths <- c(0.05, 0.95)
+pathways_heights <- c(0.11, 0.80, 0.09)
+
+empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
+
+# Plot arrange grob
+pathways_grob <- arrangeGrob(zeroGrob(),
+                             heatmap_patchwork_grob,
+                             pathways_dendrogram_grob,
+                             zeroGrob(),
+                             layout_matrix = pathways_layout,
+                             widths = unit(pathways_widths, "npc"),
+                             heights = unit(pathways_heights, "npc"))
+
+# Plot dimensions
+pathways_width_in <- 12
+pathways_height_in <- 5
+
+# Plot dimensions with units
+pathways_width_in <- unit(pathways_width_in, "in")
+pathways_height_in <- unit(pathways_height_in, "in")
+
+# Export plot
+outfile <- paste("pathways_cluster_heatmap_NLQ_k", hclust_kcut, sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = pathways_width_in,
+    height = pathways_height_in)
+grid.draw(pathways_grob)
+dev.off()
+```
+
+```{r generate-pathways-heatmap-q-norm}
+# Generate heatmap
+pathways_heatmap_norm <- ggplot(df_pathways_heatmap, 
+                                aes(x = factor(k), 
+                                    y = fct_rev(pathway), 
+                                    fill = NLQ_norm)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(pathway_cluster~nk, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion(), 
+                   position = "right") + 
+  scale_fill_gradientn(colors = heatmap_palette) +
+  labs(x = "Mouse cluster",
+       y = "Biological pathway module",
+       fill = "-log10(q)") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        strip.text = element_blank(),
+        plot.margin = margin(l = 0))
+
+heatmap_patchwork_norm <- (human_match_heatmap / pathways_heatmap_norm) +
+  plot_layout(heights = c(0.06, 0.94), guides = "collect") &
+  theme(plot.margin = margin(l = 0))
+
+heatmap_patchwork_norm_grob <- patchworkGrob(heatmap_patchwork_norm)
+
+# Plot arrange grob
+pathways_norm_grob <- arrangeGrob(zeroGrob(),
+                                  heatmap_patchwork_norm_grob,
+                                  pathways_dendrogram_grob,
+                                  zeroGrob(),
+                                  layout_matrix = pathways_layout,
+                                  widths = unit(pathways_widths, "npc"),
+                                  heights = unit(pathways_heights, "npc"))
+
+outfile <- paste("pathways_cluster_heatmap_NLQ_norm_k", hclust_kcut, sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = pathways_width_in,
     height = pathways_height_in)
@@ -855,3 +1134,144 @@ print(pathways_heatmap_topn)
 dev.off()
 ```
 
+# Gene ontology pathway hierarchy
+
+```{r}
+library(tmod)
+```
+
+```{r}
+# Background set of genes
+background_set <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Raw/sagittal_gene_table_normalized_filtered.csv"
+background_set <- read_csv(background_set, show_col_types = FALSE) %>% 
+  pull(msg.genes.acronym) %>% 
+  as.character()
+
+# Gene modules from Reactome database
+tmod_modules <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Raw/Human_Reactome_March_01_2020_symbol.gmt"
+tmod_modules <- tmodImportMSigDB(tmod_modules, format = "gmt")
+```
+
+```{r}
+df_pathway_similarity <- expand_grid(pathway_1 = pathway_ids,
+                                     pathway_2 = pathway_ids,
+                                     jaccard_index = 0,
+                                     prop_1_in_2 = 0,
+                                     prop_2_in_1 = 0,
+                                     size_1 = 0,
+                                     size_2 = 0)
+
+for (i in 1:nrow(df_pathway_similarity)) {
+  
+  pathway_1 <- df_pathway_similarity[[i, "pathway_1"]]
+  pathway_2 <- df_pathway_similarity[[i, "pathway_2"]]
+  pathway_1_genes <- tmod_modules[["MODULES2GENES"]][[pathway_1]]
+  pathway_2_genes <- tmod_modules[["MODULES2GENES"]][[pathway_2]]
+  
+  nintersect <- length(intersect(pathway_1_genes, pathway_2_genes))
+  nunion <- length(union(pathway_1_genes, pathway_2_genes))
+  df_pathway_similarity[[i, "jaccard_index"]] <- nintersect/nunion
+  
+  df_pathway_similarity[[i, "prop_1_in_2"]] <- sum(pathway_1_genes %in% pathway_2_genes)/length(pathway_1_genes)
+  df_pathway_similarity[[i, "prop_2_in_1"]] <- sum(pathway_2_genes %in% pathway_1_genes)/length(pathway_2_genes)
+  
+  df_pathway_similarity[[i, "size_1"]] <- length(pathway_1_genes)
+  df_pathway_similarity[[i, "size_2"]] <- length(pathway_2_genes)
+  
+}
+
+df_pathway_similarity <- df_pathway_similarity %>% 
+  rename(pathway_id_1 = pathway_1,
+         pathway_id_2 = pathway_2) %>% 
+  left_join(df_pathway_info, 
+            by = c("pathway_id_1" = "ID")) %>% 
+  rename(pathway_1 = pathway,
+         acronym_1 = acronym) %>% 
+  left_join(df_pathway_info, 
+            by = c("pathway_id_2" = "ID")) %>% 
+  rename(pathway_2 = pathway,
+         acronym_2 = acronym) 
+```
+
+```{r}
+df_pathway_sizes <- df_pathway_similarity %>% 
+  select(pathway = pathway_1, size = size_1, acronym = acronym_1) %>% 
+  distinct() %>% 
+  mutate(pathway = factor(pathway, levels = pathway[order(size, decreasing = TRUE)]),
+         acronym = factor(acronym, levels = acronym[order(size, decreasing = TRUE)]))
+
+ggplot(df_pathway_sizes, 
+       aes(x = size, y = pathway)) + 
+  geom_col()
+```
+
+```{r}
+pathway_hierarchy_heatmap <- df_pathway_similarity %>% 
+  mutate(acronym_1 = factor(acronym_1, levels = levels(df_pathway_sizes[["acronym"]])),
+         acronym_2 = factor(acronym_2, levels = levels(df_pathway_sizes[["acronym"]])),
+         prop_1_in_2 = ifelse(pathway_1 == pathway_2, NA, prop_1_in_2),
+         is_subset = ifelse(prop_1_in_2 == 1, "*", "")) %>% 
+  ggplot(aes(x = acronym_2, y = fct_rev(acronym_1), fill = prop_1_in_2)) + 
+  geom_tile(col = "grey60") +
+  geom_text(mapping = aes(label = is_subset),
+            col = "white",
+            size = 8, nudge_y = -0.4) + 
+  scale_fill_gradientn(colours = heatmap_palette, na.value = "grey80") + 
+  scale_x_discrete(expand = expansion(), position = "top") + 
+  scale_y_discrete(expand = expansion()) + 
+  labs(x = "Pathway",
+       y = "Pathway",
+       fill = "Proportion of \nx in y") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 0))
+
+outfile <- "pathway_hierarchy_heatmap.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(5, "in"))
+print(pathway_hierarchy_heatmap)
+dev.off()
+```
+
+I'm not sure if there's a cleaner way to get at this. The Jaccard index gives me the similarity between two sets, but it doesn't tell me anything about hierarchical relationships. The Jaccard index of a nested pair of sets could actually be quite small if one of the sets if much bigger than the other. What if I change the denominator though? Instead of the union I could use the size of one of the sets. The metric would stop being symmetric, but I think that's what I want in this case? Isn't that exactly what this proportion is that I'm computing? 
+
+```{r}
+
+```
+
+
+```{r}
+# Iterate over clusters
+for (k in 1:nk) {
+  
+  # Target gene set for cluster k
+  target_set <- unique(c(list_cluster_interactions[[k]][["preferredName_A"]],
+                         list_cluster_interactions[[k]][["preferredName_B"]]))
+  
+  # Convert mouse gene names to human
+  fg <- get_homologs(target_set, "mouse", ordered = F)[["human_genes"]]
+  bg <- get_homologs(background_set, "mouse", ordered = F)[["human_genes"]]
+  
+  # Run hypergeometric test against pathway modules
+  tmod_hgtest_out <- tmodHGtest(fg = fg, bg = bg, mset = tmod_modules, 
+                                qval = 1.1, filter = FALSE, order.by = "pval")
+  
+  # Clean up output
+  tmod_hgtest_out <- tmod_hgtest_out %>% 
+    as_tibble() %>% 
+    arrange(P.Value) %>% 
+    mutate(rank = 1:nrow(.),
+           NLQ = -log(adj.P.Val),
+           k = k) %>% 
+    dplyr::select(rank, Title, NLQ, P.Value, adj.P.Val, everything()) %>% 
+    arrange(adj.P.Val)
+  
+  # Export the enrichment data to file
+  outfile <- paste("human_cluster_pathway_enrichment", nk, k, gene_score, sep = "_")
+  outfile <- paste0(outfile, ".csv")
+  outfile <- file.path(output_dir, outfile)
+  write_csv(x = tmod_hgtest_out, file = outfile)
+  
+}
+```
