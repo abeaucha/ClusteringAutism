@@ -50,6 +50,29 @@ compute_cluster_fractions <- function(cluster_dir, nk, k, labels, defs, mask,
 }
 
 
+#' Compute within-cluster sum of squared distances
+#'
+#' @param x (matrix) A matrix to cluster according to columns
+#' @param method (character scalar) Distance metric used for 
+#' hierarchical clustering
+#'
+#' @return (numeric vector) Within-cluster sum of squared distances
+hclust_wcss <- function(x, method = "euclidean") {
+  hc <- hclust(dist(x = t(x), method = method))
+  wcss <- numeric(ncol(x))
+  for (nk in 1:length(wcss)) {
+    labs <- cutree(hc, k = nk)
+    wcss_nk <- numeric(nk)
+    for (k in 1:nk) {
+      xk <- as.matrix(x[,labs == k])
+      wcss_nk[k] <- sum(colSums((xk - rowMeans(xk))^2))/ncol(xk)
+    }
+    wcss[nk] <- mean(wcss_nk)
+  }
+  return(wcss)
+}
+
+
 import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, threshold = NULL, threshold_value = NULL, threshold_symmetric = NULL, threshold_comparison = NULL) {
   
   pattern = paste("nk", nk, "k", k, sep = "_")
