@@ -64,7 +64,9 @@ nk_max <- 10
 stringdb_threshold <- 950
 
 # Base directory for pathway data files
-pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
+# pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
+pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper_11_5/"
+# pathways_dir <- "../../data/mouse/enrichment/NeighbourhoodEnrichment/"
 pathways_dir <- file.path(pathways_dir, stringdb_threshold)
 
 # Prefix for pathway data files
@@ -120,11 +122,12 @@ for (nk in 2:nk_max) {
     
     # Fix mouse enrichment p-values and q-values
     # REMOVE IF FIXED UPSTREAM
+    # list_pathways[[as.character(nk)]][[k]] <- list_pathways[[as.character(nk)]][[k]] %>% 
+    #   mutate(P.Value = P.Value/2,
+    #          adj.P.Val = p.adjust(P.Value, method = "fdr"),
+    #          NLQ = -log10(adj.P.Val))
     list_pathways[[as.character(nk)]][[k]] <- list_pathways[[as.character(nk)]][[k]] %>% 
-      mutate(P.Value = P.Value/2,
-             adj.P.Val = p.adjust(P.Value, method = "fdr"),
-             NLQ = -log10(adj.P.Val),
-             qval_log = -log10(adj.P.Val))
+      mutate(NLQ = -log10(adj.P.Val))
   }
   
   # Combine clusters per solution
@@ -205,7 +208,7 @@ for (i in 1:length(list_polar_plots)) {
   
   # Radial labels
   E_max <- ceiling(max(list_polar_plots[[i]][["E"]]))
-  q_max <- ceiling(max(list_polar_plots[[i]][["qval_log"]]))
+  q_max <- ceiling(max(list_polar_plots[[i]][["NLQ"]]))
   
   E_max <- ifelse(E_max > E_threshold, E_threshold, E_max)
   q_max <- ifelse(q_max > q_threshold, q_threshold, q_max)
@@ -223,9 +226,9 @@ for (i in 1:length(list_polar_plots)) {
                            breaks = q_polar_breaks)
   
   df_polar_plot <- list_polar_plots[[i]] %>% 
-    select(k, pathway, E, qval_log) %>% 
+    select(k, pathway, E, NLQ) %>% 
     mutate(E = ifelse(E > E_threshold, E_threshold, E),
-           qval_log = ifelse(qval_log > q_threshold, q_threshold, qval_log),
+           NLQ = ifelse(NLQ > q_threshold, q_threshold, NLQ),
            k = factor(k))
   
   E_polar_plot <- ggplot(df_polar_plot, 
@@ -252,7 +255,7 @@ for (i in 1:length(list_polar_plots)) {
   
   q_polar_plot <- ggplot(df_polar_plot, 
                          aes(x = pathway, 
-                             ymin = 0, ymax = qval_log, 
+                             ymin = 0, ymax = NLQ, 
                              group = k, 
                              fill = k, 
                              col = k)) + 
@@ -547,7 +550,9 @@ df_pathways_nk_gt4_subset <- df_pathways_nk_gt4 %>%
   group_by(pathway) %>% 
   mutate(E_norm = E/max(E),
          NLQ_norm = NLQ/max(NLQ)) %>% 
-  ungroup()
+  ungroup() %>% 
+  mutate(E_norm = ifelse(is.nan(E_norm), 0, E_norm),
+         NLQ_norm = ifelse(is.nan(NLQ_norm), 0, NLQ_norm))
 
 # Convert pathway data frame into matrix 
 mat_pathways_nk_gt4_subset <- df_pathways_nk_gt4_subset %>% 
@@ -788,6 +793,7 @@ grid.draw(pathways_norm_grob)
 dev.off()
 ```
 
+
 ## Significance heatmaps
 
 ```{r pathways-heatmap-q-proc}
@@ -896,9 +902,9 @@ pathways_heatmap <- ggplot(df_pathways_heatmap,
                        limits = c(2, NLQ_threshold),
                        na.value = "grey95") +
   # scale_fill_distiller(palette = "OrRd",
-                       # direction = 1,
-                       # limits = c(2, NLQ_threshold),
-                       # na.value = "grey95") + 
+  # direction = 1,
+  # limits = c(2, NLQ_threshold),
+  # na.value = "grey95") + 
   labs(x = "Mouse cluster",
        y = "Biological pathway module",
        fill = "-log10(q)") +
