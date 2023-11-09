@@ -51,60 +51,85 @@ hclust_wcss <- function(x, method = "euclidean") {
 ```
 
 ```{r params}
-#Output directory
-output_dir <- "outputs/mouse_cluster_pathways/"
-if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
-
 # Max number of clusters
 nk_max <- 10
+
+# Database versions
+# stringdb_version <- "11.5"
+stringdb_version <- "12.0"
+# bader_version <- "2020"
+bader_version <- "2023"
+stringdb_threshold <- 900
+
+# Output directory
+output_dir <- paste("StringDB", stringdb_version, "Bader", bader_version, stringdb_threshold, sep = "_")
+output_dir <- file.path("outputs", "mouse_cluster_pathways", output_dir, "")
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
 ```{r import-pathway-enrichment}
-# Threshold for StringDB 
-stringdb_threshold <- 950
-
 # Base directory for pathway data files
-# pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
-pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper_11_5/"
-# pathways_dir <- "../../data/mouse/enrichment/NeighbourhoodEnrichment/"
+pathways_dir <- "../../data/mouse/enrichment/"
+pathways_dir <- file.path(pathways_dir, 
+                          paste("StringDB", stringdb_version, 
+                                "Bader", bader_version, 
+                                sep = "_"))
+pathways_dir <- file.path(pathways_dir, "NeighbourhoodEnrichment")
 pathways_dir <- file.path(pathways_dir, stringdb_threshold)
+
+if (length(list.files(pathways_dir)) == 0) {
+  stop("No files in specified directory")
+}
 
 # Prefix for pathway data files
 pathways_file_prefix <- "NewBader_enrichment_clusterneighbourhood_vs_brain_all"
 
 # Pathway IDs for a prior pathway set
-pathway_ids <-c("GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.1",
-                "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.5",
-                "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 71%6794362",
-                "ADHERENS JUNCTIONS INTERACTIONS%REACTOME%R-HSA-418990.2",
-                "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 71%420029",
-                "MAPK FAMILY SIGNALING CASCADES%REACTOME DATABASE ID RELEASE 71%5683057",
-                "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 71%1227986",
-                "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 71%1236394",
-                "SIGNALING BY WNT%REACTOME%R-HSA-195721.5",
-                "CA2+ PATHWAY%REACTOME DATABASE ID RELEASE 71%4086398",
-                "SIGNALING BY NOTCH%REACTOME DATABASE ID RELEASE 71%157118",
-                "MTOR SIGNALLING%REACTOME%R-HSA-165159.5",
-                "SIGNALING BY VEGF%REACTOME DATABASE ID RELEASE 71%194138",
-                "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 71%5358351",
-                "AXON GUIDANCE%REACTOME DATABASE ID RELEASE 71%422475",
-                "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 71%4839726",
-                "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.9",
-                "GENE EXPRESSION (TRANSCRIPTION)%REACTOME DATABASE ID RELEASE 71%74160",
-                "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 71%9620244",
-                "SIGNALING BY GPCR%REACTOME%R-HSA-372790.4")
-
-# List of desired pathway terms
-pathway_terms <- c("Chromatin organization",
-                   "Gene expression (transcription)",
-                   "Generic transcription pathway",
-                   "Mapk family signaling cascades",
-                   "Mtor signalling",
-                   "Protein-protein interactions at synapses",
-                   "Signaling by hedgehog",
-                   "Signaling by notch",
-                   "Signaling by wnt",
-                   "Transmission across chemical synapses")
+if (bader_version == "2020") {
+  pathway_ids <- c("ADHERENS JUNCTIONS INTERACTIONS%REACTOME%R-HSA-418990.2",
+                   "AXON GUIDANCE%REACTOME DATABASE ID RELEASE 71%422475",
+                   "CA2+ PATHWAY%REACTOME DATABASE ID RELEASE 71%4086398",
+                   "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 71%4839726",
+                   "GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.1",
+                   "GENE EXPRESSION (TRANSCRIPTION)%REACTOME DATABASE ID RELEASE 71%74160",
+                   "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.9",
+                   "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 71%9620244",
+                   "MAPK FAMILY SIGNALING CASCADES%REACTOME DATABASE ID RELEASE 71%5683057",
+                   "MTOR SIGNALLING%REACTOME%R-HSA-165159.5",
+                   "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 71%6794362",
+                   "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 71%1227986",
+                   "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 71%1236394",
+                   "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 71%5358351",
+                   "SIGNALING BY GPCR%REACTOME%R-HSA-372790.4",
+                   "SIGNALING BY NOTCH%REACTOME DATABASE ID RELEASE 71%157118",
+                   "SIGNALING BY VEGF%REACTOME DATABASE ID RELEASE 71%194138",
+                   "SIGNALING BY WNT%REACTOME%R-HSA-195721.5",
+                   "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 71%420029",
+                   "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.5")
+} else if (bader_version == "2023") {
+  pathway_ids <- c("ADHERENS JUNCTIONS INTERACTIONS%REACTOME DATABASE ID RELEASE 38%418990",
+                   "AXON GUIDANCE%REACTOME%R-HSA-422475.7",
+                   "CA2+ PATHWAY%REACTOME%R-HSA-4086398.4",
+                   "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 38%4839726",
+                   "GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.2",
+                   "GENE EXPRESSION (TRANSCRIPTION)%REACTOME%R-HSA-74160.8",
+                   "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.12",
+                   "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 38%9620244",
+                   "MAPK FAMILY SIGNALING CASCADES%REACTOME%R-HSA-5683057.4",
+                   "MTOR SIGNALLING%REACTOME%R-HSA-165159.7",
+                   "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 38%6794362",
+                   "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 38%1227986",
+                   "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 38%1236394",
+                   "SIGNALING BY GPCR%REACTOME DATABASE ID RELEASE 38%372790",
+                   "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 38%5358351",
+                   "SIGNALING BY NOTCH%REACTOME%R-HSA-157118.6",
+                   "SIGNALING BY VEGF%REACTOME%R-HSA-194138.3",
+                   "SIGNALING BY WNT%REACTOME DATABASE ID RELEASE 38%195721",
+                   "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 38%420029",
+                   "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.7")
+} else {
+  stop()
+}
 
 # Import mouse pathway enrichment files
 # Iterate over cluster solutions
@@ -577,14 +602,7 @@ pheatmap_out <- pheatmap(mat = mat_pathways_nk_gt4_subset,
 pheatmap_pathway_lvls <- pheatmap_out[["tree_row"]][["labels"]]
 pheatmap_pathway_order <- pheatmap_out[["tree_row"]][["order"]]
 pathway_lvls_clustered <- pheatmap_pathway_lvls[pheatmap_pathway_order]
-
-# Clustering order for pathway labels
-# pathway_label_lvls_clustered <- df_pathway_labels %>% 
-#   mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
-#   arrange(pathway) %>% 
-#   pull(label)
 ```
-
 
 ```{r}
 df_pathway_hclust <- tibble(wcss = hclust_wcss(x = t(mat_pathways_nk_gt4_subset))) %>% 
