@@ -15,22 +15,22 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r packages}
 suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
 suppressPackageStartupMessages(library(grid))
 suppressPackageStartupMessages(library(gridExtra))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(pheatmap))
 suppressPackageStartupMessages(library(ggplotify))
 suppressPackageStartupMessages(library(RColorBrewer))
-# suppressPackageStartupMessages(library(RMINC))
-# suppressPackageStartupMessages(library(MRIcrotome))
 # suppressPackageStartupMessages(library(viridis))
 # suppressPackageStartupMessages(library(viridisLite))
 ```
 
 ```{r functions}
 source("../src/utils.R")
+source("../src/processing.R")
 source("../src/analysis.R")
-# source("../src/processing.R")
 ```
 
 ```{r pipeline-params}
@@ -141,38 +141,75 @@ empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
 # Panel: Mouse pathway enrichment heatmap
 
 ```{r pathways-import}
-# Threshold for StringDB 
+# Database versions
+# stringdb_version <- "11.5"
+stringdb_version <- "12.0"
+# bader_version <- "2020"
+bader_version <- "2023"
 stringdb_threshold <- 950
 
 # Base directory for pathway data files
-# pathways_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/NeighbourhoodEnrichment_Paper/"
-pathways_dir <- "../Data/Outputs/NeighbourhoodEnrichment_Paper_2P/"
+pathways_dir <- "../data/mouse/enrichment/"
+pathways_dir <- file.path(pathways_dir, 
+                          paste("StringDB", stringdb_version, 
+                                "Bader", bader_version, 
+                                sep = "_"))
+pathways_dir <- file.path(pathways_dir, "NeighbourhoodEnrichment")
 pathways_dir <- file.path(pathways_dir, stringdb_threshold)
+
+if (length(list.files(pathways_dir)) == 0) {
+  stop("No files in specified directory")
+}
 
 # Prefix for pathway data files
 pathways_file_prefix <- "NewBader_enrichment_clusterneighbourhood_vs_brain_all"
 
-# Pathway IDs for pre-selected pathways
-pathway_ids <-c("GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.1",
-                "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.5",
-                "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 71%6794362",
-                "ADHERENS JUNCTIONS INTERACTIONS%REACTOME%R-HSA-418990.2",
-                "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 71%420029",
-                "MAPK FAMILY SIGNALING CASCADES%REACTOME DATABASE ID RELEASE 71%5683057",
-                "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 71%1227986",
-                "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 71%1236394",
-                "SIGNALING BY WNT%REACTOME%R-HSA-195721.5",
-                "CA2+ PATHWAY%REACTOME DATABASE ID RELEASE 71%4086398",
-                "SIGNALING BY NOTCH%REACTOME DATABASE ID RELEASE 71%157118",
-                "MTOR SIGNALLING%REACTOME%R-HSA-165159.5",
-                "SIGNALING BY VEGF%REACTOME DATABASE ID RELEASE 71%194138",
-                "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 71%5358351",
-                "AXON GUIDANCE%REACTOME DATABASE ID RELEASE 71%422475",
-                "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 71%4839726",
-                "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.9",
-                "GENE EXPRESSION (TRANSCRIPTION)%REACTOME DATABASE ID RELEASE 71%74160",
-                "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 71%9620244",
-                "SIGNALING BY GPCR%REACTOME%R-HSA-372790.4")
+# Pathway IDs for a prior pathway set
+if (bader_version == "2020") {
+  pathway_ids <- c("ADHERENS JUNCTIONS INTERACTIONS%REACTOME%R-HSA-418990.2",
+                   "AXON GUIDANCE%REACTOME DATABASE ID RELEASE 71%422475",
+                   "CA2+ PATHWAY%REACTOME DATABASE ID RELEASE 71%4086398",
+                   "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 71%4839726",
+                   "GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.1",
+                   "GENE EXPRESSION (TRANSCRIPTION)%REACTOME DATABASE ID RELEASE 71%74160",
+                   "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.9",
+                   "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 71%9620244",
+                   "MAPK FAMILY SIGNALING CASCADES%REACTOME DATABASE ID RELEASE 71%5683057",
+                   "MTOR SIGNALLING%REACTOME%R-HSA-165159.5",
+                   "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 71%6794362",
+                   "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 71%1227986",
+                   "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 71%1236394",
+                   "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 71%5358351",
+                   "SIGNALING BY GPCR%REACTOME%R-HSA-372790.4",
+                   "SIGNALING BY NOTCH%REACTOME DATABASE ID RELEASE 71%157118",
+                   "SIGNALING BY VEGF%REACTOME DATABASE ID RELEASE 71%194138",
+                   "SIGNALING BY WNT%REACTOME%R-HSA-195721.5",
+                   "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 71%420029",
+                   "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.5")
+} else if (bader_version == "2023") {
+  pathway_ids <- c("ADHERENS JUNCTIONS INTERACTIONS%REACTOME DATABASE ID RELEASE 38%418990",
+                   "AXON GUIDANCE%REACTOME%R-HSA-422475.7",
+                   "CA2+ PATHWAY%REACTOME%R-HSA-4086398.4",
+                   "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 38%4839726",
+                   "GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.2",
+                   "GENE EXPRESSION (TRANSCRIPTION)%REACTOME%R-HSA-74160.8",
+                   "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.12",
+                   "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 38%9620244",
+                   "MAPK FAMILY SIGNALING CASCADES%REACTOME%R-HSA-5683057.4",
+                   "MTOR SIGNALLING%REACTOME%R-HSA-165159.7",
+                   "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 38%6794362",
+                   "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 38%1227986",
+                   "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 38%1236394",
+                   "SIGNALING BY GPCR%REACTOME DATABASE ID RELEASE 38%372790",
+                   "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 38%5358351",
+                   "SIGNALING BY NOTCH%REACTOME%R-HSA-157118.6",
+                   "SIGNALING BY VEGF%REACTOME%R-HSA-194138.3",
+                   "SIGNALING BY WNT%REACTOME DATABASE ID RELEASE 38%195721",
+                   "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 38%420029",
+                   "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.7")
+} else {
+  stop()
+}
 
 # Iterate over cluster solutions and import mouse pathway enrichment files
 list_pathways <- vector(mode = "list", length = nk_max-1)
@@ -189,12 +226,12 @@ for (nk in 2:nk_max) {
     
     # Fix mouse enrichment p-values and q-values
     # REMOVE IF FIXED UPSTREAM
-    list_pathways[[as.character(nk)]][[k]] <- list_pathways[[as.character(nk)]][[k]] %>%
-      mutate(P.Value = P.Value/2,
-             adj.P.Val = p.adjust(P.Value, method = "fdr"),
-             NLQ = -log10(adj.P.Val))
     # list_pathways[[as.character(nk)]][[k]] <- list_pathways[[as.character(nk)]][[k]] %>%
-      # mutate(NLQ = -log10(adj.P.Val))
+    #   mutate(P.Value = P.Value/2,
+    #          adj.P.Val = p.adjust(P.Value, method = "fdr"),
+    #          NLQ = -log10(adj.P.Val))
+    list_pathways[[as.character(nk)]][[k]] <- list_pathways[[as.character(nk)]][[k]] %>%
+      mutate(NLQ = -log10(adj.P.Val))
   }
   
   # Combine clusters per solution
@@ -209,7 +246,6 @@ for (nk in 2:nk_max) {
   
 }
 ```
-
 
 ```{r pathways-info}
 # Extract pathway ID and name
@@ -237,7 +273,7 @@ df_pathway_info[["acronym"]] <- c(
 
 ## Cluster significance by permutation testing
 
-```{r import-similarity-true}
+```{r import-similarity}
 # Set of similarity files
 similarity_files <- list.files(similarity_dir, full.names = TRUE)
 
@@ -392,20 +428,7 @@ cluster_lvls <- df_pathways_nk_gt4 %>%
   distinct() %>% 
   arrange(nk, k) %>% 
   pull(cluster_id)
-```
 
-```{r}
-df_pathways_nk_gt4 %>% 
-  filter(pathway %in% df_pathway_info[["pathway"]]) %>% 
-  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls),
-         pathway = factor(pathway, levels = df_pathway_info[["pathway"]])) %>% 
-  group_by(pathway) %>% 
-  summarise(E_max = max(E),
-            NLQ_max = max(NLQ))
-```
-
-
-```{r pathway-clust-proc}
 # Filter for desired pathways
 # Compute normalized enrichment and NLQ per pathway
 df_pathways_nk_gt4_subset <- df_pathways_nk_gt4 %>% 
@@ -570,7 +593,7 @@ fig3_heatmap_human_match_legend_grob <- fig3_heatmap_human_match %>%
   getGrob("guides.3-3-3-3")
 
 # fig3_heatmap_human_match <- fig3_heatmap_human_match +
-  # theme(legend.position = "none")
+# theme(legend.position = "none")
 ```
 
 ```{r fig3-heatmap-enrichment}
@@ -638,7 +661,7 @@ fig3_heatmap_pathways_legend_grob <- fig3_heatmap_pathways %>%
   getGrob("guides.3-3-3-3")
 
 # fig3_heatmap_pathways <- fig3_heatmap_pathways +
-  # theme(legend.position = "none")
+# theme(legend.position = "none")
 ```
 
 
@@ -710,7 +733,6 @@ fig3_heatmap_height_in <- unit(fig3_heatmap_height_in, "in")
 outfile <- paste(output_plot_prefix, "pathways", sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
-
 pdf(file = outfile,
     width = fig3_heatmap_width_in,
     height = fig3_heatmap_height_in)
@@ -718,53 +740,303 @@ grid.draw(fig3_heatmap_grob)
 dev.off()
 ```
 
-```{r fig3-heatmap-patchwork}
-fig3_heatmap_patchwork <- (fig3_heatmap_human_match / fig3_heatmap_pathways) +
-  plot_layout(heights = c(0.06, 0.94), guides = "collect") &
-  theme(plot.margin = margin(l = 0))
+# Mouse brain slices
 
-fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
+```{r mouse-ss-paths}
+# Mouse parameter set ID
+mouse_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(mouse_id)
+
+# Jacobians to display
+jacobians <- "relative"
+
+# Threshold method
+threshold <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold)
+
+# Threshold value
+threshold_value <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_value)
+
+# Threshold symmetric option
+threshold_symmetric <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_symmetric)
+
+# Mouse pipeline directory
+mouse_pipeline_dir <- "../data/mouse/derivatives/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version)
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_params_id)
+
+# Mouse centroid map directory
+mouse_centroid_dir <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_centroid_dir <- file.path(mouse_centroid_dir, "resolution_0.05")
+mouse_centroid_dir <- file.path(mouse_centroid_dir, jacobians)
+
+# Mouse anatomy
+mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
+mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_anat_vol <- mincArray(mouse_anat)
+
+# Mouse mask
+mouse_mask_file <- "../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
+mouse_mask <- mincGetVolume(mouse_mask_file)
 ```
 
-```{r fig3-heatmap}
-fig3_heatmap_patchwork <- (fig3_heatmap_human_match / fig3_heatmap_pathways) +
-  plot_layout(heights = c(0.06, 0.94), guides = "collect") &
-  theme(plot.margin = margin(l = 0))
+```{r mouse-ss-resample}
+# Mouse images need to be resampled to 50um
+run <- FALSE
+if (run) {
+  
+  # Input and output directories
+  indir <- file.path(mouse_pipeline_dir, "cluster_maps", "resolution_0.2", jacobians)
+  outdir <- mouse_centroid_dir
+  
+  # Iterate over clusters
+  for (nk in 2:nk_max) {
+    for (k in 1:nk) {
+      
+      # Input and output file names
+      infile <- paste0("cluster_map_nk_", nk, "_k_", k, ".mnc")
+      outfile <- infile
+      
+      # Prepend directories to files
+      infile <- file.path(indir, infile)
+      outfile <- file.path(outdir, outfile)
+      
+      # Resampling command
+      cmd_mincresample <- paste("mincresample", "-clobber",
+                                "-like", mouse_anat_file,
+                                infile, outfile)
+      
+      # Execute resampling
+      system(command = cmd_mincresample)
+      
+    }
+  }
+}
+```
 
-fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
+```{r mouse-ss}
+# Anatomical plane to display
+# Sagittal: 1
+# Coronal: 2 
+# Transverse: 3
+mouse_slc_dim <- 1
 
-fig3_heatmap_layout <- rbind(c(01, 02),
-                             c(03, 02),
-                             c(04, 02))
+# Mouse brain slice to display
+mouse_slc <- 92
 
-fig3_heatmap_widths <- c(0.05, 0.95)
-fig3_heatmap_heights <- c(0.025, 0.875, 0.1)
-fig3_heatmap_heights <- c(7.5, 96, 18.5)
+# Determine mouse clusters with human matches
+df_mouse_matches <- df_sig_nk %>% 
+  filter(has_match) %>% 
+  select(cluster_id, nk, k) %>% 
+  mutate(nk = as.numeric(as.character(nk)),
+         k = as.numeric(as.character(k)))
 
-fig3_heatmap_grob <- arrangeGrob(zeroGrob(), 
-                                 fig3_heatmap_patchwork_grob,
-                                 fig3_heatmap_dendrogram_grob,
-                                 zeroGrob(),
-                                 layout_matrix = fig3_heatmap_layout,
-                                 widths = unit(fig3_heatmap_widths, "npc"),
-                                 heights = unit(fig3_heatmap_heights, "bigpts"))
+# Iterate over mouse clusters
+for (i in 1:nrow(df_mouse_matches)) {
+  
+  # Extract cluster info
+  nk <- df_mouse_matches[[i, "nk"]]
+  k <- df_mouse_matches[[i, "k"]]
+  
+  print(paste(nk, k, sep = "-"))
+  
+  # Import centroid image and threshold
+  img <- import_cluster_map(imgdir = mouse_centroid_dir,
+                            mask = mouse_mask_file,
+                            nk = nk, k = k,
+                            threshold = threshold,
+                            threshold_value = threshold_value,
+                            threshold_symmetric = threshold_symmetric)
+  
+  # Compute overlay thresholds
+  overlay_threshold <- numeric(2)
+  overlay_threshold[1] <- min(abs(img[img != 0]))
+  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+  overlay_threshold <- round(overlay_threshold, 2)
+  
+  # Convert mincSingleDim to mincArray
+  img <- mincArray(img)
+  
+  # Generate slice series
+  ss <- sliceSeries(nrow = 1, ncol = 1, dimension = mouse_slc_dim, slices = mouse_slc) %>% 
+    anatomy(mouse_anat_vol, low = 700, high = 1400) %>% 
+    overlay(img, low = overlay_threshold[1], high = overlay_threshold[2], 
+            symmetric = TRUE) 
+  
+  # Slice dimensions in pixels
+  width_px <- dim(mouse_anat_vol)[2]
+  height_px <- dim(mouse_anat_vol)[3]
+  
+  # Image dimensions
+  width_in <- 5
+  height_in <- 5*(height_px/width_px)
+  
+  width_in <- unit(width_in, "in")
+  height_in <- unit(height_in, "in")
+  
+  outfile <- paste(output_plot_prefix, "mouse_cluster_centroid_nk",
+                   nk, "k", k, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = width_in,
+      height = height_in)
+  draw(ss)
+  dev.off()
+  
+}
+```
 
-fig3_heatmap_width_pt <- 510
-fig3_heatmap_height_pt <- sum(fig3_heatmap_heights)
+# Human brain slices
 
-fig3_heatmap_width_in <- fig3_heatmap_width_pt/pt_per_in
-fig3_heatmap_height_in <- fig3_heatmap_height_pt/pt_per_in
+```{r human-ss-paths}
+# Human parameter set ID
+human_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_id)
 
-fig3_heatmap_width_in <- unit(fig3_heatmap_width_in, "in")
-fig3_heatmap_height_in <- unit(fig3_heatmap_height_in, "in")
+# Jacobians to display
+jacobians <- "relative"
 
-outfile <- paste(output_plot_prefix, "pathways", sep = "_")
-outfile <- paste0(outfile, ".pdf")
+# Threshold method
+threshold <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold)
+
+# Threshold value
+threshold_value <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_value)
+
+# Threshold symmetric option
+threshold_symmetric <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_symmetric)
+
+# Human image resolution
+human_resolution <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_resolution)
+human_resolution <- sprintf("%.1f", human_resolution)
+
+# Human pipeline directory
+human_pipeline_dir <- "../data/human/derivatives/"
+human_pipeline_dir <- file.path(human_pipeline_dir, version)
+human_pipeline_dir <- file.path(human_pipeline_dir, human_params_id)
+
+# Human centroid map directory
+human_centroid_dir <- file.path(human_pipeline_dir, "cluster_maps")
+human_centroid_dir <- file.path(human_centroid_dir, paste("resolution", human_resolution, sep = "_"))
+human_centroid_dir <- file.path(human_centroid_dir, jacobians)
+
+# Human anatomy
+human_anat_file <- "../data/human/registration/v2/reference_files/model_0.8mm.mnc"
+human_anat <- mincGetVolume(human_anat_file)
+human_anat_vol <- mincArray(human_anat)
+
+# Cropped human human images
+slices_dim_1 <- 25:200
+slices_dim_2 <- 25:250
+slices_dim_3 <- 25:220
+human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
+
+# Human mask
+human_mask_file <- "../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
+human_mask <- mincGetVolume(human_mask_file)
+```
+
+```{r human-ss}
+# Anatomical plane to display
+# Sagittal: 1
+# Coronal: 2 
+# Transverse: 3
+human_slc_dim <- 1
+
+# Human brain slice to display
+human_slc <- 82
+
+# Determine human clusters matching mouse clusters
+df_human_matches <- df_sim_pvals %>% 
+  filter(mouse_nk >= 4, 
+         significant == 1) %>% 
+  select(cluster_id = human_cluster_id, 
+         nk = human_nk,
+         k = human_k) %>% 
+  distinct()
+
+# Iterate over human clusters
+for (i in 1:nrow(df_human_matches)) {
+  
+  # Extract cluster info
+  nk <- df_human_matches[[i, "nk"]]
+  k <- df_human_matches[[i, "k"]]
+  
+  print(paste(nk, k, sep = "-"))
+  
+  # Import centroid image and threshold
+  img <- import_cluster_map(imgdir = human_centroid_dir,
+                            mask = human_mask_file,
+                            nk = nk, k = k,
+                            threshold = threshold,
+                            threshold_value = threshold_value,
+                            threshold_symmetric = threshold_symmetric)
+  
+  # Compute overlay thresholds
+  overlay_threshold <- numeric(2)
+  overlay_threshold[1] <- min(abs(img[img != 0]))
+  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+  overlay_threshold <- round(overlay_threshold, 2)
+  
+  # Convert mincSingleDim to mincArray and crop
+  img <- mincArray(img)
+  img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+  
+  # Generate slice series
+  ss <- sliceSeries(nrow = 1, ncol = 1, dimension = human_slc_dim, slices = human_slc) %>% 
+    anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
+    overlay(img, 
+            low = overlay_threshold[1], 
+            high = overlay_threshold[2], 
+            symmetric = TRUE) 
+  
+  # Slice dimensions in pixels
+  width_px <- dim(human_anat_vol)[2]
+  height_px <- dim(human_anat_vol)[3]
+  
+  # Image dimensions
+  width_in <- 5
+  height_in <- 5*(height_px/width_px)
+  
+  width_in <- unit(width_in, "in")
+  height_in <- unit(height_in, "in")
+  
+  outfile <- paste(output_plot_prefix, "human_cluster_centroid_nk",
+                   nk, "k", k, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = width_in,
+      height = height_in)
+  draw(ss)
+  dev.off()
+  
+}
+```
+
+```{r}
+outfile <- "fig3_matching_clusters.csv"
 outfile <- file.path(output_dir, outfile)
-
-pdf(file = outfile,
-    width = fig3_heatmap_width_in,
-    height = fig3_heatmap_height_in)
-grid.draw(fig3_heatmap_grob)
-dev.off()
+df_sim_pvals %>% 
+  filter(mouse_nk >= 4, significant == 1) %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  select(mouse_cluster = mouse_cluster_id, 
+         human_cluster = human_cluster_id)  %>% 
+  write_csv(file = outfile)
 ```
+
