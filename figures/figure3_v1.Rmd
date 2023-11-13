@@ -2,7 +2,7 @@
 title: "Figure 3"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-11-07"
+date: "2023-11-13"
 output: html_document
 ---
 
@@ -86,41 +86,6 @@ permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
 nk_max <- params %>% 
   filter(id == params_id) %>% 
   pull(human_cluster_nk_max)
-
-# # Human parameter set ID
-# human_params_id <- params %>% 
-#   filter(id == params_id) %>% 
-#   pull(human_id)
-# 
-# # Mouse parameter set ID
-# mouse_params_id <- params %>% 
-#   filter(id == params_id) %>% 
-#   pull(mouse_id)
-# 
-# # Human pipeline directory
-# human_pipeline_dir <- "../data/human/derivatives/"
-# human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
-# 
-# # Human cluster map directories
-# human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
-# human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
-# human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
-# names(human_cluster_map_dirs) <- jacobians
-# 
-# # Mouse pipeline directory
-# mouse_pipeline_dir <- "../data/mouse/derivatives/"
-# mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
-# 
-# # Mouse cluster map directories
-# mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
-# mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
-# mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
-# names(mouse_cluster_map_dirs) <- jacobians
-# 
-# mouse_cluster_map_dirs_50um <- file.path(mouse_pipeline_dir, "cluster_maps")
-# mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, "resolution_0.05")
-# mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, jacobians)
-# names(mouse_cluster_map_dirs_50um) <- jacobians
 ```
 
 ```{r graphical-params}
@@ -135,8 +100,17 @@ font_size <- 6
 
 # Empty rectangle grob
 empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
-```
 
+rect_w_num <- function(n) {
+  out <- gTree(children = gList(empty_rect_grob,
+                                textGrob(label = n)))
+  return(out)
+}
+
+# Figure width (bigpt)
+fig3_width <- 510
+# fig3_height <- 
+```
 
 # Panel: Mouse pathway enrichment heatmap
 
@@ -225,11 +199,6 @@ for (nk in 2:nk_max) {
     list_pathways[[as.character(nk)]][[k]] <- read_csv(pathways_file, show_col_types = FALSE)  
     
     # Fix mouse enrichment p-values and q-values
-    # REMOVE IF FIXED UPSTREAM
-    # list_pathways[[as.character(nk)]][[k]] <- list_pathways[[as.character(nk)]][[k]] %>%
-    #   mutate(P.Value = P.Value/2,
-    #          adj.P.Val = p.adjust(P.Value, method = "fdr"),
-    #          NLQ = -log10(adj.P.Val))
     list_pathways[[as.character(nk)]][[k]] <- list_pathways[[as.character(nk)]][[k]] %>%
       mutate(NLQ = -log10(adj.P.Val))
   }
@@ -570,7 +539,7 @@ fig3_heatmap_human_match <- ggplot(df_sig_nk,
   scale_y_discrete(expand = expansion()) +
   scale_fill_manual(values = brewer.pal(n = 9, name = "PuBu")[c(1, 9)], 
                     labels = c("No", "Yes"),
-                    guide = guide_legend(title.position = "bottom",
+                    guide = guide_legend(title.position = "top",
                                          title.hjust = 0.5)) + 
   labs(fill = "Human match") + 
   theme_bw() +
@@ -585,6 +554,14 @@ fig3_heatmap_human_match <- ggplot(df_sig_nk,
         axis.ticks = element_blank(),
         legend.direction = "horizontal",
         legend.position = "bottom",
+        legend.key.size = unit(10, "bigpts"),
+        legend.title = element_text(size = font_size,
+                                    family = font_family,
+                                    hjust = 0.5),
+        legend.text = element_text(size = font_size-1,
+                                   family = font_family),
+        # legend.background = element_rect(colour = "black"),
+        legend.margin = margin(),
         plot.margin = margin(l = 0))
 
 fig3_heatmap_human_match_legend_grob <- fig3_heatmap_human_match %>%
@@ -592,8 +569,8 @@ fig3_heatmap_human_match_legend_grob <- fig3_heatmap_human_match %>%
   grid.force() %>%
   getGrob("guides.3-3-3-3")
 
-# fig3_heatmap_human_match <- fig3_heatmap_human_match +
-# theme(legend.position = "none")
+fig3_heatmap_human_match <- fig3_heatmap_human_match +
+  theme(legend.position = "none")
 ```
 
 ```{r fig3-heatmap-enrichment}
@@ -610,17 +587,19 @@ if (pathway_stat == "qvals") {
   df_pathways_heatmap <- df_pathways_heatmap %>% 
     mutate(intensity = ifelse(NLQ > threshold, threshold, NLQ))
   heatmap_limits <- c(2, threshold)
+  heatmap_fill_lab <- "-log10(q)"
 } else if (pathway_stat == "enrichment") {
   stat_threshold <- 45
   df_pathways_heatmap <- df_pathways_heatmap %>% 
     mutate(intensity = ifelse(E > threshold, threshold, E))
   heatmap_limits <- c(0, threshold)
+  heatmap_fill_lab <- "Enrichment"
 } else {
   stop()
 }
 
 # Heatmap palette
-heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")[2:9]
+heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")
 heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
 
 # Generate heatmap
@@ -635,12 +614,14 @@ fig3_heatmap_pathways <- ggplot(df_pathways_heatmap,
                    position = "right") + 
   scale_fill_gradientn(colors = heatmap_palette,
                        limits = heatmap_limits,
-                       na.value = "white",
+                       na.value = "grey85",
                        guide = guide_colourbar(title.position = "bottom",
-                                               title.hjust = 0.5)) +
+                                               title.hjust = 0.5,
+                                               barwidth = unit(50, "bigpts"),
+                                               barheight = unit(10, "bigpts"))) +
   labs(x = "Mouse cluster",
        y = "Biological pathway module",
-       fill = "Enrichment") +
+       fill = heatmap_fill_lab) +
   theme_bw() +
   theme(strip.background = element_blank(),
         strip.text = element_blank(),
@@ -651,8 +632,8 @@ fig3_heatmap_pathways <- ggplot(df_pathways_heatmap,
         axis.ticks = element_line(size = 0.25),
         legend.position = "bottom",
         legend.title = element_text(size = font_size, family = font_family),
-        legend.text = element_text(size = font_size, family = font_family),
-        # legend.position = "none",
+        legend.text = element_text(size = font_size-1, family = font_family),
+        legend.margin = margin(),
         plot.margin = margin(l = 0))
 
 fig3_heatmap_pathways_legend_grob <- fig3_heatmap_pathways %>%
@@ -660,10 +641,9 @@ fig3_heatmap_pathways_legend_grob <- fig3_heatmap_pathways %>%
   grid.force() %>%
   getGrob("guides.3-3-3-3")
 
-# fig3_heatmap_pathways <- fig3_heatmap_pathways +
-# theme(legend.position = "none")
+fig3_heatmap_pathways <- fig3_heatmap_pathways +
+  theme(legend.position = "none")
 ```
-
 
 ```{r fig3-heatmap-enrichment}
 # fig3_heatmap_pathways_width_pt <- 
@@ -672,75 +652,27 @@ fig3_heatmap_pathways_legend_grob <- fig3_heatmap_pathways %>%
 # fig3_heatmap_pathways_width_in <- fig3_heatmap_pathways_width_pt/pt_per_in
 # fig3_heatmap_pathways_height_in <- fig3_heatmap_pathways_height_pt/pt_per_in
 
-fig3_heatmap_pathways_width_in <- 12
-fig3_heatmap_pathways_height_in <- 4
-
-fig3_heatmap_pathways_width_in <- unit(fig3_heatmap_pathways_width_in, "in")
-fig3_heatmap_pathways_height_in <- unit(fig3_heatmap_pathways_height_in, "in")
-
-# Export plot
-outfile <- paste(output_plot_prefix, "pathways_heatmap", sep = "_")
-outfile <- paste0(outfile, ".pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig3_heatmap_pathways_width_in,
-    height = fig3_heatmap_pathways_height_in)
-print(fig3_heatmap_pathways)
-dev.off()
+# fig3_heatmap_pathways_width_in <- 12
+# fig3_heatmap_pathways_height_in <- 4
+# 
+# fig3_heatmap_pathways_width_in <- unit(fig3_heatmap_pathways_width_in, "in")
+# fig3_heatmap_pathways_height_in <- unit(fig3_heatmap_pathways_height_in, "in")
+# 
+# # Export plot
+# outfile <- paste(output_plot_prefix, "pathways_heatmap", sep = "_")
+# outfile <- paste0(outfile, ".pdf")
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile,
+#     width = fig3_heatmap_pathways_width_in,
+#     height = fig3_heatmap_pathways_height_in)
+# print(fig3_heatmap_pathways)
+# dev.off()
 ```
 
 
-```{r fig3-heatmap}
-fig3_heatmap_patchwork <- (fig3_heatmap_human_match / fig3_heatmap_pathways / guide_area()) +
-  plot_layout(heights = c(0.05, 0.70, 0.25), guides = "collect") &
-  theme(plot.margin = margin(l = 0),
-        legend.direction = "horizontal", 
-        legend.position = "bottom",
-        legend.title = element_text(size = font_size, family = font_family),
-        legend.text = element_text(size = font_size, family = font_family),
-        legend.background = element_rect(colour = "black"),
-        legend.key = element_rect(colour = "black"))
+# Panel: Mouse and human slice series
 
-fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
-
-fig3_heatmap_layout <- rbind(c(01, 02),
-                             c(03, 02),
-                             c(04, 02),
-                             c(05, 05))
-
-fig3_heatmap_widths <- c(0.05, 0.95)
-fig3_heatmap_heights <- c(0.025, 0.875, 0.1)
-fig3_heatmap_heights <- c(19, 205, 19, 235)
-
-fig3_heatmap_grob <- arrangeGrob(empty_rect_grob, 
-                                 gTree(children = gList(empty_rect_grob, fig3_heatmap_patchwork_grob)),
-                                 fig3_heatmap_dendrogram_grob,
-                                 empty_rect_grob,
-                                 empty_rect_grob,
-                                 layout_matrix = fig3_heatmap_layout,
-                                 widths = unit(fig3_heatmap_widths, "npc"),
-                                 heights = unit(fig3_heatmap_heights, "bigpts"))
-
-fig3_heatmap_width_pt <- 510
-fig3_heatmap_height_pt <- sum(fig3_heatmap_heights)
-
-fig3_heatmap_width_in <- fig3_heatmap_width_pt/pt_per_in
-fig3_heatmap_height_in <- fig3_heatmap_height_pt/pt_per_in
-
-fig3_heatmap_width_in <- unit(fig3_heatmap_width_in, "in")
-fig3_heatmap_height_in <- unit(fig3_heatmap_height_in, "in")
-
-outfile <- paste(output_plot_prefix, "pathways", sep = "_")
-outfile <- paste0(outfile, ".pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig3_heatmap_width_in,
-    height = fig3_heatmap_height_in)
-grid.draw(fig3_heatmap_grob)
-dev.off()
-```
-
-# Mouse brain slices
+## Mouse brain slices
 
 ```{r mouse-ss-paths}
 # Mouse parameter set ID
@@ -820,7 +752,7 @@ if (run) {
 }
 ```
 
-```{r mouse-ss}
+```{r mouse-ss-import}
 # Anatomical plane to display
 # Sagittal: 1
 # Coronal: 2 
@@ -838,6 +770,7 @@ df_mouse_matches <- df_sig_nk %>%
          k = as.numeric(as.character(k)))
 
 # Iterate over mouse clusters
+list_mouse_slices <- vector(mode = "list", length = nrow(df_mouse_matches))
 for (i in 1:nrow(df_mouse_matches)) {
   
   # Extract cluster info
@@ -864,36 +797,111 @@ for (i in 1:nrow(df_mouse_matches)) {
   img <- mincArray(img)
   
   # Generate slice series
-  ss <- sliceSeries(nrow = 1, ncol = 1, dimension = mouse_slc_dim, slices = mouse_slc) %>% 
+  list_mouse_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                        dimension = mouse_slc_dim, 
+                                        slices = mouse_slc) %>% 
     anatomy(mouse_anat_vol, low = 700, high = 1400) %>% 
-    overlay(img, low = overlay_threshold[1], high = overlay_threshold[2], 
-            symmetric = TRUE) 
+    overlay(img, 
+            low = overlay_threshold[1], high = overlay_threshold[2], 
+            symmetric = TRUE) %>% 
+    grobify()
   
-  # Slice dimensions in pixels
-  width_px <- dim(mouse_anat_vol)[2]
-  height_px <- dim(mouse_anat_vol)[3]
-  
-  # Image dimensions
-  width_in <- 5
-  height_in <- 5*(height_px/width_px)
-  
-  width_in <- unit(width_in, "in")
-  height_in <- unit(height_in, "in")
-  
-  outfile <- paste(output_plot_prefix, "mouse_cluster_centroid_nk",
-                   nk, "k", k, sep = "_")
-  outfile <- paste0(outfile, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  pdf(file = outfile,
-      width = width_in,
-      height = height_in)
-  draw(ss)
-  dev.off()
+  # # Slice dimensions in pixels
+  # mouse_width_px <- dim(mouse_anat_vol)[2]
+  # mouse_height_px <- dim(mouse_anat_vol)[3]
+  # 
+  # # Image dimensions
+  # mouse_height_pt <- 15
+  # mouse_width_pt <- mouse_height_pt*(mouse_width_px/mouse_height_px)
+  # 
+  # mouse_width_in <- mouse_width_pt/pt_per_in
+  # mouse_height_in <- mouse_height_pt/pt_per_in
+  # 
+  # mouse_width_in <- unit(mouse_width_in, "in")
+  # mouse_height_in <- unit(mouse_height_in, "in")
+  # 
+  # outfile <- paste(output_plot_prefix, "mouse_cluster_centroid_nk",
+  #                  nk, "k", k, sep = "_")
+  # outfile <- paste0(outfile, ".pdf")
+  # outfile <- file.path(output_dir, outfile)
+  # pdf(file = outfile,
+  #     width = mouse_width_in,
+  #     height = mouse_height_in)
+  # draw(ss)
+  # dev.off()
   
 }
 ```
 
-# Human brain slices
+```{r mouse-ss-grob}
+list_mouse_ss_grobs <- vector(mode = "list", length = 2*length(list_mouse_slices))
+jseq <- seq(1, 2*length(list_mouse_slices), by = 2)
+for (i in 1:length(list_mouse_slices)) {
+  list_mouse_ss_grobs[[jseq[i]]] <- list_mouse_slices[[i]]
+  list_mouse_ss_grobs[[jseq[i]+1]] <- zeroGrob()
+}
+
+# Mouse slice dimensions
+mouse_width_px <- dim(mouse_anat_vol)[2]
+mouse_height_px <- dim(mouse_anat_vol)[3]
+
+# Number of slices
+nss <- length(list_mouse_slices)
+
+# Width of padding between slices
+padding_width_pt <- 2
+
+# Width of padding between clusters
+padding_big_width_pt <- 2*padding_width_pt
+
+# Set padding widths in grid
+fig3_mouse_ss_widths <- rep(c(0, padding_width_pt), nss)
+fig3_mouse_ss_widths[c(4*1:3, 6*3:6)] <- padding_big_width_pt
+
+# Total width of padding
+padding_width_tot <- sum(fig3_mouse_ss_widths)
+
+# Total width of slices
+ss_width_tot <- fig3_width - padding_width_tot
+
+# Figure dimensions of individual slices
+mouse_width_pt <- ss_width_tot/nss
+mouse_height_pt <- mouse_width_pt*(mouse_height_px/mouse_width_px)
+
+# Figure grid widths and heights
+fig3_mouse_ss_widths[2*(1:nss)-1] <- mouse_width_pt
+fig3_mouse_ss_heights <- mouse_height_pt
+
+# Figure grid layout
+fig3_mouse_ss_layout <- rbind(1:length(list_mouse_ss_grobs))
+
+# Figure grob
+fig3_mouse_ss_grob <- arrangeGrob(grobs = list_mouse_ss_grobs,
+                                  layout_matrix = fig3_mouse_ss_layout,
+                                  widths = unit(fig3_mouse_ss_widths, "bigpts"),
+                                  heights = unit(fig3_mouse_ss_heights, "bigpts"))
+
+fig3_mouse_ss_width_pt <- sum(fig3_mouse_ss_widths)
+fig3_mouse_ss_height_pt <- sum(fig3_mouse_ss_heights)
+
+fig3_mouse_ss_width_in <- fig3_mouse_ss_width_pt/pt_per_in
+fig3_mouse_ss_height_in <- fig3_mouse_ss_height_pt/pt_per_in
+
+fig3_mouse_ss_width_in <- unit(fig3_mouse_ss_width_in, "in")
+fig3_mouse_ss_height_in <- unit(fig3_mouse_ss_height_in, "in")
+
+outfile <- paste(output_plot_prefix, "ss_mouse", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig3_mouse_ss_width_in,
+    height = fig3_mouse_ss_height_in)
+grid.draw(fig3_mouse_ss_grob)
+dev.off()
+```
+
+
+## Human brain slices
 
 ```{r human-ss-paths}
 # Human parameter set ID
@@ -951,7 +959,7 @@ human_mask_file <- "../data/human/registration/v2/reference_files/mask_0.8mm.mnc
 human_mask <- mincGetVolume(human_mask_file)
 ```
 
-```{r human-ss}
+```{r human-ss-import}
 # Anatomical plane to display
 # Sagittal: 1
 # Coronal: 2 
@@ -962,15 +970,60 @@ human_slc_dim <- 1
 human_slc <- 82
 
 # Determine human clusters matching mouse clusters
-df_human_matches <- df_sim_pvals %>% 
-  filter(mouse_nk >= 4, 
-         significant == 1) %>% 
-  select(cluster_id = human_cluster_id, 
-         nk = human_nk,
-         k = human_k) %>% 
-  distinct()
+list_human_matches <- vector(mode = "list", length = nrow(df_mouse_matches))
+for (i in 1:nrow(df_mouse_matches)) {
+  
+  # Extract matches to mouse cluster
+  df_match_i <- df_sim_pvals %>% 
+    filter(mouse_nk == df_mouse_matches[[i, "nk"]],
+           mouse_k == df_mouse_matches[[i, "k"]],
+           significant == 1)
+  
+  # If only one match, select that one
+  if (nrow(df_match_i) == 1) {
+    df_match_i <- df_match_i %>% 
+      select(cluster_id = human_cluster_id,
+             nk = human_nk, k = human_k)
+  } else {
+    
+    # If more than one match, test whether there is a match at the same nk
+    nk_test <- df_match_i %>% 
+      filter(mouse_nk == human_nk) %>% 
+      nrow()
+    
+    # If only one match at same nk, select that one
+    if (nk_test == 1) {
+      df_match_i <- df_match_i %>% 
+        filter(mouse_nk == human_nk) %>% 
+        select(cluster_id = human_cluster_id,
+               nk = human_nk, k = human_k)
+      
+      # If more than one match at nk, select the most significant
+    } else if (nk_test > 1) {
+      df_match_i <- df_match_i %>% 
+        filter(mouse_nk == human_nk) %>% 
+        top_n(n = -1, wt = pval) %>% 
+        select(cluster_id = human_cluster_id,
+               nk = human_nk, k = human_k)
+      
+      # If no matches at nk, select the most significant amid the others
+    } else {
+      df_match_i <- df_match_i %>% 
+        top_n(n = -1, wt = pval) %>% 
+        select(cluster_id = human_cluster_id,
+               nk = human_nk, k = human_k)
+    } 
+  }
+  
+  list_human_matches[[i]] <- df_match_i
+  
+}
+
+# Reduce list to a data frame
+df_human_matches <- bind_rows(list_human_matches)
 
 # Iterate over human clusters
+list_human_slices <- vector(mode = "list", length = nrow(df_human_matches))
 for (i in 1:nrow(df_human_matches)) {
   
   # Extract cluster info
@@ -998,38 +1051,132 @@ for (i in 1:nrow(df_human_matches)) {
   img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
   
   # Generate slice series
-  ss <- sliceSeries(nrow = 1, ncol = 1, dimension = human_slc_dim, slices = human_slc) %>% 
+  list_human_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                        dimension = human_slc_dim, 
+                                        slices = human_slc) %>% 
     anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
     overlay(img, 
             low = overlay_threshold[1], 
             high = overlay_threshold[2], 
-            symmetric = TRUE) 
+            symmetric = TRUE) %>% 
+    grobify()
   
-  # Slice dimensions in pixels
-  width_px <- dim(human_anat_vol)[2]
-  height_px <- dim(human_anat_vol)[3]
-  
-  # Image dimensions
-  width_in <- 5
-  height_in <- 5*(height_px/width_px)
-  
-  width_in <- unit(width_in, "in")
-  height_in <- unit(height_in, "in")
-  
-  outfile <- paste(output_plot_prefix, "human_cluster_centroid_nk",
-                   nk, "k", k, sep = "_")
-  outfile <- paste0(outfile, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  pdf(file = outfile,
-      width = width_in,
-      height = height_in)
-  draw(ss)
-  dev.off()
+  # # Slice dimensions in pixels
+  # human_width_px <- dim(human_anat_vol)[2]
+  # human_height_px <- dim(human_anat_vol)[3]
+  # 
+  # # Image dimensions
+  # human_height_pt <- mouse_height_pt
+  # human_width_pt <- human_height_pt*(human_width_px/human_height_px)
+  # 
+  # human_height_in <- human_height_pt/pt_per_in
+  # human_width_in <- human_width_pt/pt_per_in
+  # 
+  # human_width_in <- unit(human_width_in, "in")
+  # human_height_in <- unit(human_height_in, "in")
+  # 
+  # outfile <- paste(output_plot_prefix, "human_cluster_centroid_nk",
+  #                  nk, "k", k, sep = "_")
+  # outfile <- paste0(outfile, ".pdf")
+  # outfile <- file.path(output_dir, outfile)
+  # pdf(file = outfile,
+  #     width = human_width_in,
+  #     height = human_height_in)
+  # draw(ss)
+  # dev.off()
   
 }
 ```
 
-```{r}
+```{r human-ss-grob}
+list_human_ss_grobs <- vector(mode = "list", length = 2*length(list_human_slices))
+jseq <- seq(1, 2*length(list_human_slices), by = 2)
+for (i in 1:length(list_human_slices)) {
+  list_human_ss_grobs[[jseq[i]]] <- list_human_slices[[i]]
+  list_human_ss_grobs[[jseq[i]+1]] <- zeroGrob()
+}
+
+# Human slice dimensions in pixels
+human_width_px <- dim(human_anat_vol_cropped)[2]
+human_height_px <- dim(human_anat_vol_cropped)[3]
+
+# Image dimensions
+human_width_pt <- mouse_width_pt
+human_height_pt <- human_width_pt*(human_height_px/human_width_px)
+
+# Figure grid widths and heights
+fig3_human_ss_widths <- fig3_mouse_ss_widths
+fig3_human_ss_heights <- human_height_pt
+
+# Figure grid layout
+fig3_human_ss_layout <- fig3_mouse_ss_layout
+
+# Figure grob
+fig3_human_ss_grob <- arrangeGrob(grobs = list_human_ss_grobs,
+                                  layout_matrix = fig3_human_ss_layout,
+                                  widths = unit(fig3_human_ss_widths, "bigpts"),
+                                  heights = unit(fig3_human_ss_heights, "bigpts"))
+
+# Dimensions in bigpts
+fig3_human_ss_width_pt <- sum(fig3_human_ss_widths)
+fig3_human_ss_height_pt <- sum(fig3_human_ss_heights)
+
+# Dimensions in inches
+fig3_human_ss_width_in <- fig3_human_ss_width_pt/pt_per_in
+fig3_human_ss_height_in <- fig3_human_ss_height_pt/pt_per_in
+
+fig3_human_ss_width_in <- unit(fig3_human_ss_width_in, "in")
+fig3_human_ss_height_in <- unit(fig3_human_ss_height_in, "in")
+
+# Export
+outfile <- paste(output_plot_prefix, "ss_human", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig3_human_ss_width_in,
+    height = fig3_human_ss_height_in)
+grid.draw(fig3_human_ss_grob)
+dev.off()
+```
+
+## Combined
+
+```{r fig3-ss}
+fig3_ss_widths <- fig3_width
+fig3_ss_heights <- c(fig3_human_ss_heights, fig3_mouse_ss_heights)
+
+fig3_ss_layout <- cbind(1:2)
+
+fig3_ss_grob <- arrangeGrob(fig3_human_ss_grob,
+                            fig3_mouse_ss_grob,
+                            layout_matrix = fig3_ss_layout,
+                            widths = unit(fig3_width, "bigpts"),
+                            heights = unit(fig3_ss_heights, "bigpts"))
+
+# Dimensions in bigpts
+fig3_ss_width_pt <- sum(fig3_ss_widths)
+fig3_ss_height_pt <- sum(fig3_ss_heights)
+
+# Dimensions in inches
+fig3_ss_width_in <- fig3_ss_width_pt/pt_per_in
+fig3_ss_height_in <- fig3_ss_height_pt/pt_per_in
+
+fig3_ss_width_in <- unit(fig3_ss_width_in, "in")
+fig3_ss_height_in <- unit(fig3_ss_height_in, "in")
+
+# Export
+outfile <- paste(output_plot_prefix, "ss", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig3_ss_width_in,
+    height = fig3_ss_height_in)
+grid.draw(fig3_ss_grob)
+dev.off()
+```
+
+
+```{r fig3-matching-clusters}
 outfile <- "fig3_matching_clusters.csv"
 outfile <- file.path(output_dir, outfile)
 df_sim_pvals %>% 
@@ -1039,4 +1186,79 @@ df_sim_pvals %>%
          human_cluster = human_cluster_id)  %>% 
   write_csv(file = outfile)
 ```
+
+
+# Test
+
+```{r fig3-heatmap}
+# fig3_heatmap_patchwork <- (fig3_heatmap_human_match / fig3_heatmap_pathways / guide_area()) +
+#   plot_layout(heights = c(0.05, 0.70, 0.25), guides = "collect") &
+#   theme(plot.margin = margin(l = 0),
+#         legend.direction = "horizontal", 
+#         legend.position = "bottom",
+#         legend.title = element_text(size = font_size, family = font_family),
+#         legend.text = element_text(size = font_size, family = font_family),
+#         legend.background = element_rect(colour = "black"),
+#         legend.key = element_rect(colour = "black"))
+
+fig3_heatmap_patchwork <- (fig3_heatmap_human_match / fig3_heatmap_pathways) +
+  plot_layout(heights = c(0.05, 0.95)) &
+  theme(plot.margin = margin(l = 0))
+
+fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
+
+fig3_heatmap_layout <- rbind(c(01, 01, 01, 01),
+                             c(02, 02, 02, 02),
+                             c(03, 04, 05, 06),
+                             c(07, 04, 04, 04),
+                             c(08, 04, 04, 04))
+
+fig3_heatmap_widths <- fig3_width*c(0.05, 0.75, 0.12, 0.08)
+fig3_heatmap_heights <- c(fig3_ss_height_pt, 19, 19, 205, 19)
+
+fig3_heatmap_grob <- arrangeGrob(fig3_ss_grob,
+                                 # rect_w_num(2),
+                                 zeroGrob(),
+                                 # rect_w_num(3),
+                                 zeroGrob(),
+                                 fig3_heatmap_patchwork_grob,
+                                 fig3_heatmap_human_match_legend_grob,
+                                 # rect_w_num(6),
+                                 zeroGrob(),
+                                 fig3_heatmap_dendrogram_grob,
+                                 # rect_w_num(8),
+                                 zeroGrob(),
+                                 layout_matrix = fig3_heatmap_layout,
+                                 widths = unit(fig3_heatmap_widths, "bigpts"),
+                                 heights = unit(fig3_heatmap_heights, "bigpts"))
+
+fig3_heatmap_width_pt <- sum(fig3_heatmap_widths)
+fig3_heatmap_height_pt <- sum(fig3_heatmap_heights)
+
+fig3_heatmap_width_in <- fig3_heatmap_width_pt/pt_per_in
+fig3_heatmap_height_in <- fig3_heatmap_height_pt/pt_per_in
+
+fig3_heatmap_width_in <- unit(fig3_heatmap_width_in, "in")
+fig3_heatmap_height_in <- unit(fig3_heatmap_height_in, "in")
+
+fig3_heatmap_legend_vp <- viewport(x = unit(fig3_width-10, "bigpts"),
+                                   y = unit(0, "bigpts"),
+                                   width = unit(50, "bigpts"),
+                                   height = unit(45, "bigpts"),
+                                   just = c("right", "bottom"))
+
+outfile <- paste(output_plot_prefix, "pathways", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig3_heatmap_width_in,
+    height = fig3_heatmap_height_in)
+grid.draw(fig3_heatmap_grob)
+pushViewport(fig3_heatmap_legend_vp)
+grid.draw(fig3_heatmap_pathways_legend_grob)
+popViewport()
+dev.off()
+```
+
+
 
