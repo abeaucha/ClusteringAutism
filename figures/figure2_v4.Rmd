@@ -30,11 +30,30 @@ suppressPackageStartupMessages(library(pROC))
 source("../src/utils.R")
 source("../src/processing.R")
 source("../src/analysis.R")
+
+export_pdf <- function(x, w, h, outfile) {
+  
+  w_in <- w/pt_per_in
+  h_in <- h/pt_per_in
+  
+  w_in <- unit(w_in, "in")
+  h_in <- unit(h_in, "in")
+  
+  pdf(file = outfile,
+      width = w_in,
+      height = h_in)
+  grid.draw(x)
+  dev.off()
+  
+}
 ```
 
 ```{r pipeline-params}
 # Output directory
 output_dir <- "figure2/"
+
+# Plot file prefix
+output_plot_prefix <- "figure2"
 
 # Similarity pipeline
 version <- "v2"
@@ -116,16 +135,26 @@ names(mouse_cluster_map_dirs_50um) <- jacobians
 pt_per_in <- 72
 
 # Font family
-fig2_font_family <- "Helvetica"
+font_family <- "Helvetica"
 
 # Nature suggested font size: 5-7 pt
-fig2_font_size <- 6
-
-# Black rectangle grob
-fig2_ss_black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
+font_size <- 6
 
 # Empty rectangle grob
-fig2_empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
+empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
+
+rect_w_num <- function(n) {
+  out <- gTree(children = gList(empty_rect_grob,
+                                textGrob(label = n)))
+  return(out)
+}
+
+# Black rectangle grob
+black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
+
+# Figure width (bigpt)
+fig2_width_pt <- 510
+fig2_height_pt <- 481
 ```
 
 
@@ -341,7 +370,7 @@ overlay_low <- 0.19
 overlay_high <- 1.0
 ```
 
-```{r fig2-ss-human-imgs}
+```{r fig2-ss-human-grob}
 # For each human cluster, create a set of coronal slices
 fig2_ss_human_slice_grobs <- vector(mode = "list", length = nk_human)
 names(fig2_ss_human_slice_grobs) <- names(list_human_centroids[["relative"]])
@@ -380,24 +409,19 @@ fig2_ss_human_grob <- arrangeGrob(grobs = fig2_ss_human_grobs_list,
                                   heights = fig2_ss_human_heights)
 
 # Human ss dimensions in bigpts
-fig2_ss_human_height <- 195
-fig2_ss_human_width <- fig2_ss_human_height*(nk_human/ss_nslices)
-
-# Human ss dimensions in inches
-fig2_ss_human_height_in <- unit(fig2_ss_human_height/pt_per_in, "in")
-fig2_ss_human_width_in <- unit(fig2_ss_human_width/pt_per_in, "in")
+fig2_ss_human_height_pt <- 195
+fig2_ss_human_width_pt <- fig2_ss_human_height_pt*(nk_human/ss_nslices)
 
 # Export human ss plot
 outfile <- "figure2_ss_human.pdf"
 outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig2_ss_human_width_in,
-    height = fig2_ss_human_height_in)
-grid.draw(fig2_ss_human_grob)
-dev.off()
+export_pdf(x = fig2_ss_human_grob,
+           w = fig2_ss_human_width_pt,
+           h = fig2_ss_human_height_pt,
+           outfile = outfile)
 ```
 
-```{r fig2-ss-mouse-imgs}
+```{r fig2-ss-mouse-grob}
 # For each mouse cluster, create a set of coronal slices
 fig2_ss_mouse_slice_grobs <- vector(mode = "list", length = nk_mouse)
 names(fig2_ss_mouse_slice_grobs) <- names(list_mouse_centroids[["relative"]])
@@ -436,29 +460,24 @@ fig2_ss_mouse_grob <- arrangeGrob(grobs = fig2_ss_mouse_grobs_list,
                                   heights = fig2_ss_mouse_heights)
 
 # Mouse ss dimensions in bigpts
-fig2_ss_mouse_height <- fig2_ss_human_height
-fig2_ss_mouse_width <- fig2_ss_mouse_height*(nk_mouse/ss_nslices)
-
-# Mouse ss dimensions in inches
-fig2_ss_mouse_height_in <- unit(fig2_ss_mouse_height/pt_per_in, "in")
-fig2_ss_mouse_width_in <- unit(fig2_ss_mouse_width/pt_per_in, "in")
+fig2_ss_mouse_height_pt <- fig2_ss_human_height_pt
+fig2_ss_mouse_width_pt <- fig2_ss_mouse_height_pt*(nk_mouse/ss_nslices)
 
 # Export mouse ss plot
 outfile <- "figure2_ss_mouse.pdf"
 outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig2_ss_mouse_width_in,
-    height = fig2_ss_mouse_height_in)
-grid.draw(fig2_ss_mouse_grob)
-dev.off()
+export_pdf(x = fig2_ss_mouse_grob,
+           w = fig2_ss_mouse_width_pt,
+           h = fig2_ss_mouse_height_pt,
+           outfile = outfile)
 ```
 
-```{r fig2-ss-legend}
+```{r fig2-ss-legend-grob}
 # Global properties for legend
 fig2_ss_legend_scale_y <- 0.5
 fig2_ss_legend_scale_height <- 0.9
 fig2_ss_legend_labels_y <- fig2_ss_legend_scale_y + 0.5*fig2_ss_legend_scale_height*c(-1, 1)
-fig2_ss_legend_labels_fontsize <- fig2_font_size
+fig2_ss_legend_labels_fontsize <- font_size
 fig2_ss_legend_labels_colour <- "white"
 
 # Positive scale raster grob
@@ -466,7 +485,7 @@ fig2_ss_legend_pos_scale_palette <- rev(MRIcrotome:::defaultCol())
 fig2_ss_legend_pos_scale_raster_grob <- rasterGrob(image = cbind(fig2_ss_legend_pos_scale_palette),
                                                    y = fig2_ss_legend_scale_y,
                                                    width = 1, height = fig2_ss_legend_scale_height)
-fig2_ss_legend_pos_scale_raster_grob <- gTree(children = gList(fig2_ss_black_rect_grob, 
+fig2_ss_legend_pos_scale_raster_grob <- gTree(children = gList(black_rect_grob, 
                                                                fig2_ss_legend_pos_scale_raster_grob))
 
 # Positive scale labels
@@ -478,9 +497,9 @@ fig2_ss_legend_pos_labels_grob <- textGrob(label = fig2_ss_legend_pos_labels,
                                            x = 0.1,
                                            just = c("left", "center"),
                                            gp = gpar(fontsize = fig2_ss_legend_labels_fontsize,
-                                                     fontfamily = fig2_font_family,
+                                                     fontfamily = font_family,
                                                      col = fig2_ss_legend_labels_colour))
-fig2_ss_legend_pos_labels_grob <- gTree(children = gList(fig2_ss_black_rect_grob, 
+fig2_ss_legend_pos_labels_grob <- gTree(children = gList(black_rect_grob, 
                                                          fig2_ss_legend_pos_labels_grob))
 
 # Negative scale raster grob
@@ -488,7 +507,7 @@ fig2_ss_legend_neg_scale_palette <- MRIcrotome:::defaultRCol()
 fig2_ss_legend_neg_scale_raster_grob <- rasterGrob(image = cbind(fig2_ss_legend_neg_scale_palette),
                                                    y = fig2_ss_legend_scale_y,
                                                    width = 1, height = fig2_ss_legend_scale_height)
-fig2_ss_legend_neg_scale_raster_grob <- gTree(children = gList(fig2_ss_black_rect_grob, 
+fig2_ss_legend_neg_scale_raster_grob <- gTree(children = gList(black_rect_grob, 
                                                                fig2_ss_legend_neg_scale_raster_grob))
 
 # Negative scale labels
@@ -499,9 +518,9 @@ fig2_ss_legend_neg_labels_grob <- textGrob(label = fig2_ss_legend_neg_labels,
                                            x = 0.1,
                                            just = c("left", "center"),
                                            gp = gpar(fontsize = fig2_ss_legend_labels_fontsize,
-                                                     fontfamily = fig2_font_family,
+                                                     fontfamily = font_family,
                                                      col = fig2_ss_legend_labels_colour))
-fig2_ss_legend_neg_labels_grob <- gTree(children = gList(fig2_ss_black_rect_grob, 
+fig2_ss_legend_neg_labels_grob <- gTree(children = gList(black_rect_grob, 
                                                          fig2_ss_legend_neg_labels_grob))
 
 # Legend title
@@ -509,16 +528,16 @@ fig2_ss_legend_title_grob <- textGrob(label = "Effect size", rot = 90,
                                       x = 0.2, y = 0.5,
                                       just = c("center", "top"),
                                       gp = gpar(fontsize = fig2_ss_legend_labels_fontsize,
-                                                fontfamily = fig2_font_family,
+                                                fontfamily = font_family,
                                                 col = fig2_ss_legend_labels_colour))
-fig2_ss_legend_title_grob <- gTree(children = gList(fig2_ss_black_rect_grob,
+fig2_ss_legend_title_grob <- gTree(children = gList(black_rect_grob,
                                                     fig2_ss_legend_title_grob))
 
 # Legend grob
 fig2_ss_legend_grob <- arrangeGrob(fig2_ss_legend_pos_scale_raster_grob,
                                    fig2_ss_legend_pos_labels_grob,
                                    fig2_ss_legend_title_grob,
-                                   fig2_ss_black_rect_grob,
+                                   black_rect_grob,
                                    fig2_ss_legend_neg_scale_raster_grob,
                                    fig2_ss_legend_neg_labels_grob,
                                    layout_matrix = rbind(c(01, 02, 03),
@@ -528,21 +547,78 @@ fig2_ss_legend_grob <- arrangeGrob(fig2_ss_legend_pos_scale_raster_grob,
                                    heights = unit(c(0.49, 0.02, 0.49), "npc"))
 
 # Legend dimensions in bigpts
-fig2_ss_legend_height <- fig2_ss_mouse_height
-fig2_ss_legend_width <- 50
-
-# Legend dimensions in inches
-fig2_ss_legend_height_in <- unit(fig2_ss_legend_height/pt_per_in, "in")
-fig2_ss_legend_width_in <- unit(fig2_ss_legend_width/pt_per_in, "in")
+fig2_ss_legend_height_pt <- fig2_ss_mouse_height_pt
+fig2_ss_legend_width_pt <- 50
 
 # Export slice series legend
 outfile <- "figure2_ss_legend.pdf"
 outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig2_ss_legend_width_in,
-    height = fig2_ss_legend_height_in)
-grid.draw(fig2_ss_legend_grob)
-dev.off()
+export_pdf(x = fig2_ss_legend_grob,
+           w = fig2_ss_legend_width_pt,
+           h = fig2_ss_legend_height_pt,
+           outfile = outfile)
+```
+
+```{r fig2-ss-grob}
+# Layout for figure 2 slice series
+fig2_ss_layout <- rbind(c(01, 01, 01, 01, 01, 01),
+                        c(02, 03, 04, 05, 06, 07),
+                        c(08, 08, 08, 08, 08, 08))
+
+# Dimensions for figure 2 slice series
+fig2_ss_widths <- c(7, fig2_ss_human_width_pt, 19, fig2_ss_mouse_width_pt, 12, fig2_ss_legend_width_pt)
+fig2_ss_heights <- c(22, fig2_ss_human_height_pt, 23)
+
+# Figure 2 slice series grob
+fig2_ss_grob <- arrangeGrob(black_rect_grob,
+                            black_rect_grob,
+                            fig2_ss_human_grob,
+                            black_rect_grob,
+                            fig2_ss_mouse_grob,
+                            black_rect_grob,
+                            fig2_ss_legend_grob,
+                            black_rect_grob,
+                            layout_matrix = fig2_ss_layout,
+                            widths = unit(fig2_ss_widths, "bigpts"),
+                            heights = unit(fig2_ss_heights, "bigpts"))
+
+# Figure 2 slice series dimensions
+fig2_ss_width_pt <- sum(fig2_ss_widths)
+fig2_ss_height_pt <- sum(fig2_ss_heights)
+
+# Export plot
+outfile <- paste(output_plot_prefix, "ss", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+export_pdf(x = fig2_ss_grob,
+           w = fig2_ss_width_pt,
+           h = fig2_ss_height_pt,
+           outfile = outfile)
+```
+
+
+```{r}
+fig2_layout <- rbind(c(01, 02),
+                     c(03, 04))
+
+fig2_widths <- c(fig2_ss_width_pt, fig2_width_pt - fig2_ss_width_pt)
+fig2_heights <- c(fig2_ss_height_pt, 202)
+
+fig2_grob <- arrangeGrob(fig2_ss_grob, 
+                         empty_rect_grob,
+                         empty_rect_grob,
+                         empty_rect_grob,
+                         layout_matrix = fig2_layout,
+                         widths = unit(fig2_widths, "bigpts"),
+                         heights = unit(fig2_heights, "bigpts"))
+
+fig2_width_pt <- sum(fig2_widths)
+fig2_height_pt <- sum(fig2_heights)
+
+export_pdf(x = fig2_grob, 
+           w = fig2_width_pt,
+           h = fig2_height_pt,
+           outfile = outfile)
 ```
 
 
@@ -749,17 +825,17 @@ fig2_heatmap <- ggplot(df_similarity_nk,
   scale_y_discrete(expand = expansion(mult = 0)) + 
   theme_bw() + 
   theme(axis.ticks = element_blank(), 
-        axis.text = element_text(size = fig2_font_size, family = fig2_font_family),
-        axis.title = element_text(size = fig2_font_size, family = fig2_font_family),
+        axis.text = element_text(size = font_size, family = font_family),
+        axis.title = element_text(size = font_size, family = font_family),
         legend.position = c(1, 0.5),
         legend.justification = c("left", "center"),
         legend.margin = margin(l = 4, r = 0, unit = "bigpts"),
         legend.title = element_text(angle = 90,
                                     hjust = 0.5,
-                                    size = fig2_font_size,
-                                    family = fig2_font_family),
-        legend.text = element_text(size = fig2_font_size-1,
-                                   family = fig2_font_family),
+                                    size = font_size,
+                                    family = font_family),
+        legend.text = element_text(size = font_size-1,
+                                   family = font_family),
         # plot.background = element_rect(colour = "black"),
         plot.margin = margin(t = 0, l = 5, r = 5, unit = "bigpts"))
 ```
@@ -817,7 +893,7 @@ fig2_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity,
        col = "nk") + 
   theme_bw() +
   theme(axis.title.y.right = element_text(angle = 90, vjust = 2),
-        axis.text.y.right = element_text(size = fig2_font_size-1),
+        axis.text.y.right = element_text(size = font_size-1),
         plot.margin = margin(t = 0, l = 5, unit = "bigpts"))
 ```
 
@@ -825,8 +901,8 @@ fig2_permutations_pvals <- ggplot(df_similarity_nk, aes(x = similarity,
 # Combine plots using patchwork
 fig2_similarity <- fig2_heatmap / fig2_permutations_density / fig2_permutations_pvals +
   plot_layout(heights = c(1, 1, 1)) &
-  theme(axis.text = element_text(size = fig2_font_size, family = fig2_font_family),
-        axis.title = element_text(size = fig2_font_size, family = fig2_font_family))
+  theme(axis.text = element_text(size = font_size, family = font_family),
+        axis.title = element_text(size = font_size, family = font_family))
 
 # Heatmap dimensions in bigpts
 fig2_similarity_width_pt <- 188
@@ -1006,19 +1082,19 @@ fig2_pathways_mouse <- ggplot(df_polar_plot,
   theme_bw() + 
   theme(axis.ticks.x = element_blank(),
         axis.line.x = element_blank(),
-        axis.text.x = element_text(size = fig2_font_size,
-                                   family = fig2_font_family),
+        axis.text.x = element_text(size = font_size,
+                                   family = font_family),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
         panel.border = element_blank(),
         legend.position = "bottom",
         legend.key.size = unit(12, "bigpts"),
-        legend.title = element_text(size = fig2_font_size,
-                                    family = fig2_font_family,
+        legend.title = element_text(size = font_size,
+                                    family = font_family,
                                     hjust = 0.5),
-        legend.text = element_text(size = fig2_font_size,
-                                   family = fig2_font_family),
+        legend.text = element_text(size = font_size,
+                                   family = font_family),
         legend.box.margin = margin(t = -15),
         plot.margin = margin(l = 10, r = 25, t = 10)
   )
@@ -1161,19 +1237,19 @@ fig2_pathways_human <- ggplot(df_polar_plot,
   theme_bw() + 
   theme(axis.ticks.x = element_blank(),
         axis.line.x = element_blank(),
-        axis.text.x = element_text(size = fig2_font_size-1,
-                                   family = fig2_font_family),
+        axis.text.x = element_text(size = font_size-1,
+                                   family = font_family),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
         panel.border = element_blank(),
         legend.position = "bottom",
         legend.key.size = unit(12, "bigpts"),
-        legend.title = element_text(size = fig2_font_size,
-                                    family = fig2_font_family,
+        legend.title = element_text(size = font_size,
+                                    family = font_family,
                                     hjust = 0.5),
-        legend.text = element_text(size = fig2_font_size,
-                                   family = fig2_font_family),
+        legend.text = element_text(size = font_size,
+                                   family = font_family),
         legend.box.margin = margin(t = -15),
         plot.margin = margin(l = 15, r = 25, t = 10),
         # plot.background = element_rect(colour = "black")
@@ -1321,8 +1397,8 @@ for (alpha in alpha_mouse) {
          y = "Sensitivity") +
     theme_bw() +
     theme(legend.position = "none",
-          axis.text = element_text(size = fig2_font_size-1),
-          axis.title = element_text(size = fig2_font_size),
+          axis.text = element_text(size = font_size-1),
+          axis.title = element_text(size = font_size),
           plot.margin = margin(t = 6))
   
   # Export plot
@@ -1431,14 +1507,14 @@ fig2_dx <- ggplot(df_dx_nk_freq,
   theme_bw() +
   theme(legend.position = "bottom",
         legend.key.size = unit(12, "bigpts"),
-        legend.title = element_text(size = fig2_font_size,
-                                    family = fig2_font_family,
+        legend.title = element_text(size = font_size,
+                                    family = font_family,
                                     hjust = 0.5),
-        legend.text = element_text(size = fig2_font_size,
-                                   family = fig2_font_family),
+        legend.text = element_text(size = font_size,
+                                   family = font_family),
         legend.box.margin = margin(t = -15),
-        axis.text = element_text(size = fig2_font_size, family = fig2_font_family),
-        axis.title = element_text(size = fig2_font_size, family = fig2_font_family),
+        axis.text = element_text(size = font_size, family = font_family),
+        axis.title = element_text(size = font_size, family = font_family),
         plot.margin = margin(l = 5))
 
 # Extract legend grob
@@ -1570,21 +1646,21 @@ p_pathways_match <- (p_pathways_match_1 | p_pathways_match_2) / guide_area() +
                        guide = guide_colourbar(title.position = "bottom",
                                                barheight = unit(0.05, "npc"),
                                                barwidth = unit(0.35, "npc")))  &
-  theme(axis.text = element_text(size = fig2_font_size-1),
+  theme(axis.text = element_text(size = font_size-1),
         axis.ticks = element_blank(),
         axis.ticks.length = unit(0, "bigpts"),
-        axis.title = element_text(size = fig2_font_size-1,
-                                  family = fig2_font_family),
+        axis.title = element_text(size = font_size-1,
+                                  family = font_family),
         legend.position = "bottom",
         legend.direction = "horizontal",
         # legend.background = element_rect(colour = "black"),
         legend.margin = margin(),
         legend.title = element_text(angle = 0,
                                     hjust = 0.5,
-                                    size = fig2_font_size-1,
-                                    family = fig2_font_family),
-        legend.text = element_text(size = fig2_font_size-1,
-                                   family = fig2_font_family),
+                                    size = font_size-1,
+                                    family = font_family),
+        legend.text = element_text(size = font_size-1,
+                                   family = font_family),
         plot.margin = margin(r = 1.5, t = 0, b = 0, l = 1.5))
 
 # legend.position = c(1, 0.5),
@@ -1592,10 +1668,10 @@ p_pathways_match <- (p_pathways_match_1 | p_pathways_match_2) / guide_area() +
 # legend.margin = margin(l = 4, r = 0, unit = "bigpts"),
 # legend.title = element_text(angle = 90,
 #                             hjust = 0.5,
-#                             size = fig2_font_size,
-#                             family = fig2_font_family),
-# legend.text = element_text(size = fig2_font_size-1,
-#                            family = fig2_font_family),
+#                             size = font_size,
+#                             family = font_family),
+# legend.text = element_text(size = font_size-1,
+#                            family = font_family),
 
 # Pathways plot dimensions in bigpts
 fig2_pathways_match_width_pt <- 170
