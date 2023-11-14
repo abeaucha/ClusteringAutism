@@ -2,7 +2,7 @@
 title: "Figure 2"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-10-24"
+date: "2023-11-14"
 output: html_document
 ---
 
@@ -596,32 +596,6 @@ export_pdf(x = fig2_ss_grob,
            outfile = outfile)
 ```
 
-
-```{r}
-fig2_layout <- rbind(c(01, 02),
-                     c(03, 04))
-
-fig2_widths <- c(fig2_ss_width_pt, fig2_width_pt - fig2_ss_width_pt)
-fig2_heights <- c(fig2_ss_height_pt, 202)
-
-fig2_grob <- arrangeGrob(fig2_ss_grob, 
-                         empty_rect_grob,
-                         empty_rect_grob,
-                         empty_rect_grob,
-                         layout_matrix = fig2_layout,
-                         widths = unit(fig2_widths, "bigpts"),
-                         heights = unit(fig2_heights, "bigpts"))
-
-fig2_width_pt <- sum(fig2_widths)
-fig2_height_pt <- sum(fig2_heights)
-
-export_pdf(x = fig2_grob, 
-           w = fig2_width_pt,
-           h = fig2_height_pt,
-           outfile = outfile)
-```
-
-
 ## Panel: Mouse-human cluster similarity matrices
 
 ```{r fig2-sim-import}
@@ -780,7 +754,7 @@ df_similarity_nk <- df_similarity_nk %>%
          pval_lab = ifelse(significant, "*", ""))
 ```
 
-```{r fig2-sim-plots-heatmap}
+```{r fig2-sim-heatmap}
 # Max and min similarity values
 similarity_max <- max(df_similarity_nk[["similarity"]])
 similarity_min <- min(df_similarity_nk[["similarity"]])
@@ -818,27 +792,235 @@ fig2_heatmap <- ggplot(df_similarity_nk,
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
                        breaks = seq(0, 1, by = 0.1),
-                       guide = guide_colourbar(title.position = "right",
-                                               barheight = unit(0.23, "npc"),
-                                               barwidth = unit(0.05, "npc"))) +
+                       guide = guide_colourbar(title.position = "top",
+                                               barheight = unit(60, "bigpts"),
+                                               barwidth = unit(15, "bigpts"))) +
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
-  theme_bw() + 
-  theme(axis.ticks = element_blank(), 
-        axis.text = element_text(size = font_size, family = font_family),
-        axis.title = element_text(size = font_size, family = font_family),
-        legend.position = c(1, 0.5),
-        legend.justification = c("left", "center"),
-        legend.margin = margin(l = 4, r = 0, unit = "bigpts"),
-        legend.title = element_text(angle = 90,
-                                    hjust = 0.5,
-                                    size = font_size,
-                                    family = font_family),
-        legend.text = element_text(size = font_size-1,
-                                   family = font_family),
-        # plot.background = element_rect(colour = "black"),
-        plot.margin = margin(t = 0, l = 5, r = 5, unit = "bigpts"))
+  theme_bw() +
+  theme(plot.margin = margin(t = 0, b = 0, l = 5, unit = "bigpts"),
+        legend.position = c(1, 0),
+        legend.justification = c("left", "bottom"),)
+#+ 
+  # theme(axis.ticks = element_blank(), 
+  #       axis.text = element_text(size = font_size, family = font_family),
+  #       axis.title = element_text(size = font_size, family = font_family),
+  #       legend.position = c(1, 0.5),
+  #       legend.justification = c("left", "center"),
+  #       legend.margin = margin(l = 4, r = 0, unit = "bigpts"),
+  #       legend.title = element_text(angle = 90,
+  #                                   hjust = 0.5,
+  #                                   size = font_size,
+  #                                   family = font_family),
+  #       legend.text = element_text(size = font_size-1,
+  #                                  family = font_family),
+  #       plot.background = element_rect(colour = "black"),
+  #       plot.margin = margin(t = 0, l = 5, r = 5, unit = "bigpts"))
 ```
+
+## Panel: Human cluster demographics
+
+```{r fig2-dx-import}
+# Human registration directory
+human_registration_dir <- "../data/human/registration/"
+human_registration_dir <- file.path(human_registration_dir, version)
+
+# Import human demographics data
+demographics <- file.path(human_registration_dir, "subject_info", "demographics.csv")
+demographics <- read_csv(demographics, show_col_types = FALSE)
+
+# Filter for participants 
+demographics <- demographics %>%
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner))
+
+# Resolution used for clustering
+human_cluster_resolution <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_cluster_resolution)
+human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
+
+# Human clustering directory
+human_cluster_dir <- file.path(human_pipeline_dir, "clusters")
+human_cluster_dir <- file.path(human_cluster_dir, paste("resolution", human_cluster_resolution, sep = "_"))
+
+# Import human clusters
+human_clusters <- file.path(human_cluster_dir, "clusters.csv")
+human_clusters <- read_csv(human_clusters, show_col_types = FALSE)
+
+
+human_cluster_demo <- human_clusters %>% 
+  left_join(demographics, by = c("ID" = "file"))
+
+df_diagnoses <- tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD",
+                              "Anxiety", "Sub-threshold ADHD",
+                              "Intellectual Disability only", 
+                              "Tourette Syndrome", "Other", "Fragile X"),
+                       DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", 
+                                  "ADHD", "Other", "Other", "Other", "Other"))
+
+human_cluster_demo <- human_cluster_demo %>% 
+  left_join(df_diagnoses, by = "DX")
+```
+
+```{r fig2-dx-freq}
+dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
+
+dx_grid <- expand_grid(DX_new = df_diagnoses$DX_new,
+                       k = 1:nk_human)
+
+df_dx_nk <- human_cluster_demo %>% 
+  select(k = contains(paste0("nk", nk_human)),
+         DX_new)
+
+df_dx_nk_freq <- df_dx_nk %>% 
+  group_by(k) %>% 
+  mutate(n_per_k = n()) %>% 
+  group_by(k, DX_new) %>% 
+  mutate(n_per_k_per_dx = n(),
+         prop_per_k_per_dx = n_per_k_per_dx/n_per_k) %>% 
+  ungroup() %>% 
+  distinct() %>% 
+  right_join(dx_grid, by = c("k", "DX_new")) %>% 
+  mutate(prop_per_k_per_dx = ifelse(is.na(prop_per_k_per_dx), 0, prop_per_k_per_dx),
+         k = factor(k),
+         DX_new = factor(DX_new, levels = dx_lvls),
+         cluster_id = paste(nk_human, k, sep = "-"),
+         cluster_id = factor(cluster_id))
+```
+
+```{r fig2-dx}
+dx_palette <- brewer.pal(n = length(dx_lvls), name = "Dark2")
+
+fig2_dx <- ggplot(df_dx_nk_freq,
+                  aes(x = cluster_id, y = prop_per_k_per_dx,
+                      fill = DX_new, col = DX_new, alpha = DX_new)) + 
+  geom_col(position = "dodge", alpha = 0.6) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  scale_colour_manual(values = dx_palette,
+                      guide = guide_legend(title.position = "top",
+                                           hjust = 0)) +
+  scale_fill_manual(values = dx_palette,
+                    guide = guide_legend(title.position = "top",
+                                         hjust = 0)) +
+  # scale_alpha_manual(values = rep(0.6, length(dx_lvls)), guide = NULL) + 
+  labs(x = "Human clusters",
+       y = "Proportion per cluster",
+       fill = "Diagnosis",
+       col = "Diagnosis") + 
+  theme_bw() +
+  theme(legend.key.size = unit(15, "bigpts"),
+        legend.position = c(1, 0.5),
+        legend.justification = c("left", "center"), 
+        plot.margin = margin(t = 10, l = 5, r = 40, unit = "bigpts"))
+
+# +
+#   theme(legend.position = c(1, 0.5),
+#         legend.justification = c("left", "center"),
+#         legend.margin = margin(l = 4, r = 0, unit = "bigpts"), 
+#         legend.key.size = unit(12, "bigpts"),
+#         legend.title = element_text(size = font_size,
+#                                     family = font_family,
+#                                     hjust = 0.5),
+#         legend.text = element_text(size = font_size,
+#                                    family = font_family),
+#         # legend.box.margin = margin(t = -15),
+#         # axis.text = element_text(size = font_size, family = font_family),
+#         # axis.title = element_text(size = font_size, family = font_family),
+#         plot.margin = margin(l = 5, r = 20, unit = "bigpts"),
+#         plot.background = element_rect(colour = "black"))
+```
+
+
+```{r fig2-test}
+# Combine plots using patchwork
+fig2_sim_dx <- (fig2_heatmap / fig2_dx) +
+  plot_layout(heights = c(1, 2)) &
+  theme(axis.text = element_text(size = font_size, family = font_family),
+        axis.title = element_text(size = font_size, family = font_family),
+        legend.text = element_text(size = font_size-1, family = font_family),
+        legend.title = element_text(size = font_size, family = font_family),
+        legend.margin = margin(l = 5, r = 5, t = 0, b = 0, unit = "bigpts"))
+
+fig2_sim_dx_grob <- patchworkGrob(fig2_sim_dx)
+
+fig2_layout <- rbind(c(01, 02),
+                     c(03, 04))
+
+fig2_widths <- c(fig2_ss_width_pt, fig2_width_pt - fig2_ss_width_pt)
+fig2_heights <- c(fig2_ss_height_pt, 202)
+
+fig2_grob <- arrangeGrob(fig2_ss_grob, 
+                         fig2_sim_dx_grob,
+                         empty_rect_grob,
+                         empty_rect_grob,
+                         layout_matrix = fig2_layout,
+                         widths = unit(fig2_widths, "bigpts"),
+                         heights = unit(fig2_heights, "bigpts"))
+
+fig2_width_pt <- sum(fig2_widths)
+fig2_height_pt <- sum(fig2_heights)
+
+export_pdf(x = fig2_grob, 
+           w = fig2_width_pt,
+           h = fig2_height_pt,
+           outfile = outfile)
+```
+
+```{r fig2-dx-plot}
+# Extract legend grob
+fig2_dx_legend_grob <- fig2_dx %>% 
+  ggplotGrob() %>% 
+  grid.force() %>% 
+  getGrob("guides.3-3-3-3")
+
+# Remove legend
+fig2_dx <- fig2_dx +
+  theme(legend.position = "none")
+
+# Convert to grob
+fig2_dx_grob <- grid.force(ggplotGrob(fig2_dx))
+
+# Plot dimensions in bigpts
+fig2_dx_width_pt <- 188
+fig2_dx_height_pt <- fig2_pathways_mouse_height_pt
+
+# Plot dimensions in inches
+fig2_dx_width_in <- unit(fig2_dx_width_pt/pt_per_in, "in")
+fig2_dx_height_in <- unit(fig2_dx_height_pt/pt_per_in, "in")
+
+# Export plot
+outfile <- "figure2_diagnoses.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig2_dx_width_in,
+    height = fig2_dx_height_in)
+print(fig2_dx)
+dev.off()
+
+# Pathways plot legend dimensions in bigpts
+fig2_dx_legend_width_pt <- fig2_dx_width_pt
+fig2_dx_legend_height_pt <- 50
+
+# Pathways plot legend dimensions in inches
+fig2_dx_legend_width_in <- unit(fig2_dx_legend_width_pt/pt_per_in, "in")
+fig2_dx_legend_height_in <- unit(fig2_dx_legend_height_pt/pt_per_in, "in")
+
+# Export pathways plot legend
+outfile <- "figure2_diagnoses_legend.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = fig2_dx_legend_width_in,
+    height = fig2_dx_legend_height_in)
+grid.draw(fig2_dx_legend_grob)
+dev.off()
+```
+
+
+
 
 ```{r fig2-sim-plots-density}
 # Limits and breaks for permutations plot
@@ -1414,157 +1596,6 @@ for (alpha in alpha_mouse) {
 
 fig2_pathways_roc_grob <- grid.force(ggplotGrob(fig2_pathways_roc))
 ```
-
-
-## Panel: Human cluster demographics
-
-```{r fig2-dx-import}
-# Human registration directory
-human_registration_dir <- "../data/human/registration/"
-human_registration_dir <- file.path(human_registration_dir, version)
-
-# Import human demographics data
-demographics <- file.path(human_registration_dir, "subject_info", "demographics.csv")
-demographics <- read_csv(demographics, show_col_types = FALSE)
-
-# Filter for participants 
-demographics <- demographics %>%
-  filter(!is.na(DX),
-         !is.na(Age),
-         !is.na(Sex),
-         !is.na(Site),
-         !is.na(Scanner))
-
-# Resolution used for clustering
-human_cluster_resolution <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_cluster_resolution)
-human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
-
-# Human clustering directory
-human_cluster_dir <- file.path(human_pipeline_dir, "clusters")
-human_cluster_dir <- file.path(human_cluster_dir, paste("resolution", human_cluster_resolution, sep = "_"))
-
-# Import human clusters
-human_clusters <- file.path(human_cluster_dir, "clusters.csv")
-human_clusters <- read_csv(human_clusters, show_col_types = FALSE)
-
-
-human_cluster_demo <- human_clusters %>% 
-  left_join(demographics, by = c("ID" = "file"))
-
-df_diagnoses <- tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD", "Anxiety", "Sub-threshold ADHD", "Intellectual Disability only", "Tourette Syndrome", "Other", "Fragile X"),
-                       DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", "ADHD", "Other", "Other", "Other", "Other"))
-
-human_cluster_demo <- human_cluster_demo %>% 
-  left_join(df_diagnoses, by = "DX")
-```
-
-```{r fig2-dx-freq}
-dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
-
-dx_grid <- expand_grid(DX_new = df_diagnoses$DX_new,
-                       k = 1:nk_human)
-
-df_dx_nk <- human_cluster_demo %>% 
-  select(k = contains(paste0("nk", nk_human)),
-         DX_new)
-
-df_dx_nk_freq <- df_dx_nk %>% 
-  group_by(k) %>% 
-  mutate(n_per_k = n()) %>% 
-  group_by(k, DX_new) %>% 
-  mutate(n_per_k_per_dx = n(),
-         prop_per_k_per_dx = n_per_k_per_dx/n_per_k) %>% 
-  ungroup() %>% 
-  distinct() %>% 
-  right_join(dx_grid, by = c("k", "DX_new")) %>% 
-  mutate(prop_per_k_per_dx = ifelse(is.na(prop_per_k_per_dx), 0, prop_per_k_per_dx),
-         k = factor(k),
-         DX_new = factor(DX_new, levels = dx_lvls),
-         cluster_id = paste(nk_human, k, sep = "-"),
-         cluster_id = factor(cluster_id))
-```
-
-```{r fig2-dx-plot}
-dx_palette <- brewer.pal(n = length(dx_lvls), name = "Dark2")
-
-fig2_dx <- ggplot(df_dx_nk_freq,
-                  aes(x = cluster_id, y = prop_per_k_per_dx,
-                      fill = DX_new, col = DX_new, alpha = DX_new)) + 
-  geom_col(position = "dodge") +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
-  scale_colour_manual(values = dx_palette,
-                      guide = guide_legend(title.position = "bottom",
-                                           hjust = 0)) +
-  scale_fill_manual(values = dx_palette,
-                    guide = guide_legend(title.position = "bottom",
-                                         hjust = 0)) +
-  scale_alpha_manual(values = rep(0.6, length(dx_lvls))) + 
-  labs(x = "Human clusters",
-       y = "Proportion per cluster",
-       fill = "Diagnosis") + 
-  theme_bw() +
-  theme(legend.position = "bottom",
-        legend.key.size = unit(12, "bigpts"),
-        legend.title = element_text(size = font_size,
-                                    family = font_family,
-                                    hjust = 0.5),
-        legend.text = element_text(size = font_size,
-                                   family = font_family),
-        legend.box.margin = margin(t = -15),
-        axis.text = element_text(size = font_size, family = font_family),
-        axis.title = element_text(size = font_size, family = font_family),
-        plot.margin = margin(l = 5))
-
-# Extract legend grob
-fig2_dx_legend_grob <- fig2_dx %>% 
-  ggplotGrob() %>% 
-  grid.force() %>% 
-  getGrob("guides.3-3-3-3")
-
-# Remove legend
-fig2_dx <- fig2_dx +
-  theme(legend.position = "none")
-
-# Convert to grob
-fig2_dx_grob <- grid.force(ggplotGrob(fig2_dx))
-
-# Plot dimensions in bigpts
-fig2_dx_width_pt <- 188
-fig2_dx_height_pt <- fig2_pathways_mouse_height_pt
-
-# Plot dimensions in inches
-fig2_dx_width_in <- unit(fig2_dx_width_pt/pt_per_in, "in")
-fig2_dx_height_in <- unit(fig2_dx_height_pt/pt_per_in, "in")
-
-# Export plot
-outfile <- "figure2_diagnoses.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig2_dx_width_in,
-    height = fig2_dx_height_in)
-print(fig2_dx)
-dev.off()
-
-# Pathways plot legend dimensions in bigpts
-fig2_dx_legend_width_pt <- fig2_dx_width_pt
-fig2_dx_legend_height_pt <- 50
-
-# Pathways plot legend dimensions in inches
-fig2_dx_legend_width_in <- unit(fig2_dx_legend_width_pt/pt_per_in, "in")
-fig2_dx_legend_height_in <- unit(fig2_dx_legend_height_pt/pt_per_in, "in")
-
-# Export pathways plot legend
-outfile <- "figure2_diagnoses_legend.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = fig2_dx_legend_width_in,
-    height = fig2_dx_legend_height_in)
-grid.draw(fig2_dx_legend_grob)
-dev.off()
-```
-
 
 ## Build bottom row
 
