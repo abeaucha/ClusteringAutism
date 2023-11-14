@@ -23,6 +23,7 @@ suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(pheatmap))
 suppressPackageStartupMessages(library(ggplotify))
 suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(rcartocolor))
 # suppressPackageStartupMessages(library(viridis))
 # suppressPackageStartupMessages(library(viridisLite))
 ```
@@ -583,16 +584,16 @@ df_pathways_heatmap <- df_pathways_nk_gt4_subset %>%
 
 # Clamped enrichment statistic
 if (pathway_stat == "qvals") {
-  threshold <- 30
+  stat_threshold <- 30
   df_pathways_heatmap <- df_pathways_heatmap %>% 
-    mutate(intensity = ifelse(NLQ > threshold, threshold, NLQ))
-  heatmap_limits <- c(2, threshold)
+    mutate(intensity = ifelse(NLQ > stat_threshold, stat_threshold, NLQ))
+  heatmap_limits <- c(2, stat_threshold)
   heatmap_fill_lab <- "-log10(q)"
 } else if (pathway_stat == "enrichment") {
   stat_threshold <- 45
   df_pathways_heatmap <- df_pathways_heatmap %>% 
-    mutate(intensity = ifelse(E > threshold, threshold, E))
-  heatmap_limits <- c(0, threshold)
+    mutate(intensity = ifelse(E > stat_threshold, stat_threshold, E))
+  heatmap_limits <- c(0, stat_threshold)
   heatmap_fill_lab <- "Enrichment"
 } else {
   stop()
@@ -1185,6 +1186,346 @@ df_sim_pvals %>%
   select(mouse_cluster = mouse_cluster_id, 
          human_cluster = human_cluster_id)  %>% 
   write_csv(file = outfile)
+```
+
+# Panel: Mouse pathway polar plots
+
+```{r}
+df_pathways_nk4 <- df_pathways_all %>% 
+  filter(nk == 4)
+
+polar_plot_lvls <- c(" ", pathway_lvls_clustered)
+
+# Create a temp df for the additional empty factor level
+df_polar_plot_tmp <- df_pathways_nk4 %>% 
+  mutate(pathway = as.character(pathway)) %>% 
+  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+  mutate(pathway = " ")
+
+# Join the empty factor level to the true factors
+df_polar_plot <- df_pathways_nk4 %>% 
+  bind_rows(df_polar_plot_tmp) %>% 
+  mutate(pathway = factor(pathway, levels = polar_plot_lvls))
+
+NLQ_threshold <- 30
+df_polar_plot <- df_polar_plot %>% 
+  mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+# Polar plot parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+breaks_end <- NLQ_threshold
+breaks_step <- 1
+polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                       breaks = polar_breaks)
+
+
+# Palette for pathway plot
+pathways_palette_nk4 <- c(carto_pal(12, "Prism")[2],
+                          carto_pal(12, "Antique")[7],
+                          carto_pal(12, "Antique")[2],
+                          carto_pal(12, "Prism")[8])
+
+# Generate polar plot
+fig3_pathways_nk4 <- ggplot(df_polar_plot, 
+                            aes(x = pathway, 
+                                ymin = 0, ymax = NLQ, 
+                                group = cluster_id, 
+                                fill = cluster_id, 
+                                col = cluster_id)) + 
+  geom_ribbon(mapping = aes(alpha = cluster_id,
+                            size = cluster_id)) + 
+  # geom_text(data = polar_labels,
+  #           inherit.aes = FALSE,
+  #           mapping = aes(x = pathway,
+  #                         y = breaks,
+  #                         label = breaks)) +
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion(), 
+                   labels = pathway_label_lvls_clustered) + 
+  scale_y_continuous(breaks = polar_breaks) +
+  scale_colour_manual(values = pathways_palette_nk4,
+                      guide = guide_legend(title.position = "bottom",
+                                           hjust = 0)) + 
+  scale_fill_manual(values = pathways_palette_nk4,
+                    guide = guide_legend(title.position = "bottom",
+                                         hjust = 0)) +
+  scale_size_manual(values = c(0.6, 0.4, 0.4, 0.6)) + 
+  scale_alpha_manual(values = c(0.3, 0.2, 0.2, 0.3)) +
+  labs(x = NULL,
+       fill = "Mouse cluster",
+       col = "Mouse cluster",
+       alpha = "Mouse cluster",
+       size = "Mouse cluster") +
+  theme_bw() + 
+  theme(axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_text(size = font_size,
+                                   family = font_family),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        panel.border = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(12, "bigpts"),
+        legend.title = element_text(size = font_size,
+                                    family = font_family,
+                                    hjust = 0.5),
+        legend.text = element_text(size = font_size,
+                                   family = font_family),
+        legend.box.margin = margin(t = -15),
+        plot.margin = margin(l = 10, r = 25, t = 10)
+  )
+
+# Extract legend grob
+fig3_pathways_nk4_legend_grob <- fig3_pathways_nk4 %>% 
+  ggplotGrob() %>% 
+  grid.force() %>% 
+  getGrob("guides.3-3-3-3")
+
+# Remove legend
+fig3_pathways_nk4 <- fig3_pathways_nk4 +
+  theme(legend.position = "none")
+
+# Plot grob
+fig3_pathways_nk4_grob <- grid.force(ggplotGrob(fig3_pathways_nk4))
+
+# Fix polar axis labels
+fig3_pathways_nk4_grob <- grid.force(ggplotGrob(fig3_pathways_nk4))
+fig3_pathways_nk4_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
+
+# fig3_pathways_nk4_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- unit(c(0.50, 0.80, 1.00, 1.00, 0.80, 0.50, 0.22, 0.01, 0.01, 0.16), "npc")
+# fig3_pathways_nk4_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- unit(c(0.99, 0.91, 0.68, 0.35, 0.09, 0.02, 0.09, 0.35, 0.65, 0.91), "npc")
+
+grid.newpage()
+grid.draw(fig3_pathways_nk4_grob)
+```
+
+```{r}
+df_pathways_nk7 <- df_pathways_all %>% 
+  filter(nk == 7)
+
+polar_plot_lvls <- c(" ", pathway_lvls_clustered)
+
+# Create a temp df for the additional empty factor level
+df_polar_plot_tmp <- df_pathways_nk7 %>% 
+  mutate(pathway = as.character(pathway)) %>% 
+  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+  mutate(pathway = " ")
+
+# Join the empty factor level to the true factors
+df_polar_plot <- df_pathways_nk7 %>% 
+  bind_rows(df_polar_plot_tmp) %>% 
+  mutate(pathway = factor(pathway, levels = polar_plot_lvls))
+
+NLQ_threshold <- 30
+df_polar_plot <- df_polar_plot %>% 
+  mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+# Polar plot parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+breaks_end <- NLQ_threshold
+breaks_step <- 1
+polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                       breaks = polar_breaks)
+
+
+# Palette for pathway plot
+# pathways_palette_nk7 <- c(carto_pal(12, "Prism")[2],
+#                           carto_pal(12, "Antique")[7],
+#                           carto_pal(12, "Antique")[2],
+#                           carto_pal(12, "Prism")[8])
+
+# Generate polar plot
+fig3_pathways_nk7 <- ggplot(df_polar_plot, 
+                            aes(x = pathway, 
+                                ymin = 0, ymax = NLQ, 
+                                group = cluster_id, 
+                                fill = cluster_id, 
+                                col = cluster_id)) + 
+  geom_ribbon(alpha = 0.3) + 
+  # geom_ribbon(mapping = aes(alpha = cluster_id,
+                            # size = cluster_id)) + 
+  # geom_text(data = polar_labels,
+  #           inherit.aes = FALSE,
+  #           mapping = aes(x = pathway,
+  #                         y = breaks,
+  #                         label = breaks)) +
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion(), 
+                   labels = pathway_label_lvls_clustered) + 
+  scale_y_continuous(breaks = polar_breaks) +
+  # scale_colour_manual(values = pathways_palette_nk7,
+  #                     guide = guide_legend(title.position = "bottom",
+  #                                          hjust = 0)) + 
+  # scale_fill_manual(values = pathways_palette_nk7,
+  #                   guide = guide_legend(title.position = "bottom",
+  #                                        hjust = 0)) +
+  # scale_size_manual(values = c(0.6, 0.4, 0.4, 0.6)) + 
+  # scale_alpha_manual(values = c(0.3, 0.2, 0.2, 0.3)) +
+  labs(x = NULL,
+       fill = "Mouse cluster",
+       col = "Mouse cluster",
+       alpha = "Mouse cluster",
+       size = "Mouse cluster") +
+  theme_bw() + 
+  theme(axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_text(size = font_size,
+                                   family = font_family),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        panel.border = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(12, "bigpts"),
+        legend.title = element_text(size = font_size,
+                                    family = font_family,
+                                    hjust = 0.5),
+        legend.text = element_text(size = font_size,
+                                   family = font_family),
+        legend.box.margin = margin(t = -15),
+        plot.margin = margin(l = 10, r = 25, t = 10)
+  )
+
+# Extract legend grob
+fig3_pathways_nk7_legend_grob <- fig3_pathways_nk7 %>% 
+  ggplotGrob() %>% 
+  grid.force() %>% 
+  getGrob("guides.3-3-3-3")
+
+# Remove legend
+fig3_pathways_nk7 <- fig3_pathways_nk7 +
+  theme(legend.position = "none")
+
+# Plot grob
+fig3_pathways_nk7_grob <- grid.force(ggplotGrob(fig3_pathways_nk7))
+
+# Fix polar axis labels
+fig3_pathways_nk7_grob <- grid.force(ggplotGrob(fig3_pathways_nk7))
+fig3_pathways_nk7_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
+
+# fig3_pathways_nk7_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- unit(c(0.50, 0.80, 1.00, 1.00, 0.80, 0.50, 0.22, 0.01, 0.01, 0.16), "npc")
+# fig3_pathways_nk7_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- unit(c(0.99, 0.91, 0.68, 0.35, 0.09, 0.02, 0.09, 0.35, 0.65, 0.91), "npc")
+
+grid.newpage()
+grid.draw(fig3_pathways_nk7_grob)
+```
+
+```{r}
+fig3_polar_layout <- rbind(1:3)
+
+fig3_polar_grob <- arrangeGrob(fig3_pathways_nk4_grob,
+                               empty_rect_grob,
+                               fig3_pathways_nk7_grob,
+                               layout_matrix = fig3_polar_layout)
+
+grid.newpage()
+grid.draw(fig3_polar_grob)
+```
+
+
+```{r}
+df_pathways_subset <- df_pathways_all %>% 
+  filter(nk %in% c(4, 7))
+
+polar_plot_lvls <- c(" ", pathway_lvls_clustered)
+
+# Create a temp df for the additional empty factor level
+df_polar_plot_tmp <- df_pathways_subset %>% 
+  mutate(pathway = as.character(pathway)) %>% 
+  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+  mutate(pathway = " ")
+
+# Join the empty factor level to the true factors
+df_polar_plot <- df_pathways_subset %>% 
+  bind_rows(df_polar_plot_tmp) %>% 
+  mutate(pathway = factor(pathway, levels = polar_plot_lvls))
+
+NLQ_threshold <- 30
+df_polar_plot <- df_polar_plot %>% 
+  mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ),
+         k = factor(k),
+         nk = factor(nk))
+
+# Polar plot parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+breaks_end <- NLQ_threshold
+breaks_step <- 1
+polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                       breaks = polar_breaks)
+
+# Generate polar plot
+ggplot(df_polar_plot, 
+       aes(x = pathway, 
+           ymin = 0, ymax = NLQ, 
+           group = k, 
+           fill = k, 
+           col = k)) + 
+  geom_ribbon(alpha = 0.3) + 
+  facet_grid(.~nk) + 
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion(), 
+                   labels = pathway_label_lvls_clustered) + 
+  scale_y_continuous(breaks = polar_breaks) +
+  labs(x = NULL,
+       fill = "Mouse cluster",
+       col = "Mouse cluster",
+       alpha = "Mouse cluster",
+       size = "Mouse cluster") +
+  theme_bw() + 
+  theme(axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_text(size = font_size,
+                                   family = font_family),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        panel.border = element_blank(),
+        legend.position = "right",
+        legend.key.size = unit(12, "bigpts"),
+        legend.title = element_text(size = font_size,
+                                    family = font_family,
+                                    hjust = 0.5),
+        legend.text = element_text(size = font_size,
+                                   family = font_family),
+        legend.box.margin = margin(t = -15),
+        plot.margin = margin(l = 10, r = 25, t = 10)
+  )
+```
+
+
+```{r}
+# Extract legend grob
+fig3_pathways_nk7_legend_grob <- fig3_pathways_nk7 %>% 
+  ggplotGrob() %>% 
+  grid.force() %>% 
+  getGrob("guides.3-3-3-3")
+
+# Remove legend
+fig3_pathways_nk7 <- fig3_pathways_nk7 +
+  theme(legend.position = "none")
+
+# Plot grob
+fig3_pathways_nk7_grob <- grid.force(ggplotGrob(fig3_pathways_nk7))
+
+# Fix polar axis labels
+fig3_pathways_nk7_grob <- grid.force(ggplotGrob(fig3_pathways_nk7))
+fig3_pathways_nk7_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
+
+# fig3_pathways_nk7_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- unit(c(0.50, 0.80, 1.00, 1.00, 0.80, 0.50, 0.22, 0.01, 0.01, 0.16), "npc")
+# fig3_pathways_nk7_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- unit(c(0.99, 0.91, 0.68, 0.35, 0.09, 0.02, 0.09, 0.35, 0.65, 0.91), "npc")
+
+grid.newpage()
+grid.draw(fig3_pathways_nk7_grob)
 ```
 
 
