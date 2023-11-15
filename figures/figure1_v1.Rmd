@@ -1,0 +1,264 @@
+---
+title: "Figure 1"
+subtitle: "Clustering Autism"
+author: "Antoine Beauchamp"
+date: "2023-11-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r functions}
+source("../src/utils.R")
+source("../src/processing.R")
+source("../src/analysis.R")
+
+export_pdf <- function(x, w, h, outfile) {
+  
+  w_in <- w/pt_per_in
+  h_in <- h/pt_per_in
+  
+  w_in <- unit(w_in, "in")
+  h_in <- unit(h_in, "in")
+  
+  pdf(file = outfile,
+      width = w_in,
+      height = h_in)
+  grid.draw(x)
+  dev.off()
+  
+}
+```
+
+```{r pipeline-params}
+# Output directory
+output_dir <- "figure1/"
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+}
+
+# Plot file prefix
+output_plot_prefix <- "figure1"
+
+# Similarity pipeline
+version <- "v2"
+pipeline_dir <- "../data/cross_species/"
+pipeline_dir <- file.path(pipeline_dir, version)
+
+# Human parameters
+human_resolution <- 0.8
+human_es_method <- "normative-growth"
+human_es_df <- 3
+human_cluster_map_method <- "mean"
+
+# Mouse parameters
+mouse_resolution <- 0.2
+mouse_cluster_map_method <- human_cluster_map_method
+
+# Similarity parameters
+metric <- "correlation"
+
+# Fetch parameter set
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                human_resolution = human_resolution,
+                                human_es_method = human_es_method,
+                                human_es_df = human_es_df,
+                                human_cluster_map_method = human_cluster_map_method,
+                                metric = metric)
+params
+```
+
+```{r paths}
+# Parameter set ID
+params_id <- 405
+
+# Update pipeline directory with parameter set ID
+pipeline_dir <- file.path(pipeline_dir, params_id)
+
+# Jacobians
+jacobians <- c("absolute", "relative")
+
+# Human parameter set ID
+human_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_id)
+
+# Mouse parameter set ID
+mouse_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(mouse_id)
+
+# Human pipeline directory
+human_pipeline_dir <- "../data/human/derivatives/"
+human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
+
+# Human cluster map directories
+human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
+human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
+human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
+names(human_cluster_map_dirs) <- jacobians
+
+# Mouse pipeline directory
+mouse_pipeline_dir <- "../data/mouse/derivatives/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
+
+# Mouse cluster map directories
+mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
+mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
+names(mouse_cluster_map_dirs) <- jacobians
+
+mouse_cluster_map_dirs_50um <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, "resolution_0.05")
+mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, jacobians)
+names(mouse_cluster_map_dirs_50um) <- jacobians
+
+mouse_expr_dir <- "../data/mouse/expression/latent_space/"
+```
+
+# Mouse cluster slice
+
+```{r}
+# Mouse anatomy at 50um
+mouse_anat_file_50um <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
+mouse_anat_50um <- mincGetVolume(mouse_anat_file_50um)
+mouse_anat_vol_50um <- mincArray(mouse_anat_50um)
+
+# Mouse anatomy at 200um
+mouse_anat_file_200um <- "../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
+mouse_anat_200um <- mincGetVolume(mouse_anat_file_200um)
+mouse_anat_vol_200um <- mincArray(mouse_anat_200um)
+
+# Mouse mask at 50um
+mouse_mask_file_50um <- "../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
+mouse_mask_50um <- mincGetVolume(mouse_mask_file_50um)
+
+# Mouse mask at 200um
+mouse_mask_file_200um <- "../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
+mouse_mask_200um <- mincGetVolume(mouse_mask_file_200um)
+
+# Threshold method
+threshold <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold)
+
+# Threshold value
+threshold_value <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_value)
+
+# Threshold symmetric option
+threshold_symmetric <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_symmetric)
+```
+
+```{r}
+nk_mouse <- 4
+k_mouse <- 4
+
+mouse_centroid <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["relative"]],
+                                     mask = mouse_mask_file_50um,
+                                     nk = nk_mouse, k = k_mouse,
+                                     threshold = threshold,
+                                     threshold_value = threshold_value,
+                                     threshold_symmetric = threshold_symmetric)
+
+mouse_centroid <- mincArray(mouse_centroid)
+
+slc <- 90
+
+ss_mouse_centroid <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = slc) %>% 
+  anatomy(mouse_anat_vol_50um, low = 700, high = 1400) %>% 
+  overlay(mouse_centroid, low = 0.19, high = 1.00, symmetric = TRUE) 
+
+ss_mouse_centroid_width_px <- dim(mouse_centroid)[1]
+ss_mouse_centroid_height_px <- dim(mouse_centroid)[2]
+
+ss_mouse_centroid_width_in <- 5
+ss_mouse_centroid_height_in <- ss_mouse_centroid_width_in*(ss_mouse_centroid_height_px/ss_mouse_centroid_width_px)
+
+ss_mouse_centroid_width_in <- unit(ss_mouse_centroid_width_in, "in")
+ss_mouse_centroid_height_in <- unit(ss_mouse_centroid_height_in, "in")
+
+# Export human ss plot
+outfile <- paste(output_plot_prefix, "ss_mouse_centroid", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = ss_mouse_centroid_width_in,
+    height = ss_mouse_centroid_height_in)
+draw(ss_mouse_centroid)
+dev.off()
+```
+
+```{r}
+mouse_expr_file <- "MLP_labels67_layers3_units200_L20.0_mousetransform_100.csv"
+mouse_expr_file <- file.path(mouse_expr_dir, mouse_expr_file)
+df_mouse_expr <- as_tibble(data.table::fread(mouse_expr_file, header = TRUE))
+
+expr_cols <- c(1, 4)
+
+for (j in expr_cols) {
+  
+  mouse_expr_vol <- numeric(length(mouse_anat_200um))
+  mouse_expr_vol[mouse_mask_200um == 1] <- df_mouse_expr[[j]]
+  attributes(mouse_expr_vol) <- attributes(mouse_mask_200um)
+  
+  outfile <- paste(output_plot_prefix, "ss_mouse_expr", j, "200um", sep = "_")
+  outfile <- paste0(outfile, ".mnc")
+  outfile <- file.path(output_dir, outfile)
+  mincWriteVolume(buffer = mouse_expr_vol,
+                  output.filename = outfile,
+                  like.filename = mouse_anat_file_200um,
+                  clobber = TRUE)
+  
+  infile <- outfile
+  outfile <- str_replace(infile, "200um", "50um")
+  cmd_mincresample <- paste("mincresample", "-clobber",
+                            "-like", mouse_anat_file_50um,
+                            infile, outfile)
+  system(command = cmd_mincresample)
+  
+  mouse_expr_vol <- mincGetVolume(outfile)
+  mouse_expr_vol <- mouse_expr_vol/max(mouse_expr_vol)
+  mouse_expr_vol[mouse_mask_50um < 0.5] <- NA
+  mouse_expr_vol <- mincArray(mouse_expr_vol)
+  
+  ss_mouse_expr <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = slc) %>% 
+    anatomy(mouse_anat_vol_50um, low = 700, high = 1400) %>% 
+    overlay(mouse_expr_vol, low = -0.1, high = 0.8)
+  
+  ss_mouse_expr_width_px <- dim(mouse_expr_vol)[1]
+  ss_mouse_expr_height_px <- dim(mouse_expr_vol)[2]
+  
+  ss_mouse_expr_width_in <- 5
+  ss_mouse_expr_height_in <- ss_mouse_expr_width_in*(ss_mouse_expr_height_px/ss_mouse_expr_width_px)
+  
+  ss_mouse_expr_width_in <- unit(ss_mouse_expr_width_in, "in")
+  ss_mouse_expr_height_in <- unit(ss_mouse_expr_height_in, "in")
+  
+  # Export human ss plot
+  outfile <- str_replace(outfile, ".mnc", ".pdf")
+  pdf(file = outfile,
+      width = ss_mouse_expr_width_in,
+      height = ss_mouse_expr_height_in)
+  draw(ss_mouse_expr)
+  dev.off()
+  
+}
+```
+
+
+
+
+
