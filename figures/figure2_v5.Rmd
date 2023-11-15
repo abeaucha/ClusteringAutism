@@ -1552,7 +1552,7 @@ export_pdf(x = fig2_grob,
 ```
 
 
-# Additional
+# Supplementary
 
 ```{r fig2-pathways-enrichment-20, eval = FALSE}
 # pathway_palette_cols <- c("white", brewer.pal(n = 9, name = "OrRd")[3:9])
