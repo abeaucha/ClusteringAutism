@@ -2,9 +2,11 @@
 title: "Figure 1"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-11-15"
+date: "2023-11-16"
 output: html_document
 ---
+
+# Initialization
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -20,22 +22,6 @@ suppressPackageStartupMessages(library(MRIcrotome))
 source("../src/utils.R")
 source("../src/processing.R")
 source("../src/analysis.R")
-
-export_pdf <- function(x, w, h, outfile) {
-  
-  w_in <- w/pt_per_in
-  h_in <- h/pt_per_in
-  
-  w_in <- unit(w_in, "in")
-  h_in <- unit(h_in, "in")
-  
-  pdf(file = outfile,
-      width = w_in,
-      height = h_in)
-  grid.draw(x)
-  dev.off()
-  
-}
 ```
 
 ```{r pipeline-params}
@@ -125,9 +111,9 @@ names(mouse_cluster_map_dirs_50um) <- jacobians
 mouse_expr_dir <- "../data/mouse/expression/latent_space/"
 ```
 
-# Mouse cluster slice
+# Mouse cluster centroid
 
-```{r}
+```{r fig1-mouse-ss-files}
 # Mouse anatomy at 50um
 mouse_anat_file_50um <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
 mouse_anat_50um <- mincGetVolume(mouse_anat_file_50um)
@@ -162,35 +148,46 @@ threshold_symmetric <- params %>%
   pull(threshold_symmetric)
 ```
 
-```{r}
+```{r fig1-mouse-centroid-img}
+# Mouse cluster
 nk_mouse <- 4
 k_mouse <- 4
 
+# Transverse plane
+slc_dim <- 3
+
+# Slice index
+slc <- 90
+
+# Import centroid image
 mouse_centroid <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["relative"]],
                                      mask = mouse_mask_file_50um,
                                      nk = nk_mouse, k = k_mouse,
                                      threshold = threshold,
                                      threshold_value = threshold_value,
                                      threshold_symmetric = threshold_symmetric)
-
 mouse_centroid <- mincArray(mouse_centroid)
 
-slc <- 90
-
-ss_mouse_centroid <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slice = slc) %>% 
+# Generate ss env
+ss_mouse_centroid <- sliceSeries(nrow = 1, ncol = 1, 
+                                 dimension = slc_dim, slice = slc) %>% 
   anatomy(mouse_anat_vol_50um, low = 700, high = 1400) %>% 
-  overlay(mouse_centroid, low = 0.19, high = 1.00, symmetric = TRUE) 
+  overlay(mouse_centroid, 
+          low = 0.19, high = 0.65, 
+          symmetric = TRUE) 
 
+# Image width and height in pixels
 ss_mouse_centroid_width_px <- dim(mouse_centroid)[1]
 ss_mouse_centroid_height_px <- dim(mouse_centroid)[2]
 
+# Image output dimensions
 ss_mouse_centroid_width_in <- 5
 ss_mouse_centroid_height_in <- ss_mouse_centroid_width_in*(ss_mouse_centroid_height_px/ss_mouse_centroid_width_px)
 
 ss_mouse_centroid_width_in <- unit(ss_mouse_centroid_width_in, "in")
 ss_mouse_centroid_height_in <- unit(ss_mouse_centroid_height_in, "in")
 
-# Export human ss plot
+# Export slice image
 outfile <- paste(output_plot_prefix, "ss_mouse_centroid", sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
@@ -201,19 +198,29 @@ draw(ss_mouse_centroid)
 dev.off()
 ```
 
-```{r}
-mouse_expr_file <- "MLP_labels67_layers3_units200_L20.0_mousetransform_100.csv"
+```{r fig1-mouse-expr-imgs}
+# Create a mask image from binarized centroid image
+mouse_centroid_mask <- mouse_centroid
+mouse_centroid_mask[abs(mouse_centroid) > 0] <- 1
+mouse_centroid_mask <- mincArray(mouse_centroid_mask)
+
+# Import mouse expression file
+mouse_latent_space_id <- 100
+mouse_expr_file <- paste("MLP_labels67_layers3_units200_L20.0_mousetransform", 100, sep = "_")
+mouse_expr_file <- paste0(mouse_expr_file, ".csv")
 mouse_expr_file <- file.path(mouse_expr_dir, mouse_expr_file)
 df_mouse_expr <- as_tibble(data.table::fread(mouse_expr_file, header = TRUE))
 
-expr_cols <- c(1, 4)
-
+# Iterate over latent space variables and export images
+expr_cols <- c(1, 4, 20)
 for (j in expr_cols) {
   
+  # Create an image volume for latent space image
   mouse_expr_vol <- numeric(length(mouse_anat_200um))
   mouse_expr_vol[mouse_mask_200um == 1] <- df_mouse_expr[[j]]
   attributes(mouse_expr_vol) <- attributes(mouse_mask_200um)
   
+  # Export expression image at 200um
   outfile <- paste(output_plot_prefix, "ss_mouse_expr", j, "200um", sep = "_")
   outfile <- paste0(outfile, ".mnc")
   outfile <- file.path(output_dir, outfile)
@@ -222,6 +229,7 @@ for (j in expr_cols) {
                   like.filename = mouse_anat_file_200um,
                   clobber = TRUE)
   
+  # Resample expression image to 50um
   infile <- outfile
   outfile <- str_replace(infile, "200um", "50um")
   cmd_mincresample <- paste("mincresample", "-clobber",
@@ -229,25 +237,30 @@ for (j in expr_cols) {
                             infile, outfile)
   system(command = cmd_mincresample)
   
+  # Import expression image at 50um, normalize and mask
   mouse_expr_vol <- mincGetVolume(outfile)
   mouse_expr_vol <- mouse_expr_vol/max(mouse_expr_vol)
   mouse_expr_vol[mouse_mask_50um < 0.5] <- NA
   mouse_expr_vol <- mincArray(mouse_expr_vol)
   
+  # Generate ss for expression image
   ss_mouse_expr <- sliceSeries(nrow = 1, ncol = 1, dimension = 3, slices = slc) %>% 
     anatomy(mouse_anat_vol_50um, low = 700, high = 1400) %>% 
-    overlay(mouse_expr_vol, low = -0.1, high = 0.8)
+    overlay(mouse_expr_vol, low = -0.1, high = 0.8, alpha = 0.8) %>% 
+    contours(mouse_centroid_mask, levels = 1, col = "blue", lwd = 2)
   
+  # Image width and height in pixels
   ss_mouse_expr_width_px <- dim(mouse_expr_vol)[1]
   ss_mouse_expr_height_px <- dim(mouse_expr_vol)[2]
   
+  # Image output dimensions
   ss_mouse_expr_width_in <- 5
   ss_mouse_expr_height_in <- ss_mouse_expr_width_in*(ss_mouse_expr_height_px/ss_mouse_expr_width_px)
   
   ss_mouse_expr_width_in <- unit(ss_mouse_expr_width_in, "in")
   ss_mouse_expr_height_in <- unit(ss_mouse_expr_height_in, "in")
   
-  # Export human ss plot
+  # Export image
   outfile <- str_replace(outfile, ".mnc", ".pdf")
   pdf(file = outfile,
       width = ss_mouse_expr_width_in,
@@ -258,7 +271,11 @@ for (j in expr_cols) {
 }
 ```
 
-
-
-
-
+```{r fig1-mouse-clean-imgs}
+# Remove MINC files in directory if desired
+delete_imgs <- TRUE
+if (delete_imgs) {
+  fig1_imgfiles <- list.files(output_dir, full.names = TRUE, pattern = "*.mnc")
+  for (img in fig1_imgfiles) {system(paste("rm", img))}
+}
+```
