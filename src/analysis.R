@@ -1,3 +1,6 @@
+library(tools)
+
+
 #' Compute the fraction of voxels
 #'
 #' @param cluster_dir (character scalar) Path to the directory 
