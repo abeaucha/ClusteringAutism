@@ -50,6 +50,52 @@ compute_cluster_fractions <- function(cluster_dir, nk, k, labels, defs, mask,
 }
 
 
+#' Export grid grob to PDF
+#'
+#' @param x (grob) Grob to export
+#' @param file (character scalar) Output file
+#' @param width (numeric scalar) Width of PDF
+#' @param height (numeric scalar) Height of PDF 
+#' @param units (character scalar) Dimension units
+#'
+#' @return NULL
+export_pdf <- function(x, file, width, height, units = "in") {
+  
+  if (!("grob" %in% class(x))) {
+    stop("Argument \"x\" must be a grob")
+  }
+  
+  if (units == "in") {
+    width <- width
+    height <- height
+  } else if (units == "inches") {
+    width <- width
+    height <- height
+  } else if (units == "bigpts") {
+    pt_per_in <- 72
+    width <- width/pt_per_in
+    height <- height/pt_per_in
+  } else {
+    stop("Unknown units: ", units)
+  }
+  
+  if (file_ext(file) != "pdf") {
+    stop("Argument \"file\" must have extension .pdf")
+  }
+  
+  tryCatch(
+    {pdf(file = file,
+         width = unit(width, "in"),
+         height = unit(height, "in"))
+      grid.draw(x)
+      dev.off()}, 
+    error = function(c) {
+      message("Error: ", conditionMessage(c))
+    }
+  )
+}
+
+
 #' Compute within-cluster sum of squared distances
 #'
 #' @param x (matrix) A matrix to cluster according to columns
