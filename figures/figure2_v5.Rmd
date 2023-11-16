@@ -2,7 +2,7 @@
 title: "Figure 2"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-11-15"
+date: "2023-11-16"
 output: html_document
 ---
 
@@ -30,22 +30,6 @@ suppressPackageStartupMessages(library(pROC))
 source("../src/utils.R")
 source("../src/processing.R")
 source("../src/analysis.R")
-
-export_pdf <- function(x, w, h, outfile) {
-  
-  w_in <- w/pt_per_in
-  h_in <- h/pt_per_in
-  
-  w_in <- unit(w_in, "in")
-  h_in <- unit(h_in, "in")
-  
-  pdf(file = outfile,
-      width = w_in,
-      height = h_in)
-  grid.draw(x)
-  dev.off()
-  
-}
 ```
 
 ```{r pipeline-params}
@@ -415,9 +399,10 @@ fig2_ss_human_width_pt <- fig2_ss_human_height_pt*(nk_human/ss_nslices)
 outfile <- "figure2_ss_human.pdf"
 outfile <- file.path(output_dir, outfile)
 export_pdf(x = fig2_ss_human_grob,
-           w = fig2_ss_human_width_pt,
-           h = fig2_ss_human_height_pt,
-           outfile = outfile)
+           width = fig2_ss_human_width_pt,
+           height = fig2_ss_human_height_pt,
+           units = "bigpts",
+           file = outfile)
 ```
 
 ```{r fig2-ss-mouse-grob}
@@ -466,9 +451,10 @@ fig2_ss_mouse_width_pt <- fig2_ss_mouse_height_pt*(nk_mouse/ss_nslices)
 outfile <- "figure2_ss_mouse.pdf"
 outfile <- file.path(output_dir, outfile)
 export_pdf(x = fig2_ss_mouse_grob,
-           w = fig2_ss_mouse_width_pt,
-           h = fig2_ss_mouse_height_pt,
-           outfile = outfile)
+           width = fig2_ss_mouse_width_pt,
+           height = fig2_ss_mouse_height_pt,
+           units = "bigpts",
+           file = outfile)
 ```
 
 ```{r fig2-ss-legend-grob}
@@ -553,9 +539,10 @@ fig2_ss_legend_width_pt <- 50
 outfile <- "figure2_ss_legend.pdf"
 outfile <- file.path(output_dir, outfile)
 export_pdf(x = fig2_ss_legend_grob,
-           w = fig2_ss_legend_width_pt,
-           h = fig2_ss_legend_height_pt,
-           outfile = outfile)
+           width = fig2_ss_legend_width_pt,
+           height = fig2_ss_legend_height_pt,
+           units = "bigpts",
+           file = outfile)
 ```
 
 ```{r fig2-ss-grob}
@@ -590,9 +577,10 @@ outfile <- paste(output_plot_prefix, "ss", sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 export_pdf(x = fig2_ss_grob,
-           w = fig2_ss_width_pt,
-           h = fig2_ss_height_pt,
-           outfile = outfile)
+           width = fig2_ss_width_pt,
+           height = fig2_ss_height_pt,
+           units = "bigpts",
+           file = outfile)
 ```
 
 # Panel: Mouse-human cluster similarity heatmap
@@ -1113,7 +1101,7 @@ theme_pathways <- theme(axis.ticks.x = element_blank(),
                         legend.margin = margin(b = 5)
                         # legend.box.margin = margin(t = -15)
                         # plot.margin = margin(l = 10, r = 25, t = 10)
-  )
+)
 
 # Generate polar plot
 fig2_pathways_mouse <- ggplot(df_polar_plot, 
@@ -1546,13 +1534,154 @@ fig2_height_pt <- sum(fig2_heights)
 outfile <- paste0(output_plot_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 export_pdf(x = fig2_grob, 
-           w = fig2_width_pt,
-           h = fig2_height_pt,
-           outfile = outfile)
+           width = fig2_width_pt,
+           height = fig2_height_pt,
+           units = "bigpts",
+           file = outfile)
 ```
 
 
 # Supplementary
+
+```{r fig2-supp-pathways-roc-plots, eval = TRUE}
+# Sequence of alpha thresholds
+nalpha <- 1000
+alpha_seq <- seq(0, 1, length.out = nalpha) 
+
+# Sequence of alpha values for mouse ground truth
+# NOTE: ROC analysis can't be completed for -log10(12) and above
+alpha_mouse <- 1:10
+alpha_mouse <- (1/10)^alpha_mouse
+for (alpha in alpha_mouse) {
+  
+  # Iterate over human clusters and generate ROC curve
+  list_pathways_roc <- vector(mode = "list", length = length(list_human_pathways_match))
+  names(list_pathways_roc) <- names(list_human_pathways_match)
+  for (k in 1:length(list_pathways_roc)) {
+    
+    # Mouse ground truth for human cluster k
+    mouse_pass <- list_human_pathways_match[[k]] %>% 
+      filter(str_detect(cluster_id, "M")) %>% 
+      mutate(pass = adj.P.Val < alpha) %>% 
+      arrange(pathway) %>% 
+      pull(pass)
+    
+    # Generate ROC curve data
+    df_roc <- tibble(alpha = alpha_seq,
+                     fpr = 0,
+                     tpr = 0)
+    for (i in 1:nrow(df_roc)) {
+      
+      # Human pathway predictions at alpha threshold
+      human_pass <- list_human_pathways_match[[k]] %>% 
+        filter(str_detect(cluster_id, "H")) %>% 
+        mutate(pass = adj.P.Val <= df_roc[[i, "alpha"]]) %>% 
+        arrange(pathway) %>% 
+        pull(pass)
+      
+      # Compute TPR and FPR
+      df_roc[[i, "tpr"]] <- sum(human_pass & mouse_pass)/sum(mouse_pass)
+      df_roc[[i, "fpr"]] <- sum(human_pass & !mouse_pass)/sum(!mouse_pass)
+      
+    }
+    
+    list_pathways_roc[[k]] <- df_roc
+    
+  }
+  
+  # Combine ROC data for both human clusters
+  df_pathways_roc <- bind_rows(list_pathways_roc, .id = "cluster_id")
+  
+  # Plot ROC curves at given mouse alpha
+  fig2_supp_pathways_roc <- ggplot(df_pathways_roc,
+                                   aes(x = fpr, y = tpr, 
+                                       col = cluster_id)) + 
+    annotate(geom = "segment",
+             x = 0, xend = 1,
+             y = 0, yend = 1,
+             size = 0.4,
+             linetype = "dashed",
+             col = "black") +
+    geom_line() +
+    coord_equal() + 
+    scale_color_manual(values = pathways_human_palette) + 
+    labs(x = "False positive rate (1 - specificity)",
+         y = "Sensitivity",
+         col = "Cluster",
+         title = paste("-log10(alpha)", "=", -log10(alpha))) +
+    theme_bw() +
+    theme(axis.text = element_text(size = font_size),
+          axis.title = element_text(size = font_size),
+          legend.title = element_text(size = font_size),
+          legend.text = element_text(size = font_size),
+          plot.title = element_text(size = font_size))
+  
+  outfile <- paste(output_plot_prefix, "supp", "pathways",
+                   "ROC", -log10(alpha), 
+                   sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = 3,
+      height = 2.5)
+  print(fig2_supp_pathways_roc)
+  dev.off()
+  
+}
+```
+
+```{r fig2-supp-pathways-roc-auc, eval = TRUE}
+# Iterate over human clusters and mouse alpha values
+df_auc <- expand_grid(k = 1:nk_human,
+                      alpha = alpha_mouse,
+                      auc = 0)
+for (i in 1:nrow(df_auc)) {
+  
+  # Human cluster
+  k <- df_auc[[i, "k"]]
+  
+  # Human pathway values used to predict the mouse pathways
+  predictor <- list_human_pathways_match[[k]] %>% 
+    filter(str_detect(cluster_id, "H")) %>% 
+    arrange(pathway) %>% 
+    pull(adj.P.Val)
+  
+  # Mouse pathway ground truth at alpha
+  outcome <- list_human_pathways_match[[k]] %>% 
+    filter(str_detect(cluster_id, "M")) %>% 
+    mutate(pass = adj.P.Val < df_auc[[i, "alpha"]]) %>% 
+    arrange(pathway) %>% 
+    pull(pass)
+  
+  # Compute AUC
+  df_auc[[i, "auc"]] <- auc(outcome, predictor, quiet = TRUE)[1]
+}
+
+# Generate cluster IDs
+df_auc <- df_auc %>% 
+  mutate(cluster_id = paste(nk_human, k, sep = "-"),
+         cluster_id = factor(cluster_id))
+
+# Plot AUC over mouse alpha values
+fig2_pathways_roc_auc <- ggplot(df_auc, aes(x = -log10(alpha), y = auc, col = cluster_id)) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(ylim = c(0.5, 1)) +
+  scale_x_continuous(breaks = -log10(alpha_mouse)) + 
+  labs(y = "AUC",
+       col = "Human cluster") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+
+# Export plot
+outfile <- paste0("figure2_supp_pathways_ROC_AUC.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(5, "in"),
+    height = unit(3, "in"))
+print(fig2_pathways_roc_auc)
+dev.off()
+```
 
 ```{r fig2-pathways-enrichment-20, eval = FALSE}
 # pathway_palette_cols <- c("white", brewer.pal(n = 9, name = "OrRd")[3:9])
@@ -1676,62 +1805,5 @@ pdf(file = outfile,
     width = unit(8, "in"),
     height = unit(6, "in"))
 print(p_pathways_match)
-dev.off()
-```
-
-```{r fig2-pathways-roc-auc, eval = FALSE}
-# Sequence of alpha values for mouse ground truth
-alpha_mouse <- 1:10
-alpha_mouse <- (1/10)^alpha_mouse
-
-# Iterate over human clusters and mouse alpha values
-df_auc <- expand_grid(k = 1:nk_human,
-                      alpha = alpha_mouse,
-                      auc = 0)
-for (i in 1:nrow(df_auc)) {
-  
-  # Human cluster
-  k <- df_auc[[i, "k"]]
-  
-  # Human pathway values used to predict the mouse pathways
-  predictor <- list_human_pathways_match[[k]] %>% 
-    filter(str_detect(cluster_id, "H")) %>% 
-    arrange(pathway) %>% 
-    pull(adj.P.Val)
-  
-  # Mouse pathway ground truth at alpha
-  outcome <- list_human_pathways_match[[k]] %>% 
-    filter(str_detect(cluster_id, "M")) %>% 
-    mutate(pass = adj.P.Val < df_auc[[i, "alpha"]]) %>% 
-    arrange(pathway) %>% 
-    pull(pass)
-  
-  # Compute AUC
-  df_auc[[i, "auc"]] <- auc(outcome, predictor, quiet = TRUE)[1]
-}
-
-# Generate cluster IDs
-df_auc <- df_auc %>% 
-  mutate(cluster_id = paste(nk_human, k, sep = "-"),
-         cluster_id = factor(cluster_id))
-
-# Plot AUC over mouse alpha values
-fig2_pathways_roc_auc <- ggplot(df_auc, aes(x = -log10(alpha), y = auc, col = cluster_id)) + 
-  geom_line() + 
-  geom_point() + 
-  coord_cartesian(ylim = c(0.5, 1)) +
-  scale_x_continuous(breaks = -log10(alpha_mouse)) + 
-  labs(y = "AUC",
-       col = "Human cluster") + 
-  theme_bw() + 
-  theme(panel.grid.minor.x = element_blank())
-
-# Export plot
-outfile <- paste0("figure2_pathways_ROC_AUC.pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(5, "in"),
-    height = unit(3, "in"))
-print(fig2_pathways_roc_auc)
 dev.off()
 ```
