@@ -88,6 +88,11 @@ mouse_params_id <- params %>%
   filter(id == params_id) %>% 
   pull(mouse_id)
 
+# Max number of clusters
+nk_max <- params %>% 
+  filter(id == params_id) %>% 
+  pull(human_cluster_nk_max)
+
 # Human pipeline directory
 human_pipeline_dir <- "../data/human/derivatives/"
 human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
@@ -1003,49 +1008,133 @@ if (bader_version == "2020") {
 }
 
 # Import mouse pathway enrichment files
-list_mouse_pathways <- vector(mode = "list", length = nk_mouse)
-names(list_mouse_pathways) <- paste(nk_mouse, 1:nk_mouse, sep = "-")
-for (k in 1:nk_mouse) {
-  pathways_file <- paste(mouse_pathways_file_prefix, nk_mouse, k, stringdb_score, sep = "_")
-  pathways_file <- paste0(pathways_file, ".csv")
-  pathways_file <- file.path(mouse_pathways_dir, pathways_file)
-  list_mouse_pathways[[k]]  <- read_csv(pathways_file, show_col_types = FALSE) %>% 
-    mutate(NLQ = -log10(adj.P.Val)) %>% 
+# list_mouse_pathways <- vector(mode = "list", length = nk_mouse)
+# names(list_mouse_pathways) <- paste(nk_mouse, 1:nk_mouse, sep = "-")
+# for (k in 1:nk_mouse) {
+#   pathways_file <- paste(mouse_pathways_file_prefix, nk_mouse, k, stringdb_score, sep = "_")
+#   pathways_file <- paste0(pathways_file, ".csv")
+#   pathways_file <- file.path(mouse_pathways_dir, pathways_file)
+#   list_mouse_pathways[[k]]  <- read_csv(pathways_file, show_col_types = FALSE) %>% 
+#     mutate(NLQ = -log10(adj.P.Val)) %>% 
+#     rename(pathway = Title,
+#            k = cluster) %>% 
+#     mutate(nk = nk_mouse) %>% 
+#     unite(col = "cluster_id", nk, k,
+#           sep = "-", remove = FALSE)
+# }
+
+# Iterate over cluster solutions and import mouse pathway enrichment files
+list_mouse_pathways <- vector(mode = "list", length = nk_max-1)
+names(list_mouse_pathways) <- 2:nk_max
+for (nk in 2:nk_max) {
+  
+  # Iterate over cluster number
+  list_mouse_pathways[[as.character(nk)]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    pathways_file <- paste(mouse_pathways_file_prefix, nk, k, stringdb_score, sep = "_")
+    pathways_file <- paste0(pathways_file, ".csv")
+    pathways_file <- file.path(mouse_pathways_dir, pathways_file)
+    list_mouse_pathways[[as.character(nk)]][[k]] <- read_csv(pathways_file, show_col_types = FALSE)  
+    
+    # Fix mouse enrichment p-values and q-values
+    list_mouse_pathways[[as.character(nk)]][[k]] <- list_mouse_pathways[[as.character(nk)]][[k]] %>%
+      mutate(NLQ = -log10(adj.P.Val))
+  }
+  
+  # Combine clusters per solution
+  list_mouse_pathways[[as.character(nk)]] <- list_mouse_pathways[[as.character(nk)]] %>% 
+    reduce(.f = bind_rows) %>% 
     rename(pathway = Title,
            k = cluster) %>% 
-    mutate(nk = nk_mouse) %>% 
-    unite(col = "cluster_id", nk, k,
+    filter(ID %in% pathway_ids) %>% 
+    mutate(nk = nk) %>% 
+    unite(col = "cluster_id", nk, k, 
           sep = "-", remove = FALSE)
+  
 }
 
+
 # Reduce list of pathways to a data frame
-df_mouse_pathways <- list_mouse_pathways %>% 
+df_mouse_pathways_all <- list_mouse_pathways %>% 
   bind_rows() %>% 
   filter(ID %in% pathway_ids)
+
+# Filter pathways for nk = 4
+df_mouse_pathways <- df_mouse_pathways_all %>% 
+  filter(nk == nk_mouse)
 ```
 
 ```{r fig2-pathways-info}
 # Extract pathway ID and name
-df_pathway_info <- list_mouse_pathways[[1]] %>% 
-  filter(ID %in% pathway_ids) %>% 
+df_pathway_info <- df_mouse_pathways %>% 
   select(ID, pathway) %>% 
   distinct() %>% 
   arrange(pathway)
 
+# # Create pathway acronyms
+# df_pathway_info[["acronym"]] <- c(
+#   "Adherens junction", "Axon guid.",
+#   "Ca2+", "Chromatin",
+#   "Gap junction", "Gene expr.",
+#   "Transcription", "LTP",
+#   "Mapk", "Mtor",
+#   "Prot-prot int.", "erbb2",
+#   "erbb4", "gpcr",
+#   "hedgehog", "notch",
+#   "vegf", "wnt", 
+#   "Tight junction", "Trans. synapses"
+# )
+
 # Create pathway acronyms
 df_pathway_info[["acronym"]] <- c(
-  "Adherens junction", "Axon guid.",
-  "Ca2+", "Chromatin",
-  "Gap junction", "Gene expr.",
-  "Transcription", "LTP",
-  "Mapk", "Mtor",
-  "Prot-prot int.", "erbb2",
-  "erbb4", "gpcr",
-  "hedgehog", "notch",
-  "vegf", "wnt", 
-  "Tight junction", "Trans. synapses"
+  "AJI", "AG", "Ca2+", "CO",
+  "GJTR", "GE", "GTP", "LTP",
+  "MAPK", "MTOR", "PPIS", "ERBB2",
+  "ERBB4", "GPCR", "HEDGEHOG", "NOTCH",
+  "VEGF", "WNT", "TJI", "TACS"
 )
 ```
+
+```{r}
+# Filter for cluster solutions with nk >= 4
+df_pathways_nk_gt4 <- df_mouse_pathways_all %>% 
+  filter(nk >= 4)
+
+# Filter for desired pathways
+# Compute normalized enrichment and NLQ per pathway
+df_pathways_nk_gt4_subset <- df_pathways_nk_gt4 %>% 
+  filter(pathway %in% df_pathway_info[["pathway"]]) %>% 
+  group_by(pathway) %>% 
+  mutate(NLQ_norm = NLQ/max(NLQ)) %>% 
+  ungroup() %>% 
+  mutate(NLQ_norm = ifelse(is.nan(NLQ_norm), 0, NLQ_norm))
+
+# Convert pathway data frame into matrix 
+mat_pathways_nk_gt4_subset <- df_pathways_nk_gt4_subset %>% 
+  select(pathway, cluster_id, NLQ_norm) %>% 
+  pivot_wider(id_cols = pathway, 
+              names_from = cluster_id, 
+              values_from = NLQ_norm) %>% 
+  column_to_rownames("pathway") %>% 
+  as.matrix()
+
+# Hierarchical clustering of the pathways
+pathway_hc <- hclust(d = dist(mat_pathways_nk_gt4_subset, 
+                              method = "euclidean"))
+
+# Extract pathway order according to clustering
+pathway_lvls <- pathway_hc[["labels"]]
+pathway_order <- pathway_hc[["order"]]
+pathway_lvls_clustered <- pathway_lvls[pathway_order]
+
+# Order pathway acronyms according to clustering
+pathway_label_lvls_clustered <- df_pathway_info %>%
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>%
+  arrange(pathway) %>%
+  pull(acronym)
+```
+
+
 
 ```{r fig2-pathways-mouse-plot}
 # An additional empty level must be added to close the polar plot
@@ -1414,7 +1503,7 @@ nalpha <- 1000
 alpha_seq <- seq(0, 1, length.out = nalpha) 
 
 # Mouse alpha value used to establish ground truth
-alpha_mouse <- 1e-3
+alpha_mouse <- 1e-8
 
 # Iterate over human clusters and generate ROC curve
 list_pathways_roc <- vector(mode = "list", length = length(list_human_pathways_match))
@@ -1543,7 +1632,7 @@ export_pdf(x = fig2_grob,
 
 # Supplementary
 
-```{r fig2-supp-pathways-roc-plots, eval = TRUE}
+```{r fig2-supp-pathways-roc-plots, eval = FALSE}
 # Sequence of alpha thresholds
 nalpha <- 1000
 alpha_seq <- seq(0, 1, length.out = nalpha) 
@@ -1630,7 +1719,7 @@ for (alpha in alpha_mouse) {
 }
 ```
 
-```{r fig2-supp-pathways-roc-auc, eval = TRUE}
+```{r fig2-supp-pathways-roc-auc, eval = FALSE}
 # Iterate over human clusters and mouse alpha values
 df_auc <- expand_grid(k = 1:nk_human,
                       alpha = alpha_mouse,
