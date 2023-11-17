@@ -1095,7 +1095,7 @@ df_pathway_info[["acronym"]] <- c(
 )
 ```
 
-```{r}
+```{r fig2-pathways-mouse-clust}
 # Filter for cluster solutions with nk >= 4
 df_pathways_nk_gt4 <- df_mouse_pathways_all %>% 
   filter(nk >= 4)
@@ -1134,11 +1134,19 @@ pathway_label_lvls_clustered <- df_pathway_info %>%
   pull(acronym)
 ```
 
-
+```{r fig2-pathways-mouse-clust}
+# Obtain pathway cluster order at selected solution
+hclust_kcut <- 5
+cutree(pathway_hc, k = hclust_kcut) %>% 
+  enframe(name = "pathway", value = "pathway_cluster") %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
+  arrange(pathway)
+```
 
 ```{r fig2-pathways-mouse-plot}
 # An additional empty level must be added to close the polar plot
-polar_plot_lvls <- c(" ", df_pathway_info[["pathway"]])
+# polar_plot_lvls <- c(" ", df_pathway_info[["pathway"]])
+polar_plot_lvls <- c(" ", pathway_lvls_clustered)
 
 # Create a temp df for the additional empty factor level
 df_polar_plot_tmp <- df_mouse_pathways %>% 
@@ -1152,7 +1160,7 @@ df_polar_plot <- df_mouse_pathways %>%
   mutate(pathway = factor(pathway, levels = polar_plot_lvls))
 
 # Clamp q-values to threshold
-NLQ_threshold <- 3
+NLQ_threshold <- 8
 df_polar_plot <- df_polar_plot %>% 
   mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
 
@@ -1161,7 +1169,7 @@ nspokes <- length(polar_plot_lvls) - 1
 theta_start <- -(2*pi)/nspokes
 breaks_start <- 0
 breaks_end <- NLQ_threshold
-breaks_step <- 1
+breaks_step <- 2
 polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
 polar_labels <- tibble(pathway = polar_plot_lvls[2],
                        breaks = polar_breaks)
@@ -1172,9 +1180,10 @@ pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
                             carto_pal(12, "Antique")[2],
                             carto_pal(12, "Prism")[8])
 
+# Theme for polar plots
 theme_pathways <- theme(axis.ticks.x = element_blank(),
                         axis.line.x = element_blank(),
-                        axis.text.x = element_text(size = font_size,
+                        axis.text.x = element_text(size = font_size-1,
                                                    family = font_family),
                         axis.text.y = element_blank(),
                         axis.ticks.y = element_blank(),
@@ -1188,8 +1197,6 @@ theme_pathways <- theme(axis.ticks.x = element_blank(),
                         legend.text = element_text(size = font_size,
                                                    family = font_family),
                         legend.margin = margin(b = 5)
-                        # legend.box.margin = margin(t = -15)
-                        # plot.margin = margin(l = 10, r = 25, t = 10)
 )
 
 # Generate polar plot
@@ -1201,14 +1208,15 @@ fig2_pathways_mouse <- ggplot(df_polar_plot,
                                   col = cluster_id)) + 
   geom_ribbon(mapping = aes(alpha = cluster_id,
                             size = cluster_id)) + 
-  # geom_text(data = polar_labels,
-  #           inherit.aes = FALSE,
-  #           mapping = aes(x = pathway,
-  #                         y = breaks,
-  #                         label = breaks)) +
+  geom_text(data = polar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = pathway,
+                          y = breaks,
+                          label = breaks),
+            family = font_family,
+            size = font_size*0.36) +
   coord_radar(start = theta_start, clip = "off") + 
-  scale_x_discrete(expand = expansion(), 
-                   labels = df_pathway_info[["acronym"]]) + 
+  scale_x_discrete(expand = expansion()) + 
   scale_y_continuous(breaks = polar_breaks) +
   scale_colour_manual(values = pathways_mouse_palette,
                       guide = guide_legend(title.position = "bottom",
@@ -1238,12 +1246,12 @@ fig2_pathways_mouse <- fig2_pathways_mouse +
 fig2_pathways_mouse_grob <- grid.force(ggplotGrob(fig2_pathways_mouse))
 
 # Fix polar axis labels
-fig2_pathways_mouse_grob <- grid.force(ggplotGrob(fig2_pathways_mouse))
-fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- df_pathway_info[["acronym"]]
+# fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- df_pathway_info[["acronym"]]
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
 
 # Get initial label positions
-fig2_pathways_mouse_labels_x <- fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]]
-fig2_pathways_mouse_labels_y <- fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]]
+fig2_pathways_mouse_labels_x <- fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]]
+fig2_pathways_mouse_labels_y <- fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]]
 
 # Nudge label positions
 fig2_pathways_mouse_labels_x_nudge <- c(0.00, 0.00, 0.00, 0.00, 0.00, 
@@ -1265,8 +1273,8 @@ fig2_pathways_mouse_labels_x <- fig2_pathways_mouse_labels_x + fig2_pathways_mou
 fig2_pathways_mouse_labels_y <- fig2_pathways_mouse_labels_y + fig2_pathways_mouse_labels_y_nudge
 
 # Set new label positions
-fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- fig2_pathways_mouse_labels_x
-fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- fig2_pathways_mouse_labels_y
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]] <- fig2_pathways_mouse_labels_x
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]] <- fig2_pathways_mouse_labels_y
 ```
 
 ```{r to-clean-1}
@@ -1343,7 +1351,8 @@ df_human_pathways <- list_human_pathways %>%
 
 ```{r fig2-pathways-human-plot}
 # An additional empty level must be added to close the polar plot
-polar_plot_lvls <- c(" ", df_pathway_info[["pathway"]])
+# polar_plot_lvls <- c(" ", df_pathway_info[["pathway"]])
+polar_plot_lvls <- c(" ", pathway_lvls_clustered)
 
 # Create a temp df for the additional empty factor level
 df_polar_plot_tmp <- df_human_pathways %>% 
@@ -1371,11 +1380,13 @@ fig2_pathways_human <- ggplot(df_polar_plot,
                                   fill = cluster_id, 
                                   col = cluster_id)) + 
   geom_ribbon(mapping = aes(alpha = cluster_id)) + 
-  # geom_text(data = polar_labels,
-  #           inherit.aes = FALSE,
-  #           mapping = aes(x = pathway, 
-  #                         y = breaks, 
-  #                         label = breaks)) + 
+  geom_text(data = polar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = pathway,
+                          y = breaks,
+                          label = breaks),
+            family = font_family,
+            size = font_size*0.36) +
   coord_radar(start = theta_start, clip = "off") + 
   scale_x_discrete(expand = expansion()) + 
   scale_y_continuous(breaks = polar_breaks) +
@@ -1406,11 +1417,12 @@ fig2_pathways_human <- fig2_pathways_human +
 fig2_pathways_human_grob <- grid.force(ggplotGrob(fig2_pathways_human))
 
 # Fix polar axis labels
-fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- df_pathway_info[["acronym"]]
+# fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- df_pathway_info[["acronym"]]
+fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
 
 # Get initial label positions
-fig2_pathways_human_labels_x <- fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]]
-fig2_pathways_human_labels_y <- fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]]
+fig2_pathways_human_labels_x <- fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]]
+fig2_pathways_human_labels_y <- fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]]
 
 # Nudge label positions
 fig2_pathways_human_labels_x_nudge <- c(0.00, 0.00, 0.00, 0.00, 0.00, 
@@ -1432,8 +1444,8 @@ fig2_pathways_human_labels_x <- fig2_pathways_human_labels_x + fig2_pathways_hum
 fig2_pathways_human_labels_y <- fig2_pathways_human_labels_y + fig2_pathways_human_labels_y_nudge
 
 # Set new label positions
-fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- fig2_pathways_human_labels_x
-fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- fig2_pathways_human_labels_y
+fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]] <- fig2_pathways_human_labels_x
+fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]] <- fig2_pathways_human_labels_y
 ```
 
 ```{r to-clean-2}
@@ -1490,7 +1502,8 @@ for (k in 1:nk_human) {
   # Combine human and mouse pathway enrichment
   list_human_pathways_match[[k]] <- list_human_pathways[[k]] %>% 
     mutate(cluster_id = paste0("H", cluster_id)) %>% 
-    bind_rows(list_mouse_pathways[[mouse_match_id]] %>% 
+    bind_rows(df_mouse_pathways %>% 
+                filter(cluster_id == mouse_match_id) %>% 
                 mutate(cluster_id = paste0("M", cluster_id))) %>% 
     filter(ID %in% pathway_ids)
   
