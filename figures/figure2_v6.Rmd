@@ -8,11 +8,11 @@ output: html_document
 
 # Initialization
 
-```{r setup, include=FALSE}
+```{r fig2-knitr-setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r packages}
+```{r fig2-packages}
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
@@ -26,13 +26,13 @@ suppressPackageStartupMessages(library(rcartocolor))
 suppressPackageStartupMessages(library(pROC))
 ```
 
-```{r functions}
+```{r fig2-functions}
 source("../src/utils.R")
 source("../src/processing.R")
 source("../src/analysis.R")
 ```
 
-```{r pipeline-params}
+```{r fig2-pipeline-params}
 # Output directory
 output_dir <- "figure2/"
 
@@ -68,7 +68,7 @@ params <- fetch_params_metadata(metadata = metadata,
 params
 ```
 
-```{r paths}
+```{r fig2-paths}
 # Parameter set ID
 params_id <- 405
 
@@ -119,7 +119,7 @@ mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, jacobians)
 names(mouse_cluster_map_dirs_50um) <- jacobians
 ```
 
-```{r graphical-params}
+```{r fig2-graphical-params}
 # Number of bigpts in an inch
 pt_per_in <- 72
 
@@ -1556,7 +1556,7 @@ fig2_pathways_roc_auc <- ggplot(df_auc, aes(x = -log10(alpha),
 
 # Figure
 
-```{r fig2}
+```{r fig2-build}
 # Combine similarity and dx plots using patchwork
 fig2_sim_dx <- (fig2_sim_heatmap / fig2_dx) +
   plot_layout(heights = c(1, 2)) &
