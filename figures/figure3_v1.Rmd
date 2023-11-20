@@ -1270,6 +1270,8 @@ dev.off()
 
 # Supplementary
 
+## Export matching mouse-human clusters
+
 ```{r fig3-supp-matching-clusters, eval = FALSE}
 outfile <- "fig3_matching_clusters.csv"
 outfile <- file.path(output_dir, outfile)
@@ -1279,4 +1281,438 @@ df_sim_pvals %>%
   select(mouse_cluster = mouse_cluster_id, 
          human_cluster = human_cluster_id)  %>% 
   write_csv(file = outfile)
+```
+
+## Pathway heatmap with clustered clusters
+
+```{r fig3-supp-heatmap-norm-scree-plot}
+mat_pathways_nk_gt4_subset %>% 
+  hclust_wcss() %>% 
+  as_tibble() %>% 
+  mutate(nk = 1:nrow(.)) %>% 
+  ggplot(df_pathway_hclust,
+         mapping = aes(x = nk, y = value)) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(xlim = c(1, 20)) + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) +
+  labs(x = "Number of clusters",
+       y = "Within-cluster sum of squared distance") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r fig3-supp-heatmap-norm-build}
+# Run hierarchical clustering ################################################
+
+# Run hierarchical clustering on neuroanatomical clusters
+cluster_hc <- hclust(d = dist(t(mat_pathways_nk_gt4_subset), 
+                              method = "euclidean"))
+
+# Extract cluster order according to clustering
+cluster_lvls <- cluster_hc[["labels"]]
+cluster_order <- cluster_hc[["order"]]
+cluster_lvls_clustered <- cluster_lvls[cluster_order]
+
+# Obtain cluster order at selected solution
+hclust_kcut_clusters <- 5
+df_cluster_hclust <- cutree(cluster_hc, k = hclust_kcut_clusters) %>% 
+  enframe(name = "cluster_id", value = "cluster")
+
+# Relevel clusters to follow dendrogram order
+df_cluster_lvls <- df_cluster_hclust %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered)) %>% 
+  arrange(cluster_id) %>% 
+  select(cluster) %>% 
+  distinct() %>% 
+  mutate(cluster_new = 1:nrow(.))
+
+df_cluster_hclust <- df_cluster_hclust %>% 
+  left_join(df_cluster_lvls, by = "cluster") %>% 
+  select(-cluster, cluster = cluster_new)
+
+df_pathways_heatmap_2 <- df_pathways_heatmap %>% 
+  left_join(df_cluster_hclust, by = "cluster_id") %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered))
+
+
+# Generate dendrograms #######################################################
+
+# Generate clustered heatmap
+fig3_supp_pheatmap <- pheatmap(mat = mat_pathways_nk_gt4_subset,
+                               cluster_col = TRUE,
+                               cluster_rows = TRUE,
+                               clustering_distance_rows = "euclidean",
+                               cutree_rows = hclust_kcut,
+                               cutree_cols = hclust_kcut_clusters,
+                               silent = TRUE)
+
+# Extract dendrograms
+fig3_supp_dendrogram_cols <- fig3_supp_pheatmap[["gtable"]][["grobs"]][[1]]
+fig3_supp_dendrogram_rows <- fig3_supp_pheatmap[["gtable"]][["grobs"]][[2]]
+
+
+# Generate human match heatmap ###############################################
+
+df_sig_nk_2 <- df_sig_nk %>% 
+  left_join(df_cluster_hclust, by = "cluster_id") %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered))
+
+fig3_supp_heatmap_human_match <- ggplot(df_sig_nk_2,
+                                   mapping = aes(x = cluster_id, 
+                                                 y = dummy, 
+                                                 fill = has_match)) + 
+  geom_tile(col = "grey50") +
+  facet_grid(.~cluster, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_manual(values = brewer.pal(n = 9, name = "PuBu")[c(1, 9)], 
+                    labels = c("No", "Yes"),
+                    guide = guide_legend(title.position = "top",
+                                         title.hjust = 0.5)) + 
+  labs(fill = "Human match") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_blank())
+
+
+# Generate main heatmap ######################################################
+
+fig3_supp_heatmap_clustered <- ggplot(df_pathways_heatmap_2, 
+                                      aes(x = cluster_id, 
+                                          y = fct_rev(pathway), 
+                                          fill = intensity)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(pathway_cluster~cluster, scales = "free", space = "free") +
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion(), 
+                   position = "right") + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = heatmap_limits,
+                       na.value = "grey85") + 
+  labs(x = "Mouse cluster",
+       y = "Biological pathway module",
+       fill = heatmap_fill_lab) +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        strip.text = element_blank())
+fig3_supp_heatmap_clustered_grob <- grid.force(ggplotGrob(fig3_supp_heatmap_clustered))
+
+
+# Combine heatmaps using patchwork ###########################################
+fig3_supp_heatmap_patchwork <- (fig3_supp_heatmap_human_match / fig3_supp_heatmap_clustered) +
+  plot_layout(heights = c(0.05, 0.95), guides = "collect") &
+  theme(plot.margin = margin(l = 0))
+fig3_supp_heatmap_patchwork_grob <- patchworkGrob(fig3_supp_heatmap_patchwork)
+
+
+# Build supplementary figure #################################################
+
+fig3_supp_heatmap_grob <- arrangeGrob(zeroGrob(),
+                                      fig3_supp_dendrogram_cols,
+                                      zeroGrob(),
+                                      zeroGrob(),
+                                      fig3_supp_heatmap_patchwork_grob,
+                                      fig3_supp_dendrogram_rows, 
+                                      zeroGrob(),
+                                      layout_matrix = rbind(c(01, 02, 03),
+                                                            c(04, 05, 05),
+                                                            c(06, 05, 05),
+                                                            c(07, 05, 05)),
+                                      widths = c(0.10, 0.72, 0.18),
+                                      heights = c(0.10, 0.04, 0.77, 0.04))
+
+outfile <- paste(output_plot_prefix, "supp_heatmap_clustered_cols_norm", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+export_pdf(x = fig3_supp_heatmap_grob,
+           file = outfile,
+           width = 20,
+           height = 10)
+```
+
+
+```{r fig3-supp-heatmap-scree-plot}
+mat_pathways_nk_gt4_subset <- df_pathways_nk_gt4_subset %>% 
+  select(pathway, cluster_id, NLQ) %>% 
+  pivot_wider(id_cols = pathway, 
+              names_from = cluster_id, 
+              values_from = NLQ) %>% 
+  column_to_rownames("pathway") %>% 
+  as.matrix()
+
+mat_pathways_nk_gt4_subset %>% 
+  hclust_wcss() %>% 
+  as_tibble() %>% 
+  mutate(nk = 1:nrow(.)) %>% 
+  ggplot(df_pathway_hclust,
+         mapping = aes(x = nk, y = value)) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(xlim = c(1, 20)) + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) +
+  labs(x = "Number of clusters",
+       y = "Within-cluster sum of squared distance") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r fig3-supp-heatmap-build}
+# Run hierarchical clustering ################################################
+
+
+cluster_hc <- hclust(d = dist(t(mat_pathways_nk_gt4_subset), 
+                              method = "euclidean"))
+
+# Extract pathway order according to clustering
+cluster_lvls <- cluster_hc[["labels"]]
+cluster_order <- cluster_hc[["order"]]
+cluster_lvls_clustered <- cluster_lvls[cluster_order]
+
+# Obtain pathway cluster order at selected solution
+hclust_kcut_clusters <- 8
+df_cluster_hclust <- cutree(cluster_hc, k = hclust_kcut_clusters) %>% 
+  enframe(name = "cluster_id", value = "cluster")
+
+# Relevel pathways to follow dendrogram order
+df_cluster_lvls <- df_cluster_hclust %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered)) %>% 
+  arrange(cluster_id) %>% 
+  select(cluster) %>% 
+  distinct() %>% 
+  mutate(cluster_new = 1:nrow(.))
+
+df_cluster_hclust <- df_cluster_hclust %>% 
+  left_join(df_cluster_lvls, by = "cluster") %>% 
+  select(-cluster, cluster = cluster_new)
+
+df_pathways_heatmap_2 <- df_pathways_heatmap %>% 
+  left_join(df_cluster_hclust, by = "cluster_id") %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered))
+
+
+# Generate dendrograms #######################################################
+
+# Generate clustered heatmap
+fig3_supp_pheatmap <- pheatmap(mat = mat_pathways_nk_gt4_subset,
+                               cluster_col = TRUE,
+                               clustering_distance_rows = "euclidean",
+                               cutree_cols = hclust_kcut_clusters,
+                               silent = FALSE)
+
+# Extract dendrograms
+fig3_supp_dendrogram_cols <- fig3_supp_pheatmap[["gtable"]][["grobs"]][[1]]
+
+
+# Generate human match heatmap ###############################################
+
+df_sig_nk_2 <- df_sig_nk %>% 
+  left_join(df_cluster_hclust, by = "cluster_id") %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered))
+
+fig3_supp_heatmap_human_match <- ggplot(df_sig_nk_2,
+                                   mapping = aes(x = cluster_id, 
+                                                 y = dummy, 
+                                                 fill = has_match)) + 
+  geom_tile(col = "grey50") +
+  facet_grid(.~cluster, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_manual(values = brewer.pal(n = 9, name = "PuBu")[c(1, 9)], 
+                    labels = c("No", "Yes"),
+                    guide = guide_legend(title.position = "top",
+                                         title.hjust = 0.5)) + 
+  labs(fill = "Human match") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_blank())
+
+
+# Generate main heatmap ######################################################
+
+fig3_supp_heatmap_clustered <- ggplot(df_pathways_heatmap_2, 
+                                      aes(x = cluster_id, 
+                                          y = fct_rev(pathway), 
+                                          fill = intensity)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(pathway_cluster~cluster, scales = "free", space = "free") +
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion(), 
+                   position = "right") + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = heatmap_limits,
+                       na.value = "grey85") + 
+  labs(x = "Mouse cluster",
+       y = "Biological pathway module",
+       fill = heatmap_fill_lab) +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        strip.text = element_blank())
+fig3_supp_heatmap_clustered_grob <- grid.force(ggplotGrob(fig3_supp_heatmap_clustered))
+
+
+# Combine heatmaps using patchwork ###########################################
+fig3_supp_heatmap_patchwork <- (fig3_supp_heatmap_human_match / fig3_supp_heatmap_clustered) +
+  plot_layout(heights = c(0.05, 0.95), guides = "collect") &
+  theme(plot.margin = margin(l = 0))
+fig3_supp_heatmap_patchwork_grob <- patchworkGrob(fig3_supp_heatmap_patchwork)
+
+
+# Build supplementary figure #################################################
+
+fig3_supp_heatmap_grob <- arrangeGrob(zeroGrob(),
+                                      fig3_supp_dendrogram_cols,
+                                      zeroGrob(),
+                                      zeroGrob(),
+                                      fig3_supp_heatmap_patchwork_grob,
+                                      fig3_supp_dendrogram_rows, 
+                                      zeroGrob(),
+                                      layout_matrix = rbind(c(01, 02, 03),
+                                                            c(04, 05, 05),
+                                                            c(06, 05, 05),
+                                                            c(07, 05, 05)),
+                                      widths = c(0.10, 0.72, 0.18),
+                                      heights = c(0.10, 0.04, 0.77, 0.04))
+
+outfile <- paste(output_plot_prefix, "supp_heatmap_clustered_cols", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+export_pdf(x = fig3_supp_heatmap_grob,
+           file = outfile,
+           width = 20,
+           height = 10)
+```
+
+```{r fig3-supp-heatmap-no-thresh}
+# Run hierarchical clustering ################################################
+
+
+cluster_hc <- hclust(d = dist(t(mat_pathways_nk_gt4_subset), 
+                              method = "euclidean"))
+
+# Extract pathway order according to clustering
+cluster_lvls <- cluster_hc[["labels"]]
+cluster_order <- cluster_hc[["order"]]
+cluster_lvls_clustered <- cluster_lvls[cluster_order]
+
+# Obtain pathway cluster order at selected solution
+hclust_kcut_clusters <- 8
+df_cluster_hclust <- cutree(cluster_hc, k = hclust_kcut_clusters) %>% 
+  enframe(name = "cluster_id", value = "cluster")
+
+# Relevel pathways to follow dendrogram order
+df_cluster_lvls <- df_cluster_hclust %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered)) %>% 
+  arrange(cluster_id) %>% 
+  select(cluster) %>% 
+  distinct() %>% 
+  mutate(cluster_new = 1:nrow(.))
+
+df_cluster_hclust <- df_cluster_hclust %>% 
+  left_join(df_cluster_lvls, by = "cluster") %>% 
+  select(-cluster, cluster = cluster_new)
+
+df_pathways_heatmap_2 <- df_pathways_heatmap %>% 
+  left_join(df_cluster_hclust, by = "cluster_id") %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered))
+
+
+# Generate dendrograms #######################################################
+
+# Generate clustered heatmap
+fig3_supp_pheatmap <- pheatmap(mat = mat_pathways_nk_gt4_subset,
+                               cluster_col = TRUE,
+                               clustering_distance_rows = "euclidean",
+                               cutree_cols = hclust_kcut_clusters,
+                               silent = FALSE)
+
+# Extract dendrograms
+fig3_supp_dendrogram_cols <- fig3_supp_pheatmap[["gtable"]][["grobs"]][[1]]
+
+
+# Generate human match heatmap ###############################################
+
+df_sig_nk_2 <- df_sig_nk %>% 
+  left_join(df_cluster_hclust, by = "cluster_id") %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered))
+
+fig3_supp_heatmap_human_match <- ggplot(df_sig_nk_2,
+                                   mapping = aes(x = cluster_id, 
+                                                 y = dummy, 
+                                                 fill = has_match)) + 
+  geom_tile(col = "grey50") +
+  facet_grid(.~cluster, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_manual(values = brewer.pal(n = 9, name = "PuBu")[c(1, 9)], 
+                    labels = c("No", "Yes"),
+                    guide = guide_legend(title.position = "top",
+                                         title.hjust = 0.5)) + 
+  labs(fill = "Human match") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_blank())
+
+
+# Generate main heatmap ######################################################
+
+fig3_supp_heatmap_clustered <- ggplot(df_pathways_heatmap_2, 
+                                      aes(x = cluster_id, 
+                                          y = fct_rev(pathway), 
+                                          fill = intensity)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(pathway_cluster~cluster, scales = "free", space = "free") +
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion(), 
+                   position = "right") + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       na.value = "grey85") + 
+  labs(x = "Mouse cluster",
+       y = "Biological pathway module",
+       fill = heatmap_fill_lab) +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        strip.text = element_blank())
+fig3_supp_heatmap_clustered_grob <- grid.force(ggplotGrob(fig3_supp_heatmap_clustered))
+
+
+# Combine heatmaps using patchwork ###########################################
+fig3_supp_heatmap_patchwork <- (fig3_supp_heatmap_human_match / fig3_supp_heatmap_clustered) +
+  plot_layout(heights = c(0.05, 0.95), guides = "collect") &
+  theme(plot.margin = margin(l = 0))
+fig3_supp_heatmap_patchwork_grob <- patchworkGrob(fig3_supp_heatmap_patchwork)
+
+
+# Build supplementary figure #################################################
+
+fig3_supp_heatmap_grob <- arrangeGrob(zeroGrob(),
+                                      fig3_supp_dendrogram_cols,
+                                      zeroGrob(),
+                                      zeroGrob(),
+                                      fig3_supp_heatmap_patchwork_grob,
+                                      fig3_supp_dendrogram_rows, 
+                                      zeroGrob(),
+                                      layout_matrix = rbind(c(01, 02, 03),
+                                                            c(04, 05, 05),
+                                                            c(06, 05, 05),
+                                                            c(07, 05, 05)),
+                                      widths = c(0.10, 0.72, 0.18),
+                                      heights = c(0.10, 0.04, 0.77, 0.04))
+
+outfile <- paste(output_plot_prefix, "supp_heatmap_clustered_cols_no_threshold", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+export_pdf(x = fig3_supp_heatmap_grob,
+           file = outfile,
+           width = 20,
+           height = 10)
 ```
