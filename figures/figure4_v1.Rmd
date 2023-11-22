@@ -2,38 +2,36 @@
 title: "Figure 4"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-10-04"
+date: "2023-11-22"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+# Initialization
+
+```{r fig4-setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-```{r packages}
+```{r fig4-packages}
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(ggalluvial))
 suppressPackageStartupMessages(library(ggnewscale))
-# suppressPackageStartupMessages(library(RMINC))
-# suppressPackageStartupMessages(library(MRIcrotome))
-# suppressPackageStartupMessages(library(grid))
-# suppressPackageStartupMessages(library(gridExtra))
-# suppressPackageStartupMessages(library(patchwork))
-# suppressPackageStartupMessages(library(viridis))
-# suppressPackageStartupMessages(library(viridisLite))
+suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(rcartocolor))
 ```
 
-```{r functions}
+```{r fig4-functions}
 source("../src/utils.R")
-# source("../src/processing.R")
-# source("../src/analysis.R")
+source("../src/analysis.R")
 ```
 
-```{r pipeline-params}
+```{r fig4-pipeline-params}
 # Output directory
 output_dir <- "figure4/"
+
+# Plot file prefix
+output_plot_prefix <- "figure4"
 
 # Human processing pipeline
 version <- "v2"
@@ -62,7 +60,7 @@ params <- fetch_params_metadata(metadata = metadata,
 params
 ```
 
-```{r paths}
+```{r fig4-paths}
 # Parameter set ID
 params_id <- 700
 
@@ -93,10 +91,27 @@ clusters_file <- file.path(cluster_dir, "clusters.csv")
 demographics_file <- file.path(registration_dir, "subject_info", "demographics.csv")
 ```
 
-```{r}
+```{r fig4-graphical-params}
+# Number of bigpts in an inch
+pt_per_in <- 72
+
+# Font family
+font_family <- "Helvetica"
+
+# Nature suggested font size: 5-7 pt
+font_size <- 6
+
+# Figure width (bigpts)
+fig4_width_pt <- 510
+```
+
+
+# Panel: Human diagnosis alluvial diagrams
+
+```{r fig4-import}
 # Import patient cluster assignments
-clusters <- read_csv(clusters_file, show_col_types = FALSE)
-clusters <- rename(clusters, file = ID)
+df_clusters <- read_csv(clusters_file, show_col_types = FALSE)
+df_clusters <- rename(df_clusters, file = ID)
 
 # Import cohort demographics
 demographics <- read_csv(demographics_file, show_col_types = FALSE)
@@ -110,7 +125,7 @@ demographics <- demographics %>%
          !is.na(Scanner))
 
 # Join demographics information to cluster assignments
-cluster_demographics <- clusters %>% 
+df_cluster_demographics <- df_clusters %>% 
   left_join(demographics, by = "file")
 
 # Re-map diagnoses to broader categories
@@ -136,25 +151,26 @@ df_diagnoses <- tibble(DX = c("ASD",
                                   "Other"))
 
 # Get re-mapped diagnoses
-cluster_demographics <- cluster_demographics %>% 
+df_cluster_demographics <- df_cluster_demographics %>% 
   left_join(df_diagnoses, by = "DX")
 ```
 
-```{r}
-# Extract diagnoses and convert cluster assigments to long format
-cluster_dx_long <- cluster_demographics %>% 
+```{r fig4-dx-proportions}
+# Extract diagnoses and convert cluster assignments to long format
+df_cluster_dx_long <- df_cluster_demographics %>% 
   select(ID = file, contains("nk"), DX = DX_new) %>% 
-  pivot_longer(cols = c(-ID, -DX), names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = str_remove(nk_name, "nk"),
+  pivot_longer(cols = c(-ID, -DX), 
+               names_to = "nk", 
+               values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
          nk = as.numeric(nk),
          k = as.numeric(k)) %>% 
-  select(-nk_name) %>% 
   unite(col = "cluster_id", nk, k, 
         sep = "-", remove = FALSE) %>% 
   select(ID, cluster_id, nk, k, DX)
 
 # Compute per cluster diagnostic proportions
-cluster_dx_freq <- cluster_dx_long %>%
+df_cluster_dx_freq <- df_cluster_dx_long %>%
   select(-ID) %>% 
   group_by(nk, k) %>% 
   mutate(n_per_k = n()) %>% 
@@ -164,154 +180,160 @@ cluster_dx_freq <- cluster_dx_long %>%
   mutate(prop_dx_per_k = n_per_dx_per_k/n_per_k) %>% 
   distinct()
 
+# Cluster IDs in order
+cluster_ids <- df_cluster_dx_freq %>% 
+  select(cluster_id, nk, k) %>% 
+  distinct() %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)
+
+# Broad diagnostic groups
+diagnoses <- df_cluster_dx_freq %>% 
+  pull(DX) %>% 
+  unique() %>% 
+  sort()
+
 # Full grid of cluster labels and diagnoses
-cluster_dx_grid <- expand_grid(cluster_id = unique(cluster_dx_freq$cluster_id),
-                               DX = unique(df_diagnoses$DX_new)) %>% 
+df_cluster_dx_grid <- expand_grid(cluster_id = cluster_ids,
+                                  DX = diagnoses) %>% 
   separate(col = cluster_id, into = c("nk", "k"), 
            sep = "-", remove = FALSE) %>% 
   mutate(nk = as.numeric(nk),
          k = as.numeric(k))
 
 # Include diagnoses where cluster proportion is null
-cluster_dx_freq <- cluster_dx_freq %>% 
-  right_join(cluster_dx_grid, by = c("cluster_id", "nk", "k", "DX")) %>% 
+df_cluster_dx_freq <- df_cluster_dx_freq %>% 
+  right_join(df_cluster_dx_grid, 
+             by = c("cluster_id", "nk", "k", "DX")) %>% 
   mutate(n_per_k = ifelse(is.na(n_per_k), 0, n_per_k),
          n_per_dx_per_k = ifelse(is.na(n_per_dx_per_k), 0, n_per_dx_per_k),
          prop_dx_per_k = ifelse(is.na(prop_dx_per_k), 0, prop_dx_per_k)) 
-
-cluster_dx_prop <- cluster_dx_freq %>% 
-  select(cluster_id, nk, k, DX, prop_dx_per_k) %>% 
-  mutate(DX = paste("prop", DX, sep = "_")) %>% 
-  pivot_wider(id = c(cluster_id, nk, k), names_from = "DX", values_from = "prop_dx_per_k")
-
-cluster_dx_prop
 ```
 
-
-
-```{r}
-cluster_dx_prop_ids <- cluster_dx_long %>% 
-  left_join(cluster_dx_prop,
-            by = c("cluster_id", "nk", "k"))# %>% 
-  # mutate(nk = factor(nk, levels = 2:nk_max),
-         # k = factor(k, levels = 1:nk_max))
-
-
-dx <- unique(cluster_dx_prop_ids$DX)
-
-df_cluster_dx_chi2 <- expand_grid(nk = 2:nk_max,
-                                  DX = dx) %>% 
+```{r fig4-dx-chi2}
+# Generate a grid of clusters and diagnoses
+df_chi2 <- expand_grid(nk = 2:nk_max,
+                       DX = diagnoses) %>% 
   mutate(chi2 = 0, pval = 0)
-for (i in 1:nrow(df_cluster_dx_chi2)) {
-  
-  df_chi2_test <- cluster_dx_prop_ids %>% 
-    filter(nk == df_cluster_dx_chi2[[i, "nk"]]) %>% 
-    mutate(isDX = ifelse(DX == df_cluster_dx_chi2[[i, "DX"]], TRUE, FALSE),
-           isDX = factor(isDX),
-           k = factor(k))
 
+# Iterate over cluster-dx combinations
+for (i in 1:nrow(df_chi2)) {
+  
+  # Extract cluster nk and diagnosis
+  nk_i <- df_chi2[[i, "nk"]]
+  dx_i <- df_chi2[[i, "DX"]]
+  
+  # Format data to run a binary chi-squared test for the given diagnosis
+  df_chi2_test <- df_cluster_dx_long %>% 
+    filter(nk == nk_i) %>% 
+    mutate(isDX = factor(DX == dx_i),
+           k = factor(k))
+  
+  # Run the chi-squared test
   chi2 <- chisq.test(x = df_chi2_test[["k"]],
                      y = df_chi2_test[["isDX"]], 
                      simulate.p.value = TRUE, 
-                     B = 1e5)  
-
-  df_cluster_dx_chi2[[i, "chi2"]] <- chi2[["statistic"]]
-  df_cluster_dx_chi2[[i, "pval"]] <- chi2[["p.value"]]
+                     B = 1e5)
+  
+  # Assign the test values
+  df_chi2[[i, "chi2"]] <- chi2[["statistic"]]
+  df_chi2[[i, "pval"]] <- chi2[["p.value"]]
 }
-
-df_cluster_dx_chi2 <- df_cluster_dx_chi2 %>% 
-  mutate(nk = factor(nk, levels = 2:nk_max),
-         pval_lab = sprintf("%.3f", pval),
-         pval_lab = paste("p", "=", pval_lab))
 ```
 
-```{r}
-alluvial_palette <- brewer.pal(n = 9, name = "OrRd")
-for (i in 1:length(dx)) {
+```{r fig4-alluvial-plots}
+# Data frame containing cluster DX proportions with patient IDs
+df_alluvial_all <- df_cluster_dx_freq %>%
+  select(cluster_id, nk, k, DX, prop_dx_per_k) %>%
+  pivot_wider(id = c(cluster_id, nk, k), 
+              names_from = "DX", 
+              values_from = "prop_dx_per_k") %>% 
+  right_join(df_cluster_dx_long, 
+             by = c("cluster_id", "nk", "k"))  
+
+# Palette for alluvials
+alluvial_palette <- carto_pal(n = 7, "BurgYl")
+
+# Iterate over diagnoses
+for (i in 1:length(diagnoses)) {
   
-  cluster_dx_alluvial <- cluster_dx_prop_ids %>% 
-    select(ID, nk, k, DX, prop = contains(paste0("prop_", dx[i]))) %>% 
-    mutate(isDX = ifelse(DX == dx[i], TRUE, FALSE),
+  # Extract dx
+  dx_i <- diagnoses[i]
+  
+  # Subset alluvial data frame for given dx
+  df_alluvial_i <- df_alluvial_all %>% 
+    rename(prop = contains(dx_i)) %>% 
+    mutate(isDX = DX == dx_i,
            nk = factor(nk, levels = 2:nk_max),
            k = factor(k, levels = 1:nk_max))
   
-  cluster_dx_chi2_alluvial <- df_cluster_dx_chi2 %>% 
-    filter(DX == dx[i])
-
-  p_cluster_dx_alluvial <- ggplot(data = cluster_dx_alluvial, 
-         mapping = aes(x = nk, stratum = k, alluvium = ID)) + 
-    geom_flow(mapping = aes(fill = isDX,
-                            alpha = isDX),
+  # Generate alluvial plot
+  fig4_alluvial_plot <- ggplot(data = df_alluvial_i,
+                               mapping = aes(x = nk, 
+                                             stratum = k, 
+                                             alluvium = ID)) + 
+    geom_flow(mapping = aes(alpha = isDX),
               stat = "alluvium", aes.flow = "forward",
+              fill = "grey70",
               show.legend = FALSE) +
-    scale_alpha_manual(values = c(0, 0.5)) + 
-    scale_fill_manual(values = c(NA, "grey70")) + 
+    scale_alpha_manual(values = c(0, 1)) +
     new_scale_fill() + 
-    geom_stratum(mapping = aes(fill = prop)) + 
-    scale_fill_gradientn(colors = alluvial_palette[2:9],
-                         limits = c(0, 1)) + 
-    geom_text(data = cluster_dx_chi2_alluvial,
-              inherit.aes = FALSE,
-              mapping = aes(x = nk, label = pval_lab),
-              y = 750) +
+    geom_stratum(mapping = aes(fill = prop),
+                 size = 0.25) + 
+    scale_fill_gradientn(colors = alluvial_palette,
+                         limits = c(0, 1)) +
     scale_y_continuous(breaks = seq(0, 700, by = 100), 
                        minor_breaks = seq(0, 700, by = 50),
-                       limits = c(0, 750)) + 
+                       expand = expansion(add = 20)) + 
     labs(x = "Number of clusters",
          y = "Number of patients",
-         fill = "Proportion",
-         title = paste("Proportion of patients with", dx[i])) + 
+         fill = "Proportion per cluster") + 
     theme_bw() + 
-    theme(panel.grid.major.x = element_blank())
+    theme(panel.grid.major.x = element_blank(),
+          axis.title = element_text(size = font_size, family = font_family),
+          axis.text = element_text(size = font_size, family = font_family),
+          legend.title = element_text(size = font_size, family = font_family),
+          legend.text = element_text(size = font_size, family = font_family))
+
+  # Extract chi-squared p-values for given dx  
+  df_pvals_i <- df_chi2 %>% 
+    filter(DX == dx_i) %>% 
+    mutate(nk = factor(nk, levels = 2:nk_max),
+           pval = sprintf("%.2f", pval),
+           pval = paste0("p = ", pval),
+           y = "y")
   
-  # Export human ss plot
-  outfile <- paste0("sankey_human_dx_", dx[i], ".pdf")
+  # Generate a plot containing p-value labels
+  fig4_alluvial_pvals <- ggplot(df_pvals_i, 
+                                aes(x = nk, y = y, label = pval)) + 
+    geom_text(size = font_size*0.36,
+              family = font_family) + 
+    theme_void() +
+    theme(plot.margin = margin()) 
+  
+  # Combine p-values with alluvial
+  fig4_alluvial <- (fig4_alluvial_pvals / fig4_alluvial_plot) +
+    plot_layout(heights = c(0.05, 0.95)) &
+    theme(plot.margin = margin())
+  
+  # Plot dimensions in bigpts
+  fig4_alluvial_width_pt <- 510
+  fig4_alluvial_height_pt <- fig4_alluvial_width_pt/2
+  
+  # Plot dimensions in inches
+  fig4_alluvial_width_in <- fig4_alluvial_width_pt/pt_per_in
+  fig4_alluvial_height_in <- fig4_alluvial_height_pt/pt_per_in
+  
+  # Export plot
+  outfile <- paste(output_plot_prefix, "alluvial", dx_i, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile,
-      width = unit(10, "in"),
-      height = unit(5, "in"))
-  print(p_cluster_dx_alluvial)
+      width = unit(fig4_alluvial_width_in, "in"),
+      height = unit(fig4_alluvial_height_in, "in"))
+  print(fig4_alluvial)
   dev.off()
-}
-```
-
-
-```{r}
-max(cluster_dx_prop$prop_ASD)
-min(cluster_dx_prop$prop_ASD)
-
-
-
-ggplot(data = cluster_dx_prop_ids, 
-       mapping = aes(x = nk, stratum = k, alluvium = ID)) + 
-  geom_flow(mapping = aes(fill = isASD,
-                          alpha = isASD),
-            stat = "alluvium", aes.flow = "forward",
-            show.legend = FALSE) +
-  scale_alpha_manual(values = c(0, 0.5)) + 
-  scale_fill_manual(values = c(NA, "grey70")) + 
-  new_scale_fill() + 
-  geom_stratum(mapping = aes(fill = prop_ASD)) + 
-  scale_fill_gradientn(colors = alluvial_palette[2:9],
-                       limits = c(0.3, 1.0)) + 
-  labs(x = "Number of clusters",
-       y = "Number of patients",
-       fill = "Proportion") + 
-  theme_bw() + 
-  theme(panel.grid.major.x = element_blank())
-```
-
-```{r}
-cluster_dx_prop %>% 
-  arrange(prop_ASD)
-```
-
-
-```{r}
-cluster_dx_freq %>% 
-  arrange(desc(prop_dx_per_k))
   
-  filter(DX == "ASD", nk >= 7) %>% 
-  arrange(nk, k)
+}
 ```
 
