@@ -102,6 +102,9 @@ font_size <- 6
 # Empty rectangle grob
 empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
 
+# Black rectangle grob
+black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
+
 rect_w_num <- function(n) {
   out <- gTree(children = gList(empty_rect_grob,
                                 textGrob(label = n)))
@@ -722,6 +725,7 @@ for (i in 1:length(nk_subset)) {
           axis.title.y = element_blank(),
           axis.text.y = element_blank(),
           axis.ticks.y = element_blank(),
+          panel.border = element_blank(),
           plot.margin = margin())
   
   # Extract grob
@@ -734,7 +738,9 @@ for (i in 1:length(nk_subset)) {
   }
   
   # Assign grob to list
-  list_polar_plots[[i]] <- polar_plot_nk_grob[["children"]][[panel]]
+  # list_polar_plots[[i]] <- polar_plot_nk_grob[["children"]][[panel]]
+  list_polar_plots[[i]] <- gTree(children = gList(polar_plot_nk_grob, 
+                                                  empty_rect_grob))
   
 }
 ```
@@ -1058,10 +1064,23 @@ human_width_px <- dim(human_anat_vol_cropped)[2]
 human_height_px <- dim(human_anat_vol_cropped)[3]
 
 # Total number of slices
+nss <- length(nk_subset)
 nslc_tot <- nrow(df_clusters_subset)
 
+# Padding between slices within a panel
+fig3_bottom_ss_padding_pt <- 2
+
+# Padding between panels
+fig3_bottom_panel_padding_pt <- 4
+
+# Total padding width 
+fig3_ss_padding_width_pt <- fig3_bottom_panel_padding_pt*(nss-1) + fig3_bottom_ss_padding_pt*((nslc_tot - 1) - (nss-1))
+
+# Total width available to place slices
+fig3_ss_width_pt <- fig3_width - fig3_ss_padding_width_pt
+
 # Dimensions of mouse slices in bigpts
-fig3_mouse_ss_width_pt <- fig3_width/nslc_tot
+fig3_mouse_ss_width_pt <- fig3_ss_width_pt/nslc_tot
 fig3_mouse_ss_height_pt <- fig3_mouse_ss_width_pt*(mouse_height_px/mouse_width_px)
 
 # Dimensions of human slices in bigpts
@@ -1079,44 +1098,88 @@ for (i in 1:length(list_mouse_slices)) {
     
     # Dimensions of slice series grid
     fig3_bottom_ss_widths <- fig3_mouse_ss_width_pt
-    fig3_bottom_ss_heights <- c(fig3_mouse_ss_height_pt, fig3_human_ss_height_pt)
+    fig3_bottom_ss_heights <- c(fig3_mouse_ss_height_pt, fig3_bottom_ss_padding_pt, fig3_human_ss_height_pt)
     
     # Generate slice series for cluster solution    
-    fig3_bottom_ss_grobs[[i]][[j]] <- arrangeGrob(list_mouse_slices[[i]][[j]],
-                                                  list_human_slices[[i]][[j]],
-                                                  layout_matrix = cbind(1:2),
-                                                  widths = unit(fig3_bottom_ss_widths, "bigpts"),
-                                                  heights = unit(fig3_bottom_ss_heights, "bigpts"))
+    ss <- arrangeGrob(list_mouse_slices[[i]][[j]],
+                      black_rect_grob,
+                      list_human_slices[[i]][[j]],
+                      layout_matrix = cbind(1:3),
+                      widths = unit(fig3_bottom_ss_widths, "bigpts"),
+                      heights = unit(fig3_bottom_ss_heights, "bigpts"))
+    
+    ss_border <- rectGrob(gp = gpar(fill = NA, col = "red", lwd = 2))
+    
+    outfile <- paste(output_plot_prefix, "bottom_ss", names(list_mouse_slices[[i]])[j], sep = "_")
+    outfile <- paste0(outfile, ".pdf")
+    outfile <- file.path(output_dir, outfile)
+    export_pdf(x = ss,
+               file = outfile,
+               width = sum(fig3_bottom_ss_widths),
+               height = sum(fig3_bottom_ss_heights),
+               units = "bigpts")
+    
+    # fig3_bottom_ss_grobs[[i]][[j]] <- ss
+    fig3_bottom_ss_grobs[[i]][[j]] <- gTree(children = gList(ss, ss_border))
+    
   }
 }
-```
 
-```{r fig3-bottom-panel-grobs}
+# BREAK HERE ####
+#```{r fig3-bottom-panel-grobs}
+# Height of polar plot based on ss width
 fig3_polar_height_pt <- 2*fig3_mouse_ss_width_pt
 
+# Iterate over bottom panel ss grobs
 fig3_bottom_panel_grobs <- vector(mode = "list", length = length(fig3_bottom_ss_grobs))
-fig3_bottom_widths <- numeric(length(fig3_bottom_ss_grobs))
+fig3_bottom_widths_nopadding <- numeric(length(fig3_bottom_ss_grobs))
 for (i in 1:length(fig3_bottom_panel_grobs)) {
   
+  # Number of slices in the current panel
   nslc <- length(fig3_bottom_ss_grobs[[i]])
   
-  fig3_bottom_panel_widths <- rep(fig3_mouse_ss_width_pt, nslc)
+  # Number of columns in the panel grid
+  ncols <- 2*nslc-1
+  
+  # Number of grobs in the panel
+  ngrobs <- 2*nslc
+  
+  # Indices for ss and padding elements
+  ind_ss <- seq(1, ncols, by = 2)
+  ind_padding <- seq(2, ncols, by = 2)
+  
+  # Widths of the panel grid
+  fig3_bottom_panel_widths <- numeric(ncols)
+  fig3_bottom_panel_widths[ind_ss] <- fig3_mouse_ss_width_pt
+  fig3_bottom_panel_widths[ind_padding] <- fig3_bottom_ss_padding_pt
+  # fig3_bottom_panel_widths <- rep(fig3_mouse_ss_width_pt, nslc)
+  
+  # Heights of the panel grid
   fig3_bottom_panel_heights <- c(sum(fig3_bottom_ss_heights), fig3_polar_height_pt)
   
-  fig3_bottom_panel_grobs_list <- c(fig3_bottom_ss_grobs[[i]],
-                                    list_polar_plots[i])
+  # Build the list of grobs for the panel
+  fig3_bottom_panel_grobs_list <- vector(mode = "list", length = ngrobs)
+  fig3_bottom_panel_grobs_list[ind_ss] <- fig3_bottom_ss_grobs[[i]]
+  fig3_bottom_panel_grobs_list[ind_padding] <- list(zeroGrob())
+  fig3_bottom_panel_grobs_list[ngrobs] <- list_polar_plots[i]
+  # fig3_bottom_panel_grobs_list <- c(fig3_bottom_ss_grobs[[i]],
+                                    # list_polar_plots[i])
   
-  fig3_bottom_panel_layout <-  rbind(1:nslc,
-                                     rep(nslc+1, nslc))
+  # Layout of the panel grid
+  fig3_bottom_panel_layout <-  rbind(1:(ncols),
+                                     rep(ngrobs, ncols))
   
+  # Grob for the current panel
   fig3_bottom_panel_grobs[[i]] <- arrangeGrob(grobs = fig3_bottom_panel_grobs_list,
                                               layout_matrix = fig3_bottom_panel_layout,
                                               widths = unit(fig3_bottom_panel_widths, "bigpts"),
                                               heights = unit(fig3_bottom_panel_heights, "bigpts"))
   
+  # Dimensions of the panel in bigpts
   fig3_bottom_panel_width <- sum(fig3_bottom_panel_widths)
   fig3_bottom_panel_height <- sum(fig3_bottom_panel_heights)  
     
+  # Export panel
   outfile <- paste(output_plot_prefix, "bottom_panel_nk", nk_subset[i], sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
@@ -1126,17 +1189,32 @@ for (i in 1:length(fig3_bottom_panel_grobs)) {
              height = fig3_bottom_panel_height,
              units = "bigpts")  
   
-  fig3_bottom_widths[i] <- fig3_bottom_panel_width
+  fig3_bottom_widths_nopadding[i] <- fig3_bottom_panel_width
   
 }
-```
 
-```{r fig3-bottom-grob}
+# BREAK HERE ####
+#```{r fig3-bottom-grob}
+
+ngrobs <- 2*nss-1
+
+# Indices for ss and padding elements
+ind_panels <- seq(1, ngrobs, by = 2)
+ind_padding <- seq(2, ngrobs, by = 2)
+
+fig3_bottom_widths <- numeric(ngrobs)
+fig3_bottom_widths[ind_panels] <- fig3_bottom_widths_nopadding
+fig3_bottom_widths[ind_padding] <- fig3_bottom_panel_padding_pt
+
 fig3_bottom_heights <- fig3_bottom_panel_height
 
-fig3_bottom_layout <- rbind(1:4)
+fig3_bottom_grobs_list <- vector(mode = "list", length = ngrobs)
+fig3_bottom_grobs_list[ind_panels] <- fig3_bottom_panel_grobs
+fig3_bottom_grobs_list[ind_padding] <- list(zeroGrob())
 
-fig3_bottom_grob <- arrangeGrob(grobs = fig3_bottom_panel_grobs,
+fig3_bottom_layout <- rbind(1:ngrobs)
+
+fig3_bottom_grob <- arrangeGrob(grobs = fig3_bottom_grobs_list,
                                 layout_matrix = fig3_bottom_layout,
                                 widths = unit(fig3_bottom_widths, "bigpts"),
                                 heights = unit(fig3_bottom_heights, "bigpts"))
@@ -1152,9 +1230,9 @@ export_pdf(x = fig3_bottom_grob,
            width = fig3_bottom_width,
            height = fig3_bottom_height,
            units = "bigpts")
-```
 
-```{r fig3-build}
+# BREAK HERE ####
+#```{r fig3-build}
 # Combine heatmaps using patchwork
 fig3_heatmap_patchwork <- (fig3_heatmap_pathways / fig3_heatmap_human_match) +
   plot_layout(heights = c(0.95, 0.05)) &
@@ -1162,13 +1240,17 @@ fig3_heatmap_patchwork <- (fig3_heatmap_pathways / fig3_heatmap_human_match) +
 fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
 
 
-fig3_height_padding_pt <- 19
+fig3_height_padding_1_pt <- 8
+fig3_height_padding_2_pt <- 32
+fig3_height_padding_3_pt <- 19
 
 fig3_heatmap_height_pt <- 205
 
 # Figure 3 dimensions
-fig3_widths <- c(25.5, fig3_width - 25.5)
-fig3_heights <- c(fig3_height_padding_pt, fig3_heatmap_height_pt, fig3_height_padding_pt, fig3_height_padding_pt, fig3_bottom_height)
+fig3_widths <- c(26, fig3_width - 26)
+fig3_heights <- c(fig3_height_padding_1_pt, fig3_heatmap_height_pt,
+                  fig3_height_padding_2_pt, fig3_height_padding_3_pt, 
+                  fig3_bottom_height)
 
 # Figure 3 layout
 fig3_layout <- rbind(c(01, 02),
@@ -1178,11 +1260,11 @@ fig3_layout <- rbind(c(01, 02),
                      c(06, 06))
 
 # Figure 3 grob
-fig3_grob <- arrangeGrob(empty_rect_grob,
+fig3_grob <- arrangeGrob(zeroGrob(),
                          fig3_heatmap_patchwork_grob,
                          fig3_heatmap_dendrogram_grob,
                          empty_rect_grob,
-                         empty_rect_grob,
+                         zeroGrob(),
                          fig3_bottom_grob,
                          layout_matrix = fig3_layout,
                          widths = unit(fig3_widths, "bigpts"),
@@ -1211,6 +1293,11 @@ dev.off()
 
 
 # Supplementary
+
+```{r}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
 
 ## Export matching mouse-human clusters
 
