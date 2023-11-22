@@ -1095,6 +1095,7 @@ for (i in 1:length(list_mouse_slices)) {
 fig3_polar_height_pt <- 2*fig3_mouse_ss_width_pt
 
 fig3_bottom_panel_grobs <- vector(mode = "list", length = length(fig3_bottom_ss_grobs))
+fig3_bottom_widths <- numeric(length(fig3_bottom_ss_grobs))
 for (i in 1:length(fig3_bottom_panel_grobs)) {
   
   nslc <- length(fig3_bottom_ss_grobs[[i]])
@@ -1113,43 +1114,45 @@ for (i in 1:length(fig3_bottom_panel_grobs)) {
                                               widths = unit(fig3_bottom_panel_widths, "bigpts"),
                                               heights = unit(fig3_bottom_panel_heights, "bigpts"))
   
+  fig3_bottom_panel_width <- sum(fig3_bottom_panel_widths)
+  fig3_bottom_panel_height <- sum(fig3_bottom_panel_heights)  
+    
+  outfile <- paste(output_plot_prefix, "bottom_panel_nk", nk_subset[i], sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = fig3_bottom_panel_grobs[[i]],
+             file = outfile,
+             width = fig3_bottom_panel_width,
+             height = fig3_bottom_panel_height,
+             units = "bigpts")  
+  
+  fig3_bottom_widths[i] <- fig3_bottom_panel_width
+  
 }
-
-test_width <- sum(fig3_bottom_panel_widths)
-test_height <- sum(fig3_bottom_panel_heights)
-
-outfile <- file.path(output_dir, "test.pdf")
-export_pdf(x = fig3_bottom_grobs[[i]],
-           file = outfile,
-           width = test_width,
-           height = test_height,
-           units = "bigpts")
 ```
 
+```{r fig3-bottom-grob}
+fig3_bottom_heights <- fig3_bottom_panel_height
 
+fig3_bottom_layout <- rbind(1:4)
 
-
-
-
-```{r}
-fig3_bottom_widths <- rep(fig3_inset_polar_width_pt, length(nk_subset))
-fig3_bottom_heights <- c(sum(fig3_inset_heights))
-
-fig3_bottom_layout <- rbind(c(01, 02, 03, 04))
-
-fig3_bottom_grob <- arrangeGrob(grobs = list_inset_grobs,
+fig3_bottom_grob <- arrangeGrob(grobs = fig3_bottom_panel_grobs,
                                 layout_matrix = fig3_bottom_layout,
                                 widths = unit(fig3_bottom_widths, "bigpts"),
                                 heights = unit(fig3_bottom_heights, "bigpts"))
 
-outfile <- file.path(output_dir, "bottom_test.pdf")
+fig3_bottom_width <- sum(fig3_bottom_widths)
+fig3_bottom_height <- sum(fig3_bottom_heights)
+
+outfile <- paste(output_plot_prefix, "bottom_panel", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
 export_pdf(x = fig3_bottom_grob,
            file = outfile,
-           width = sum(fig3_bottom_widths),
-           height = sum(fig3_bottom_heights),
+           width = fig3_bottom_width,
+           height = fig3_bottom_height,
            units = "bigpts")
 ```
-
 
 ```{r fig3-build}
 # Combine heatmaps using patchwork
@@ -1165,7 +1168,7 @@ fig3_heatmap_height_pt <- 205
 
 # Figure 3 dimensions
 fig3_widths <- c(25.5, fig3_width - 25.5)
-fig3_heights <- c(fig3_height_padding_pt, fig3_heatmap_height_pt, fig3_height_padding_pt, fig3_height_padding_pt, fig3_polar_height)
+fig3_heights <- c(fig3_height_padding_pt, fig3_heatmap_height_pt, fig3_height_padding_pt, fig3_height_padding_pt, fig3_bottom_height)
 
 # Figure 3 layout
 fig3_layout <- rbind(c(01, 02),
@@ -1180,8 +1183,7 @@ fig3_grob <- arrangeGrob(empty_rect_grob,
                          fig3_heatmap_dendrogram_grob,
                          empty_rect_grob,
                          empty_rect_grob,
-                         # fig3_pathways_polar_grob,
-                         empty_rect_grob,
+                         fig3_bottom_grob,
                          layout_matrix = fig3_layout,
                          widths = unit(fig3_widths, "bigpts"),
                          heights = unit(fig3_heights, "bigpts"))
