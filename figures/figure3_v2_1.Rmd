@@ -2,7 +2,7 @@
 title: "Figure 3"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-11-21"
+date: "2023-11-23"
 output: html_document
 ---
 
@@ -39,7 +39,7 @@ source("../src/analysis.R")
 output_dir <- "figure3/"
 
 # Plot file prefix
-output_plot_prefix <- "figure3_test"
+output_plot_prefix <- "figure3"
 
 # Similarity pipeline
 version <- "v2"
@@ -258,7 +258,7 @@ df_sim_pvals <- df_sim_pvals %>%
 ```
 
 
-# Element: Mouse pathway enrichment heatmap
+# Figure element: Mouse pathway enrichment heatmap
 
 ```{r fig3-heatmap-pathways-import}
 # Database versions
@@ -489,7 +489,7 @@ df_pathway_hclust <- df_pathway_hclust %>%
   select(-pathway_cluster, pathway_cluster = pathway_cluster_new)
 ```
 
-```{r fig3-heatmap-dendrogram}
+```{r fig3-heatmap-dendrogram-plot}
 # Generate clustered heatmap
 fig3_pheatmap <- pheatmap(mat = mat_pathways_nk_gt4_subset,
                           cluster_col = FALSE,
@@ -503,7 +503,7 @@ fig3_heatmap_dendrogram_grob <- fig3_pheatmap[["gtable"]][["grobs"]][[1]]
 fig3_heatmap_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
 ```
 
-```{r fig3-heatmap-enrichment}
+```{r fig3-heatmap-enrichment-plot}
 # Join pathway enrichment information with pathway clusters
 df_pathways_heatmap <- df_pathways_nk_gt4_subset %>% 
   left_join(df_pathway_hclust, by = "pathway") %>% 
@@ -543,15 +543,12 @@ fig3_heatmap_pathways <- ggplot(df_pathways_heatmap,
        y = "Biological pathway module",
        fill = heatmap_fill_lab) +
   theme_bw() +
-  theme(strip.background.y = element_blank(),
-        strip.text.y = element_blank(),
-        strip.text.x = element_text(size = font_size, family = font_family,
-                                    margin = margin(b = 1, t = 1)),
-        strip.background.x = element_rect(fill = "grey90"),
+  theme(strip.background = element_blank(),
+        strip.text = element_blank(),
         panel.spacing = unit(4, "bigpts"),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
+        axis.title.x = element_text(size = font_size, family = font_family),
+        axis.text.x = element_text(size = font_size, family = font_family),
+        axis.ticks.x = element_line(size = 0.25),
         axis.title.y = element_text(size = font_size, family = font_family),
         axis.text.y = element_text(size = font_size-1, family = font_family), 
         axis.ticks.y = element_line(size = 0.25),
@@ -572,7 +569,7 @@ fig3_heatmap_pathways <- fig3_heatmap_pathways +
   theme(legend.position = "none")
 ```
 
-```{r fig3-heatmap-human-match}
+```{r fig3-heatmap-human-match-plot}
 # Determine which mouse clusters have significant human matches
 df_sig_nk <- df_sim_pvals %>%
   group_by(mouse_nk, mouse_k) %>% 
@@ -603,15 +600,15 @@ fig3_heatmap_human_match <- ggplot(df_sig_nk,
   labs(x = "Mouse cluster",
        fill = "Human match") + 
   theme_bw() +
-  theme(strip.background = element_blank(),
-        strip.text = element_blank(),
-        panel.spacing = unit(4, "bigpts"),
-        axis.title.x = element_text(size = font_size, family = font_family),
-        axis.text.x = element_text(size = font_size, family = font_family),
-        axis.ticks.x = element_line(size = 0.25),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(), 
+  theme(panel.spacing = unit(4, "bigpts"),
+        strip.background.x = element_rect(fill = "grey90"),
+        strip.text.x = element_text(size = font_size, family = font_family,
+                                    margin = margin(b = 1, t = 1)),
+        strip.background.y = element_blank(),
+        strip.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
         legend.direction = "horizontal",
         legend.position = "bottom",
         legend.key.size = unit(10, "bigpts"),
@@ -635,8 +632,62 @@ fig3_heatmap_human_match <- fig3_heatmap_human_match +
   theme(legend.position = "none")
 ```
 
-# Element: Mouse pathway polar plots
+```{r fig3-heatmap-build}
+# Combine heatmaps using patchwork
+fig3_heatmap_patchwork <- (fig3_heatmap_human_match / fig3_heatmap_pathways) +
+  plot_layout(heights = c(0.05, 0.95)) &
+  theme(plot.margin = margin(l = 0))
+fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
 
+# Width of dendrogram panel in bigpts
+fig3_heatmap_dendrogram_width_pt <- 26
+
+# Dimensions of heatmap patchwork in bigpts
+fig3_heatmap_patchwork_width_pt <- fig3_width - fig3_heatmap_dendrogram_width_pt
+fig3_heatmap_patchwork_height_pt <- 205
+
+# Heights of padding elements in bigpts
+fig3_heatmap_padding_height_1_pt <- 21
+fig3_heatmap_padding_height_2_pt <- 19
+# fig3_heatmap_padding_height_3_pt <- 19
+
+# Dimensions of heatmap plot
+fig3_heatmap_widths <- c(fig3_heatmap_dendrogram_width_pt, fig3_heatmap_patchwork_width_pt)
+fig3_heatmap_heights <- c(fig3_heatmap_padding_height_1_pt, 
+                          fig3_heatmap_patchwork_height_pt,
+                          fig3_heatmap_padding_height_2_pt)
+
+# Layout of heatmap plot
+fig3_heatmap_layout <- rbind(c(01, 02),
+                             c(03, 02),
+                             c(04, 02))
+
+# Grob grid for heatmap plot
+fig3_heatmap_grob <- arrangeGrob(zeroGrob(),
+                                 fig3_heatmap_patchwork_grob,
+                                 fig3_heatmap_dendrogram_grob,
+                                 zeroGrob(),
+                                 layout_matrix = fig3_heatmap_layout,
+                                 widths = unit(fig3_heatmap_widths, "bigpts"),
+                                 heights = unit(fig3_heatmap_heights, "bigpts"))
+
+# Dimensions of plot in bigpts
+fig3_heatmap_width_pt <- sum(fig3_heatmap_widths)
+fig3_heatmap_height_pt <- sum(fig3_heatmap_heights)
+
+# Export plot
+outfile <- paste(output_plot_prefix, "heatmap", sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+export_pdf(x = fig3_heatmap_grob,
+           file = outfile,
+           width = fig3_heatmap_width_pt,
+           height = fig3_heatmap_height_pt,
+           units = "bigpts")
+```
+
+
+# Figure element: Mouse pathway polar plots
 
 ```{r fig3-pathways-polar-plots}
 # Select cluster solutions
@@ -746,7 +797,7 @@ for (i in 1:length(nk_subset)) {
 ```
 
 
-# Element: Mouse brain slices
+# Figure element: Mouse brain slices
 
 ```{r fig3-ss-mouse-paths}
 # Mouse parameter set ID
@@ -885,7 +936,7 @@ for (l in 1:length(list_mouse_slices)) {
 ```
 
 
-## Human brain slices
+# Figure element: Human brain slices
 
 ```{r fig3-ss-human-paths}
 # Human parameter set ID
@@ -1098,12 +1149,12 @@ for (i in 1:length(list_mouse_slices)) {
     
     # Dimensions of slice series grid
     fig3_bottom_ss_widths <- fig3_mouse_ss_width_pt
-    fig3_bottom_ss_heights <- c(fig3_mouse_ss_height_pt, fig3_bottom_ss_padding_pt, fig3_human_ss_height_pt)
+    fig3_bottom_ss_heights <- c(fig3_human_ss_height_pt, fig3_bottom_ss_padding_pt, fig3_mouse_ss_height_pt)
     
     # Generate slice series for cluster solution    
-    ss <- arrangeGrob(list_mouse_slices[[i]][[j]],
+    ss <- arrangeGrob(list_human_slices[[i]][[j]],
                       black_rect_grob,
-                      list_human_slices[[i]][[j]],
+                      list_mouse_slices[[i]][[j]],
                       layout_matrix = cbind(1:3),
                       widths = unit(fig3_bottom_ss_widths, "bigpts"),
                       heights = unit(fig3_bottom_ss_heights, "bigpts"))
@@ -1124,9 +1175,9 @@ for (i in 1:length(list_mouse_slices)) {
     
   }
 }
+```
 
-# BREAK HERE ####
-#```{r fig3-bottom-panel-grobs}
+```{r fig3-bottom-panel-grobs}
 # Height of polar plot based on ss width
 fig3_polar_height_pt <- 2*fig3_mouse_ss_width_pt
 
@@ -1142,7 +1193,7 @@ for (i in 1:length(fig3_bottom_panel_grobs)) {
   ncols <- 2*nslc-1
   
   # Number of grobs in the panel
-  ngrobs <- 2*nslc
+  ngrobs <- 2*nslc+1
   
   # Indices for ss and padding elements
   ind_ss <- seq(1, ncols, by = 2)
@@ -1152,22 +1203,21 @@ for (i in 1:length(fig3_bottom_panel_grobs)) {
   fig3_bottom_panel_widths <- numeric(ncols)
   fig3_bottom_panel_widths[ind_ss] <- fig3_mouse_ss_width_pt
   fig3_bottom_panel_widths[ind_padding] <- fig3_bottom_ss_padding_pt
-  # fig3_bottom_panel_widths <- rep(fig3_mouse_ss_width_pt, nslc)
   
-  # Heights of the panel grid
-  fig3_bottom_panel_heights <- c(sum(fig3_bottom_ss_heights), fig3_polar_height_pt)
+  # Heights of the panel grids
+  fig3_bottom_panel_heights <- c(fig3_polar_height_pt, fig3_bottom_ss_padding_pt, sum(fig3_bottom_ss_heights))
   
   # Build the list of grobs for the panel
   fig3_bottom_panel_grobs_list <- vector(mode = "list", length = ngrobs)
-  fig3_bottom_panel_grobs_list[ind_ss] <- fig3_bottom_ss_grobs[[i]]
-  fig3_bottom_panel_grobs_list[ind_padding] <- list(zeroGrob())
-  fig3_bottom_panel_grobs_list[ngrobs] <- list_polar_plots[i]
-  # fig3_bottom_panel_grobs_list <- c(fig3_bottom_ss_grobs[[i]],
-                                    # list_polar_plots[i])
+  fig3_bottom_panel_grobs_list[1] <- list_polar_plots[i]
+  fig3_bottom_panel_grobs_list[2] <- list(zeroGrob())
+  fig3_bottom_panel_grobs_list[ind_ss+2] <- fig3_bottom_ss_grobs[[i]]
+  fig3_bottom_panel_grobs_list[ind_padding+2] <- list(zeroGrob())
   
   # Layout of the panel grid
-  fig3_bottom_panel_layout <-  rbind(1:(ncols),
-                                     rep(ngrobs, ncols))
+  fig3_bottom_panel_layout <-  rbind(rep(1, ncols),
+                                     rep(2, ncols),
+                                     3:(ncols+2))
   
   # Grob for the current panel
   fig3_bottom_panel_grobs[[i]] <- arrangeGrob(grobs = fig3_bottom_panel_grobs_list,
@@ -1192,9 +1242,9 @@ for (i in 1:length(fig3_bottom_panel_grobs)) {
   fig3_bottom_widths_nopadding[i] <- fig3_bottom_panel_width
   
 }
+```
 
-# BREAK HERE ####
-#```{r fig3-bottom-grob}
+```{r fig3-bottom-grob}
 
 ngrobs <- 2*nss-1
 
@@ -1230,42 +1280,27 @@ export_pdf(x = fig3_bottom_grob,
            width = fig3_bottom_width,
            height = fig3_bottom_height,
            units = "bigpts")
+```
 
-# BREAK HERE ####
-#```{r fig3-build}
-# Combine heatmaps using patchwork
-fig3_heatmap_patchwork <- (fig3_heatmap_pathways / fig3_heatmap_human_match) +
-  plot_layout(heights = c(0.95, 0.05)) &
-  theme(plot.margin = margin(l = 0))
-fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
-
-
-fig3_height_padding_1_pt <- 8
-fig3_height_padding_2_pt <- 32
-fig3_height_padding_3_pt <- 19
-
-fig3_heatmap_height_pt <- 205
+```{r fig3-build}
+# Padding between heatmap and ss
+fig3_padding_height_pt <- 20
 
 # Figure 3 dimensions
-fig3_widths <- c(26, fig3_width - 26)
-fig3_heights <- c(fig3_height_padding_1_pt, fig3_heatmap_height_pt,
-                  fig3_height_padding_2_pt, fig3_height_padding_3_pt, 
-                  fig3_bottom_height)
+fig3_widths <- c(fig3_width)
+fig3_heights <- c(fig3_bottom_height,
+                  fig3_padding_height_pt,
+                  fig3_heatmap_height_pt)
 
 # Figure 3 layout
-fig3_layout <- rbind(c(01, 02),
-                     c(03, 02),
-                     c(04, 02),
-                     c(05, 05),
-                     c(06, 06))
+fig3_layout <- rbind(c(01),
+                     c(02),
+                     c(03))
 
 # Figure 3 grob
-fig3_grob <- arrangeGrob(zeroGrob(),
-                         fig3_heatmap_patchwork_grob,
-                         fig3_heatmap_dendrogram_grob,
-                         empty_rect_grob,
+fig3_grob <- arrangeGrob(fig3_bottom_grob,
                          zeroGrob(),
-                         fig3_bottom_grob,
+                         fig3_heatmap_grob,
                          layout_matrix = fig3_layout,
                          widths = unit(fig3_widths, "bigpts"),
                          heights = unit(fig3_heights, "bigpts"))
