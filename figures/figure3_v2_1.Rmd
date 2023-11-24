@@ -87,6 +87,11 @@ permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
 nk_max <- params %>% 
   filter(id == params_id) %>% 
   pull(human_cluster_nk_max)
+
+# Mouse pipeline parameter set ID
+mouse_params_id <- params %>% 
+  filter(id == params_id) %>% 
+  pull(mouse_id)
 ```
 
 ```{r fig3-graphical-params}
@@ -511,6 +516,26 @@ df_pathways_heatmap <- df_pathways_nk_gt4_subset %>%
   mutate(pathway = factor(pathway, levels = pathway_lvls_clustered),
          acronym = factor(acronym, levels = pathway_label_lvls_clustered))
 
+df_sig_nk <- df_sim_pvals %>% 
+  group_by(mouse_nk, mouse_k) %>% 
+  summarise(p = min(pval),
+            nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(plab = case_when(p < 0.05 ~ "**",
+                          p >= 0.05 & p < 0.1 ~ "*",
+                          p >= 0.1 ~ ""),
+         has_match = ifelse(nsignificant > 0, TRUE, FALSE),
+         y = "y") %>% 
+  select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", "nk", "k", 
+        sep = "-", remove = FALSE) 
+
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  left_join(df_sig_nk %>% 
+              select(cluster_id, has_match),
+            by = "cluster_id")
+
 # Clamped enrichment statistic
 NLQ_threshold <- 30
 df_pathways_heatmap <- df_pathways_heatmap %>% 
@@ -571,34 +596,59 @@ fig3_heatmap_pathways <- fig3_heatmap_pathways +
 
 ```{r fig3-heatmap-human-match-plot}
 # Determine which mouse clusters have significant human matches
-df_sig_nk <- df_sim_pvals %>%
-  group_by(mouse_nk, mouse_k) %>% 
-  summarise(nsignificant = sum(significant),
-            .groups = "drop") %>%
-  mutate(has_match = ifelse(nsignificant > 0, TRUE, FALSE),
-         dummy = "y") %>% 
-  select(nk = mouse_nk, k = mouse_k, has_match, dummy) %>% 
-  filter(nk >= 4) %>% 
-  unite(col = "cluster_id", "nk", "k", 
-        sep = "-", remove = FALSE) %>% 
-  mutate(nk = factor(nk, levels = 4:nk_max),
-         k = factor(k, levels = 1:nk_max))
+# df_sig_nk <- df_sim_pvals %>%
+#   group_by(mouse_nk, mouse_k) %>% 
+#   summarise(nsignificant = sum(significant),
+#             .groups = "drop") %>%
+#   mutate(has_match = ifelse(nsignificant > 0, TRUE, FALSE),
+#          dummy = "y") %>% 
+#   select(nk = mouse_nk, k = mouse_k, has_match, dummy) %>% 
+#   filter(nk >= 4) %>% 
+#   unite(col = "cluster_id", "nk", "k", 
+#         sep = "-", remove = FALSE) %>% 
+#   mutate(nk = factor(nk, levels = 4:nk_max),
+#          k = factor(k, levels = 1:nk_max))
+
+# df_sig_nk <- df_sim_pvals %>% 
+#   group_by(mouse_nk, mouse_k) %>% 
+#   summarise(p = min(pval),
+#             nsignificant = sum(significant),
+#             .groups = "drop") %>% 
+#   mutate(plab = case_when(p < 0.05 ~ "**",
+#                           p >= 0.05 & p < 0.1 ~ "*",
+#                           p >= 0.1 ~ ""),
+#          has_match = ifelse(nsignificant > 0, TRUE, FALSE),
+#          y = "y") %>% 
+#   select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
+#   filter(nk >= 4) %>% 
+#   unite(col = "cluster_id", "nk", "k", 
+#         sep = "-", remove = FALSE) %>% 
+#   mutate(nk = factor(nk, levels = 4:nk_max),
+#          k = factor(k, levels = 1:nk_max))
 
 # Generate heatmap of mouse clusters with human matches
 fig3_heatmap_human_match <- ggplot(df_sig_nk,
-                                   mapping = aes(x = k, 
-                                                 y = dummy, 
-                                                 fill = has_match)) + 
+                                   mapping = aes(x = factor(k), 
+                                                 y = y, 
+                                                 fill = p,
+                                                 label = plab)) + 
   geom_tile(col = "grey50") +
+  geom_text(col = "white",
+            angle = 90,
+            vjust = "middle",
+            nudge_x = 0.1,
+            family = font_family,
+            size = font_size*0.36) + 
   facet_grid(.~nk, scales = "free", space = "free") + 
-  scale_x_discrete(expand = expansion()) + 
+  scale_x_discrete(expand = expansion()) +
   scale_y_discrete(expand = expansion()) +
-  scale_fill_manual(values = brewer.pal(n = 9, name = "PuBu")[c(1, 9)], 
-                    labels = c("No", "Yes"),
-                    guide = guide_legend(title.position = "top",
-                                         title.hjust = 0.5)) + 
+  scale_fill_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[c(1:4, 8)])) +
+  # scale_fill_manual(values = brewer.pal(n = 9, name = "PuBu")[c(1, 9)], 
+  #                   labels = c("No", "Yes"),
+  #                   guide = guide_legend(title.position = "top",
+  #                                        title.hjust = 0.5)) + 
   labs(x = "Mouse cluster",
-       fill = "Human match") + 
+       fill = "Human match") +
   theme_bw() +
   theme(panel.spacing = unit(4, "bigpts"),
         strip.background.x = element_rect(fill = "grey90"),
@@ -689,7 +739,7 @@ export_pdf(x = fig3_heatmap_grob,
 
 # Figure element: Mouse pathway polar plots
 
-```{r fig3-pathways-polar-plots}
+```{r}
 # Select cluster solutions
 nk_subset <- c(4, 6, 8, 10)
 
@@ -709,6 +759,109 @@ df_clusters_subset <- df_pathways_subset %>%
   select(cluster_id, nk, k) %>% 
   distinct() %>% 
   arrange(nk, k)
+```
+
+```{r}
+mouse_pipeline_dir <- "../data/mouse/derivatives/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version, mouse_params_id)
+
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
+mouse_cluster_file <- "clusters.csv"
+mouse_cluster_file <- file.path(mouse_cluster_dir, mouse_cluster_file)
+df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+colnames(df_mouse_clusters) <- c("ID", paste0("nk", 2:nk_max))
+
+df_mouse_clusters_long <- df_mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk", values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
+         nk = as.numeric(nk)) %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)  
+
+cluster_ids_nk4 <- df_mouse_clusters_long %>% 
+  filter(nk == 4) %>% 
+  select(cluster_id, nk, k) %>% 
+  distinct() %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)
+
+cluster_ids_gt4 <- df_mouse_clusters_long %>% 
+  semi_join(df_mouse_matches, by = "cluster_id") %>% 
+  filter(nk > 4) %>% 
+  select(cluster_id, nk, k) %>% 
+  distinct() %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)
+
+df_cluster_grid <- expand_grid(cluster_id_nk4 = cluster_ids_nk4,
+                               cluster_id = cluster_ids_gt4,
+                               p = 0)
+for (i in 1:nrow(df_cluster_grid)) {
+  
+  models_in_clust_4 <- df_mouse_clusters_long %>% 
+    filter(cluster_id == df_cluster_grid[[i, "cluster_id_nk4"]]) %>% 
+    pull(ID)
+  
+  models_in_clust <- df_mouse_clusters_long %>% 
+    filter(cluster_id == df_cluster_grid[[i, "cluster_id"]]) %>% 
+    pull(ID)
+  
+  intersection <- intersect(models_in_clust, models_in_clust_4)
+  df_cluster_grid[[i, "p"]] <- length(intersection)/length(models_in_clust)
+  
+}
+
+
+df_cluster_grid <- df_cluster_grid %>% 
+  group_by(cluster_id) %>% 
+  filter(p == max(p)) %>% 
+  ungroup() %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_ids_gt4),
+         cluster_id_nk4 = factor(cluster_id_nk4, levels = cluster_ids_nk4)) %>% 
+  arrange(cluster_id_nk4, cluster_id)
+
+df_cluster_grid <- df_cluster_grid %>% 
+  separate(col = "cluster_id", into = c("nk", "k"),
+           sep = "-", remove = FALSE) %>% 
+  filter(nk %in% nk_subset)
+
+df_cluster_grid 
+```
+
+```{r}
+# Palette for mouse pathway plot
+pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
+                            carto_pal(12, "Vivid")[1],
+                            carto_pal(12, "Safe")[4],
+                            carto_pal(12, "Prism")[8])
+
+df_cluster_palette_nk4 <- tibble(nk = 4, k = 1:4,
+                                 colour = pathways_mouse_palette) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-")
+
+
+
+df_polar_palette <- df_cluster_grid %>% 
+  left_join(df_cluster_palette_nk4, 
+            by = c("cluster_id_nk4" = "cluster_id")) 
+
+df_polar_palette <- bind_rows(df_polar_palette %>% 
+                                select(cluster_id = cluster_id_nk4,
+                                       colour) %>% 
+                                distinct(),
+                              df_polar_palette %>% 
+                                select(cluster_id, colour)) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"), 
+           sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  arrange(nk, k)
+```
+
+```{r fig3-pathways-polar-plots}
+df_polar_palette <- df_polar_palette %>% 
+  semi_join(df_mouse_matches,
+            by = c("cluster_id", "nk", "k"))
 
 # Polar plot pathway order
 polar_plot_lvls <- c(" ", pathway_lvls_clustered)
@@ -747,6 +900,10 @@ for (i in 1:length(nk_subset)) {
     mutate(pathway = factor(pathway, levels = polar_plot_lvls),
            NLQ = ifelse(NLQ > polar_plot_threshold, polar_plot_threshold, NLQ))
   
+  polar_palette_nk <- df_polar_palette %>% 
+    filter(nk == nk_subset[i]) %>% 
+    pull(colour)
+  
   # Generate polar plot
   polar_plot_nk <- ggplot(df_polar_plot, 
                           aes(x = pathway, 
@@ -754,7 +911,9 @@ for (i in 1:length(nk_subset)) {
                               group = cluster_id, 
                               fill = cluster_id, 
                               col = cluster_id)) + 
-    geom_ribbon(alpha = 0.3, show.legend = FALSE) + 
+    geom_ribbon(alpha = 0.3, 
+                size = 0.5,
+                show.legend = FALSE) + 
     geom_text(data = polar_labels,
               inherit.aes = FALSE,
               mapping = aes(x = pathway,
@@ -766,8 +925,8 @@ for (i in 1:length(nk_subset)) {
     scale_x_discrete(expand = expansion(), 
                      labels = pathway_label_lvls_clustered) + 
     scale_y_continuous(breaks = polar_breaks) +
-    # scale_fill_manual(values = polar_palette) +
-    # scale_colour_manual(values = polar_palette) +
+    scale_fill_manual(values = polar_palette_nk) +
+    scale_colour_manual(values = polar_palette_nk) +
     theme_bw() +
     theme(axis.title.x = element_blank(),
           axis.text.x = element_text(size = font_size-1,
@@ -1142,6 +1301,10 @@ fig3_human_ss_height_pt <- fig3_human_ss_width_pt*(human_height_px/human_width_p
 fig3_bottom_ss_grobs <- vector(mode = "list", length = length(list_mouse_slices))
 for (i in 1:length(list_mouse_slices)) {
   
+  neuro_palette_nk <- df_polar_palette %>% 
+    filter(nk == nk_subset[i]) %>% 
+    pull(colour)
+  
   # Number of slices for nk selection
   nslc <- length(list_mouse_slices[[i]])
   fig3_bottom_ss_grobs[[i]] <- vector(mode = "list", length = nslc)
@@ -1159,7 +1322,7 @@ for (i in 1:length(list_mouse_slices)) {
                       widths = unit(fig3_bottom_ss_widths, "bigpts"),
                       heights = unit(fig3_bottom_ss_heights, "bigpts"))
     
-    ss_border <- rectGrob(gp = gpar(fill = NA, col = "red", lwd = 2))
+    ss_border <- rectGrob(gp = gpar(fill = NA, col = neuro_palette_nk[j], lwd = 1.75))
     
     outfile <- paste(output_plot_prefix, "bottom_ss", names(list_mouse_slices[[i]])[j], sep = "_")
     outfile <- paste0(outfile, ".pdf")
@@ -1175,9 +1338,9 @@ for (i in 1:length(list_mouse_slices)) {
     
   }
 }
-```
 
-```{r fig3-bottom-panel-grobs}
+# BREAK HERE ####
+#```{r fig3-bottom-panel-grobs}
 # Height of polar plot based on ss width
 fig3_polar_height_pt <- 2*fig3_mouse_ss_width_pt
 
@@ -1228,7 +1391,7 @@ for (i in 1:length(fig3_bottom_panel_grobs)) {
   # Dimensions of the panel in bigpts
   fig3_bottom_panel_width <- sum(fig3_bottom_panel_widths)
   fig3_bottom_panel_height <- sum(fig3_bottom_panel_heights)  
-    
+  
   # Export panel
   outfile <- paste(output_plot_prefix, "bottom_panel_nk", nk_subset[i], sep = "_")
   outfile <- paste0(outfile, ".pdf")
@@ -1242,9 +1405,9 @@ for (i in 1:length(fig3_bottom_panel_grobs)) {
   fig3_bottom_widths_nopadding[i] <- fig3_bottom_panel_width
   
 }
-```
 
-```{r fig3-bottom-grob}
+# BREAK HERE ####
+#```{r fig3-bottom-grob}
 
 ngrobs <- 2*nss-1
 
@@ -1280,9 +1443,9 @@ export_pdf(x = fig3_bottom_grob,
            width = fig3_bottom_width,
            height = fig3_bottom_height,
            units = "bigpts")
-```
 
-```{r fig3-build}
+# BREAK HERE ####
+#```{r fig3-build}
 # Padding between heatmap and ss
 fig3_padding_height_pt <- 20
 
@@ -1329,11 +1492,6 @@ dev.off()
 
 # Supplementary
 
-```{r}
-knitr::opts_chunk$set(eval = FALSE)
-```
-
-
 ## Export matching mouse-human clusters
 
 ```{r fig3-supp-matching-clusters, eval = FALSE}
@@ -1349,7 +1507,7 @@ df_sim_pvals %>%
 
 ## Pathway heatmap with clustered clusters
 
-```{r fig3-supp-heatmap-norm-scree-plot}
+```{r fig3-supp-heatmap-norm-scree-plot, eval = FALSE}
 mat_pathways_nk_gt4_subset %>% 
   hclust_wcss() %>% 
   as_tibble() %>% 
@@ -1366,7 +1524,7 @@ mat_pathways_nk_gt4_subset %>%
   theme(panel.grid.minor.x = element_blank())
 ```
 
-```{r fig3-supp-heatmap-norm-build}
+```{r fig3-supp-heatmap-norm-build, eval = FALSE}
 # Run hierarchical clustering ################################################
 
 # Run hierarchical clustering on neuroanatomical clusters
@@ -1498,8 +1656,7 @@ export_pdf(x = fig3_supp_heatmap_grob,
            height = 10)
 ```
 
-
-```{r fig3-supp-heatmap-scree-plot}
+```{r fig3-supp-heatmap-scree-plot, eval = FALSE}
 mat_pathways_nk_gt4_subset <- df_pathways_nk_gt4_subset %>% 
   select(pathway, cluster_id, NLQ) %>% 
   pivot_wider(id_cols = pathway, 
@@ -1524,7 +1681,7 @@ mat_pathways_nk_gt4_subset %>%
   theme(panel.grid.minor.x = element_blank())
 ```
 
-```{r fig3-supp-heatmap-build}
+```{r fig3-supp-heatmap-build, eval = FALSE}
 # Run hierarchical clustering ################################################
 
 
@@ -1653,7 +1810,7 @@ export_pdf(x = fig3_supp_heatmap_grob,
            height = 10)
 ```
 
-```{r fig3-supp-heatmap-no-thresh}
+```{r fig3-supp-heatmap-no-thresh, eval = FALSE}
 # Run hierarchical clustering ################################################
 
 
@@ -1780,69 +1937,4 @@ export_pdf(x = fig3_supp_heatmap_grob,
            width = 20,
            height = 10)
 ```
-
-
-## Neuroanatomical cluster streams ??
-
-```{r}
-mouse_pipeline_dir <- "../data/mouse/derivatives/"
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version, mouse_params_id)
-
-mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
-mouse_cluster_file <- "clusters.csv"
-mouse_cluster_file <- file.path(mouse_cluster_dir, mouse_cluster_file)
-df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
-colnames(df_mouse_clusters) <- c("ID", paste0("nk", 2:nk_max))
-
-df_mouse_clusters_long <- df_mouse_clusters %>% 
-  pivot_longer(cols = -ID, names_to = "nk", values_to = "k") %>% 
-  mutate(nk = str_remove(nk, "nk"),
-         nk = as.numeric(nk)) %>% 
-  filter(nk >= 4) %>% 
-  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)  
-
-cluster_ids_nk4 <- df_mouse_clusters_long %>% 
-  filter(nk == 4) %>% 
-  select(cluster_id, nk, k) %>% 
-  distinct() %>% 
-  arrange(nk, k) %>% 
-  pull(cluster_id)
-
-cluster_ids_gt4 <- df_mouse_clusters_long %>% 
-  semi_join(df_mouse_matches, by = "cluster_id") %>% 
-  filter(nk > 4) %>% 
-  select(cluster_id, nk, k) %>% 
-  distinct() %>% 
-  arrange(nk, k) %>% 
-  pull(cluster_id)
-
-df_clusters_grid <- expand_grid(cluster_id_nk4 = cluster_ids_nk4,
-                                cluster_id = cluster_ids_gt4,
-                                p = 0)
-for (i in 1:nrow(df_clusters_grid)) {
-  
-  models_in_clust_4 <- df_mouse_clusters_long %>% 
-    filter(cluster_id == df_clusters_grid[[i, "cluster_id_nk4"]]) %>% 
-    pull(ID)
-  
-  models_in_clust <- df_mouse_clusters_long %>% 
-    filter(cluster_id == df_clusters_grid[[i, "cluster_id"]]) %>% 
-    pull(ID)
-  
-  intersection <- intersect(models_in_clust, models_in_clust_4)
-  df_clusters_grid[[i, "p"]] <- length(intersection)/length(models_in_clust)
-  
-}
-
-df_clusters_grid <- df_clusters_grid %>% 
-  group_by(cluster_id) %>% 
-  filter(p == max(p)) %>% 
-  ungroup() %>% 
-  mutate(cluster_id = factor(cluster_id, levels = cluster_ids_gt4),
-         cluster_id_nk4 = factor(cluster_id_nk4, levels = cluster_ids_nk4)) %>% 
-  arrange(cluster_id_nk4, cluster_id)
-```
-
-
-
 
