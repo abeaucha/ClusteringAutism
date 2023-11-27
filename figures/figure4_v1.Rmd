@@ -280,8 +280,10 @@ for (i in 1:length(diagnoses)) {
     new_scale_fill() + 
     geom_stratum(mapping = aes(fill = prop),
                  size = 0.25) + 
-    scale_fill_gradientn(colors = alluvial_palette,
-                         limits = c(0, 1)) +
+    scale_fill_gradient(low = "white", high = "red",
+                        limits = c(0, 1)) + 
+    # scale_fill_gradientn(colors = alluvial_palette,
+                         # limits = c(0, 1)) +
     scale_y_continuous(breaks = seq(0, 700, by = 100), 
                        minor_breaks = seq(0, 700, by = 50),
                        expand = expansion(add = 20)) + 
