@@ -547,6 +547,8 @@ heatmap_fill_lab <- "-log10(q)"
 heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")
 heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
 
+fig3_heatmap_pathways_legend_width_pt <- 50
+
 # Generate heatmap of enrichment significance
 fig3_heatmap_pathways <- ggplot(df_pathways_heatmap, 
                                 aes(x = factor(k), 
@@ -560,9 +562,9 @@ fig3_heatmap_pathways <- ggplot(df_pathways_heatmap,
   scale_fill_gradientn(colors = heatmap_palette,
                        limits = heatmap_limits,
                        na.value = "grey85",
-                       guide = guide_colourbar(title.position = "bottom",
-                                               title.hjust = 0.5,
-                                               barwidth = unit(50, "bigpts"),
+                       guide = guide_colourbar(title.position = "top",
+                                               title.hjust = 0.5, 
+                                               barwidth = unit(fig3_heatmap_pathways_legend_width_pt, "bigpts"),
                                                barheight = unit(10, "bigpts"))) +
   labs(x = "Mouse cluster",
        y = "Biological pathway module",
@@ -642,13 +644,11 @@ fig3_heatmap_human_match <- ggplot(df_sig_nk,
   facet_grid(.~nk, scales = "free", space = "free") + 
   scale_x_discrete(expand = expansion()) +
   scale_y_discrete(expand = expansion()) +
-  scale_fill_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[c(1:4, 8)])) +
-  # scale_fill_manual(values = brewer.pal(n = 9, name = "PuBu")[c(1, 9)], 
-  #                   labels = c("No", "Yes"),
-  #                   guide = guide_legend(title.position = "top",
-  #                                        title.hjust = 0.5)) + 
+  scale_fill_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[c(1:4, 8)]),
+                       guide = guide_colourbar(title.position = "top", 
+                                               barwidth = unit(80, "bigpts"))) +
   labs(x = "Mouse cluster",
-       fill = "Human match") +
+       fill = "p-value") +
   theme_bw() +
   theme(panel.spacing = unit(4, "bigpts"),
         strip.background.x = element_rect(fill = "grey90"),
@@ -667,7 +667,6 @@ fig3_heatmap_human_match <- ggplot(df_sig_nk,
                                     hjust = 0.5),
         legend.text = element_text(size = font_size-1,
                                    family = font_family),
-        # legend.background = element_rect(colour = "black"),
         legend.margin = margin(),
         plot.margin = margin(l = 0))
 
@@ -1443,9 +1442,9 @@ export_pdf(x = fig3_bottom_grob,
            width = fig3_bottom_width,
            height = fig3_bottom_height,
            units = "bigpts")
+```
 
-# BREAK HERE ####
-#```{r fig3-build}
+```{r fig3-build}
 # Padding between heatmap and ss
 fig3_padding_height_pt <- 20
 
@@ -1472,6 +1471,21 @@ fig3_grob <- arrangeGrob(fig3_bottom_grob,
 fig3_width_pt <- sum(fig3_widths)
 fig3_height_pt <- sum(fig3_heights)
 
+# Viewports for heatmap legends
+fig3_heatmap_pathways_legend_vp <- viewport(x = unit(fig3_width_pt-8, "bigpts"),
+                                            y = unit(25, "bigpts"),
+                                            width = unit(fig3_heatmap_pathways_legend_width_pt, "bigpts"),
+                                            height = unit(20, "bigpts"),
+                                            just = c("right", "bottom"))
+
+fig3_heatmap_human_match_legend_vp_width <- 105
+fig3_heatmap_human_match_legend_vp_x <- fig3_width_pt - fig3_heatmap_human_match_legend_vp_width
+fig3_heatmap_human_match_legend_vp <- viewport(x = unit(fig3_heatmap_human_match_legend_vp_x, "bigpts"),
+                                               y = unit(fig3_heatmap_height_pt+5, "bigpts"),
+                                               width = unit(fig3_heatmap_human_match_legend_vp_width, "bigpts"),
+                                               height = unit(27, "bigpts"),
+                                               just = c("left", "top"))
+
 # Figure 3 dimensions in inches
 fig3_width_in <- fig3_width_pt/pt_per_in
 fig3_height_in <- fig3_height_pt/pt_per_in
@@ -1486,6 +1500,12 @@ pdf(file = outfile,
     width = fig3_width_in,
     height = fig3_height_in)
 grid.draw(fig3_grob)
+pushViewport(fig3_heatmap_pathways_legend_vp)
+grid.draw(fig3_heatmap_pathways_legend_grob)
+popViewport()
+pushViewport(fig3_heatmap_human_match_legend_vp)
+grid.draw(fig3_heatmap_human_match_legend_grob)
+popViewport()
 dev.off()
 ```
 
