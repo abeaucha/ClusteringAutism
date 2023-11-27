@@ -2,7 +2,7 @@
 title: "Figure 2"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-11-17"
+date: "2023-11-27"
 output: html_document
 ---
 
@@ -113,6 +113,7 @@ mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_",
 mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
 names(mouse_cluster_map_dirs) <- jacobians
 
+# Mouse cluster map directories at 50um
 mouse_cluster_map_dirs_50um <- file.path(mouse_pipeline_dir, "cluster_maps")
 mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, "resolution_0.05")
 mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, jacobians)
@@ -142,7 +143,7 @@ rect_w_num <- function(n) {
   return(out)
 }
 
-# Figure width (bigpt)
+# Maximal figure dimensions in bigpts
 fig2_width_pt <- 510
 fig2_height_pt <- 481
 ```
@@ -174,22 +175,22 @@ human_mask <- mincGetVolume(human_mask_file)
 mouse_mask_file <- "../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
 mouse_mask <- mincGetVolume(mouse_mask_file)
 
-# Threshold method
+# Image threshold method
 threshold <- params %>% 
   filter(id == params_id) %>% 
   pull(threshold)
 
-# Threshold value
+# Image threshold value
 threshold_value <- params %>% 
   filter(id == params_id) %>% 
   pull(threshold_value)
 
-# Threshold symmetric option
+# Image threshold symmetric option
 threshold_symmetric <- params %>% 
   filter(id == params_id) %>% 
   pull(threshold_symmetric)
 
-# Cluster solutions
+# Cluster solutions to visualize
 nk_mouse <- 4
 nk_human <- 2
 ```
@@ -580,6 +581,7 @@ export_pdf(x = fig2_ss_grob,
            file = outfile)
 ```
 
+
 # Panel: Mouse-human cluster similarity heatmap
 
 ```{r fig2-sim-import}
@@ -752,8 +754,6 @@ heatmap_scale_values <- (heatmap_scale_values - similarity_min)/(similarity_max 
 
 # Colours for the heatmap palette 
 heatmap_scale_colours <- magma(n = heatmap_palette_length, begin = 0.3)
-# heatmap_scale_colours <- c("white", brewer.pal(n = 4, name = "Reds"))
-# heatmap_scale_colours <- plasma(n = 255)
 
 # Heatmap palette vector
 heatmap_scale_palette <- colorRampPalette(heatmap_scale_colours)(heatmap_palette_length)
@@ -789,6 +789,7 @@ fig2_sim_heatmap <- ggplot(df_similarity_nk,
         legend.position = c(1, 0),
         legend.justification = c("left", "bottom"),)
 ```
+
 
 # Panel: Human cluster demographics
 
@@ -886,7 +887,6 @@ fig2_dx <- ggplot(df_dx_nk_freq,
   scale_fill_manual(values = dx_palette,
                     guide = guide_legend(title.position = "top",
                                          hjust = 0)) +
-  # scale_alpha_manual(values = rep(0.6, length(dx_lvls)), guide = NULL) + 
   labs(x = "Human clusters",
        y = "Proportion per cluster",
        fill = "Diagnosis",
@@ -897,6 +897,7 @@ fig2_dx <- ggplot(df_dx_nk_freq,
         legend.justification = c("left", "center"), 
         plot.margin = margin(t = 10, l = 5, r = 40, unit = "bigpts"))
 ```
+
 
 # Panel: Mouse molecular pathways polar plot
 
@@ -1092,7 +1093,6 @@ cutree(pathway_hc, k = hclust_kcut) %>%
 
 ```{r fig2-pathways-mouse-plot}
 # An additional empty level must be added to close the polar plot
-# polar_plot_lvls <- c(" ", df_pathway_info[["pathway"]])
 polar_plot_lvls <- c(" ", pathway_lvls_clustered)
 
 # Create a temp df for the additional empty factor level
@@ -1196,7 +1196,6 @@ fig2_pathways_mouse <- fig2_pathways_mouse +
 fig2_pathways_mouse_grob <- grid.force(ggplotGrob(fig2_pathways_mouse))
 
 # Fix polar axis labels
-# fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- df_pathway_info[["acronym"]]
 fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
 
 # Get initial label positions
@@ -1334,7 +1333,6 @@ fig2_pathways_human <- fig2_pathways_human +
 fig2_pathways_human_grob <- grid.force(ggplotGrob(fig2_pathways_human))
 
 # Fix polar axis labels
-# fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- df_pathway_info[["acronym"]]
 fig2_pathways_human_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
 
 # Get initial label positions
@@ -1554,6 +1552,7 @@ fig2_pathways_roc_auc <- ggplot(df_auc, aes(x = -log10(alpha),
         plot.margin = margin(t = 4, unit = "bigpts"))
 ```
 
+
 # Figure
 
 ```{r fig2-build}
@@ -1622,7 +1621,6 @@ export_pdf(x = fig2_grob,
            units = "bigpts",
            file = outfile)
 ```
-
 
 
 # Supplementary

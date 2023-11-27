@@ -2,7 +2,7 @@
 title: "Figure 3"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-11-23"
+date: "2023-11-27"
 output: html_document
 ---
 
@@ -24,8 +24,6 @@ suppressPackageStartupMessages(library(pheatmap))
 suppressPackageStartupMessages(library(ggplotify))
 suppressPackageStartupMessages(library(RColorBrewer))
 suppressPackageStartupMessages(library(rcartocolor))
-# suppressPackageStartupMessages(library(viridis))
-# suppressPackageStartupMessages(library(viridisLite))
 ```
 
 ```{r fig3-functions}
@@ -92,6 +90,13 @@ nk_max <- params %>%
 mouse_params_id <- params %>% 
   filter(id == params_id) %>% 
   pull(mouse_id)
+
+# Mouse processing pipeline directory
+mouse_pipeline_dir <- "../data/mouse/derivatives/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version, mouse_params_id)
+
+# Mouse cluster directory
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
 ```
 
 ```{r fig3-graphical-params}
@@ -116,7 +121,7 @@ rect_w_num <- function(n) {
   return(out)
 }
 
-# Figure width (bigpt)
+# Maximal dimensions of figure in bigpts
 fig3_width <- 510
 fig3_height <- 481
 ```
@@ -597,37 +602,6 @@ fig3_heatmap_pathways <- fig3_heatmap_pathways +
 ```
 
 ```{r fig3-heatmap-human-match-plot}
-# Determine which mouse clusters have significant human matches
-# df_sig_nk <- df_sim_pvals %>%
-#   group_by(mouse_nk, mouse_k) %>% 
-#   summarise(nsignificant = sum(significant),
-#             .groups = "drop") %>%
-#   mutate(has_match = ifelse(nsignificant > 0, TRUE, FALSE),
-#          dummy = "y") %>% 
-#   select(nk = mouse_nk, k = mouse_k, has_match, dummy) %>% 
-#   filter(nk >= 4) %>% 
-#   unite(col = "cluster_id", "nk", "k", 
-#         sep = "-", remove = FALSE) %>% 
-#   mutate(nk = factor(nk, levels = 4:nk_max),
-#          k = factor(k, levels = 1:nk_max))
-
-# df_sig_nk <- df_sim_pvals %>% 
-#   group_by(mouse_nk, mouse_k) %>% 
-#   summarise(p = min(pval),
-#             nsignificant = sum(significant),
-#             .groups = "drop") %>% 
-#   mutate(plab = case_when(p < 0.05 ~ "**",
-#                           p >= 0.05 & p < 0.1 ~ "*",
-#                           p >= 0.1 ~ ""),
-#          has_match = ifelse(nsignificant > 0, TRUE, FALSE),
-#          y = "y") %>% 
-#   select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
-#   filter(nk >= 4) %>% 
-#   unite(col = "cluster_id", "nk", "k", 
-#         sep = "-", remove = FALSE) %>% 
-#   mutate(nk = factor(nk, levels = 4:nk_max),
-#          k = factor(k, levels = 1:nk_max))
-
 # Generate heatmap of mouse clusters with human matches
 fig3_heatmap_human_match <- ggplot(df_sig_nk,
                                    mapping = aes(x = factor(k), 
@@ -738,7 +712,7 @@ export_pdf(x = fig3_heatmap_grob,
 
 # Figure element: Mouse pathway polar plots
 
-```{r}
+```{r fig3-pathways-cluster-subset}
 # Select cluster solutions
 nk_subset <- c(4, 6, 8, 10)
 
@@ -749,27 +723,27 @@ df_mouse_matches <- df_sig_nk %>%
   mutate(nk = as.numeric(as.character(nk)),
          k = as.numeric(as.character(k)))
 
+# Extract enrichment data for selected cluster solutions
 df_pathways_subset <- df_pathways_all %>% 
   filter(nk %in% nk_subset) %>% 
   semi_join(df_mouse_matches, 
             by = c("cluster_id", "nk", "k"))
 
+# Cluster IDs for selected cluster solutions
 df_clusters_subset <- df_pathways_subset %>% 
   select(cluster_id, nk, k) %>% 
   distinct() %>% 
   arrange(nk, k)
 ```
 
-```{r}
-mouse_pipeline_dir <- "../data/mouse/derivatives/"
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version, mouse_params_id)
-
-mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
+```{r fig3-pathways-cluster-streams}
+# Import mouse clusters
 mouse_cluster_file <- "clusters.csv"
 mouse_cluster_file <- file.path(mouse_cluster_dir, mouse_cluster_file)
 df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
 colnames(df_mouse_clusters) <- c("ID", paste0("nk", 2:nk_max))
 
+# Convert clusters data frame to long format
 df_mouse_clusters_long <- df_mouse_clusters %>% 
   pivot_longer(cols = -ID, names_to = "nk", values_to = "k") %>% 
   mutate(nk = str_remove(nk, "nk"),
@@ -777,6 +751,7 @@ df_mouse_clusters_long <- df_mouse_clusters %>%
   filter(nk >= 4) %>% 
   unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)  
 
+# Extract cluster IDs for nk = 4
 cluster_ids_nk4 <- df_mouse_clusters_long %>% 
   filter(nk == 4) %>% 
   select(cluster_id, nk, k) %>% 
@@ -784,6 +759,7 @@ cluster_ids_nk4 <- df_mouse_clusters_long %>%
   arrange(nk, k) %>% 
   pull(cluster_id)
 
+# Extract cluster IDs for nk > 4
 cluster_ids_gt4 <- df_mouse_clusters_long %>% 
   semi_join(df_mouse_matches, by = "cluster_id") %>% 
   filter(nk > 4) %>% 
@@ -792,6 +768,8 @@ cluster_ids_gt4 <- df_mouse_clusters_long %>%
   arrange(nk, k) %>% 
   pull(cluster_id)
 
+# For clusters in higher nk solutions, determine the how the models in 
+# those clusters relate to those in the 4-cluster solution
 df_cluster_grid <- expand_grid(cluster_id_nk4 = cluster_ids_nk4,
                                cluster_id = cluster_ids_gt4,
                                p = 0)
@@ -810,36 +788,34 @@ for (i in 1:nrow(df_cluster_grid)) {
   
 }
 
-
+# Identify which cluster in the 4-cluster solution are most 
+# representative of the higher clusters
 df_cluster_grid <- df_cluster_grid %>% 
   group_by(cluster_id) %>% 
   filter(p == max(p)) %>% 
   ungroup() %>% 
   mutate(cluster_id = factor(cluster_id, levels = cluster_ids_gt4),
          cluster_id_nk4 = factor(cluster_id_nk4, levels = cluster_ids_nk4)) %>% 
-  arrange(cluster_id_nk4, cluster_id)
-
-df_cluster_grid <- df_cluster_grid %>% 
+  arrange(cluster_id_nk4, cluster_id) %>% 
   separate(col = "cluster_id", into = c("nk", "k"),
            sep = "-", remove = FALSE) %>% 
   filter(nk %in% nk_subset)
-
-df_cluster_grid 
 ```
 
-```{r}
-# Palette for mouse pathway plot
+```{r fig3-pathways-polar-plots}
+# Palette for mouse pathway plot in Figure 2
 pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
                             carto_pal(12, "Vivid")[1],
                             carto_pal(12, "Safe")[4],
                             carto_pal(12, "Prism")[8])
 
+# Store polar plot palette in data frame
 df_cluster_palette_nk4 <- tibble(nk = 4, k = 1:4,
                                  colour = pathways_mouse_palette) %>% 
   unite(col = "cluster_id", nk, k, sep = "-")
 
-
-
+# Match colours to higher nk clusters most closely related to those
+# in nk = 4
 df_polar_palette <- df_cluster_grid %>% 
   left_join(df_cluster_palette_nk4, 
             by = c("cluster_id_nk4" = "cluster_id")) 
@@ -855,9 +831,8 @@ df_polar_palette <- bind_rows(df_polar_palette %>%
   mutate(nk = as.numeric(nk),
          k = as.numeric(k)) %>% 
   arrange(nk, k)
-```
 
-```{r fig3-pathways-polar-plots}
+# Filter palette data frame for those clusters with human matches
 df_polar_palette <- df_polar_palette %>% 
   semi_join(df_mouse_matches,
             by = c("cluster_id", "nk", "k"))
@@ -899,6 +874,7 @@ for (i in 1:length(nk_subset)) {
     mutate(pathway = factor(pathway, levels = polar_plot_lvls),
            NLQ = ifelse(NLQ > polar_plot_threshold, polar_plot_threshold, NLQ))
   
+  # Palette for specific polar plot
   polar_palette_nk <- df_polar_palette %>% 
     filter(nk == nk_subset[i]) %>% 
     pull(colour)
@@ -947,7 +923,6 @@ for (i in 1:length(nk_subset)) {
   }
   
   # Assign grob to list
-  # list_polar_plots[[i]] <- polar_plot_nk_grob[["children"]][[panel]]
   list_polar_plots[[i]] <- gTree(children = gList(polar_plot_nk_grob, 
                                                   empty_rect_grob))
   
@@ -1263,7 +1238,7 @@ for(l in 1:length(list_human_slices)) {
 
 # Figure
 
-```{r fig3-bottom-ss-grobs}
+```{r fig3-neuro-ss-grobs}
 # Mouse slice dimensions in pixels
 mouse_width_px <- dim(mouse_anat_vol)[2]
 mouse_height_px <- dim(mouse_anat_vol)[3]
@@ -1277,13 +1252,13 @@ nss <- length(nk_subset)
 nslc_tot <- nrow(df_clusters_subset)
 
 # Padding between slices within a panel
-fig3_bottom_ss_padding_pt <- 2
+fig3_neuro_ss_padding_pt <- 2
 
 # Padding between panels
-fig3_bottom_panel_padding_pt <- 4
+fig3_neuro_panel_padding_pt <- 4
 
 # Total padding width 
-fig3_ss_padding_width_pt <- fig3_bottom_panel_padding_pt*(nss-1) + fig3_bottom_ss_padding_pt*((nslc_tot - 1) - (nss-1))
+fig3_ss_padding_width_pt <- fig3_neuro_panel_padding_pt*(nss-1) + fig3_neuro_ss_padding_pt*((nslc_tot - 1) - (nss-1))
 
 # Total width available to place slices
 fig3_ss_width_pt <- fig3_width - fig3_ss_padding_width_pt
@@ -1297,7 +1272,7 @@ fig3_human_ss_width_pt <- fig3_mouse_ss_width_pt
 fig3_human_ss_height_pt <- fig3_human_ss_width_pt*(human_height_px/human_width_px)
 
 # Iterate over nk selection
-fig3_bottom_ss_grobs <- vector(mode = "list", length = length(list_mouse_slices))
+fig3_neuro_ss_grobs <- vector(mode = "list", length = length(list_mouse_slices))
 for (i in 1:length(list_mouse_slices)) {
   
   neuro_palette_nk <- df_polar_palette %>% 
@@ -1306,50 +1281,52 @@ for (i in 1:length(list_mouse_slices)) {
   
   # Number of slices for nk selection
   nslc <- length(list_mouse_slices[[i]])
-  fig3_bottom_ss_grobs[[i]] <- vector(mode = "list", length = nslc)
+  fig3_neuro_ss_grobs[[i]] <- vector(mode = "list", length = nslc)
   for (j in 1:nslc) {
     
     # Dimensions of slice series grid
-    fig3_bottom_ss_widths <- fig3_mouse_ss_width_pt
-    fig3_bottom_ss_heights <- c(fig3_human_ss_height_pt, fig3_bottom_ss_padding_pt, fig3_mouse_ss_height_pt)
+    fig3_neuro_ss_widths <- fig3_mouse_ss_width_pt
+    fig3_neuro_ss_heights <- c(fig3_human_ss_height_pt, fig3_neuro_ss_padding_pt, fig3_mouse_ss_height_pt)
     
     # Generate slice series for cluster solution    
     ss <- arrangeGrob(list_human_slices[[i]][[j]],
                       black_rect_grob,
                       list_mouse_slices[[i]][[j]],
                       layout_matrix = cbind(1:3),
-                      widths = unit(fig3_bottom_ss_widths, "bigpts"),
-                      heights = unit(fig3_bottom_ss_heights, "bigpts"))
+                      widths = unit(fig3_neuro_ss_widths, "bigpts"),
+                      heights = unit(fig3_neuro_ss_heights, "bigpts"))
     
+    # Coloured border for slice series
     ss_border <- rectGrob(gp = gpar(fill = NA, col = neuro_palette_nk[j], lwd = 1.75))
     
-    outfile <- paste(output_plot_prefix, "bottom_ss", names(list_mouse_slices[[i]])[j], sep = "_")
+    # Export slice series
+    outfile <- paste(output_plot_prefix, "neuro_ss", names(list_mouse_slices[[i]])[j], sep = "_")
     outfile <- paste0(outfile, ".pdf")
     outfile <- file.path(output_dir, outfile)
     export_pdf(x = ss,
                file = outfile,
-               width = sum(fig3_bottom_ss_widths),
-               height = sum(fig3_bottom_ss_heights),
+               width = sum(fig3_neuro_ss_widths),
+               height = sum(fig3_neuro_ss_heights),
                units = "bigpts")
     
-    # fig3_bottom_ss_grobs[[i]][[j]] <- ss
-    fig3_bottom_ss_grobs[[i]][[j]] <- gTree(children = gList(ss, ss_border))
+    # Store slice series in list
+    fig3_neuro_ss_grobs[[i]][[j]] <- gTree(children = gList(ss, ss_border))
     
   }
 }
+```
 
-# BREAK HERE ####
-#```{r fig3-bottom-panel-grobs}
+```{r fig3-neuro-panel-grobs}
 # Height of polar plot based on ss width
 fig3_polar_height_pt <- 2*fig3_mouse_ss_width_pt
 
-# Iterate over bottom panel ss grobs
-fig3_bottom_panel_grobs <- vector(mode = "list", length = length(fig3_bottom_ss_grobs))
-fig3_bottom_widths_nopadding <- numeric(length(fig3_bottom_ss_grobs))
-for (i in 1:length(fig3_bottom_panel_grobs)) {
+# Iterate over neuro panel ss grobs
+fig3_neuro_panel_grobs <- vector(mode = "list", length = length(fig3_neuro_ss_grobs))
+fig3_neuro_widths_nopadding <- numeric(length(fig3_neuro_ss_grobs))
+for (i in 1:length(fig3_neuro_panel_grobs)) {
   
   # Number of slices in the current panel
-  nslc <- length(fig3_bottom_ss_grobs[[i]])
+  nslc <- length(fig3_neuro_ss_grobs[[i]])
   
   # Number of columns in the panel grid
   ncols <- 2*nslc-1
@@ -1362,95 +1339,102 @@ for (i in 1:length(fig3_bottom_panel_grobs)) {
   ind_padding <- seq(2, ncols, by = 2)
   
   # Widths of the panel grid
-  fig3_bottom_panel_widths <- numeric(ncols)
-  fig3_bottom_panel_widths[ind_ss] <- fig3_mouse_ss_width_pt
-  fig3_bottom_panel_widths[ind_padding] <- fig3_bottom_ss_padding_pt
+  fig3_neuro_panel_widths <- numeric(ncols)
+  fig3_neuro_panel_widths[ind_ss] <- fig3_mouse_ss_width_pt
+  fig3_neuro_panel_widths[ind_padding] <- fig3_neuro_ss_padding_pt
   
   # Heights of the panel grids
-  fig3_bottom_panel_heights <- c(fig3_polar_height_pt, fig3_bottom_ss_padding_pt, sum(fig3_bottom_ss_heights))
+  fig3_neuro_panel_heights <- c(fig3_polar_height_pt, fig3_neuro_ss_padding_pt, sum(fig3_neuro_ss_heights))
   
   # Build the list of grobs for the panel
-  fig3_bottom_panel_grobs_list <- vector(mode = "list", length = ngrobs)
-  fig3_bottom_panel_grobs_list[1] <- list_polar_plots[i]
-  fig3_bottom_panel_grobs_list[2] <- list(zeroGrob())
-  fig3_bottom_panel_grobs_list[ind_ss+2] <- fig3_bottom_ss_grobs[[i]]
-  fig3_bottom_panel_grobs_list[ind_padding+2] <- list(zeroGrob())
+  fig3_neuro_panel_grobs_list <- vector(mode = "list", length = ngrobs)
+  fig3_neuro_panel_grobs_list[1] <- list_polar_plots[i]
+  fig3_neuro_panel_grobs_list[2] <- list(zeroGrob())
+  fig3_neuro_panel_grobs_list[ind_ss+2] <- fig3_neuro_ss_grobs[[i]]
+  fig3_neuro_panel_grobs_list[ind_padding+2] <- list(zeroGrob())
   
   # Layout of the panel grid
-  fig3_bottom_panel_layout <-  rbind(rep(1, ncols),
+  fig3_neuro_panel_layout <-  rbind(rep(1, ncols),
                                      rep(2, ncols),
                                      3:(ncols+2))
   
   # Grob for the current panel
-  fig3_bottom_panel_grobs[[i]] <- arrangeGrob(grobs = fig3_bottom_panel_grobs_list,
-                                              layout_matrix = fig3_bottom_panel_layout,
-                                              widths = unit(fig3_bottom_panel_widths, "bigpts"),
-                                              heights = unit(fig3_bottom_panel_heights, "bigpts"))
+  fig3_neuro_panel_grobs[[i]] <- arrangeGrob(grobs = fig3_neuro_panel_grobs_list,
+                                              layout_matrix = fig3_neuro_panel_layout,
+                                              widths = unit(fig3_neuro_panel_widths, "bigpts"),
+                                              heights = unit(fig3_neuro_panel_heights, "bigpts"))
   
   # Dimensions of the panel in bigpts
-  fig3_bottom_panel_width <- sum(fig3_bottom_panel_widths)
-  fig3_bottom_panel_height <- sum(fig3_bottom_panel_heights)  
+  fig3_neuro_panel_width <- sum(fig3_neuro_panel_widths)
+  fig3_neuro_panel_height <- sum(fig3_neuro_panel_heights)  
   
   # Export panel
-  outfile <- paste(output_plot_prefix, "bottom_panel_nk", nk_subset[i], sep = "_")
+  outfile <- paste(output_plot_prefix, "neuro_panel_nk", nk_subset[i], sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
-  export_pdf(x = fig3_bottom_panel_grobs[[i]],
+  export_pdf(x = fig3_neuro_panel_grobs[[i]],
              file = outfile,
-             width = fig3_bottom_panel_width,
-             height = fig3_bottom_panel_height,
+             width = fig3_neuro_panel_width,
+             height = fig3_neuro_panel_height,
              units = "bigpts")  
   
-  fig3_bottom_widths_nopadding[i] <- fig3_bottom_panel_width
+  fig3_neuro_widths_nopadding[i] <- fig3_neuro_panel_width
   
 }
+```
 
-# BREAK HERE ####
-#```{r fig3-bottom-grob}
-
+```{r fig3-neuro-grob}
+# Number of grobs in the neuro panel
 ngrobs <- 2*nss-1
 
-# Indices for ss and padding elements
+# Indices for panels and padding elements
 ind_panels <- seq(1, ngrobs, by = 2)
 ind_padding <- seq(2, ngrobs, by = 2)
 
-fig3_bottom_widths <- numeric(ngrobs)
-fig3_bottom_widths[ind_panels] <- fig3_bottom_widths_nopadding
-fig3_bottom_widths[ind_padding] <- fig3_bottom_panel_padding_pt
+# Widths for neuro panel
+fig3_neuro_widths <- numeric(ngrobs)
+fig3_neuro_widths[ind_panels] <- fig3_neuro_widths_nopadding
+fig3_neuro_widths[ind_padding] <- fig3_neuro_panel_padding_pt
 
-fig3_bottom_heights <- fig3_bottom_panel_height
+# Heighs for neuro panel
+fig3_neuro_heights <- fig3_neuro_panel_height
 
-fig3_bottom_grobs_list <- vector(mode = "list", length = ngrobs)
-fig3_bottom_grobs_list[ind_panels] <- fig3_bottom_panel_grobs
-fig3_bottom_grobs_list[ind_padding] <- list(zeroGrob())
+# Grobs in neuro panel
+fig3_neuro_grobs_list <- vector(mode = "list", length = ngrobs)
+fig3_neuro_grobs_list[ind_panels] <- fig3_neuro_panel_grobs
+fig3_neuro_grobs_list[ind_padding] <- list(zeroGrob())
 
-fig3_bottom_layout <- rbind(1:ngrobs)
+# Layout for neuro panel grid
+fig3_neuro_layout <- rbind(1:ngrobs)
 
-fig3_bottom_grob <- arrangeGrob(grobs = fig3_bottom_grobs_list,
-                                layout_matrix = fig3_bottom_layout,
-                                widths = unit(fig3_bottom_widths, "bigpts"),
-                                heights = unit(fig3_bottom_heights, "bigpts"))
+# Grid grob for neuro panel
+fig3_neuro_grob <- arrangeGrob(grobs = fig3_neuro_grobs_list,
+                                layout_matrix = fig3_neuro_layout,
+                                widths = unit(fig3_neuro_widths, "bigpts"),
+                                heights = unit(fig3_neuro_heights, "bigpts"))
 
-fig3_bottom_width <- sum(fig3_bottom_widths)
-fig3_bottom_height <- sum(fig3_bottom_heights)
+# Dimensions for neuro panel in bigpts
+fig3_neuro_width_pt <- sum(fig3_neuro_widths)
+fig3_neuro_height_pt <- sum(fig3_neuro_heights)
 
-outfile <- paste(output_plot_prefix, "bottom_panel", sep = "_")
+# Export neuro panel
+outfile <- paste(output_plot_prefix, "neuro_panel", sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
-export_pdf(x = fig3_bottom_grob,
+export_pdf(x = fig3_neuro_grob,
            file = outfile,
-           width = fig3_bottom_width,
-           height = fig3_bottom_height,
+           width = fig3_neuro_width_pt,
+           height = fig3_neuro_height_pt,
            units = "bigpts")
 ```
 
 ```{r fig3-build}
-# Padding between heatmap and ss
+# Padding between heatmap and neuro panel
 fig3_padding_height_pt <- 20
 
-# Figure 3 dimensions
+# Figure 3 dimensions in bigpts
 fig3_widths <- c(fig3_width)
-fig3_heights <- c(fig3_bottom_height,
+fig3_heights <- c(fig3_neuro_height_pt,
                   fig3_padding_height_pt,
                   fig3_heatmap_height_pt)
 
@@ -1460,24 +1444,25 @@ fig3_layout <- rbind(c(01),
                      c(03))
 
 # Figure 3 grob
-fig3_grob <- arrangeGrob(fig3_bottom_grob,
+fig3_grob <- arrangeGrob(fig3_neuro_grob,
                          zeroGrob(),
                          fig3_heatmap_grob,
                          layout_matrix = fig3_layout,
                          widths = unit(fig3_widths, "bigpts"),
                          heights = unit(fig3_heights, "bigpts"))
 
-# Figure 3 dimensions
+# Figure 3 dimensions in bigpts
 fig3_width_pt <- sum(fig3_widths)
 fig3_height_pt <- sum(fig3_heights)
 
-# Viewports for heatmap legends
+# Viewport for pathways heatmap legend
 fig3_heatmap_pathways_legend_vp <- viewport(x = unit(fig3_width_pt-8, "bigpts"),
                                             y = unit(25, "bigpts"),
                                             width = unit(fig3_heatmap_pathways_legend_width_pt, "bigpts"),
                                             height = unit(20, "bigpts"),
                                             just = c("right", "bottom"))
 
+# Viewport for human match heatmap legend
 fig3_heatmap_human_match_legend_vp_width <- 105
 fig3_heatmap_human_match_legend_vp_x <- fig3_width_pt - fig3_heatmap_human_match_legend_vp_width
 fig3_heatmap_human_match_legend_vp <- viewport(x = unit(fig3_heatmap_human_match_legend_vp_x, "bigpts"),
@@ -1493,7 +1478,7 @@ fig3_height_in <- fig3_height_pt/pt_per_in
 fig3_width_in <- unit(fig3_width_in, "in")
 fig3_height_in <- unit(fig3_height_in, "in")
 
-# Export
+# Draw figure 3
 outfile <- paste0(output_plot_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
