@@ -1,0 +1,173 @@
+---
+title: "Human cluster pathway enrichment"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(tmod))
+```
+
+```{r functions}
+# Function from Jacob's Clustering_Functions.R source file
+get_homologs <- function(genes, species, ordered=T) {
+  if (!exists("hom", envir = globalenv())) {
+    hom <<- read_tsv("http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt")
+  }
+  species <- switch (species,
+                     mouse={"mouse, laboratory"},
+                     human={"human"}
+  )
+  
+  if (ordered) {
+    genes_human <- genes_mouse <- c()
+    prog <- txtProgressBar(max=length(genes), style = 3)
+    for (i in 1:length(genes)) {
+      g <- genes[i]
+      homologene_ids <- hom$`DB Class Key`[which((hom$Symbol==g) & hom$`Common Organism Name`==species)]
+      genes_mouse <- c(genes_mouse, hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="mouse, laboratory"))])
+      genes_human <- c(genes_human, hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="human"))])
+      setTxtProgressBar(prog, i)
+    }  
+    close(prog)
+  } else {
+    # Faster, but unordered
+    homologene_ids <- hom$`DB Class Key`[which((hom$Symbol %in% genes) & hom$`Common Organism Name`==species)]
+    genes_mouse <- hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="mouse, laboratory"))]
+    genes_human <- hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="human"))]
+  }
+  
+  return(list(input_genes=genes, mouse_genes=genes_mouse, human_genes=genes_human))  
+}
+```
+
+```{r}
+output_dir <- "outputs/human_cluster_pathways"
+
+version <- "v2"
+params_id <- "700"
+
+# Number of clusters
+nk <- 2
+
+# Gene similarity score for StringDB
+# gene_score <- 900
+gene_score <- 950
+
+# Output directory. Create if needed
+output_dir <- file.path(output_dir, version, params_id, gene_score)
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
+
+
+```{r}
+variants_dir <- "outputs/human_cluster_genetics/"
+variants_dir <- file.path(variants_dir, version, params_id)
+variants_file <- file.path(variants_dir, "cluster_variants.csv")
+
+# Import human gene variants
+df_variants <- read_csv("outputs/human_cluster_genetics/v2/700/cluster_variants.csv",
+                        show_col_types = FALSE)
+
+# Identify genes for those patients with single gene mutations
+df_variants[["gene"]] <- c(NA, NA, 
+                           "Kcnq2", "Gria2",
+                           "Rai1", "Fmr1",
+                           "Tnpo3", "Stxbp1",
+                           NA, "Rbm10", 
+                           NA, NA, 
+                           "Fgf14", "Tsc1",
+                           "Meis2", "Rfx3",
+                           "Pten", "Rtl9",
+                           "Nlgn1")
+
+# Iterate over clusters
+list_cluster_interactions <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  
+  # Filter variants for cluster
+  cols <- c("nk2", "gene")
+  ind_k <- df_variants[["nk2"]] == k
+  df_variants_k <- df_variants[ind_k, cols]
+  df_variants_k[["queryIndex"]] <- 0:(nrow(df_variants_k)-1)
+  
+  # StringDB API query to get gene IDs
+  api_query_string_ids <- paste0("https://string-db.org/api/tsv/get_string_ids?identifiers=", 
+                                 paste(df_variants_k[["gene"]], collapse = "%0D"), 
+                                 "&species=10090&limit=1")
+  
+  df_string_ids <- read_tsv(api_query_string_ids, show_col_types = FALSE) %>% 
+    select(queryIndex, stringID = stringId, preferredName) 
+  
+  # Join StringDB IDs to variants
+  df_variants_k <- df_variants_k %>% 
+    left_join(df_string_ids, by = "queryIndex")
+  
+  # StringDB API query for gene neighbourhoods
+  api_query_interactions <- paste0("https://string-db.org/api/tsv/interaction_partners?identifiers=", 
+                                   paste(df_variants_k[["stringID"]], collapse = "%0D"),
+                                   "&species=10090&required_score=", gene_score)
+  
+  df_interactions_k <- read_tsv(api_query_interactions, show_col_types = FALSE) %>% 
+    rename(stringID_A = stringId_A, stringID_B = stringId_B) %>% 
+    left_join(df_variants_k %>% 
+                select(nk2, stringID),
+              by = c("stringID_A" = "stringID"))  
+  
+  list_cluster_interactions[[k]] <- df_interactions_k
+  
+}
+
+```
+
+```{r}
+# Background set of genes
+background_set <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Raw/sagittal_gene_table_normalized_filtered.csv"
+background_set <- read_csv(background_set, show_col_types = FALSE) %>% 
+  pull(msg.genes.acronym) %>% 
+  as.character()
+
+# Gene modules from Reactome database
+tmod_modules <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Raw/Human_Reactome_March_01_2020_symbol.gmt"
+tmod_modules <- tmodImportMSigDB(tmod_modules, format = "gmt")
+
+# Iterate over clusters
+for (k in 1:nk) {
+  
+  # Target gene set for cluster k
+  target_set <- unique(c(list_cluster_interactions[[k]][["preferredName_A"]],
+                         list_cluster_interactions[[k]][["preferredName_B"]]))
+  
+  # Convert mouse gene names to human
+  fg <- get_homologs(target_set, "mouse", ordered = F)[["human_genes"]]
+  bg <- get_homologs(background_set, "mouse", ordered = F)[["human_genes"]]
+  
+  # Run hypergeometric test against pathway modules
+  tmod_hgtest_out <- tmodHGtest(fg = fg, bg = bg, mset = tmod_modules, 
+                                qval = 1.1, filter = FALSE, order.by = "pval")
+  
+  # Clean up output
+  tmod_hgtest_out <- tmod_hgtest_out %>% 
+    as_tibble() %>% 
+    arrange(P.Value) %>% 
+    mutate(rank = 1:nrow(.),
+           NLQ = -log(adj.P.Val),
+           k = k) %>% 
+    dplyr::select(rank, Title, NLQ, P.Value, adj.P.Val, everything()) %>% 
+    arrange(adj.P.Val)
+  
+  # Export the enrichment data to file
+  outfile <- paste("human_cluster_pathway_enrichment", nk, k, gene_score, sep = "_")
+  outfile <- paste0(outfile, ".csv")
+  outfile <- file.path(output_dir, outfile)
+  write_csv(x = tmod_hgtest_out, file = outfile)
+  
+}
+```
+
