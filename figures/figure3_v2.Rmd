@@ -122,8 +122,13 @@ rect_w_num <- function(n) {
 }
 
 # Maximal dimensions of figure in bigpts
-fig3_width <- 510
-fig3_height <- 481
+fig3_total_width <- 510
+fig3_total_height <- 481
+
+fig3_border_padding_width <- 4
+fig3_border_padding_height <- fig3_border_padding_width
+
+fig3_width <- fig3_total_width - 2*fig3_border_padding_width
 ```
 
 # Cluster similarity and significance by permutation testing
@@ -546,7 +551,7 @@ NLQ_threshold <- 30
 df_pathways_heatmap <- df_pathways_heatmap %>% 
   mutate(intensity = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
 heatmap_limits <- c(2, NLQ_threshold)
-heatmap_fill_lab <- "-log10(q)"
+heatmap_fill_lab <- "Enrichment (-log10(q))"
 
 # Heatmap palette
 heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")
@@ -585,7 +590,7 @@ fig3_heatmap_pathways <- ggplot(df_pathways_heatmap,
         axis.text.y = element_text(size = font_size-1, family = font_family), 
         axis.ticks.y = element_line(size = 0.25),
         legend.position = "bottom",
-        legend.title = element_text(size = font_size, family = font_family),
+        legend.title = element_text(size = font_size-1, family = font_family),
         legend.text = element_text(size = font_size-1, family = font_family),
         legend.margin = margin(),
         plot.margin = margin(l = 0))
@@ -622,7 +627,7 @@ fig3_heatmap_human_match <- ggplot(df_sig_nk,
                        guide = guide_colourbar(title.position = "top", 
                                                barwidth = unit(80, "bigpts"))) +
   labs(x = "Mouse cluster",
-       fill = "p-value") +
+       fill = "Human-mouse equivalence (p-value)") +
   theme_bw() +
   theme(panel.spacing = unit(4, "bigpts"),
         strip.background.x = element_rect(fill = "grey90"),
@@ -636,7 +641,7 @@ fig3_heatmap_human_match <- ggplot(df_sig_nk,
         legend.direction = "horizontal",
         legend.position = "bottom",
         legend.key.size = unit(10, "bigpts"),
-        legend.title = element_text(size = font_size,
+        legend.title = element_text(size = font_size-1,
                                     family = font_family,
                                     hjust = 0.5),
         legend.text = element_text(size = font_size-1,
@@ -657,8 +662,8 @@ fig3_heatmap_human_match <- fig3_heatmap_human_match +
 
 ```{r fig3-heatmap-build}
 # Combine heatmaps using patchwork
-fig3_heatmap_patchwork <- (fig3_heatmap_human_match / fig3_heatmap_pathways) +
-  plot_layout(heights = c(0.05, 0.95)) &
+fig3_heatmap_patchwork <- (fig3_heatmap_human_match / plot_spacer() / fig3_heatmap_pathways) +
+  plot_layout(heights = c(0.05, 0.015, 0.935)) &
   theme(plot.margin = margin(l = 0))
 fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
 
@@ -670,9 +675,8 @@ fig3_heatmap_patchwork_width_pt <- fig3_width - fig3_heatmap_dendrogram_width_pt
 fig3_heatmap_patchwork_height_pt <- 205
 
 # Heights of padding elements in bigpts
-fig3_heatmap_padding_height_1_pt <- 21
+fig3_heatmap_padding_height_1_pt <- 24
 fig3_heatmap_padding_height_2_pt <- 19
-# fig3_heatmap_padding_height_3_pt <- 19
 
 # Dimensions of heatmap plot
 fig3_heatmap_widths <- c(fig3_heatmap_dendrogram_width_pt, fig3_heatmap_patchwork_width_pt)
@@ -804,10 +808,14 @@ df_cluster_grid <- df_cluster_grid %>%
 
 ```{r fig3-pathways-polar-plots}
 # Palette for mouse pathway plot in Figure 2
-pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
+# pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
+#                             carto_pal(12, "Vivid")[1],
+#                             carto_pal(12, "Safe")[4],
+#                             carto_pal(12, "Prism")[8])
+pathways_mouse_palette <- c("#008CFF",
                             carto_pal(12, "Vivid")[1],
-                            carto_pal(12, "Safe")[4],
-                            carto_pal(12, "Prism")[8])
+                            "green3",
+                            "#E63716")
 
 # Store polar plot palette in data frame
 df_cluster_palette_nk4 <- tibble(nk = 4, k = 1:4,
@@ -1252,7 +1260,7 @@ nss <- length(nk_subset)
 nslc_tot <- nrow(df_clusters_subset)
 
 # Padding between slices within a panel
-fig3_neuro_ss_padding_pt <- 2
+fig3_neuro_ss_padding_pt <- 3
 
 # Padding between panels
 fig3_neuro_panel_padding_pt <- 4
@@ -1297,7 +1305,9 @@ for (i in 1:length(list_mouse_slices)) {
                       heights = unit(fig3_neuro_ss_heights, "bigpts"))
     
     # Coloured border for slice series
-    ss_border <- rectGrob(gp = gpar(fill = NA, col = neuro_palette_nk[j], lwd = 1.75))
+    ss_border <- rectGrob(gp = gpar(fill = NA, 
+                                    col = neuro_palette_nk[j], 
+                                    lwd = 2.5))
     
     # Export slice series
     outfile <- paste(output_plot_prefix, "neuro_ss", names(list_mouse_slices[[i]])[j], sep = "_")
@@ -1314,9 +1324,10 @@ for (i in 1:length(list_mouse_slices)) {
     
   }
 }
-```
+#```
 
-```{r fig3-neuro-panel-grobs}
+# BREAK HERE ####
+#```{r fig3-neuro-panel-grobs}
 # Height of polar plot based on ss width
 fig3_polar_height_pt <- 2*fig3_mouse_ss_width_pt
 
@@ -1381,9 +1392,10 @@ for (i in 1:length(fig3_neuro_panel_grobs)) {
   fig3_neuro_widths_nopadding[i] <- fig3_neuro_panel_width
   
 }
-```
+#```
 
-```{r fig3-neuro-grob}
+# BREAK HERE ####
+#```{r fig3-neuro-grob}
 # Number of grobs in the neuro panel
 ngrobs <- 2*nss-1
 
@@ -1426,22 +1438,29 @@ export_pdf(x = fig3_neuro_grob,
            width = fig3_neuro_width_pt,
            height = fig3_neuro_height_pt,
            units = "bigpts")
-```
+#```
 
-```{r fig3-build}
+# BREAK HERE ####
+#```{r fig3-build}
 # Padding between heatmap and neuro panel
-fig3_padding_height_pt <- 20
+fig3_padding_height_pt <- 30
 
 # Figure 3 dimensions in bigpts
-fig3_widths <- c(fig3_width)
-fig3_heights <- c(fig3_neuro_height_pt,
+fig3_widths <- c(fig3_border_padding_width, 
+                 fig3_width, 
+                 fig3_border_padding_width)
+fig3_heights <- c(fig3_border_padding_height, 
+                  fig3_neuro_height_pt,
                   fig3_padding_height_pt,
-                  fig3_heatmap_height_pt)
+                  fig3_heatmap_height_pt, 
+                  fig3_border_padding_height)
 
 # Figure 3 layout
-fig3_layout <- rbind(c(01),
-                     c(02),
-                     c(03))
+fig3_layout <- rbind(c(NA, NA, NA),
+                     c(NA, 01, NA),
+                     c(NA, 02, NA),
+                     c(NA, 03, NA),
+                     c(NA, NA, NA))
 
 # Figure 3 grob
 fig3_grob <- arrangeGrob(fig3_neuro_grob,
@@ -1459,14 +1478,14 @@ fig3_height_pt <- sum(fig3_heights)
 fig3_heatmap_pathways_legend_vp <- viewport(x = unit(fig3_width_pt-8, "bigpts"),
                                             y = unit(25, "bigpts"),
                                             width = unit(fig3_heatmap_pathways_legend_width_pt, "bigpts"),
-                                            height = unit(20, "bigpts"),
+                                            height = unit(22, "bigpts"),
                                             just = c("right", "bottom"))
 
 # Viewport for human match heatmap legend
 fig3_heatmap_human_match_legend_vp_width <- 105
 fig3_heatmap_human_match_legend_vp_x <- fig3_width_pt - fig3_heatmap_human_match_legend_vp_width
 fig3_heatmap_human_match_legend_vp <- viewport(x = unit(fig3_heatmap_human_match_legend_vp_x, "bigpts"),
-                                               y = unit(fig3_heatmap_height_pt+5, "bigpts"),
+                                               y = unit(fig3_heatmap_height_pt+4, "bigpts"),
                                                width = unit(fig3_heatmap_human_match_legend_vp_width, "bigpts"),
                                                height = unit(27, "bigpts"),
                                                just = c("left", "top"))
