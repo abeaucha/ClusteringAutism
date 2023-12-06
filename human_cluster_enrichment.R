@@ -70,7 +70,8 @@ background_set <- "sagittal_gene_table_normalized_filtered.csv"
 
 # Gene score for StringDB
 # gene_scores <- c(850, 900, 950)
-gene_scores <- 950
+# gene_scores <- 950
+gene_scores <- seq(400, 950, by = 50)
 
 # Version of StringDB
 # stringdb_versions <- c("11.5", "12.0")
