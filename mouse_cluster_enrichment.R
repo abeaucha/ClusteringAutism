@@ -46,8 +46,10 @@ GetValidGeneClusterList<-function(Cluster_Dir="Data/Outputs/Clusters",
   cl$Gene[cl$Gene=="Nr1a"] <- "Nmdar1"
   cl$Gene[cl$Model=="itsn1(+/+);itsn2(-/-)"]<- "itsn2"
   cl$Gene[cl$Model=="Snf2H(+/+);Snf2L(-/-);emxcre"]<-"Snf2l"
-  cl$Gene[cl$Gene=="Snf2L"] <- "Snf2l"
-  cl$Gene[cl$Gene=="Snf2H"] <- "Snf2h"
+  cl$Gene[cl$Gene=="Snf2L"] <- "Smarca1"
+  cl$Gene[cl$Gene=="Snf2H"] <- "Smarca5"
+  cl$Gene[cl$Model=="Gsk3(a)"]<- "Gsk3A"
+  cl$Gene[cl$Model=="Gsk3(B)"]<- "Gsk3B"
   
   # Remove CNVs, chromosomal, and behavioural models
   valid_indices <- (! (cl$Gene %in% c("15q11-13", "16p11.2", "22q11.2", "XO", "Btbr", "Balbc", "MAR","15q25","TCDD","VPA","BtbrTT")))
