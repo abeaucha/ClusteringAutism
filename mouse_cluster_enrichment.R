@@ -262,13 +262,16 @@ cl_filt <- GetValidGeneClusterList(Cluster_Dir = cluster_dir,
 nk_max <- 10
 
 # Gene score for StringDB
-gene_scores <- c(850, 900, 950)
+# gene_scores <- c(850, 900, 950)
+gene_scores <- seq(400, 950, by = 50)
 
 # Version of StringDB
-stringdb_versions <- c("11.5", "12.0")
+# stringdb_versions <- c("11.5", "12.0")
+stringdb_versions <- "12.0"
 
 # Version of Bader pathways
-bader_versions <- c(2020, 2023)
+# bader_versions <- c(2020, 2023)
+bader_versions <- 2023
 
 # Background set for enrichment analysis
 background_set <- file.path(enrichment_dir, "sagittal_gene_table_normalized_filtered.csv")
@@ -281,6 +284,13 @@ for (i in 1:nrow(params)) {
   bader_version <- params[[i, "bader"]]
   stringdb_version <- params[[i, "stringdb"]]
   gene_score <- params[[i, "score"]]
+  
+  message(
+    paste(paste("StringDB version:", stringdb_version),
+          paste("Bader version:", bader_version),
+          paste("Gene score:", gene_score),
+          sep = "\n")
+  )
   
   output_dir <- paste("StringDB", stringdb_version, "Bader", 
                       bader_version, sep = "_")
