@@ -84,6 +84,7 @@ def parse_args():
 
     return args
 
+
 if __name__ == '__main__':
 
     # Parse command line argument
@@ -105,7 +106,7 @@ if __name__ == '__main__':
     metadata = os.path.join(pipeline_dir, 'metadata.csv')
     params = utils.fetch_params_metadata(metadata, id = args['params_id'])
     if params is None:
-        raise Exception("Pipeline not initialized: {}. " 
+        raise Exception("Pipeline not initialized: {}. "
                         "Run pl_process_initialize.py with desired parameters."
                         .format(params_id))
     if params.shape[0] > 1:
@@ -114,7 +115,7 @@ if __name__ == '__main__':
     # Check existence of pipeline directory
     pipeline_dir = os.path.join(pipeline_dir, params_id)
     if not os.path.exists(pipeline_dir):
-        raise Exception("Pipeline not initialized: {}. " 
+        raise Exception("Pipeline not initialized: {}. "
                         "Run pl_process_initialize.py with desired parameters."
                         .format(params_id))
 
