@@ -41,8 +41,11 @@ demographics_dir <- file.path(registration_dir, "subject_info")
 ```{r}
 demographics <- file.path(demographics_dir, "demographics.csv")
 demographics <- read_csv(demographics, show_col_types = FALSE)
+head(demographics)
+```
 
-demographics
+```{r}
+(nparticipants <- nrow(demographics))
 ```
 
 ```{r}
@@ -62,5 +65,96 @@ demographics %>%
   group_by(DX2) %>% 
   summarise(nparticipants = n(),
             fparticipants = n()/nrow(.))
+```
+
+```{r}
+# Redefine diagnostic categories
+df_diagnoses <- tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD",
+                              "Anxiety", "Sub-threshold ADHD",
+                              "Intellectual Disability only", 
+                              "Tourette Syndrome", "Other", "Fragile X", "Control"),
+                       DX_new_1 = c("ASD", "OCD", "ADHD", "OCD", "Anxiety", 
+                                    "ADHD", "ID", "Tourette", "Other", "Fragile X", "Control"),
+                       DX_new_2 = c("ASD", "OCD", "ADHD", "OCD", "Other", 
+                                    "ADHD", "Other", "Other", "Other", "Other", "Control"))
+
+
+demographics <- demographics %>% 
+  left_join(df_diagnoses, by = "DX")
+
+demographics %>% 
+  group_by(DX_new_1) %>% 
+  summarise(nparticipants = n())
+```
+
+```{r}
+age_cdf_max <- 70
+df_age_cdf <- tibble(Age = seq(0, age_cdf_max, length.out = 1000),
+                     CDF = 0)
+for (i in 1:nrow(df_age_cdf)) {
+  n_lwr_tail <- sum(demographics[["Age"]] <= df_age_cdf[[i, "Age"]])
+  df_age_cdf[[i, "CDF"]] <- n_lwr_tail/nparticipants
+}
+
+age_min <- min(demographics[["Age"]])
+age_max <- max(demographics[["Age"]])
+
+ggplot(df_age_cdf, 
+       aes(x = Age, y = CDF)) + 
+  geom_line() +
+  geom_vline(xintercept = c(age_min, age_max),
+             linetype = "dashed",
+             col = "red") + 
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = seq(0, age_cdf_max, by = 5),
+                     expand = expansion()) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  theme_bw()
+```
+
+```{r}
+ggplot(demographics,
+       aes(x = Age)) + 
+  geom_histogram(col = "grey20",
+                 fill = "grey80") +
+  scale_x_continuous(breaks = seq(0, age_cdf_max, by = 5)) + 
+  labs(x = "Age",
+       y = "Count") + 
+  theme_bw()
+```
+
+
+```{r}
+age_mean <- mean(demographics[["Age"]])
+age_sd <- sd(demographics[["Age"]])
+msg_age_min <- paste("Min:", floor(age_min))
+msg_age_max <- paste("Max:", floor(age_max))
+msg_age_stats <- paste("Mean:",
+                       sprintf("%.1f", age_mean),
+                       "+/-",
+                       sprintf("%.1f", age_sd))
+print(msg_age_min)
+print(msg_age_max)
+print(msg_age_stats)
+```
+
+```{r}
+demographics %>% 
+  group_by(Sex) %>% 
+  count()
+```
+
+```{r}
+demographics %>% 
+  select(Scanner) %>% 
+  separate(col = Scanner, into = c("Site", "Scanner")) %>% 
+  group_by(Site) %>% 
+  count()
+```
+
+```{r}
+demographics %>% 
+  group_by(Scanner) %>% 
+  count()
 ```
 

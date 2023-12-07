@@ -35,6 +35,9 @@ source("../src/analysis.R")
 ```{r fig2-pipeline-params}
 # Output directory
 output_dir <- "figure2/"
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+}
 
 # Plot file prefix
 output_plot_prefix <- "figure2"
