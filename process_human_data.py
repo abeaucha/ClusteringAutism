@@ -22,7 +22,7 @@ The pipeline is mappable over multiple parameter sets.
 import argparse
 from functools import reduce
 from itertools import product
-from pipelines import process_human_data
+from pipelines.processing import process_human_data
 
 
 # Command line arguments -----------------------------------------------------
