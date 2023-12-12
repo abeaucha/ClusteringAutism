@@ -172,6 +172,21 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
 
     import tempfile
 
+    script = "process_human_data.py"
+    slurm_args = dict(
+        job_name = 'process_human_data_v2_0.8mm',
+        nodes = 1,
+        cpus_per_task = 8,
+        mem = '64G',
+        time='72:00:00',
+        chdir = os.getcwd(),
+        output = 'logs/process_human_data_v2_0.8mm_%j.out'
+    )
+
+    utils.build_job_script(script = script,
+                           script_args = kwargs,
+                           slurm_args = slurm_args)
+
     file = tempfile.NamedTemporaryFile(mode = 'w', dir = './', suffix = '.sh', delete = False, newline = '\n')
     with file as f:
         f.write('#!/bin/bash\n')

@@ -2,10 +2,50 @@ import os
 import subprocess
 import multiprocessing as mp
 import pandas as pd
+import tempfile as tf
 from functools import partial
 from random import randint
 from re import sub
 from tqdm import tqdm
+
+
+def build_job_script(script, script_args, slurm_args):
+
+    file = tf.NamedTemporaryFile(mode = 'w',
+                                 dir = './',
+                                 suffix = '.sh',
+                                 delete = False,
+                                 newline = '\n')
+    with file as f:
+
+        f.write('#!/bin/bash\n')
+
+        for key, val in slurm_args.items():
+            line = '#SBATCH --{}={}\n'.format(key.replace('_', '-'), val)
+            f.write(line)
+
+        f.write('source activate_venv.sh\n')
+
+        script_ext = os.path.splitext(script)[-1]
+        if script_ext == '.py':
+            script_cmd = 'python3 {}'.format(script)
+        elif script_ext == '.R':
+            script_cmd = 'Rscript {}'.format(script)
+        else:
+            raise Exception
+
+        script_cmd = '{} \\\n'.format(script_cmd)
+        f.write(script_cmd)
+
+        for key, val in script_args.items():
+            if type(val) is tuple:
+                val = ' '.join(val)
+            line = '--{} {} \\\n'.format(key.replace('_', '-'), val)
+            f.write(line)
+
+        f.close()
+
+    return
 
 
 def execute_R(script, **kwargs):
@@ -656,7 +696,6 @@ def resample_images(infiles, isostep, outdir = None, suffix = None,
 
 
 def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
-
     """
     Transform coordinates from one space to another
 
