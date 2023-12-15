@@ -9,42 +9,89 @@ from re import sub
 from tqdm import tqdm
 
 
-def build_job_script(script, script_args, slurm_args):
+def slurm_build(script, args, resources):
+    """
 
+    Parameters
+    ----------
+    script: str
+        Name of the script to execute.
+    args: dict
+        Command line arguments for the script.
+    resources: dict
+        Arguments for the slurm scheduler.
+
+    Returns
+    -------
+    jobfile: str
+        Path to the slurm job file.
+    """
+
+    # Create a temp file
     file = tf.NamedTemporaryFile(mode = 'w',
                                  dir = './',
                                  suffix = '.sh',
                                  delete = False,
                                  newline = '\n')
+
+    # Open file for editing
     with file as f:
 
+        # Initial shebang
         f.write('#!/bin/bash\n')
 
-        for key, val in slurm_args.items():
+        # Write out slurm arguments
+        for key, val in resources.items():
             line = '#SBATCH --{}={}\n'.format(key.replace('_', '-'), val)
             f.write(line)
 
+        # Activate project virtual environment
         f.write('source activate_venv.sh\n')
 
+        # Execute script using python or R
         script_ext = os.path.splitext(script)[-1]
         if script_ext == '.py':
-            script_cmd = 'python3 {}'.format(script)
+            script_cmd = 'python3 {} '.format(script)
         elif script_ext == '.R':
             script_cmd = 'Rscript {}'.format(script)
         else:
             raise Exception
 
-        script_cmd = '{} \\\n'.format(script_cmd)
+        # script_cmd = '{} \\\n'.format(script_cmd)
         f.write(script_cmd)
-
-        for key, val in script_args.items():
+        for key, val in args.items():
             if type(val) is tuple:
                 val = ' '.join(val)
-            line = '--{} {} \\\n'.format(key.replace('_', '-'), val)
+            # line = '--{} {} \\\n'.format(key.replace('_', '-'), val)
+            line = '--{} {} '.format(key.replace('_', '-'), val)
             f.write(line)
 
+        jobfile = f.name
         f.close()
 
+    return jobfile
+
+
+def slurm_submit(script, args, resources):
+    """
+
+    Parameters
+    ----------
+    script: str
+        Name of the script to execute.
+    args: dict
+        Command line arguments for the script.
+    resources: dict
+        Arguments for the slurm scheduler.
+
+    Returns
+    -------
+
+    """
+
+    jobfile = slurm_build(**locals())
+    sbatch_cmd = 'sbatch {}'.format(jobfile)
+    subprocess.run(sbatch_cmd)
     return
 
 

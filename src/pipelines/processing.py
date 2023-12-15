@@ -1,11 +1,12 @@
 import os
+import sys
 import utils
 import pandas as pd
 from glob import glob
 from pyminc.volumes.factory import volumeFromFile
 
-def initialize(**kwargs):
 
+def initialize(**kwargs):
     # Effect size calculation method parameters
     if kwargs['es_method'] == 'normative-growth':
         kwargs['es_ncontrols'] = None
@@ -122,24 +123,14 @@ def initialize(**kwargs):
     return paths
 
 
-def effect_sizes(imgdir, demographics, mask, outdir,
-                 method = 'normative-growth', nproc = None, **kwargs):
-    # What does this function do?
-    # It needs to compute the effect sizes for either the absolute, relative,
-    # or both Jacobians. But this needs to deploy a slurm job if requested.
-    # This function needs to deploy a subprocess
-    #if local:
-    #    run script locally
-    #if slurm:
-    #    distribute on cluster
-
-    return
 
 def clustering():
     return
 
+
 def centroids():
     return
+
 
 def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
                        input_dir = 'data/human/registration/v2/jacobians_resampled/resolution_0.8/',
@@ -157,50 +148,62 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
                        cluster_file = 'clusters.csv',
                        cluster_affinity_file = 'affinity.csv',
                        cluster_map_method = 'mean'):
-
     # Get dictionary of function kwargs
     kwargs = locals().copy()
 
     # Initialize pipeline directory
+    # Get paths to pipeline
     paths = initialize(**kwargs)
 
-    # es_kwargs = {key.replace('es_', ''):val
-    #              for key,val in kwargs.items() if 'es_' in key}
-    # es_kwargs.update(
-    #     dict(imgdir = )
-    # )
+    # Compute effect sizes
+    def effect_sizes(imgdir, demographics, mask, outdir,
+                     method = 'normative-growth', platform = 'local',
+                     nproc = 1, **kwargs):
 
-    import tempfile
+        # Create output dir if needed
+        imgdir = os.path.join(imgdir, '')
+        outdir = os.path.join(outdir, '')
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
-    script = "process_human_data.py"
+        jacobians = ['absolute', 'relative']
+        if platform == 'local':
+            for j, jac in enumerate(jacobians):
+                compute_effect_sizes(...)
+        elif platform == 'slurm':
+            for j, jac in enumerate(jacobians):
+                script = 'compute_effect_sizes.py'
+                slurm_submit(script = script, ...)
+        else:
+            raise ValueError
+
+        return
+
+    # Arguments for effect sizes
+    es_kwargs = {key.replace('es_', ''):val
+                 for key,val in kwargs.items() if 'es_' in key}
+    es_kwargs.update(
+        dict(imgdir = paths['jacobians'],
+             demographics = demographics,
+             mask = mask,
+             outdir = paths['effect_sizes'])
+    )
+    effect_sizes(**es_kwargs)
+
+
+
+
     slurm_args = dict(
         job_name = 'process_human_data_v2_0.8mm',
         nodes = 1,
         cpus_per_task = 8,
         mem = '64G',
-        time='72:00:00',
+        time = '72:00:00',
         chdir = os.getcwd(),
         output = 'logs/process_human_data_v2_0.8mm_%j.out'
     )
 
-    utils.build_job_script(script = script,
-                           script_args = kwargs,
-                           slurm_args = slurm_args)
-
-    file = tempfile.NamedTemporaryFile(mode = 'w', dir = './', suffix = '.sh', delete = False, newline = '\n')
-    with file as f:
-        f.write('#!/bin/bash\n')
-        f.write('Hello world!\n')
-        tmp = ['a', 'b', 'c']
-        for x in tmp:
-            f.write(x+'\n')
-        f.close()
-        print("Something else")
 
 
-    print(file.name)
-#    effect_sizes()
-
-
-    clustering()
-    centroids()
+    # clustering()
+    # centroids()
