@@ -787,4 +787,47 @@ export_pdf(x = ggplotGrob(fig_supp_4),
            file = outfile)
 ```
 
+# Supplementary Figure 5
 
+```{r fig3-heatmap-pathway-clust-scree-plot}
+# Generate pathway cluster scree plot
+fig_supp_5 <- mat_pathways_nk_gt4_subset %>% 
+  t() %>% 
+  hclust_wcss() %>% 
+  as_tibble() %>% 
+  mutate(nk = 1:nrow(.)) %>% 
+  ggplot(df_pathway_hclust,
+         mapping = aes(nk, y = value)) + 
+  geom_line(size = 0.4) + 
+  geom_point(size = 1) +
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  labs(x = "Number of clusters (motifs)",
+       y = "Within-cluster sum of squared distance") + 
+  theme_bw() +
+  theme(axis.title = element_text(size = font_size+1,
+                                  family = font_family),
+        axis.text = element_text(size = font_size,
+                                 family = font_family),
+        legend.title = element_text(size = font_size+1,
+                                    family = font_family),
+        legend.text = element_text(size = font_size,
+                                   family = font_family),
+        panel.grid.minor.x = element_blank())
+
+# Figure dimensions
+fig_supp_5_width_pt <- fig_width_pt
+fig_supp_5_height_pt <- fig_width_pt/3
+
+# Export
+outfile <- paste(output_plot_prefix, 5, sep = "_")
+outfile <- paste0(outfile, ".jpeg")
+outfile <- file.path(output_dir, outfile)
+jpeg(filename = outfile,
+     width = fig_supp_5_width_pt/pt_per_in,
+     height = fig_supp_5_height_pt/pt_per_in,
+     units = "in",
+     res = 600,
+     quality = 100)
+print(fig_supp_5)
+dev.off()
+```
