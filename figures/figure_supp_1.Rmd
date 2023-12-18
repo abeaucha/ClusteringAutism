@@ -1,0 +1,277 @@
+---
+title: "Supplementary Figures"
+subtitle: "Clustering Autism"
+author: "Antoine Beauchamp"
+date: "2023-12-18"
+output: html_document
+---
+
+# Initialization
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(SNFtool))
+suppressPackageStartupMessages(library(cluster))
+suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(RColorBrewer))
+```
+
+```{r functions}
+source("../src/utils.R")
+source("../src/analysis.R")
+
+#Function to estimate cluster metrics over a range of solutions
+estimate_cluster_metrics <- function (W, NUMC = 2:5){
+  if (min(NUMC) == 1) {
+    warning("Note that we always assume there are more than one cluster.")
+    NUMC <- NUMC[NUMC > 1]
+  }
+  W <- (W + t(W))/2
+  diag(W) <- 0
+  if (length(NUMC) <= 0) {
+    warning(paste("Invalid NUMC provided, must be an integer vector", 
+                  "with atleast one other number than 1.", "Using default NUMC=c(2,3,4,5)", 
+                  sep = ""))
+    NUMC <- 2:5
+  }
+  degs <- rowSums(W)
+  degs[degs == 0] <- .Machine$double.eps
+  D <- diag(degs)
+  L <- D - W
+  Di <- diag(1/sqrt(degs))
+  L <- Di %*% L %*% Di
+  eigs <- eigen(L)
+  eigs_order <- sort(eigs$values, index.return = T)$ix
+  eigs$values <- eigs$values[eigs_order]
+  eigs$vectors <- eigs$vectors[, eigs_order]
+  eigengap <- abs(diff(eigs$values))
+  quality <- list()
+  for (c_index in 1:length(NUMC)) {
+    ck <- NUMC[c_index]
+    UU <- eigs$vectors[, 1:ck]
+    EigenvectorsDiscrete <- SNFtool:::.discretisation(UU)[[1]]
+    EigenVectors <- EigenvectorsDiscrete^2
+    temp1 <- EigenVectors[do.call(order, lapply(1:ncol(EigenVectors), 
+                                                function(i) EigenVectors[, i])), ]
+    temp1 <- t(apply(temp1, 1, sort, TRUE))
+    quality[[c_index]] <- (1 - eigs$values[ck + 1])/(1 - 
+                                                       eigs$values[ck]) * sum(sum(diag(1/(temp1[, 1] + .Machine$double.eps)) %*% 
+                                                                                    temp1[, 1:max(2, ck - 1)]))
+  }
+  
+  out <- tibble(nk = NUMC,
+                eigengap = eigengap[NUMC],
+                rotation = unlist(quality))
+  
+  return(out)
+}
+```
+
+```{r directories}
+#Output directory
+output_dir <- "figure_supplementary"
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+
+# Plot file prefix
+output_plot_prefix <- "figure_supp"
+
+#Human pipeline
+human_version <- "v2"
+human_pipeline_dir <- "../data/human/derivatives/"
+human_pipeline_dir <- file.path(human_pipeline_dir, human_version)
+
+#Mouse pipeline
+mouse_version <- "v2"
+mouse_pipeline_dir <- "../data/mouse/derivatives/"
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_version)
+```
+
+```{r mouse-params}
+mouse_resolution <- 0.2
+mouse_cluster_map_method <- "mean"
+
+#Identify mouse parameter set ID
+mouse_metadata <- file.path(mouse_pipeline_dir, "metadata.csv")
+mouse_params <- fetch_params_metadata(mouse_metadata, 
+                                      resolution = mouse_resolution,
+                                      cluster_map_method = mouse_cluster_map_method)
+mouse_params
+```
+
+```{r human-params}
+human_resolution <- 0.8
+human_es_method <- "normative-growth"
+# human_es_method <- "propensity-matching"
+human_es_df <- 3
+# human_es_df <- NA
+# human_es_ncontrols <- 10
+human_es_ncontrols <- NA
+human_cluster_map_method <- mouse_cluster_map_method
+
+#Identify human parameter set ID
+human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
+human_params <- fetch_params_metadata(metadata = human_metadata,
+                                      resolution = human_resolution,
+                                      es_method = human_es_method,
+                                      es_df = human_es_df,
+                                      es_ncontrols = human_es_ncontrols,
+                                      cluster_map_method = human_cluster_map_method)
+human_params
+```
+
+```{r params}
+#Parameter set IDs
+mouse_params_id <- 107
+# human_params_id <- 256
+human_params_id <- 700
+# human_params_id <- 547
+
+#Mouse clustering directory
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters")
+human_cluster_dir <- file.path(human_pipeline_dir, human_params_id, "clusters")
+
+#Human clustering directory
+human_params <- fetch_params_metadata(metadata = human_metadata,id = human_params_id)
+human_cluster_resolution <- human_params[["cluster_resolution"]]
+human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
+human_cluster_dir <- file.path(human_cluster_dir, str_c("resolution_", human_cluster_resolution))
+
+#Human effect size directory
+human_es_dir <- file.path(human_pipeline_dir, human_params_id, "effect_sizes")
+human_es_dir <- file.path(human_es_dir, str_c("resolution_", human_cluster_resolution))
+```
+
+```{r fig2-graphical-params}
+# Number of bigpts in an inch
+pt_per_in <- 72
+
+# Font family
+font_family <- "Helvetica"
+
+# Nature suggested font size: 5-7 pt
+font_size <- 6
+
+# Empty rectangle grob
+# empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
+
+# Black rectangle grob
+# black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
+
+# Rectangle with number in it
+# rect_w_num <- function(n) {
+#   out <- gTree(children = gList(empty_rect_grob,
+#                                 textGrob(label = n)))
+#   return(out)
+# }
+
+# Maximal figure dimensions in bigpts
+fig_width_pt <- 510
+fig_height_pt <- 481
+```
+
+# Supplementary Figure 1
+
+```{r import}
+#Human cluster assignments
+human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
+df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
+
+#Mouse cluster assignments
+mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
+df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+colnames(df_mouse_clusters) <- c("ID", str_c("nk", 2:10))
+
+#Human affinity matrix
+human_affinity_file <- file.path(human_cluster_dir, "affinity.csv")
+df_human_affinity <- read_csv(human_affinity_file, show_col_types = FALSE)
+mat_human_affinity <- as.matrix(df_human_affinity)
+rownames(mat_human_affinity) <- colnames(mat_human_affinity)
+
+#Mouse affinity matrix
+mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
+load(mouse_affinity_file)
+mat_mouse_affinity <- W
+df_mouse_affinity <- as_tibble(mat_mouse_affinity)
+```
+
+```{r human-cluster-optimal}
+#Max nk to examine
+nk_max <- 20
+
+#Get human cluster metrics
+df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:nk_max)
+df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:nk_max)
+df_cluster_metrics <- bind_rows(
+  df_human_cluster_metrics %>% 
+    mutate(species = "Human"),
+  df_mouse_cluster_metrics %>% 
+    mutate(species = "Mouse")
+)
+```
+
+
+```{r human-cluster-optimal}
+#Plot x-axis breaks
+xbreaks <- seq(0, nk_max, by = 2)
+
+
+#Plot of eigengap distribution
+fig_supp_1_human <- ggplot(df_cluster_metrics,
+                           aes(x = nk, y = eigengap, col = species)) + 
+  geom_line() + 
+  geom_point() +
+  coord_cartesian(xlim = c(2, nk_max),
+                  ylim = c(0, 0.1)) + 
+  scale_x_continuous(breaks = seq(0, nk_max, by = 1)) +
+  scale_y_continuous(breaks = seq(0, 0.1, by = 0.01)) + 
+  labs(x = "Number of clusters (K)",
+       y = "Eigengap",
+       col = "Species") +
+  theme_bw() + 
+  theme(axis.title = element_text(size = font_size+1,
+                                  family = font_family),
+        axis.text = element_text(size = font_size,
+                                  family = font_family),
+        legend.title = element_text(size = font_size+1,
+                                  family = font_family),
+        legend.text = element_text(size = font_size,
+                                  family = font_family),
+        panel.grid.minor.x = element_blank())
+
+fig_supp_1_width_pt <- fig_width_pt
+fig_supp_1_height_pt <- fig_width_pt/2
+
+fig_supp_1_grob <- ggplotGrob(fig_supp_1_human)
+
+outfile <- paste(output_plot_prefix, 1, sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+export_pdf(x = fig_supp_1_grob,
+           width = fig_supp_1_width_pt,
+           height = fig_supp_1_height_pt,
+           units = "bigpts",
+           file = outfile)
+```
+
+
+```{r human-cluster-optimal}
+# Figure 2 dimensions
+fig2_width_pt <- sum(fig2_widths)
+fig2_height_pt <- sum(fig2_heights)
+
+# Export
+outfile <- paste0(output_plot_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+export_pdf(x = fig2_grob, 
+           width = fig2_width_pt,
+           height = fig2_height_pt,
+           units = "bigpts",
+           file = outfile)
+```
