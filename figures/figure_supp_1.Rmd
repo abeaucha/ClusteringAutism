@@ -449,19 +449,21 @@ if (run) {
     indir <- mouse_cluster_map_dirs[[j]]
     outdir <- mouse_cluster_map_dirs_50um[[j]]
     
-    for (k in 1:nk_mouse) {
-      
-      infile <- paste0("cluster_map_nk_", nk_mouse, "_k_", k, ".mnc")
-      outfile <- infile
-      
-      infile <- file.path(indir, infile)
-      outfile <- file.path(outdir, outfile)
-      
-      cmd_mincresample <- paste("mincresample", "-clobber",
-                                "-like", mouse_anat_file,
-                                infile, outfile)
-      system(command = cmd_mincresample)
-      
+    for (nk in 2:nk_max) {
+      for (k in 1:nk) {
+        
+        infile <- paste0("cluster_map_nk_", nk, "_k_", k, ".mnc")
+        outfile <- infile
+        
+        infile <- file.path(indir, infile)
+        outfile <- file.path(outdir, outfile)
+        
+        cmd_mincresample <- paste("mincresample", "-clobber",
+                                  "-like", mouse_anat_file,
+                                  infile, outfile)
+        system(command = cmd_mincresample)
+        
+      }
     }
   }
 }
@@ -530,8 +532,8 @@ for (k in 1:nk_mouse) {
     legend() %>% 
     grobify()
   
-  fig_supp_3_width_pt <- fig_width_pt/(2.5)
-  fig_supp_3_height_pt <- (fig_supp_3_width_pt/3)*ss_nslices
+  fig_supp_3_width_pt <- fig_width_pt/(2)
+  fig_supp_3_height_pt <- (fig_supp_3_width_pt/4)*ss_nslices
   
   outfile <- paste(output_plot_prefix, 3, nk_mouse, k, sep = "_")
   outfile <- paste0(outfile, ".pdf")
@@ -743,10 +745,10 @@ df_mouse_pathways_alluvial <- df_mouse_pathways_all %>%
          E = ifelse(E > 30, 30, E))
 
 fig_supp_4 <- ggplot(df_mouse_pathways_alluvial, 
-       aes(x = nk, 
-           stratum = k,
-           fill = NLQ,
-           alluvium = ID)) + 
+                     aes(x = nk, 
+                         stratum = k,
+                         fill = NLQ,
+                         alluvium = ID)) + 
   geom_flow(stat = "alluvium", aes.flow = "forward") + 
   geom_stratum(size = 0.15) + 
   facet_wrap(~pathway, ncol = 3, nrow = 7) + 
@@ -831,3 +833,395 @@ jpeg(filename = outfile,
 print(fig_supp_5)
 dev.off()
 ```
+
+# Supplementary Figure 6
+
+```{r}
+# Directory for mouse-human cluster similarity 
+similarity_dir <- file.path(pipeline_dir, "similarity")
+
+# Directory for mouse-human cluster similarity permutations
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+```
+
+
+```{r fig3-similarity-import}
+# Set of similarity files
+similarity_files <- list.files(similarity_dir, full.names = TRUE)
+
+# Jacobians to use
+jacobians <- c("absolute", "relative")
+
+# Import absolute and relative similarity files
+similarity <- vector(mode = "list", length = length(jacobians))
+names(similarity) <- jacobians
+for (j in jacobians) {
+  similarity[[j]] <- similarity_files %>% 
+    str_subset(j) %>% 
+    read_csv(show_col_types = FALSE) %>% 
+    mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+           mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
+    unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
+    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
+    mutate(jacobians = j)
+}
+
+# Combine data frames for absolute and relative similarity
+df_similarity <- bind_rows(similarity)
+
+# Compute average similarity values across jacobians for each permutation
+df_similarity <- df_similarity %>% 
+  group_by(human_cluster_id, human_nk, human_k, 
+           mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+```
+
+```{r fig3-similarity-import-permutations}
+# Set of permutation files
+permutation_files <- list.files(permutation_dir, full.names = TRUE)
+
+# Permutation IDs
+permutation_ids <- permutation_files %>% 
+  basename() %>% 
+  str_extract("[0-9]+") %>% 
+  as.numeric() %>% 
+  unique() %>% 
+  sort()
+
+# Number of permutations
+np <- length(permutation_ids)
+
+# Iterate over jacobians and permutations to import all permuted similarity 
+# values
+list_permutations <- vector(mode = "list", length = length(jacobians))
+names(list_permutations) <- jacobians
+for (j in jacobians) {
+  
+  # Iterate over permutations
+  df_sim <- tibble()
+  for (p in 1:np) {
+    
+    # Permutation similarity data
+    infile <- permutation_files %>% 
+      str_subset(str_c("permutation_", permutation_ids[p], "_", j))
+    
+    # Import permutation similarity data
+    df_sim_tmp <- infile %>% 
+      read_csv(show_col_types = FALSE) %>% 
+      mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+             mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
+      unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
+      unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
+      mutate(permutation = permutation_ids[p]) 
+    
+    # Collate permutation data
+    df_sim <- bind_rows(df_sim, df_sim_tmp)
+  }
+  
+  # Include jacobians information
+  df_sim <- df_sim %>% 
+    mutate(jacobians = j)
+  
+  list_permutations[[j]] <- df_sim
+  
+}
+
+# Combine data frames for absolute and relative permutations
+df_permutations <- bind_rows(list_permutations)
+
+# Compute average similarity values across jacobians for each permutation
+df_permutations <- df_permutations %>% 
+  group_by(permutation, 
+           human_cluster_id, human_nk, human_k, 
+           mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+```
+
+```{r fig3-similarity-compute-pvals}
+# Mouse and human max nk
+human_nk_max <- max(df_similarity[["human_nk"]])
+mouse_nk_max <- max(df_similarity[["mouse_nk"]])
+
+# Iterate along nk diagonal +/- 1
+df_sim_pvals <- tibble()
+for (h_nk in 2:human_nk_max) {
+  for (m_nk in (h_nk-1):(h_nk+1)){
+    
+    if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
+      
+      df_sim_nk <- df_similarity %>% 
+        select(human_cluster_id, human_nk, human_k,
+               mouse_cluster_id, mouse_nk, mouse_k,
+               similarity) %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        mutate(pval = 0)
+      
+      sim_perm_nk <- df_permutations %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        pull(similarity) %>% 
+        sort()
+      
+      for (i in 1:nrow(df_sim_nk)) {
+        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
+        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+      }
+      
+      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      
+    }
+  }
+}
+
+# Evaluate significance
+sim_alpha <- 0.05
+df_sim_pvals <- df_sim_pvals %>% 
+  mutate(significant = ifelse(pval < sim_alpha, 1, 0))
+```
+
+
+
+```{r}
+df_sig_nk <- df_sim_pvals %>% 
+  group_by(mouse_nk, mouse_k) %>% 
+  summarise(p = min(pval),
+            nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(plab = case_when(p < 0.05 ~ "**",
+                          p >= 0.05 & p < 0.1 ~ "*",
+                          p >= 0.1 ~ ""),
+         has_match = ifelse(nsignificant > 0, TRUE, FALSE)) %>% 
+  select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", "nk", "k", 
+        sep = "-", remove = FALSE) 
+
+# Determine mouse clusters with human matches
+df_mouse_matches <- df_sig_nk %>% 
+  filter(has_match) %>% 
+  select(cluster_id, nk, k) %>% 
+  mutate(nk = as.numeric(as.character(nk)),
+         k = as.numeric(as.character(k)))
+```
+
+```{r}
+df_mouse_clusters_long <- df_mouse_clusters_long %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)  
+
+# Extract cluster IDs for nk = 4
+cluster_ids_nk4 <- df_mouse_clusters_long %>% 
+  filter(nk == 4) %>% 
+  select(cluster_id, nk, k) %>% 
+  distinct() %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)
+
+# Extract cluster IDs for nk > 4
+cluster_ids_gt4 <- df_mouse_clusters_long %>% 
+  semi_join(df_mouse_matches, by = "cluster_id") %>% 
+  filter(nk > 4) %>% 
+  select(cluster_id, nk, k) %>% 
+  distinct() %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)
+
+# For clusters in higher nk solutions, determine the how the models in 
+# those clusters relate to those in the 4-cluster solution
+df_cluster_grid <- expand_grid(cluster_id_nk4 = cluster_ids_nk4,
+                               cluster_id = cluster_ids_gt4,
+                               p = 0)
+for (i in 1:nrow(df_cluster_grid)) {
+  
+  models_in_clust_4 <- df_mouse_clusters_long %>% 
+    filter(cluster_id == df_cluster_grid[[i, "cluster_id_nk4"]]) %>% 
+    pull(ID)
+  
+  models_in_clust <- df_mouse_clusters_long %>% 
+    filter(cluster_id == df_cluster_grid[[i, "cluster_id"]]) %>% 
+    pull(ID)
+  
+  intersection <- intersect(models_in_clust, models_in_clust_4)
+  df_cluster_grid[[i, "p"]] <- length(intersection)/length(models_in_clust)
+  
+}
+
+# Identify which cluster in the 4-cluster solution are most 
+# representative of the higher clusters
+df_cluster_grid <- df_cluster_grid %>% 
+  group_by(cluster_id) %>% 
+  filter(p == max(p)) %>% 
+  ungroup() %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_ids_gt4),
+         cluster_id_nk4 = factor(cluster_id_nk4, levels = cluster_ids_nk4)) %>% 
+  arrange(cluster_id_nk4, cluster_id) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"),
+           sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k))
+# %>% 
+# filter(nk %in% nk_subset)
+df_cluster_grid
+```
+
+```{r}
+clusters <- paste(4, 1:4, sep = "-")
+for (clust in clusters) {
+  
+  nk <- str_split(clust, pattern = "-", simplify = TRUE)[1]
+  k <- str_split(clust, pattern = "-", simplify = TRUE)[2]
+  
+  img_abs <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["absolute"]],
+                                mask = mouse_mask_file,
+                                nk = nk, k = k,
+                                threshold = threshold,
+                                threshold_value = threshold_value,
+                                threshold_symmetric = threshold_symmetric)
+  
+  img_rel <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["relative"]],
+                                mask = mouse_mask_file,
+                                nk = nk, k = k,
+                                threshold = threshold,
+                                threshold_value = threshold_value,
+                                threshold_symmetric = threshold_symmetric)
+  
+  img_abs <- mincArray(img_abs)
+  img_rel <- mincArray(img_rel)
+  
+  fig_supp_6_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 20, end = 200) %>% 
+    anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+    overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+    sliceSeries() %>% anatomy() %>% 
+    overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%   
+    grobify()
+  
+  fig_supp_6_width_pt <- fig_width_pt/(2)
+  fig_supp_6_height_pt <- (fig_supp_6_width_pt/3)*6
+  
+  outfile <- paste(output_plot_prefix, 6, clust, clust, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = fig_supp_6_grob,
+             file = outfile,
+             width = fig_supp_6_width_pt,
+             height = fig_supp_6_height_pt,
+             units = "bigpts")
+}
+```
+
+```{r}
+for (i in 1:nrow(df_cluster_grid)) {
+  
+  nk <- df_cluster_grid[[i, "nk"]]
+  k <- df_cluster_grid[[i, "k"]]
+  
+  img_abs <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["absolute"]],
+                                mask = mouse_mask_file,
+                                nk = nk, k = k,
+                                threshold = threshold,
+                                threshold_value = threshold_value,
+                                threshold_symmetric = threshold_symmetric)
+  
+  img_rel <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["relative"]],
+                                mask = mouse_mask_file,
+                                nk = nk, k = k,
+                                threshold = threshold,
+                                threshold_value = threshold_value,
+                                threshold_symmetric = threshold_symmetric)
+  
+  img_abs <- mincArray(img_abs)
+  img_rel <- mincArray(img_rel)
+  
+  fig_supp_6_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 20, end = 200) %>% 
+    anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+    overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+    sliceSeries() %>% anatomy() %>% 
+    overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%   
+    grobify()
+  
+  fig_supp_6_width_pt <- fig_width_pt/(2)
+  fig_supp_6_height_pt <- (fig_supp_6_width_pt/3)*6
+  
+  id4 <- as.character(df_cluster_grid[[i, "cluster_id_nk4"]])
+  id <- as.character(df_cluster_grid[[i, "cluster_id"]])
+  
+  outfile <- paste(output_plot_prefix, 6, id4, id, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = fig_supp_6_grob,
+             file = outfile,
+             width = fig_supp_6_width_pt,
+             height = fig_supp_6_height_pt,
+             units = "bigpts")
+  
+  
+}
+```
+
+```{r}
+nk_subset <- c(4, 6, 8, 10)
+
+df_sig_gt4 <- df_sim_pvals %>% 
+  filter(mouse_nk >= 4, significant == 1) %>% 
+  select(-significant) %>% 
+  arrange(mouse_nk, mouse_k) 
+
+for (i in 1:nrow(df_sig_gt4)) {
+  
+  nk <- df_sig_gt4[[i, "human_nk"]]
+  k <- df_sig_gt4[[i, "human_k"]]
+  
+  # Import centroid image for specific cluster using threshold
+  img_abs <- import_cluster_map(imgdir = human_cluster_map_dirs[["absolute"]],
+                                mask = human_mask_file,
+                                nk = nk, k = k,
+                                threshold = threshold,
+                                threshold_value = threshold_value,
+                                threshold_symmetric = threshold_symmetric)
+  
+  # Import centroid image for specific cluster using threshold
+  img_rel <- import_cluster_map(imgdir = human_cluster_map_dirs[["relative"]],
+                                mask = human_mask_file,
+                                nk = nk, k = k,
+                                threshold = threshold,
+                                threshold_value = threshold_value,
+                                threshold_symmetric = threshold_symmetric)
+  
+  # Crop image to remove black space
+  img_abs <- mincArray(img_abs)
+  img_abs <- img_abs[human_slices_dim_1,,human_slices_dim_3]
+  
+  # Crop image to remove black space
+  img_rel <- mincArray(img_rel)
+  img_rel <- img_rel[human_slices_dim_1,,human_slices_dim_3]
+  
+  fig_supp_6_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 60, end = 220) %>% 
+    anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
+    overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+    sliceSeries() %>% anatomy() %>% 
+    overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%   
+    grobify()
+  
+  fig_supp_6_width_pt <- 130
+  fig_supp_6_height_pt <- (fig_supp_6_width_pt/2)*6
+  
+  mouse_clust <- df_sig_gt4[[i, "mouse_cluster_id"]]
+  human_clust <- df_sig_gt4[[i, "human_cluster_id"]]
+  
+  outfile <- paste(output_plot_prefix, 6, "mouse", mouse_clust, "human", human_clust, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = fig_supp_6_grob,
+             file = outfile,
+             width = fig_supp_6_width_pt,
+             height = fig_supp_6_height_pt,
+             units = "bigpts")
+}
+
+```
+
