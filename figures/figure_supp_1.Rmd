@@ -996,7 +996,7 @@ df_sig_nk <- df_sim_pvals %>%
                           p >= 0.05 & p < 0.1 ~ "*",
                           p >= 0.1 ~ ""),
          has_match = ifelse(nsignificant > 0, TRUE, FALSE)) %>% 
-  select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
+  select(nk = mouse_nk, k = mouse_k, p, plab, has_match) %>% 
   filter(nk >= 4) %>% 
   unite(col = "cluster_id", "nk", "k", 
         sep = "-", remove = FALSE) 
@@ -1223,5 +1223,14 @@ for (i in 1:nrow(df_sig_gt4)) {
              units = "bigpts")
 }
 
+```
+
+```{r}
+mouse_clusters <- c("4-1", "6-5", "8-6", "10-4")
+df_sim_pvals %>% 
+  filter(mouse_cluster_id %in% mouse_clusters,
+         significant == 1) %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  select(mouse_cluster_id, human_cluster_id, pval)
 ```
 
