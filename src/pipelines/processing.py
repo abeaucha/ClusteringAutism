@@ -61,7 +61,8 @@ def initialize(**kwargs):
     es_dir = os.path.join(pipeline_dir, 'effect_sizes',
                           'resolution_{}'.format(resolution), '')
     cluster_dir = os.path.join(pipeline_dir, 'clusters',
-                               'resolution_{}'.format(kwargs['cluster_resolution']),
+                               'resolution_{}'.format(
+                                   kwargs['cluster_resolution']),
                                '')
     cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps',
                                    'resolution_{}'.format(resolution), '')
@@ -131,22 +132,22 @@ def centroids():
     return
 
 
-def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
-                       input_dir = 'data/human/registration/v2/jacobians_resampled/resolution_0.8/',
-                       demographics = 'data/human/registration/v2/subject_info/demographics.csv',
-                       mask = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
-                       datasets = ('POND', 'SickKids'),
-                       parallel = True, nproc = None,
-                       es_method = 'normative-growth', es_group = 'patients',
-                       es_nbatches = 1, es_df = 3,
-                       es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
-                       es_matrix_file = 'effect_sizes.csv',
-                       cluster_resolution = 3.0,
-                       cluster_nk_max = 10, cluster_metric = 'correlation',
-                       cluster_K = 10, cluster_sigma = 0.5, cluster_t = 20,
-                       cluster_file = 'clusters.csv',
-                       cluster_affinity_file = 'affinity.csv',
-                       cluster_map_method = 'mean'):
+def main(pipeline_dir = 'data/human/derivatives/v2/',
+         input_dir = 'data/human/registration/v2/jacobians_resampled/resolution_0.8/',
+         demographics = 'data/human/registration/v2/subject_info/demographics.csv',
+         mask = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
+         datasets = ('POND', 'SickKids'),
+         parallel = True, nproc = None,
+         es_method = 'normative-growth', es_group = 'patients',
+         es_nbatches = 1, es_df = 3,
+         es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
+         es_matrix_file = 'effect_sizes.csv',
+         cluster_resolution = 3.0,
+         cluster_nk_max = 10, cluster_metric = 'correlation',
+         cluster_K = 10, cluster_sigma = 0.5, cluster_t = 20,
+         cluster_file = 'clusters.csv',
+         cluster_affinity_file = 'affinity.csv',
+         cluster_map_method = 'mean'):
     # Get dictionary of function kwargs
     kwargs = locals().copy()
 
@@ -156,7 +157,7 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
 
     # Compute effect sizes
     def effect_sizes(imgdir, demographics, mask, outdir,
-                     method = 'normative-growth', platform = 'local',
+                     method = 'normative-growth', env = 'local',
                      nproc = 1, **kwargs):
 
         # Create output dir if needed
@@ -166,21 +167,22 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
             os.makedirs(outdir)
 
         jacobians = ['absolute', 'relative']
-        if platform == 'local':
+        if env == 'local':
             for j, jac in enumerate(jacobians):
-                compute_effect_sizes(...)
-        elif platform == 'slurm':
-            for j, jac in enumerate(jacobians):
-                script = 'compute_effect_sizes.py'
-                slurm_submit(script = script, ...)
-        else:
+                utils.execute_local(script = 'compute_effect_sizes.R',
+                                    args = ...)
+        elif env == 'slurm':
+            utils.execute_slurm(script = 'compute_effect_sizes.R',
+                                args = ...,
+                                slurm_args = ...)
+            else:
             raise ValueError
 
         return
 
     # Arguments for effect sizes
-    es_kwargs = {key.replace('es_', ''):val
-                 for key,val in kwargs.items() if 'es_' in key}
+    es_kwargs = {key.replace('es_', ''): val
+                 for key, val in kwargs.items() if 'es_' in key}
     es_kwargs.update(
         dict(imgdir = paths['jacobians'],
              demographics = demographics,
@@ -188,11 +190,6 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
              outdir = paths['effect_sizes'])
     )
     effect_sizes(**es_kwargs)
-
-
-
-
-
 
     slurm_args = dict(
         job_name = 'process_human_data_v2_0.8mm',
@@ -203,8 +200,6 @@ def process_human_data(pipeline_dir = 'data/human/derivatives/v2/',
         chdir = os.getcwd(),
         output = 'logs/process_human_data_v2_0.8mm_%j.out'
     )
-
-
 
     # clustering()
     # centroids()
