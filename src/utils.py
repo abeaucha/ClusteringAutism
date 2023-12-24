@@ -95,6 +95,34 @@ def slurm_submit(script, args, resources):
     return
 
 
+def execute_local(script, **kwargs):
+    """
+    Execute a program locally.
+
+    Parameters
+    ---------
+    script: str
+        Name of the program to execute.
+    **kwargs: dict, optional
+        Key-value pairs containing command line arguments to pass to the script.
+
+    Returns
+    -------
+    None
+    """
+
+    kwargs = [['--' + str(key), str(val)] for key, val in kwargs.items()]
+    kwargs = sum(kwargs, [])
+    cmd = ['source'] + [script] + kwargs
+    subprocess.run(cmd)
+    return
+
+
+def execute_slurm(script, args, slurm_args):
+    # TODO: Write this module
+    return
+
+
 def execute_R(script, **kwargs):
     """
     Execute an R script.
