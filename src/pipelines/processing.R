@@ -3,6 +3,8 @@
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(splines))
 suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(SNFtool))
+
 
 # Environment variables ------------------------------------------------------
 
@@ -229,4 +231,86 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
 propensity_matching_norm <- function(imgdir, demographics, mask, outdir,
                                      ncontrols = 10, nproc = 1) {
   return(outfiles)
+}
+
+
+#' Run similarity network fusion (SNF)
+#'
+#' @param x1 (matrix) Input matrix
+#' @param x2 (matrix) Input matrix
+#' @param metric (character scalar) Distance metric used to compute the 
+#' affinity matrices.
+#' @param K (numeric scalar) Number of nearest-neighbours used to 
+#' compute the SNF affinity matrices. 
+#' @param sigma (numeric scalar) Variance for the local model in the 
+#' SNF affinity matrices.
+#' @param t (numeric scalar) Number of iterations for the diffusion
+#' process in SNF.
+#' @param outfile (character scalar) Path to file in which to save
+#' affinity matrix.
+#'
+#' @return (matrix) SNF affinity matrix.
+similarity_network <- function(x1, x2, metric = "correlation", K = 10,
+                               sigma = 0.5, t = 20, outfile = NULL){
+  
+  if (metric == "correlation") { 
+    d1 <- (1-cor(t(x1)))
+    d2 <- (1-cor(t(x2)))
+  } else if (metric == "euclidean") {
+    d1 <- (dist2(as.matrix(x1), as.matrix(x1)))^(1/2)
+    d2 <- (dist2(as.matrix(x2), as.matrix(x2)))^(1/2)
+  } else {
+    stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
+  }
+  
+  W1 <- affinityMatrix(d1, K = K, sigma = sigma)
+  W2 <- affinityMatrix(d2, K = K, sigma = sigma)
+  
+  W <- SNF(list(W1, W2), K = K, t = t)
+  
+  if (!is.null(outfile)){
+    data.table::fwrite(x = as_tibble(W), file = outfile)
+  }
+  
+  return(W)
+  
+}
+
+
+#' Create clusters from SNF affinity matrix
+#'
+#' @param W (matrix) SNF affinity matrix.
+#' @param nk (numeric scalar) Maximum number of clusters to use in 
+#' clustering.
+#' @param outfile (character scalar) Optional path to .csv file in 
+#' which to save cluster assignments.
+#'
+#' @return (data.frame) Cluster assignments.
+create_clusters <- function(W, nk = 10, outfile = NULL) {
+  
+  for(k in 2:nk) {
+    group <- spectralClustering(affinity = W, K = k)
+    group_name <- paste0("nk", k)
+    assign(group_name, group)
+    if (k == 2) {
+      if (is.null(rownames(W))) {
+        ids <- as.character(1:nrow(W))
+      } else {
+        ids <- rownames(W)
+      }
+      all_clusters <- data.frame(ids, group, stringsAsFactors = F)
+      colnames(all_clusters) <- c("ID", group_name)
+    } else {
+      group <- data.frame(group)
+      colnames(group) <- group_name
+      all_clusters <- cbind(all_clusters, group)
+    }
+  }
+  
+  if (!is.null(outfile)) {
+    write.csv(x = all_clusters, file = outfile, row.names = FALSE)
+  }
+  
+  return(all_clusters)
+  
 }

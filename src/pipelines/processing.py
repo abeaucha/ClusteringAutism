@@ -125,6 +125,16 @@ def initialize(**kwargs):
 
 
 def clustering():
+    if env == 'local':
+        utils.execute_local(script = 'generate_clusters.R',
+                            args = ...)
+    elif env == 'slurm':
+        utils.execute_slurm(script = 'generate_clusters.R',
+                            args = ...,
+                            slurm_args = ...)
+    else:
+        raise ValueError
+
     return
 
 
@@ -175,7 +185,7 @@ def main(pipeline_dir = 'data/human/derivatives/v2/',
             utils.execute_slurm(script = 'compute_effect_sizes.R',
                                 args = ...,
                                 slurm_args = ...)
-            else:
+        else:
             raise ValueError
 
         return
