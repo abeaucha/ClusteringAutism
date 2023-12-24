@@ -87,7 +87,6 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 # Functions ------------------------------------------------------------------
 
-# Processing functions
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
 source(file.path(SRCPATH, "pipelines/processing.R"))
@@ -111,12 +110,12 @@ matrix_res <- args[["matrix-res"]]
 nproc <- args[["nproc"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
-# Check necessary input args
-input_check <- c("imgdir", "demographics", "mask", "outdir")
-for (input in input_check) {
-  if (is.null(args[[input]])) {
-    input_arg <- paste0("--", input)
-    stop("Argument ", input_arg, " must be specified.")
+# Check required arguments
+args_req <- c("imgdir", "demographics", "mask", "outdir")
+for (arg in args_req) {
+  if (is.null(args[[arg]])) {
+    arg <- paste0("--", arg)
+    stop("Argument ", arg, " must be specified.")
   }
 }
 
