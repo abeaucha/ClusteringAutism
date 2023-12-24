@@ -44,11 +44,28 @@ def clustering():
 def centroids():
     # This function generates the cluster centroid images
     if environment is 'local':
-        execute_local('create_centroids.R')
+        # Iterate over Jacobians
+        for j in enumerate(jacobians):
+            execute_local('create_cluster_centroids.R')
     if environment is 'slurm':
-        execute_slurm('create_centroids.R')
+        execute_slurm('create_cluster_centroids.R')
         # This needs to get the job from the clustering() module to use
         # as a dependency
+        # I could do this in a distributed way. Each of the
+        # cluster solutions could be executed on a separate
+        # node. Just not sure how to set this up.
+        # Right now the driver script generates the centroids
+        # for each cluster. But I could make it so that this module
+        # does that, and the driver script only creates a centroid
+        # image from a set of images. That would be easier to distribute.
+        # That's difficult to provide at the command line though.
+        # So better would be to provide the image directory like I'm doing,
+        # but also specify which cluster solution to use
+        # Oh shoot, except I also need to iterate over Jacobians as well,
+        # so I'm not sure about that.
+        # I guess there's no reason I can't split the job array over Jacobians
+        # and cluster solutions? It would be 2*nk.
+
     return
 
 
