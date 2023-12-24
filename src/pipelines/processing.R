@@ -4,10 +4,14 @@ suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(splines))
 suppressPackageStartupMessages(library(RMINC))
 
+# Environment variables ------------------------------------------------------
+
+SRCPATH <- Sys.getenv("SRCPATH")
+
 
 # Functions ------------------------------------------------------------------
 
-source("src/processing.R")
+source(file.path(SRCPATH, "processing.R"))
 
 
 #' Fit and predict normative model
