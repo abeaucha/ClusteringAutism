@@ -1,7 +1,17 @@
 suppressPackageStartupMessages(library(tidyverse))
 
 
+#' Title
+#'
+#' @param metadata 
+#' @param ... 
+#'
+#' @return
+#' @export
+#'
+#' @examples
 fetch_params_metadata <- function(metadata, ...) {
+  
   kwargs <- list(...)
   
   if (!file.exists(metadata)) {
@@ -25,3 +35,21 @@ fetch_params_metadata <- function(metadata, ...) {
     return(df_match)
   }
 }
+
+
+#' Resample a MINC image
+#'
+#' @param infile (character scalar) Path to the image file to resample.
+#' @param isostep (numeric scalar) Isotropic dimension of voxels in 
+#' the resampled image (mm).
+#' @param outdir (character scalar) Path to the directory in which 
+#' to save the resampled image. If None, resampled image will be 
+#' written to the directory of the input file.
+#' @param suffix (character scalar) Suffix to append to output file name 
+#' before the file extension.
+#'
+#' @return (character scalar) Path to the resampled image.
+resample_image <- function(infile, isostep, outdir = NULL, suffix = NULL){
+  return(outfile)
+}
+
