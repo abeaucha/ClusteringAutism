@@ -5,7 +5,7 @@ suppressPackageStartupMessages(library(tidyverse))
 
 # Functions ------------------------------------------------------------------
 
-#' Title
+#' Fetch pipeline metadata for a set of pipeline parameters
 #'
 #' @param metadata 
 #' @param ... 
