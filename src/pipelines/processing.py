@@ -139,6 +139,15 @@ def clustering():
 
 
 def centroids():
+    if env == 'local':
+        utils.execute_local(script = 'create_cluster_centroids.R',
+                            args = ...)
+    elif env == 'slurm':
+        utils.execute_slurm(script = 'create_cluster_centroids.R',
+                            args = ...,
+                            slurm_args = ...)
+    else:
+        raise ValueError
     return
 
 
