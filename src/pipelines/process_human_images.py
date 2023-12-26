@@ -391,14 +391,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
     kwargs = locals().copy()
 
     # Initialize pipeline directory
-    # Get paths to pipeline
     paths = initialize(**kwargs)
 
-    print(paths)
-    sys.exit()
-
     # Compute effect sizes
-    # Arguments for effect sizes
     es_kwargs = {key.replace('es_', ''): val
                  for key, val in kwargs.items() if 'es_' in key}
     es_kwargs.update(
@@ -407,6 +402,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
              mask = mask,
              outdir = paths['effect_sizes'])
     )
+    print(es_kwargs)
+    sys.exit()
     effect_sizes(**es_kwargs)
 
     slurm_args = dict(
