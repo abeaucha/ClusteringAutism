@@ -1,4 +1,4 @@
-#!Rscript
+#!/usr/bin/env Rscript
 # ----------------------------------------------------------------------------
 # compute_effect_sizes.R
 # Author: Antoine Beauchamp
