@@ -1,4 +1,4 @@
-#!.venv/bin/python3
+#!python3
 
 
 # Packages -------------------------------------------------------------------
@@ -438,6 +438,8 @@ def main(pipeline_dir = 'data/human/derivatives/v2/',
 
 
 if __name__ == '__main__':
-    print("Test")
+
+    args = parse_args()
+    print(args)
     sys.exit()
     main()

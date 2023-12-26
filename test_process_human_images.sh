@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source activate_venv.sh
+#source activate_venv.sh
 
 process_human_images.py \
 --pipeline-dir data/human/derivatives/v2/ \

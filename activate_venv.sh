@@ -36,5 +36,6 @@ module load \
 #Activate the python venv
 source .venv/bin/activate
 export SRCPATH=$PWD/src
+export PATH=$PATH:$PWD/src
 export PATH=$PATH:$PWD/src/pipelines
 export PYTHONPATH=$PYTHONPATH:$PWD/src
