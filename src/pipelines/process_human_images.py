@@ -4,12 +4,12 @@
 # Packages -------------------------------------------------------------------
 
 import argparse
-import os
+# import os
 import sys
-import utils
-import pandas as pd
-from glob import glob
-from pyminc.volumes.factory import volumeFromFile
+# import utils
+# import pandas as pd
+# from glob import glob
+# from pyminc.volumes.factory import volumeFromFile
 
 
 # Command line arguments -----------------------------------------------------
@@ -73,18 +73,16 @@ def parse_args():
     # Effect size arguments ---------------------------------------------------
     parser.add_argument(
         '--es-method',
-        nargs = 1,
         type = str,
-        default = ['normative-growth'],
+        default = 'normative-growth',
         choices = ['normative-growth', 'propensity-matching'],
         help = "Method to use to compute effect size images."
     )
 
     parser.add_argument(
         '--es-group',
-        nargs = 1,
         type = str,
-        default = ['patients'],
+        default = 'patients',
         choices = ['patients', 'controls', 'all'],
         help = "Group of participants for which to compute effect sizes."
     )
@@ -92,15 +90,14 @@ def parse_args():
     parser.add_argument(
         '--es-nbatches',
         type = int,
-        default = 4,
+        default = 1,
         help = "Number of batches to use to process effect sizes."
     )
 
     parser.add_argument(
         '--es-df',
-        nargs = '*',
         type = int,
-        default = [3],
+        default = 3,
         help = ("The number of degrees of freedom for the natural splines used "
                 "in normative growth modelling. Ignored if --es-method is "
                 "'propensity-matching'.")
@@ -108,9 +105,8 @@ def parse_args():
 
     parser.add_argument(
         '--es-batch',
-        nargs = '*',
         type = str,
-        default = ['Site-Scanner'],
+        default = 'Site-Scanner',
         help = ("Batch variables to use for normalization prior to normative "
                 "growth modelling. Variables must be found in --demographics. "
                 "Multiple batch variables must be specified in a single string, "
@@ -121,7 +117,7 @@ def parse_args():
         '--es-ncontrols',
         nargs = '*',
         type = int,
-        default = [10],
+        default = 10,
         help = ("The number of controls to use for propensity-matching. "
                 "Ignored if --es-method is 'normative-growth'.")
     )
@@ -137,17 +133,15 @@ def parse_args():
     # Clustering arguments ---------------------------------------------------
     parser.add_argument(
         '--cluster-resolution',
-        nargs = 1,
         type = float,
-        default = [3.0],
+        default = 3.0,
         help = ""
     )
 
     parser.add_argument(
         '--cluster-nk-max',
-        nargs = 1,
         type = int,
-        default = [10],
+        default = 10,
         help = ("The maximum number of clusters to identify when clustering. "
                 "The program will obtain cluster solutions from 2 up to the "
                 "value provided.")
@@ -155,34 +149,30 @@ def parse_args():
 
     parser.add_argument(
         '--cluster-metric',
-        nargs = '*',
         type = str,
-        default = ['correlation'],
+        default = 'correlation',
         help = "The distance metric to use in similarity network fusion."
     )
 
     parser.add_argument(
         '--cluster-K',
-        nargs = '*',
         type = int,
-        default = [10],
+        default = 10,
         help = ("The number of nearest-neighbours to use in similarity network "
                 "fusion.")
     )
 
     parser.add_argument(
         '--cluster-sigma',
-        nargs = '*',
         type = float,
-        default = [0.5],
+        default = 0.5,
         help = "The variance for the local model in similarity network fusion."
     )
 
     parser.add_argument(
         '--cluster-t',
-        nargs = '*',
         type = int,
-        default = [20],
+        default = 20,
         help = ("The number of iterations for the diffusion process in "
                 "similarity network fusion.")
     )
@@ -206,9 +196,8 @@ def parse_args():
     # Cluster maps arguments ---------------------------------------------------
     parser.add_argument(
         '--cluster-map-method',
-        nargs = '*',
         type = str,
-        default = ['mean'],
+        default = 'mean',
         help = "The method to use to compute cluster centroid images."
     )
 
@@ -364,12 +353,8 @@ def centroids():
     return
 
 
-def main(pipeline_dir = 'data/human/derivatives/v2/',
-         input_dir = 'data/human/registration/v2/jacobians_resampled/resolution_0.8/',
-         demographics = 'data/human/registration/v2/subject_info/demographics.csv',
-         mask = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
-         datasets = ('POND', 'SickKids'),
-         parallel = True, nproc = None,
+def main(pipeline_dir, input_dir, demographics, mask,
+         datasets = ('POND', 'SickKids'), nproc = 1,
          es_method = 'normative-growth', es_group = 'patients',
          es_nbatches = 1, es_df = 3,
          es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
@@ -382,6 +367,9 @@ def main(pipeline_dir = 'data/human/derivatives/v2/',
          cluster_map_method = 'mean'):
     # Get dictionary of function kwargs
     kwargs = locals().copy()
+
+    print(kwargs)
+    sys.exit()
 
     # Initialize pipeline directory
     # Get paths to pipeline
@@ -438,8 +426,6 @@ def main(pipeline_dir = 'data/human/derivatives/v2/',
 
 
 if __name__ == '__main__':
-
     args = parse_args()
-    print(args)
-    sys.exit()
-    main()
+    args['datasets'] = tuple(args['datasets'])
+    main(**args)
