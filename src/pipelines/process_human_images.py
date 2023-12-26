@@ -4,12 +4,12 @@
 # Packages -------------------------------------------------------------------
 
 import argparse
-# import os
+import os
 import sys
-# import utils
-# import pandas as pd
-# from glob import glob
-# from pyminc.volumes.factory import volumeFromFile
+import utils
+import pandas as pd
+from glob import glob
+from pyminc.volumes.factory import volumeFromFile
 
 
 # Command line arguments -----------------------------------------------------
@@ -189,8 +189,9 @@ def parse_args():
         '--cluster-affinity-file',
         type = str,
         default = 'affinity.csv',
-        help = ("The basename of the file (.csv) in which to store the affinity "
-                "matrix produced by similarity network fusion.")
+        help = (
+            "The basename of the file (.csv) in which to store the affinity "
+            "matrix produced by similarity network fusion.")
     )
 
     # Cluster maps arguments ---------------------------------------------------
@@ -326,6 +327,27 @@ def initialize(**kwargs):
     return paths
 
 
+def effect_sizes(imgdir, demographics, mask, outdir,
+                 method = 'normative-growth', group = 'patients',
+                 nbatches = 1, df = 3, batch = 'Site-Scanner',
+                 ncontrols = None, matrix_file = 'effect_sizes.csv',
+                 execution = 'local', nproc = 1, **kwargs):
+
+    jacobians = ['absolute', 'relative']
+    if execution == 'local':
+        for j, jac in enumerate(jacobians):
+            utils.execute_local(script = 'compute_effect_sizes.R',
+                                args = ...)
+    elif execution == 'slurm':
+        utils.execute_slurm(script = 'compute_effect_sizes.R',
+                            args = ...,
+                            slurm_args = ...)
+    else:
+        raise ValueError
+
+    return
+
+
 def clustering():
     if env == 'local':
         utils.execute_local(script = 'generate_clusters.R',
@@ -368,38 +390,14 @@ def main(pipeline_dir, input_dir, demographics, mask,
     # Get dictionary of function kwargs
     kwargs = locals().copy()
 
-    print(kwargs)
-    sys.exit()
-
     # Initialize pipeline directory
     # Get paths to pipeline
     paths = initialize(**kwargs)
 
+    print(paths)
+    sys.exit()
+
     # Compute effect sizes
-    def effect_sizes(imgdir, demographics, mask, outdir,
-                     method = 'normative-growth', env = 'local',
-                     nproc = 1, **kwargs):
-
-        # Create output dir if needed
-        imgdir = os.path.join(imgdir, '')
-        outdir = os.path.join(outdir, '')
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-
-        jacobians = ['absolute', 'relative']
-        if env == 'local':
-            for j, jac in enumerate(jacobians):
-                utils.execute_local(script = 'compute_effect_sizes.R',
-                                    args = ...)
-        elif env == 'slurm':
-            utils.execute_slurm(script = 'compute_effect_sizes.R',
-                                args = ...,
-                                slurm_args = ...)
-        else:
-            raise ValueError
-
-        return
-
     # Arguments for effect sizes
     es_kwargs = {key.replace('es_', ''): val
                  for key, val in kwargs.items() if 'es_' in key}

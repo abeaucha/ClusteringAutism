@@ -140,7 +140,7 @@ compute_normative_zscore <- function(y, demographics, group = "patients",
 #' @return (character vector) Paths to the effect size images.
 normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   key = "file", group = "patients", 
-                                  df = 3, batch = None, nbatches = 1, 
+                                  df = 3, batch = NULL, nbatches = 1,
                                   nproc = 1) {
   
   # Import demographics data
