@@ -331,7 +331,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
                  nbatches = 1, df = 3, batch = 'Site-Scanner',
                  ncontrols = None, matrix_file = 'effect_sizes.csv',
-                 execution = 'local', nproc = 1, **kwargs):
+                 nproc = 1, execution = 'local', **kwargs):
 
     jacobians = ['absolute', 'relative']
     if execution == 'local':
