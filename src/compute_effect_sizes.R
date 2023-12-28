@@ -47,6 +47,9 @@ option_list <- list(
               default = "patients",
               help = paste("Group of participants for which to compute",
                            "effect sizes. [default %default]")),
+  make_option("--nbatches",
+              type = "numeric",
+              default = 1),
   make_option("--df",
               type = "numeric",
               default = 3, 
@@ -56,6 +59,10 @@ option_list <- list(
               type = "character",
               help = paste("Variables to use in normalization prior to",
                            "modelling.")),
+  make_option("--ncontrols",
+              type = "numeric",
+              help = paste("Number of propensity-matched controls to use when",
+                           "computing the effect sizes. [default %default]")),
   make_option("--matrix-file",
               type = "character",
               help = paste("File in which to export effect size matrix.",
@@ -103,6 +110,7 @@ outdir <- args[["outdir"]]
 method <- args[["method"]]
 key <- args[["key"]]
 group <- args[["group"]]
+nbatches <- args[["nbatches"]]
 df <- args[["df"]]
 batch <- args[["batch"]]
 matrix_file <- args[["matrix-file"]]
@@ -119,23 +127,74 @@ for (arg in args_req) {
   }
 }
 
-# Check nproc
-if (is.null(nproc)) {
-  stop("Specify the number of processors to use in parallel.")
-}
-
 # Generate effect size images
 if (method == "normative-growth") {
-  files <- normative_growth_norm(imgdir = imgdir, 
-                                 demographics = demographics,
-                                 mask = mask,
-                                 outdir = outdir,
-                                 key = key,
-                                 group = group,
-                                 df = df,
-                                 batch = batch,
-                                 nbatches = nbatches,
-                                 nproc = nproc)
+  if (nbatches > 1) {
+    
+    # Create voxel batches
+    mask_array <- import_image(img = mask, mask = mask)
+    batches <- parallel::splitIndices(length(mask_array), ncl = nbatches)
+    
+    # Execute script in batches
+    batch_dirs <- character(nbatches)
+    for (i in 1:nbatches) {
+      batch_dir <- file.path(outdir, paste("batch", i, sep = "_"))
+      batch_mask <- numeric(length(mask_array))
+      batch_mask[batches[[i]]] <- 1
+      
+      if (!dir.exists(batch_dir)) {
+        dir.create(batch_dir, showWarnings = FALSE, recursive = TRUE)
+      }
+      batch_maskfile <- file.path(batch_dir, "batch_mask.mnc")
+      vector_to_image(x = batch_mask, 
+                      outfile = batch_maskfile,
+                      mask = mask)
+      
+      files <- normative_growth_norm(imgdir = imgdir, 
+                                     demographics = demographics,
+                                     mask = batch_maskfile,
+                                     outdir = batch_dir,
+                                     key = key,
+                                     group = group,
+                                     df = df,
+                                     batch = batch,
+                                     nproc = nproc)
+      
+    }
+    
+    # Collate batch images
+    # print("Collating batched images...")
+    # outfiles = os.listdir(batch_dirs[0])
+    # outfiles = [file for file in outfiles if file != 'batch_mask.mnc']
+    # for outfile in outfiles:
+    #   
+    #   img = np.zeros_like(mask_array)
+    # for b, batch in enumerate(batches):
+    #   batch_img = os.path.join(batch_dirs[b], outfile)
+    # batch_mask = os.path.join(batch_dirs[b], 'batch_mask.mnc')
+    # img[batch] = import_image(img = batch_img, mask = batch_mask)
+    # 
+    # outfile = os.path.join(outdir, outfile)
+    # vector_to_image(x = img, outfile = outfile, maskfile = mask)
+    # 
+    # print("Cleaning up...")
+    # for batch_dir in batch_dirs:
+    #   rmtree(batch_dir)
+    
+    
+    print(length(mask_array))
+    quit()
+  } else {
+    files <- normative_growth_norm(imgdir = imgdir, 
+                                   demographics = demographics,
+                                   mask = mask,
+                                   outdir = outdir,
+                                   key = key,
+                                   group = group,
+                                   df = df,
+                                   batch = batch,
+                                   nproc = nproc)
+  }
 } else if (method == "propensity-matching") {
   files <- propensity_matching_norm(imgdir = imgdir, 
                                     demographics = demographics,
