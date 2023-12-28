@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import multiprocessing as mp
 import pandas as pd
 import tempfile as tf
@@ -95,7 +96,7 @@ def slurm_submit(script, args, resources):
     return
 
 
-def execute_local(script, **kwargs):
+def execute_local(script, kwargs = None):
     """
     Execute a program locally.
 
@@ -103,7 +104,7 @@ def execute_local(script, **kwargs):
     ---------
     script: str
         Name of the program to execute.
-    **kwargs: dict, optional
+    kwargs: dict, optional
         Key-value pairs containing command line arguments to pass to the script.
 
     Returns
@@ -111,14 +112,16 @@ def execute_local(script, **kwargs):
     None
     """
 
+    kwargs = {key:val for key, val in kwargs.items() if val is not None}
     kwargs = [['--' + str(key), str(val)] for key, val in kwargs.items()]
     kwargs = sum(kwargs, [])
-    cmd = ['source'] + [script] + kwargs
+    cmd = ['Rscript'] + [script] + kwargs
+    cmd = [script] + kwargs
     subprocess.run(cmd)
     return
 
 
-def execute_slurm(script, args, slurm_args):
+def execute_slurm(script, kwargs, slurm_kwargs):
     # TODO: Write this module
     return
 
