@@ -64,12 +64,6 @@ def parse_args():
                 "processing.")
     )
 
-    parser.add_argument(
-        '--nproc',
-        type = int,
-        help = "Number of processors to use in parallel."
-    )
-
     # Effect size arguments ---------------------------------------------------
     parser.add_argument(
         '--es-method',
@@ -105,19 +99,16 @@ def parse_args():
 
     parser.add_argument(
         '--es-batch',
+        nargs = '*',
         type = str,
-        default = 'Site-Scanner',
+        default = ['Site', 'Scanner'],
         help = ("Batch variables to use for normalization prior to normative "
-                "growth modelling. Variables must be found in --demographics. "
-                "Multiple batch variables must be specified in a single string, "
-                "separated by a hyphen (e.g. 'Site-Scanner').")
+                "growth modelling. Variables must be found in --demographics.")
     )
 
     parser.add_argument(
         '--es-ncontrols',
-        nargs = '*',
         type = int,
-        default = 10,
         help = ("The number of controls to use for propensity-matching. "
                 "Ignored if --es-method is 'normative-growth'.")
     )
@@ -200,6 +191,23 @@ def parse_args():
         type = str,
         default = 'mean',
         help = "The method to use to compute cluster centroid images."
+    )
+    
+    # Execution arguments ------------------------------------------------------
+    parser.add_argument(
+        '--execution',
+        type = str,
+        default = 'local',
+        choices = ['local', 'slurm'],
+        help = "Method of pipeline execution."
+    )
+    
+    
+    parser.add_argument(
+        '--nproc',
+        type = int,
+        default = 1,
+        help = "Number of processors to use in parallel."
     )
 
     args = vars(parser.parse_args())
@@ -329,15 +337,31 @@ def initialize(**kwargs):
 
 def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
-                 nbatches = 1, df = 3, batch = 'Site-Scanner',
+                 nbatches = 1, df = 3, batch = ('Site', 'Scanner'),
                  ncontrols = None, matrix_file = 'effect_sizes.csv',
-                 nproc = 1, execution = 'local', **kwargs):
+                 nproc = 1, execution = 'local', slurm_kwargs = None):
 
+    # Clean up arguments
+    kwargs = locals().copy()
+    kwargs['batch'] = (None if kwargs['batch'] is None 
+                     else '-'.join(kwargs['batch']))
+    kwargs['matrix-file'] = kwargs.pop('matrix_file')
+    del kwargs['execution']
+    del kwargs['slurm_kwargs']
+    
+    script = 'compute_effect_sizes.R'
     jacobians = ['absolute', 'relative']
     if execution == 'local':
-        for j, jac in enumerate(jacobians):
-            utils.execute_local(script = 'compute_effect_sizes.R',
-                                args = ...)
+        for j in jacobians:
+            kwargs['imgdir'] = os.path.join(kwargs['imgdir'], j, '')
+            utils.execute_local(script = script,
+                                kwargs = kwargs)
+            break
+        sys.exit()
+
+#         for j, jac in enumerate(jacobians):
+#             utils.execute_local(script = 'compute_effect_sizes.R',
+#                                 args = ...)
     elif execution == 'slurm':
         utils.execute_slurm(script = 'compute_effect_sizes.R',
                             args = ...,
@@ -376,7 +400,7 @@ def centroids():
 
 
 def main(pipeline_dir, input_dir, demographics, mask,
-         datasets = ('POND', 'SickKids'), nproc = 1,
+         datasets = ('POND', 'SickKids'),
          es_method = 'normative-growth', es_group = 'patients',
          es_nbatches = 1, es_df = 3,
          es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
@@ -386,10 +410,12 @@ def main(pipeline_dir, input_dir, demographics, mask,
          cluster_K = 10, cluster_sigma = 0.5, cluster_t = 20,
          cluster_file = 'clusters.csv',
          cluster_affinity_file = 'affinity.csv',
-         cluster_map_method = 'mean'):
+         cluster_map_method = 'mean',
+         execution = 'local', nproc = 1):
+
     # Get dictionary of function kwargs
     kwargs = locals().copy()
-
+    
     # Initialize pipeline directory
     paths = initialize(**kwargs)
 
@@ -400,10 +426,10 @@ def main(pipeline_dir, input_dir, demographics, mask,
         dict(imgdir = paths['jacobians'],
              demographics = demographics,
              mask = mask,
-             outdir = paths['effect_sizes'])
+             outdir = paths['effect_sizes'],
+             execution = execution,
+             nproc = nproc)
     )
-    print(es_kwargs)
-    sys.exit()
     effect_sizes(**es_kwargs)
 
     slurm_args = dict(
@@ -423,4 +449,5 @@ def main(pipeline_dir, input_dir, demographics, mask,
 if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
+    args['es_batch'] = tuple(args['es_batch'])
     main(**args)
