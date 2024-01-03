@@ -1164,65 +1164,67 @@ for (i in 1:nrow(df_cluster_grid)) {
 ```
 
 ```{r}
-nk_subset <- c(4, 6, 8, 10)
-
-df_sig_gt4 <- df_sim_pvals %>% 
-  filter(mouse_nk >= 4, significant == 1) %>% 
-  select(-significant) %>% 
-  arrange(mouse_nk, mouse_k) 
-
-for (i in 1:nrow(df_sig_gt4)) {
+run <- FALSE
+if (run) {
+  nk_subset <- c(4, 6, 8, 10)
   
-  nk <- df_sig_gt4[[i, "human_nk"]]
-  k <- df_sig_gt4[[i, "human_k"]]
+  df_sig_gt4 <- df_sim_pvals %>% 
+    filter(mouse_nk >= 4, significant == 1) %>% 
+    select(-significant) %>% 
+    arrange(mouse_nk, mouse_k) 
   
-  # Import centroid image for specific cluster using threshold
-  img_abs <- import_cluster_map(imgdir = human_cluster_map_dirs[["absolute"]],
-                                mask = human_mask_file,
-                                nk = nk, k = k,
-                                threshold = threshold,
-                                threshold_value = threshold_value,
-                                threshold_symmetric = threshold_symmetric)
-  
-  # Import centroid image for specific cluster using threshold
-  img_rel <- import_cluster_map(imgdir = human_cluster_map_dirs[["relative"]],
-                                mask = human_mask_file,
-                                nk = nk, k = k,
-                                threshold = threshold,
-                                threshold_value = threshold_value,
-                                threshold_symmetric = threshold_symmetric)
-  
-  # Crop image to remove black space
-  img_abs <- mincArray(img_abs)
-  img_abs <- img_abs[human_slices_dim_1,,human_slices_dim_3]
-  
-  # Crop image to remove black space
-  img_rel <- mincArray(img_rel)
-  img_rel <- img_rel[human_slices_dim_1,,human_slices_dim_3]
-  
-  fig_supp_6_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 60, end = 220) %>% 
-    anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-    overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>% 
-    sliceSeries() %>% anatomy() %>% 
-    overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%   
-    grobify()
-  
-  fig_supp_6_width_pt <- 130
-  fig_supp_6_height_pt <- (fig_supp_6_width_pt/2)*6
-  
-  mouse_clust <- df_sig_gt4[[i, "mouse_cluster_id"]]
-  human_clust <- df_sig_gt4[[i, "human_cluster_id"]]
-  
-  outfile <- paste(output_plot_prefix, 6, "mouse", mouse_clust, "human", human_clust, sep = "_")
-  outfile <- paste0(outfile, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  export_pdf(x = fig_supp_6_grob,
-             file = outfile,
-             width = fig_supp_6_width_pt,
-             height = fig_supp_6_height_pt,
-             units = "bigpts")
+  for (i in 1:nrow(df_sig_gt4)) {
+    
+    nk <- df_sig_gt4[[i, "human_nk"]]
+    k <- df_sig_gt4[[i, "human_k"]]
+    
+    # Import centroid image for specific cluster using threshold
+    img_abs <- import_cluster_map(imgdir = human_cluster_map_dirs[["absolute"]],
+                                  mask = human_mask_file,
+                                  nk = nk, k = k,
+                                  threshold = threshold,
+                                  threshold_value = threshold_value,
+                                  threshold_symmetric = threshold_symmetric)
+    
+    # Import centroid image for specific cluster using threshold
+    img_rel <- import_cluster_map(imgdir = human_cluster_map_dirs[["relative"]],
+                                  mask = human_mask_file,
+                                  nk = nk, k = k,
+                                  threshold = threshold,
+                                  threshold_value = threshold_value,
+                                  threshold_symmetric = threshold_symmetric)
+    
+    # Crop image to remove black space
+    img_abs <- mincArray(img_abs)
+    img_abs <- img_abs[human_slices_dim_1,,human_slices_dim_3]
+    
+    # Crop image to remove black space
+    img_rel <- mincArray(img_rel)
+    img_rel <- img_rel[human_slices_dim_1,,human_slices_dim_3]
+    
+    fig_supp_6_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 60, end = 220) %>% 
+      anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
+      overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+      sliceSeries() %>% anatomy() %>% 
+      overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%   
+      grobify()
+    
+    fig_supp_6_width_pt <- 130
+    fig_supp_6_height_pt <- (fig_supp_6_width_pt/2)*6
+    
+    mouse_clust <- df_sig_gt4[[i, "mouse_cluster_id"]]
+    human_clust <- df_sig_gt4[[i, "human_cluster_id"]]
+    
+    outfile <- paste(output_plot_prefix, 6, "mouse", mouse_clust, "human", human_clust, sep = "_")
+    outfile <- paste0(outfile, ".pdf")
+    outfile <- file.path(output_dir, outfile)
+    export_pdf(x = fig_supp_6_grob,
+               file = outfile,
+               width = fig_supp_6_width_pt,
+               height = fig_supp_6_height_pt,
+               units = "bigpts")
+  }
 }
-
 ```
 
 ```{r}
@@ -1230,7 +1232,17 @@ mouse_clusters <- c("4-1", "6-5", "8-6", "10-4")
 df_sim_pvals %>% 
   filter(mouse_cluster_id %in% mouse_clusters,
          significant == 1) %>% 
-  arrange(mouse_nk, mouse_k) %>% 
-  select(mouse_cluster_id, human_cluster_id, pval)
+  arrange(mouse_nk, mouse_k) %>%   
+  select(mouse_cluster_id, human_cluster_id, pval) %>% 
+  mutate(pval = round(pval, 4))  
 ```
 
+```{r}
+mouse_clusters <- c("4-4", "6-4", "8-2", "10-5")
+df_sim_pvals %>% 
+  filter(mouse_cluster_id %in% mouse_clusters,
+         significant == 1) %>% 
+  arrange(mouse_nk, mouse_k) %>%   
+  select(mouse_cluster_id, human_cluster_id, pval)  
+  # mutate(pval = round(pval, 4))  
+```
