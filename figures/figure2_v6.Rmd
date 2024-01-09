@@ -1157,10 +1157,14 @@ polar_labels <- tibble(pathway = polar_plot_lvls[2],
 #                             carto_pal(12, "Vivid")[1],
 #                             carto_pal(12, "Safe")[4],
 #                             carto_pal(12, "Prism")[8])
-pathways_mouse_palette <- c("#008CFF",
-                            carto_pal(12, "Vivid")[1],
+# pathways_mouse_palette <- c("#008CFF",
+#                             carto_pal(12, "Vivid")[1],
+#                             "green3",
+#                             "#E63716")
+pathways_mouse_palette <- c("darkorchid1",
+                            "seashell4",
                             "green3",
-                            "#E63716")
+                            "sienna2")
 
 # Transparency for mouse pathway plot
 pathways_mouse_alpha <- c(0.4, 0.3, 0.6, 0.4)
