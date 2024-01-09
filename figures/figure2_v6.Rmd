@@ -1597,6 +1597,13 @@ fig2_pathways_roc_auc <- ggplot(df_auc, aes(x = -log10(alpha),
         plot.margin = margin(t = 4, unit = "bigpts"))
 ```
 
+```{r}
+df_auc %>% 
+  group_by(cluster_id) %>% 
+  summarise(auc_min = min(auc),
+            auc_max = max(auc))
+```
+
 
 # Figure
 
