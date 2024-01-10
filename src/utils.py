@@ -115,7 +115,6 @@ def execute_local(script, kwargs = None):
     kwargs = {key:val for key, val in kwargs.items() if val is not None}
     kwargs = [['--' + str(key), str(val)] for key, val in kwargs.items()]
     kwargs = sum(kwargs, [])
-    cmd = ['Rscript'] + [script] + kwargs
     cmd = [script] + kwargs
     subprocess.run(cmd)
     return
