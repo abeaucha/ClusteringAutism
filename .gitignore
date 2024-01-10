@@ -1,3 +1,4 @@
+.config/
 .idea/
 .ipynb_checkpoints/
 .venv/
@@ -5,6 +6,7 @@ __pycache__/
 data/
 scripts_old/
 templates/
+.env
 .Rhistory
 .Rprofile
 dev.ipynb
