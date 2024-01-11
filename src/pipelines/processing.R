@@ -116,6 +116,16 @@ compute_normative_zscore <- function(y, demographics, group = "patients",
 }
 
 
+imgdir = imgdir
+demographics = demographics
+mask = mask
+outdir = outdir
+key = key
+group = group
+df = df
+batch = batch
+nproc = nproc
+
 #' Calculate human effect sizes using normative growth modelling.
 #'
 #' @param imgdir (character scalar) Path to the directory containing the 
@@ -173,6 +183,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # Image files
   imgfiles <- list.files(imgdir, full.names = TRUE)
   
+  
   # Match image files to demographics
   if (verbose) {message("Matching image files to demographics...")}
   imgs_in_demographics <- basename(imgfiles) %in% demographics[[key]]
@@ -181,20 +192,34 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   demographics <- demographics[row_match,]
   
   # Run normative growth modelling
-  if (verbose) {message("Evaluating normative growth models...")}
-  sink(nullfile())
-  voxels <- mcMincApply(filenames = imgfiles, 
-                        fun = compute_normative_zscore,
-                        demographics = demographics,
-                        group = group,
-                        batch = batch,
-                        df = df,
-                        mask = mask,
-                        cores = nproc, 
-                        return_raw = TRUE)
-  voxels <- simplify_masked(voxels[["vals"]])
-  gc()
-  sink(NULL)
+  # if (verbose) {message("Evaluating normative growth models...")}
+  # sink(nullfile())
+  # voxels <- mcMincApply(filenames = imgfiles, 
+  #                       fun = compute_normative_zscore,
+  #                       demographics = demographics,
+  #                       group = group,
+  #                       batch = batch,
+  #                       df = df,
+  #                       mask = mask,
+  #                       cores = nproc, 
+  #                       return_raw = TRUE)
+  # voxels <- simplify_masked(voxels[["vals"]])
+  # gc()
+  # sink(NULL)
+  
+  voxels <- pMincApply(filenames = imgfiles,
+                       fun = compute_normative_zscore,
+                       demographics = demographics,
+                       group = group,
+                       batch = batch,
+                       df = df,
+                       mask = mask,
+                       tinyMask = TRUE,
+                       local = TRUE,
+                       cores = nproc)
+  
+  quit()
+  
   
   # Export images
   if (verbose) {message("Exporting normalized images...")}
