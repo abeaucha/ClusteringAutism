@@ -354,6 +354,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
     if execution == 'local':
         for j in jacobians:
             kwargs['imgdir'] = os.path.join(kwargs['imgdir'], j, '')
+            kwargs['outdir'] = os.path.join(kwargs['outdir'], j, '')
             utils.execute_local(script = script,
                                 kwargs = kwargs)
             break
