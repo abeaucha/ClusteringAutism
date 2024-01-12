@@ -116,15 +116,6 @@ compute_normative_zscore <- function(y, demographics, group = "patients",
 }
 
 
-imgdir = imgdir
-demographics = demographics
-mask = mask
-outdir = outdir
-key = key
-group = group
-df = df
-batch = batch
-nproc = nproc
 
 #' Calculate human effect sizes using normative growth modelling.
 #'
@@ -207,17 +198,38 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # gc()
   # sink(NULL)
   
+  # Create voxel batches
+  mask_array <- import_image(img = mask, mask = mask)
+  batches <- parallel::splitIndices(length(mask_array), ncl = 5)
+  
+  batch_mask <- numeric(length(mask_array))
+  batch_mask[batches[[1]]] <- 1
+  batch_maskfile <- file.path(getwd(), "batch_mask.mnc")
+  vector_to_image(x = batch_mask, 
+                  outfile = batch_maskfile,
+                  mask = mask)
+  
+  source("src/minc_parallel.R")
   voxels <- pMincApply(filenames = imgfiles,
                        fun = compute_normative_zscore,
                        demographics = demographics,
                        group = group,
                        batch = batch,
                        df = df,
-                       mask = mask,
-                       tinyMask = TRUE,
+                       mask = batch_maskfile,
+                       # collate = simplify_masked,
+                       return_raw = TRUE,
                        local = TRUE,
                        cores = nproc)
+  gc()
+  object.size(voxels)/10^6
   
+  rm(voxels); gc()
+  
+  collate <- simplify2minc
+  collate <- simplify_masked
+  collation_function <- match.fun(collate)
+  results <- collation_function(voxels)
   quit()
   
   
