@@ -793,6 +793,11 @@ fig2_sim_heatmap <- ggplot(df_similarity_nk,
         legend.justification = c("left", "bottom"),)
 ```
 
+```{r}
+df_similarity_nk %>% 
+  select(human_cluster_id, mouse_cluster_id, similarity, pval)
+```
+
 
 # Panel: Human cluster demographics
 
@@ -900,6 +905,29 @@ fig2_dx <- ggplot(df_dx_nk_freq,
         legend.justification = c("left", "center"), 
         plot.margin = margin(t = 10, l = 5, r = 40, unit = "bigpts"))
 ```
+
+```{r}
+df_dx_chi2 <- df_dx_nk %>% 
+  select(k, DX_new) %>% 
+  mutate(k = factor(k),
+         DX_new = factor(DX_new))
+
+chisq.test(df_dx_chi2$k,
+           df_dx_chi2$DX_new,
+           simulate.p.value = TRUE, 
+           B = 1e5)
+```
+
+```{r}
+df_dx_chi2 <- df_dx_chi2 %>% 
+  filter(DX_new != "Other")
+
+chisq.test(df_dx_chi2$k,
+           df_dx_chi2$DX_new,
+           simulate.p.value = TRUE, 
+           B = 1e5)
+```
+
 
 
 # Panel: Mouse molecular pathways polar plot
@@ -1129,10 +1157,14 @@ polar_labels <- tibble(pathway = polar_plot_lvls[2],
 #                             carto_pal(12, "Vivid")[1],
 #                             carto_pal(12, "Safe")[4],
 #                             carto_pal(12, "Prism")[8])
-pathways_mouse_palette <- c("#008CFF",
-                            carto_pal(12, "Vivid")[1],
+# pathways_mouse_palette <- c("#008CFF",
+#                             carto_pal(12, "Vivid")[1],
+#                             "green3",
+#                             "#E63716")
+pathways_mouse_palette <- c("darkorchid1",
+                            "seashell4",
                             "green3",
-                            "#E63716")
+                            "sienna2")
 
 # Transparency for mouse pathway plot
 pathways_mouse_alpha <- c(0.4, 0.3, 0.6, 0.4)
@@ -1232,6 +1264,16 @@ fig2_pathways_mouse_labels_y <- fig2_pathways_mouse_labels_y + fig2_pathways_mou
 fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]] <- fig2_pathways_mouse_labels_x
 fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]] <- fig2_pathways_mouse_labels_y
 ```
+
+```{r}
+df_mouse_pathways %>% 
+  mutate(pathway = factor(pathway, pathway_lvls_clustered)) %>% 
+  filter(cluster_id == "4-1") %>% 
+  select(pathway, E, adj.P.Val, NLQ) %>% 
+  filter(NLQ > 1.3) %>% 
+  arrange(pathway)
+```
+
 
 
 # Panel: Human molecular pathways polar plot
@@ -1557,6 +1599,13 @@ fig2_pathways_roc_auc <- ggplot(df_auc, aes(x = -log10(alpha),
   theme(panel.grid.minor.x = element_blank(),
         legend.position = "none",
         plot.margin = margin(t = 4, unit = "bigpts"))
+```
+
+```{r}
+df_auc %>% 
+  group_by(cluster_id) %>% 
+  summarise(auc_min = min(auc),
+            auc_max = max(auc))
 ```
 
 
