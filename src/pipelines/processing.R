@@ -149,7 +149,11 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
-  
+
+  print(head(demographics))
+  print(dim(demographics))
+  quit()
+
   # Check existence of key column in demographics
   if (!(key %in% colnames(demographics))) {
     stop(paste("demographics data is missing key column:", key))
