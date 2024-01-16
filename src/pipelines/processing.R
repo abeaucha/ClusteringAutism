@@ -150,10 +150,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
 
-  print(head(demographics))
-  print(dim(demographics))
-  quit()
-
   # Check existence of key column in demographics
   if (!(key %in% colnames(demographics))) {
     stop(paste("demographics data is missing key column:", key))
@@ -179,7 +175,9 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   
   # Image files
   imgfiles <- list.files(imgdir, full.names = TRUE)
-  
+
+  print(imgfiles[1:10])
+  quit()
   
   # Match image files to demographics
   if (verbose) {message("Matching image files to demographics...")}
