@@ -1,0 +1,6 @@
+abagen
+numpy
+scipy
+pandas
+pyminc
+tqdm
