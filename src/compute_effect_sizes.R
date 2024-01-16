@@ -101,13 +101,15 @@ source(file.path(SRCPATH, "pipelines/processing.R"))
 # Main -----------------------------------------------------------------------
 
 # Parse command line args
-args <- parse_args(OptionParser(option_list = option_list))
-args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
-args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
-args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
-args[["outdir"]] <- "data/test/human/derivatives/v2/310/effect_sizes/resolution_3.0/absolute/"
-args[["nbatches"]] <- 1
-args[["nproc"]] <- 8
+
+# REMOVE THESE LINES WHEN FINISHED
+# args <- parse_args(OptionParser(option_list = option_list))
+# args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
+# args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
+# args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
+# args[["outdir"]] <- "data/test/human/derivatives/v2/310/effect_sizes/resolution_3.0/absolute/"
+# args[["nbatches"]] <- 1
+# args[["nproc"]] <- 8
 
 imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
