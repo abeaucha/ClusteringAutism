@@ -133,9 +133,6 @@ for (arg in args_req) {
   }
 }
 
-print("Made it to R driver")
-quit()
-
 # Generate effect size images
 if (method == "normative-growth") {
   if (nbatches > 1) {
@@ -194,7 +191,7 @@ if (method == "normative-growth") {
     quit()
   } else {
     print("In batch = 1 condition")
-    files <- normative_growth_norm(imgdir = imgdir, 
+    files <- normative_growth_norm(imgdir = imgdir,
                                    demographics = demographics,
                                    mask = mask,
                                    outdir = outdir,
