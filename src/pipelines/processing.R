@@ -144,8 +144,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   df = 3, batch = NULL, nbatches = 1,
                                   nproc = 1) {
 
-  print("In normative growth norm")
-
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
@@ -223,9 +221,9 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                        return_raw = TRUE,
                        local = TRUE,
                        cores = nproc)
+  voxels <- simplify_masked(voxels[["vals"]])
   print(class(voxels))
-  print(length(voxels))
-  print(names(voxels))
+  print(dim(voxels))
   quit()
 
 

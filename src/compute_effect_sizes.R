@@ -192,7 +192,6 @@ if (method == "normative-growth") {
     
     quit()
   } else {
-    print("In batch = 1 condition")
     files <- normative_growth_norm(imgdir = imgdir,
                                    demographics = demographics,
                                    mask = mask,
