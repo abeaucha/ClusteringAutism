@@ -133,6 +133,8 @@ for (arg in args_req) {
   }
 }
 
+quit()
+
 # Generate effect size images
 if (method == "normative-growth") {
   if (nbatches > 1) {
