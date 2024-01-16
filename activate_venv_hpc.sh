@@ -34,7 +34,9 @@ source .venv/bin/activate
 SRCPATH="$PWD/src"
 PYTHONPATH="$SRCPATH:$PYTHONPATH"
 PATH="$SRCPATH:$SRCPATH/pipelines:$PATH"
+RMINC_BATCH_CONF=/hpf/largeprojects/MICe/tools/r-packages/20220704/packratting/packrat/lib/x86_64-pc-linux-gnu/3.6.3/RMINC/parallel/slurm_batchtools.R
 
 export SRCPATH
 export PYTHONPATH
 export PATH
+export RMINC_BATCH_CONF
