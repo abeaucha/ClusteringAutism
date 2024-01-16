@@ -184,14 +184,14 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # Run normative growth modelling
   # if (verbose) {message("Evaluating normative growth models...")}
   # sink(nullfile())
-  # voxels <- mcMincApply(filenames = imgfiles, 
+  # voxels <- mcMincApply(filenames = imgfiles,
   #                       fun = compute_normative_zscore,
   #                       demographics = demographics,
   #                       group = group,
   #                       batch = batch,
   #                       df = df,
   #                       mask = mask,
-  #                       cores = nproc, 
+  #                       cores = nproc,
   #                       return_raw = TRUE)
   # voxels <- simplify_masked(voxels[["vals"]])
   # gc()
@@ -222,23 +222,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                        local = TRUE,
                        cores = nproc)
   voxels <- simplify_masked(voxels[["vals"]])
-  print(class(voxels))
-  print(dim(voxels))
-  quit()
 
-
-  gc()
-  object.size(voxels)/10^6
-  
-  rm(voxels); gc()
-  
-  collate <- simplify2minc
-  collate <- simplify_masked
-  collation_function <- match.fun(collate)
-  results <- collation_function(voxels)
-  quit()
-  
-  
   # Export images
   if (verbose) {message("Exporting normalized images...")}
   if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
