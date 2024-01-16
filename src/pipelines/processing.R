@@ -28,21 +28,21 @@ source(file.path(SRCPATH, "processing.R"))
 #' model.
 #'
 #' @return (data.frame) Model predictions for test participants.
-fit_predict_model <- function(y, demographics, group = "patients", 
+fit_predict_model <- function(y, demographics, group = "patients",
                               batch = NULL, df = 3) {
-  
+
   if (length(y) != nrow(demographics)) {stop()}
-  
+
   # Residualize using batch variable if specified
   if (!is.null(batch)) {
-    batch <- demographics %>% 
-      select(all_of(batch)) %>% 
-      unite(col = batch) %>% 
+    batch <- demographics %>%
+      select(all_of(batch)) %>%
+      unite(col = batch) %>%
       pull(batch)
     y <- residuals(lm(y ~ batch))
     names(y) <- NULL
   }
-  
+
   # Filters for train and test sets
   ind_fit <- demographics[["DX"]] == "Control"
   if (group == "patients") {
@@ -52,31 +52,31 @@ fit_predict_model <- function(y, demographics, group = "patients",
   } else if (group == "all") {
     ind_pred <- !logical(nrow(demographics))
   }
-  
+
   # Training data frame
   df_fit <- demographics[ind_fit, c("Age", "Sex")]
-  df_fit[["y"]] <- y[ind_fit] 
-  
+  df_fit[["y"]] <- y[ind_fit]
+
   # Test data frame
   df_pred <- demographics[ind_pred, c("Age", "Sex")]
   df_pred[["y"]] <- y[ind_pred]
-  
+
   # Fit model and predict on test set
   model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
-  model_pred <- predict(model_fit, 
-                        newdata = df_pred, 
+  model_pred <- predict(model_fit,
+                        newdata = df_pred,
                         interval = "prediction",
                         level = pnorm(q = 1) - pnorm(q = -1))
-  
+
   # Extract model parameters of interest
-  df_pred <- df_pred %>% 
+  df_pred <- df_pred %>%
     mutate(y_pred = model_pred[,"fit"],
            y_lwr = model_pred[,"lwr"],
            y_upr = model_pred[,"upr"],
            y_sd = y_pred - y_lwr)
-  
+
   return(df_pred)
-  
+
 }
 
 
@@ -91,7 +91,7 @@ zscore <- function(x){
   cols_check <- c("y", "y_pred", "y_sd")
   if (any(!(cols_check %in% colnames(x)))){stop()}
   x <- mutate(x, z = (y - y_pred)/y_sd)
-  return(x)  
+  return(x)
 }
 
 
@@ -140,7 +140,7 @@ compute_normative_zscore <- function(y, demographics, group = "patients",
 #'
 #' @return (character vector) Paths to the effect size images.
 normative_growth_norm <- function(imgdir, demographics, mask, outdir,
-                                  key = "file", group = "patients", 
+                                  key = "file", group = "patients",
                                   df = 3, batch = NULL, nbatches = 1,
                                   nproc = 1) {
 
@@ -152,7 +152,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   if (!(key %in% colnames(demographics))) {
     stop(paste("demographics data is missing key column:", key))
   }
-  
+
   # Remove entries with missing diagnosis, age, or sex
   demographics <- demographics %>%
     filter(!is.na(DX),
@@ -160,7 +160,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
            !is.na(Sex),
            !is.na(Site),
            !is.na(Scanner))
-  
+
   # Check existence of batch columns
   if (!is.null(batch)) {
     batch <- str_split(batch, pattern = "-")[[1]]
@@ -170,7 +170,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
            str_flatten(batch, collapse = "\n"))
     }
   }
-  
+
   # Image files
   imgfiles <- list.files(imgdir, full.names = TRUE)
 
@@ -180,7 +180,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   imgfiles <- imgfiles[imgs_in_demographics]
   row_match <- match(basename(imgfiles), demographics[[key]])
   demographics <- demographics[row_match,]
-  
+
   # Run normative growth modelling
   # if (verbose) {message("Evaluating normative growth models...")}
   # sink(nullfile())
@@ -196,38 +196,65 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # voxels <- simplify_masked(voxels[["vals"]])
   # gc()
   # sink(NULL)
-  
+
   # Create voxel batches
-  mask_array <- import_image(img = mask, mask = mask)
-  batches <- parallel::splitIndices(length(mask_array), ncl = 5)
-  
-  batch_mask <- numeric(length(mask_array))
-  batch_mask[batches[[1]]] <- 1
-  batch_maskfile <- file.path(getwd(), "batch_mask.mnc")
-  vector_to_image(x = batch_mask, 
-                  outfile = batch_maskfile,
-                  mask = mask)
+  # mask_array <- import_image(img = mask, mask = mask)
+  # batches <- parallel::splitIndices(length(mask_array), ncl = 5)
+  #
+  # batch_mask <- numeric(length(mask_array))
+  # batch_mask[batches[[1]]] <- 1
+  # batch_maskfile <- file.path(getwd(), "batch_mask.mnc")
+  # vector_to_image(x = batch_mask,
+  #                 outfile = batch_maskfile,
+  #                 mask = mask)
 
   print("Executing pMincApply")
 
   source("src/minc_parallel.R")
-  voxels <- pMincApply(filenames = imgfiles,
+  # voxels <- pMincApply(filenames = imgfiles,
+  #                      fun = compute_normative_zscore,
+  #                      demographics = demographics,
+  #                      group = group,
+  #                      batch = batch,
+  #                      df = df,
+  #                      mask = batch_maskfile,
+  #                      return_raw = TRUE,
+  #                      local = TRUE,
+  #                      cores = nproc)
+  # voxels <- simplify_masked(voxels[["vals"]])
+
+  voxels <- qMincApply(filenames = imgfiles,
                        fun = compute_normative_zscore,
                        demographics = demographics,
                        group = group,
                        batch = batch,
                        df = df,
-                       mask = batch_maskfile,
+                       mask = mask,
+                       batches = 24,
+                       source = c(file.path(SRCPATH, "pipelines/processing.R")),
+                       cleanup = FALSE,
                        return_raw = TRUE,
-                       local = TRUE,
-                       cores = nproc)
-  voxels <- simplify_masked(voxels[["vals"]])
+                       resources = list(memory="8G",
+                                        walltime=60*30))
+  print(class(voxels))
+  # print(length(voxels))
+  # print(names(voxels))
+  quit()
+  # voxels <- simplify_masked(voxels[["vals"]])
+
+  source(file.path(SRCPATH, "utils.R"))
+  source(file.path(SRCPATH, "processing.R"))
+  source(file.path(SRCPATH, "pipelines/processing.R"))
+
+  print(voxels$default.resources)
+
+  quit()
 
   # Export images
   if (verbose) {message("Exporting normalized images...")}
   if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
   if (group == "patients") {
-    outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]  
+    outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]
   } else if (group == "controls") {
     outfiles <- demographics[demographics[["DX"]] == "Control", key][[1]]
   } else if (group == "all") {
@@ -236,7 +263,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   outfiles <- file.path(outdir, outfiles)
   matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
                    margin = 2, nproc = nproc)
-  
+
   return(outfiles)
 }
 
@@ -279,8 +306,8 @@ propensity_matching_norm <- function(imgdir, demographics, mask, outdir,
 #' @return (matrix) SNF affinity matrix.
 similarity_network <- function(x1, x2, metric = "correlation", K = 10,
                                sigma = 0.5, t = 20, outfile = NULL){
-  
-  if (metric == "correlation") { 
+
+  if (metric == "correlation") {
     d1 <- (1-cor(t(x1)))
     d2 <- (1-cor(t(x2)))
   } else if (metric == "euclidean") {
@@ -289,18 +316,18 @@ similarity_network <- function(x1, x2, metric = "correlation", K = 10,
   } else {
     stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
   }
-  
+
   W1 <- affinityMatrix(d1, K = K, sigma = sigma)
   W2 <- affinityMatrix(d2, K = K, sigma = sigma)
-  
+
   W <- SNF(list(W1, W2), K = K, t = t)
-  
+
   if (!is.null(outfile)){
     data.table::fwrite(x = as_tibble(W), file = outfile)
   }
-  
+
   return(W)
-  
+
 }
 
 
@@ -314,7 +341,7 @@ similarity_network <- function(x1, x2, metric = "correlation", K = 10,
 #'
 #' @return (data.frame) Cluster assignments.
 create_clusters <- function(W, nk = 10, outfile = NULL) {
-  
+
   for(k in 2:nk) {
     group <- spectralClustering(affinity = W, K = k)
     group_name <- paste0("nk", k)
@@ -333,11 +360,11 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
       all_clusters <- cbind(all_clusters, group)
     }
   }
-  
+
   if (!is.null(outfile)) {
     write.csv(x = all_clusters, file = outfile, row.names = FALSE)
   }
-  
+
   return(all_clusters)
-  
+
 }

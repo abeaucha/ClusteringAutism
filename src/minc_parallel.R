@@ -1,41 +1,43 @@
+suppressPackageStartupMessages(library(batchtools))
+
 create_parallel_mask <-
   function(sample_file, mask = NULL, n, temp_dir = getwd(), prefix = "pMincMask", tinyMask = FALSE){
-    
+
     sample_volume <- mincGetVolume(sample_file)
     mask_file <- "unset"
-    
+
     temp_dir <- path.expand(temp_dir)
     if(!file.exists(temp_dir)) dir.create(temp_dir)
-    
+
     mask_file <- tempfile(prefix, tmpdir = temp_dir, fileext = ".mnc")
-    
+
     if(is.null(mask)){
       if(n %% 1 != 0) stop("the number of jobs must be an integer")
-      
+
       nVoxels <- length(sample_volume)
       mask_values <- groupingVector(nVoxels, n)
     } else {
       mask_values <- mincGetVolume(mask)
       if(tinyMask) mask_values[mask_values > 1.5] <- 0 #THIS LINE DOESN'T DO ANYTHING
-      
+
       nVoxels <- sum(mask_values > .5)
-      
-      mask_values[mask_values > .5] <- 
+
+      mask_values[mask_values > .5] <-
         groupingVector(nVoxels, n)
-      
+
     }
 
-    mincWriteVolume(buffer = mask_values, 
-                    output.filename = mask_file, 
+    mincWriteVolume(buffer = mask_values,
+                    output.filename = mask_file,
                     like.filename = sample_file)
-    
+
     return(mask_file)
   }
 
-tenacious_remove_registry <- 
+tenacious_remove_registry <-
   function(reg){
     tryCatch(removeRegistry(reg = reg)
-             , error = 
+      , error =
                function(e){
                  killJobs(reg = reg, findNotDone(reg = reg))
                  removeRegistry(reg = reg)
@@ -128,46 +130,46 @@ pMincApply <-
            registry_name = new_file("pMincApply_registry"),
            registry_dir = getwd()
   ){
-    
+
     if(!is.null(method))
       warning("Use of method is deprecated, please use a `conf_file` or"
-              , "the local argument")
-    
+        , "the local argument")
+
     RMINC:::enoughAvailableFileDescriptors(length(filenames))
 
     if(is.null(slab_sizes)){
       slab_sizes <- minc.dimensions.sizes(filenames[1])
       slab_sizes[1] <- 1
     }
-    
+
     if(local){
       if(is.null(cores))
         cores <- max(getOption("mc.cores"), parallel::detectCores() - 1)
-      
+
       results <- mcMincApply(filenames, fun, ...,
                              slab_sizes = slab_sizes,
-                             mask = mask, 
+                             mask = mask,
                              tinyMask = tinyMask,
                              cores = cores,
-                             temp_dir = temp_dir, 
+                             temp_dir = temp_dir,
                              return_raw = return_raw,
                              collate = collate)
     } else {
       if(is.null(cores))
         cores <- 1
-      
-      results <- qMincApply(filenames, fun, ..., mask = mask, 
+
+      results <- qMincApply(filenames, fun, ..., mask = mask,
                             slab_sizes = slab_sizes,
-                            tinyMask = tinyMask, batches = batches, 
+                            tinyMask = tinyMask, batches = batches,
                             resources = resources, packages = packages,
                             clobber = TRUE, collate = collate,
                             cleanup = cleanup,
                             conf_file = conf_file,
                             registry_dir = registry_dir,
-                            registy_name = registry_name) 
+                            registy_name = registry_name)
     }
 
-  
+
     results
   }
 
@@ -205,33 +207,33 @@ mcMincApply <-
            cleanup = TRUE,
            mask_vals = NULL,
            collate = simplify2minc
-           ){
-    
+  ){
+
     filenames <- as.character(filenames)
     RMINC:::enoughAvailableFileDescriptors(length(filenames))
-    
+
     if(is.null(slab_sizes)){
       slab_sizes <- minc.dimensions.sizes(filenames[1])
       slab_sizes[1] <- 1
     }
-    
+
     sample_file <- filenames[1]
     sample_volume <- mincGetVolume(sample_file)
     mask_file <- "unset"
-    
+
     if(is.null(mask_vals)){
       mask_file <- create_parallel_mask(sample_file = sample_file
-                                        , mask = mask
-                                        , n = cores
-                                        , tinyMask = tinyMask)
+        , mask = mask
+        , n = cores
+        , tinyMask = tinyMask)
       on.exit(try(unlink(mask_file)))
       mask_vals <- 1:cores
     } else {
       mask_file <- mask
     }
-    
+
     dot_args <- list(...)
-    mincApplyArguments <- 
+    mincApplyArguments <-
       c(list(filenames = filenames,
              fun = match.fun(fun),
              slab_sizes = slab_sizes,
@@ -241,17 +243,17 @@ mcMincApply <-
     #override important argument
     mincApplyArguments$filter_masked <- TRUE
     mincApplyArguments$return_indices <- TRUE
-    
-    results <- 
+
+    results <-
       RMINC:::failing_mcmapply(mincApplyRCPP,
                                maskval = mask_vals,
                                MoreArgs = mincApplyArguments,
                                SIMPLIFY = FALSE,
                                mc.cores = cores)
-    
+
     inds <- unlist(lapply(results, function(el) el$inds))
     vals <- unlist(lapply(results, function(el) el$vals), recursive = FALSE)
-    
+
     if(return_raw){
       results <- list(inds = inds, vals = vals)
       results <- setMincAttributes(results, list(filenames = filenames,
@@ -259,25 +261,25 @@ mcMincApply <-
                                                  mask = mask))
       return(results)
     }
-    
+
     result_order <-
       order(inds)
-    
+
     results <- vals[result_order]
-    
+
     if(!is.null(mask)){
       expanded_results <- rep(list(getOption("RMINC_MASKED_VALUE")), length(sample_volume))
       expanded_results[inds[result_order] + 1] <- results ##add one to inds to convert c++ to R
       results <- expanded_results
     }
-    
+
     collation_function <- match.fun(collate)
     results <- collation_function(results)
     results <- setMincAttributes(results, list(filenames = filenames,
                                                likeVolume = filenames[1],
                                                mask = mask))
-    
-    return(results) 
+
+    return(results)
   }
 
 
@@ -358,12 +360,13 @@ mcMincApply <-
 #' }
 #' @seealso \url{https://www.jstatsoft.org/article/view/v064i11} \link{pMincApply} \link{mcMincApply}
 #' @export
-qMincApply <- 
-  function(filenames, fun, ..., 
+qMincApply <-
+  function(filenames, fun, ...,
            mask=NULL, batches=4, tinyMask=FALSE,
            slab_sizes = NULL,
            resources = list(),
            packages = c("RMINC"),
+           source = character(0L),
            registry_dir = getwd(),
            registry_name = "qMincApply_registry",
            temp_dir = getwd(),
@@ -371,6 +374,7 @@ qMincApply <-
            wait = TRUE,
            cleanup = TRUE,
            clobber = FALSE,
+           return_raw = FALSE,
            collate = simplify2minc,
            conf_file = getOption("RMINC_BATCH_CONF")) {
 
@@ -383,33 +387,37 @@ qMincApply <-
       qMincRegistry(registry_name = new_file(registry_name, registry_dir),
                     registry_dir = registry_dir,
                     packages = packages,
+                    source = source,
                     clobber = clobber,
                     resources = resources,
                     conf_file = conf_file)
-    
+
     on.exit({
       if(cleanup && wait){
         try(lapply(list.files(temp_dir, pattern = "pMincMask.*\\.mnc"), unlink))
         tenacious_remove_registry(qMinc_registry)
-      } 
+      }
     })
-    
+
     qMincMap(qMinc_registry,
-             filenames, 
-             fun = match.fun(fun), 
+             filenames,
+             fun = match.fun(fun),
              ...,
              slab_sizes = slab_sizes,
              batches = batches,
              cores = cores,
-             mask = mask, 
+             mask = mask,
              tinyMask = tinyMask,
              temp_dir = temp_dir)
-    
+
     if(wait){
-      qMinc_results <- qMincReduce(qMinc_registry, wait = TRUE, collate = collate)
+      qMinc_results <- qMincReduce(qMinc_registry,
+                                   wait = TRUE,
+                                   return_raw = return_raw,
+                                   collate = collate)
       return(qMinc_results)
     }
-    
+
     return(qMinc_registry)
   }
 
@@ -421,54 +429,56 @@ qMincRegistry <- function(registry_name = "qMincApply_registry",
                           registry_dir = getwd(),
                           clobber = FALSE,
                           resources = list(),
+                          source = character(0L),
                           conf_file = getOption("RMINC_BATCH_CONF")){
-  
+
   if(! "RMINC" %in% packages)
     packages <- c("RMINC", packages)
-  
+
   if(clobber)
     try(removeRegistry(reg = loadRegistry(registry_dir)), silent = TRUE)
-  
+
   qMinc_registry <-
     makeRegistry(registry_name,
                  registry_dir,
                  packages = packages,
+                 source = source,
                  conf.file = conf_file)
 
   qMinc_registry$default.resources[names(resources)] <- resources
-  
+
   return(qMinc_registry)
 }
 
 #' @describeIn qMincApply map
 #' @export
-qMincMap <- 
-  function(registry, filenames, fun, ..., mask = NULL, 
+qMincMap <-
+  function(registry, filenames, fun, ..., mask = NULL,
            slab_sizes = NULL,
            batches = 4, tinyMask = FALSE, temp_dir = getwd(),
            cores = 1){
-    
+
     if(is.null(slab_sizes)){
       slab_sizes <- minc.dimensions.sizes(filenames[1])
       slab_sizes[1] <- 1
     }
-    
+
     new_mask_file <- create_parallel_mask(sample_file = filenames[1]
-                                          , mask = mask
-                                          , n = batches * cores
-                                          , tinyMask = tinyMask)
-    
+      , mask = mask
+      , n = batches * cores
+      , tinyMask = tinyMask)
+
     #Group the indices
-    mask_indices <- 
+    mask_indices <-
       lapply(1:batches, function(i){
         seq((i -1)*cores + 1,
             i * cores)
       })
-    
+
     #Create a list of all additional args to pass to mcMincApply
     dot_args <- list(...)
-    mincApplyArguments <- 
-      c(list(filenames = filenames, 
+    mincApplyArguments <-
+      c(list(filenames = filenames,
              fun = match.fun(fun),
              slab_sizes = slab_sizes,
              cores = cores,
@@ -480,36 +490,44 @@ qMincMap <-
     #Override these if passed through ...
     mincApplyArguments$return_raw <- TRUE
 
-    
+
     ids <-
       batchMap(reg = registry,
-               mcMincApply, 
+               mcMincApply,
                mask_vals = mask_indices,
                more.args = mincApplyArguments)
-    
+
     submitJobs(ids, reg = registry)
-    
+
     return(registry)
   }
 
 #' @describeIn qMincApply reduce
 #' @export
-qMincReduce <- 
-  function(registry, ignore_incompletes = FALSE, wait = FALSE, collate = simplify2minc){
-    
+qMincReduce <-
+  function(registry, ignore_incompletes = FALSE, wait = FALSE,
+           return_raw = FALSE, collate = simplify2minc){
+
     if(wait)
       waitForJobs(reg = registry)
-    
+
     if((!ignore_incompletes) && nrow(findNotDone(reg = registry)) != 0)
       stop("Some jobs have not terminated, use `ignore_incompletes` to reduce anyway, or set `wait`")
-    
+
     results <- reduceResultsList(reg = registry, use.names = FALSE)
     result_attributes <- mincAttributes(results[[1]])
-    
+    print(result_attributes)
+
     result_indices <- unlist(lapply(results, function(el) el$inds))
     result_order <- order(result_indices)
     results <- unlist(lapply(results, function(el) el$vals), recursive = FALSE)[result_order]
-    
+
+    print(return_raw)
+    if (return_raw) {
+      results <- list(inds = result_indices, vals = results)
+      return(results)
+    }
+
     if(!is.null(result_attributes$mask)){
       total_voxels <- prod(minc.dimensions.sizes(result_attributes$mask))
       expanded_results <- rep(list(getOption("RMINC_MASKED_VALUE")), total_voxels)
@@ -517,13 +535,13 @@ qMincReduce <-
       expanded_results[result_indices[result_order] + 1] <- results
       results <- expanded_results
     }
-    
+
     collation_function <- match.fun(collate)
     results <- collation_function(results)
-    
+
     if(!is.null(result_attributes))
       results <- setMincAttributes(results, result_attributes)
-    
+
     return(results)
   }
 
@@ -533,7 +551,7 @@ groupingVector <- function(len, groups){
   groups <- rep(1:groups, each = group_len)
   if(n_overfill != 0)
     groups <- groups[-(1:n_overfill)]
-  
+
   return(groups)
 }
 
