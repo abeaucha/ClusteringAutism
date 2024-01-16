@@ -191,9 +191,9 @@ if (method == "normative-growth") {
     #   rmtree(batch_dir)
     
     
-    print(length(mask_array))
     quit()
   } else {
+    print("In batch = 1 condition")
     files <- normative_growth_norm(imgdir = imgdir, 
                                    demographics = demographics,
                                    mask = mask,

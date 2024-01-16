@@ -143,7 +143,9 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   key = "file", group = "patients", 
                                   df = 3, batch = NULL, nbatches = 1,
                                   nproc = 1) {
-  
+
+  print("In normative growth norm")
+
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
@@ -208,7 +210,10 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   vector_to_image(x = batch_mask, 
                   outfile = batch_maskfile,
                   mask = mask)
-  
+
+  print("Batched mask created")
+  quit()
+
   source("src/minc_parallel.R")
   voxels <- pMincApply(filenames = imgfiles,
                        fun = compute_normative_zscore,
