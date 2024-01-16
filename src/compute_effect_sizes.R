@@ -133,6 +133,7 @@ for (arg in args_req) {
   }
 }
 
+print("Made it to R driver")
 quit()
 
 # Generate effect size images
