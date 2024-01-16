@@ -211,8 +211,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                   outfile = batch_maskfile,
                   mask = mask)
 
-  print("Batched mask created")
-  quit()
+  print("Executing pMincApply")
 
   source("src/minc_parallel.R")
   voxels <- pMincApply(filenames = imgfiles,
@@ -222,10 +221,15 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                        batch = batch,
                        df = df,
                        mask = batch_maskfile,
-                       # collate = simplify_masked,
                        return_raw = TRUE,
                        local = TRUE,
                        cores = nproc)
+  print(class(voxels))
+  print(length(voxels))
+  print(names(voxels))
+  quit()
+
+
   gc()
   object.size(voxels)/10^6
   
