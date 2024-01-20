@@ -8,4 +8,5 @@ process_human_images.py \
 --demographics data/human/registration/v2/subject_info/demographics.csv \
 --mask data/human/registration/v2/reference_files/mask_3.0mm.mnc \
 --es-nbatches 1 \
+--execution local \
 --nproc 8
