@@ -6,10 +6,10 @@ module use /hpf/largeprojects/MICe/tools/modulefiles/linux-centos7-sandybridge/
 module load python-3.9.13-gcc-8.2.0-kagensa
 
 #If venv does not exist, create it
-if [ ! -d ".venv" ]; then
+if [ ! -d ".venv_hpc" ]; then
 	echo "Initializing python virtual environment..."
-	python3 -m venv .venv
-	. .venv/bin/activate
+	python3 -m venv .venv_hpc
+	. .venv_hpc/bin/activate
 	echo "Upgrading pip..."
 	pip install pip --upgrade
 	echo "Installing python packages..."
@@ -30,7 +30,7 @@ module load r-packages/20220704
 module load ants-20220609-gcc-8.2.0-lnn77l7 ants-2.4.0-gcc-8.2.0-z6w27gh
 
 #Activate the python venv
-source .venv/bin/activate
+source .venv_hpc/bin/activate
 SRCPATH="$PWD/src"
 PYTHONPATH="$SRCPATH:$PYTHONPATH"
 PATH="$SRCPATH:$SRCPATH/pipelines:$PATH"
