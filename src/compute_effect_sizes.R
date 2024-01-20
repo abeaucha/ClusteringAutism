@@ -74,12 +74,24 @@ option_list <- list(
                            "resampled to this resolution before being",
                            "converted to a matrix.",
                            "Ignored if --matrix-file is NULL.")),
+    make_option("--execution",
+                type = "character",
+                default = "local",
+                help = paste("[default %default]")),
   make_option("--nproc",
               type = "numeric",
               default = 1,
               help = paste("Number of processors to use in parallel.",
                            "Executed serially if 1.",
                            "[default %default]")),
+    make_option("--slurm-mem",
+                type = "character",
+                default = "8G",
+                help = paste("Memory per CPU core")),
+    make_option("--slurm-time",
+                type = "numeric",
+                default = 60,
+                help = paste("Walltime in minutes")),
   make_option("--verbose",
               type = "character",
               default = "true",
@@ -124,6 +136,7 @@ batch <- args[["batch"]]
 matrix_file <- args[["matrix-file"]]
 matrix_res <- args[["matrix-res"]]
 nproc <- args[["nproc"]]
+execution <- args[["execution"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
 # Check required arguments
@@ -134,6 +147,16 @@ for (arg in args_req) {
     stop("Argument ", arg, " must be specified.")
   }
 }
+
+# Check execution option
+if (execution == "local") {
+    resources <- list() 
+    } else if (execution == "slurm") {
+    resources <- list(memory = args[["slurm-mem"]],
+                       walltime = args[["slurm-time"]]*60)
+    } else {
+    stop()
+    }
 
 # Generate effect size images
 if (method == "normative-growth") {
@@ -166,6 +189,7 @@ if (method == "normative-growth") {
                                      group = group,
                                      df = df,
                                      batch = batch,
+                                     execution = execution,
                                      nproc = nproc)
       
     }
@@ -192,6 +216,7 @@ if (method == "normative-growth") {
     
     quit()
   } else {
+      print(resources)
     files <- normative_growth_norm(imgdir = imgdir,
                                    demographics = demographics,
                                    mask = mask,
@@ -200,7 +225,9 @@ if (method == "normative-growth") {
                                    group = group,
                                    df = df,
                                    batch = batch,
-                                   nproc = nproc)
+                                   execution = execution,
+                                   nproc = nproc,
+                                  resources = resources)
   }
 } else if (method == "propensity-matching") {
   files <- propensity_matching_norm(imgdir = imgdir, 

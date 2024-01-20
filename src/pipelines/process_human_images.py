@@ -210,6 +210,18 @@ def parse_args():
         help = "Number of processors to use in parallel."
     )
 
+    parser.add_argument(
+        '--slurm-mem',
+        type = str,
+        help = "Memory per CPU."
+    )
+
+    parser.add_argument(
+        '--slurm-time',
+        type = int,
+        help = "Walltime in minutes for Slurm jobs."
+    )
+
     args = vars(parser.parse_args())
 
     return args
@@ -339,8 +351,10 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
                  nbatches = 1, df = 3, batch = ('Site', 'Scanner'),
                  ncontrols = None, matrix_file = 'effect_sizes.csv',
-                 nproc = 1, execution = 'local', slurm_kwargs = None):
+                 execution = 'local', nproc = 1, slurm_kwargs = None):
 
+    print(execution)
+    
     # Clean up arguments
     kwargs = locals().copy()
     kwargs['batch'] = (None if kwargs['batch'] is None 
@@ -359,14 +373,17 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                                 kwargs = kwargs)
             break
         sys.exit()
-
-#         for j, jac in enumerate(jacobians):
-#             utils.execute_local(script = 'compute_effect_sizes.R',
-#                                 args = ...)
     elif execution == 'slurm':
-        utils.execute_slurm(script = 'compute_effect_sizes.R',
-                            args = ...,
-                            slurm_args = ...)
+        for j in jacobians:
+            kwargs['imgdir'] = os.path.join(kwargs['imgdir'], j, '')
+            kwargs['outdir'] = os.path.join(kwargs['outdir'], j, '')
+            utils.execute_local(script = script,
+                                kwargs = kwargs)
+            break
+        sys.exit()
+        # utils.execute_slurm(script = 'compute_effect_sizes.R',
+        #                     args = ...,
+        #                     slurm_args = ...)
     else:
         raise ValueError
 
@@ -451,4 +468,6 @@ if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
     args['es_batch'] = tuple(args['es_batch'])
+    print(args)
+    sys.exit()
     main(**args)
