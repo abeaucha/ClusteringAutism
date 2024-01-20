@@ -14,6 +14,7 @@ SRCPATH <- Sys.getenv("SRCPATH")
 # Functions ------------------------------------------------------------------
 
 source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "minc_parallel.R"))
 
 
 #' Fit and predict normative model
@@ -142,8 +143,9 @@ compute_normative_zscore <- function(y, demographics, group = "patients",
 normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   key = "file", group = "patients",
                                   df = 3, batch = NULL, nbatches = 1,
-                                  nproc = 1) {
-
+                                  execution = "local", nproc = 1, 
+                                  resources = list()) {
+    
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
@@ -182,73 +184,46 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   demographics <- demographics[row_match,]
 
   # Run normative growth modelling
-  # if (verbose) {message("Evaluating normative growth models...")}
-  # sink(nullfile())
-  # voxels <- mcMincApply(filenames = imgfiles,
-  #                       fun = compute_normative_zscore,
-  #                       demographics = demographics,
-  #                       group = group,
-  #                       batch = batch,
-  #                       df = df,
-  #                       mask = mask,
-  #                       cores = nproc,
-  #                       return_raw = TRUE)
-  # voxels <- simplify_masked(voxels[["vals"]])
-  # gc()
-  # sink(NULL)
-
-  # Create voxel batches
-  # mask_array <- import_image(img = mask, mask = mask)
-  # batches <- parallel::splitIndices(length(mask_array), ncl = 5)
-  #
-  # batch_mask <- numeric(length(mask_array))
-  # batch_mask[batches[[1]]] <- 1
-  # batch_maskfile <- file.path(getwd(), "batch_mask.mnc")
-  # vector_to_image(x = batch_mask,
-  #                 outfile = batch_maskfile,
-  #                 mask = mask)
-
-  print("Executing pMincApply")
-
-  source("src/minc_parallel.R")
-  # voxels <- pMincApply(filenames = imgfiles,
-  #                      fun = compute_normative_zscore,
-  #                      demographics = demographics,
-  #                      group = group,
-  #                      batch = batch,
-  #                      df = df,
-  #                      mask = batch_maskfile,
-  #                      return_raw = TRUE,
-  #                      local = TRUE,
-  #                      cores = nproc)
-  # voxels <- simplify_masked(voxels[["vals"]])
-
-  voxels <- qMincApply(filenames = imgfiles,
+  if (verbose) {message("Evaluating normative growth models...")}
+    if (execution == "local") {
+        print("Executing locally")
+  voxels <- mcMincApply(filenames = imgfiles,
+                        fun = compute_normative_zscore,
+                        demographics = demographics,
+                        group = group,
+                        batch = batch,
+                        df = df,
+                        mask = mask,
+                        cores = nproc,
+                        return_raw = TRUE)
+    } else if (execution == "slurm") {
+        print("Executing on HPC")
+        resources = list(memory="8G",
+                          walltime=60*30)
+          voxels <- qMincApply(filenames = imgfiles,
                        fun = compute_normative_zscore,
                        demographics = demographics,
                        group = group,
                        batch = batch,
                        df = df,
                        mask = mask,
-                       batches = 24,
+                       batches = nproc,
                        source = c(file.path(SRCPATH, "pipelines/processing.R")),
                        cleanup = FALSE,
                        return_raw = TRUE,
-                       resources = list(memory="8G",
-                                        walltime=60*30))
-  print(class(voxels))
-  # print(length(voxels))
-  # print(names(voxels))
-  quit()
-  # voxels <- simplify_masked(voxels[["vals"]])
+                       resources = resources)
+    } else {
+        stop()
+    }
+    voxels <- simplify_masked(voxels[["vals"]])
 
-  source(file.path(SRCPATH, "utils.R"))
-  source(file.path(SRCPATH, "processing.R"))
-  source(file.path(SRCPATH, "pipelines/processing.R"))
+    print(class(voxels))
+    print(dim(voxels))
+    gc()
+    
+    quit()
+  
 
-  print(voxels$default.resources)
-
-  quit()
 
   # Export images
   if (verbose) {message("Exporting normalized images...")}
