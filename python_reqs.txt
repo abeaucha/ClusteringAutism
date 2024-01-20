@@ -6,7 +6,7 @@ pandas
 datatable
 pyminc
 tqdm
-sklearn
+scikit-learn
 torch
 skorch
 matplotlib
