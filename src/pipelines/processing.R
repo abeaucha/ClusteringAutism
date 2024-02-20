@@ -10,6 +10,9 @@ suppressPackageStartupMessages(library(SNFtool))
 
 SRCPATH <- Sys.getenv("SRCPATH")
 
+# REMOVE THESE LINES WHEN FINISHED
+# SRCPATH <- "src"
+
 
 # Functions ------------------------------------------------------------------
 
@@ -186,7 +189,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # Run normative growth modelling
   if (verbose) {message("Evaluating normative growth models...")}
   if (execution == "local") {
-    print("Executing locally")
+    print("Executing locally...")
     voxels <- mcMincApply(filenames = imgfiles,
                           fun = compute_normative_zscore,
                           demographics = demographics,
@@ -197,7 +200,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                           cores = nproc,
                           return_raw = TRUE)
   } else if (execution == "slurm") {
-    print("Executing on HPC")
+    print("Executing on HPC...")
     voxels <- qMincApply(filenames = imgfiles,
                          fun = compute_normative_zscore,
                          demographics = demographics,
@@ -213,15 +216,9 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   } else {
     stop()
   }
+  
+  # Convert voxel list into matrix
   voxels <- simplify_masked(voxels[["vals"]])
-  
-  print(class(voxels))
-  print(dim(voxels))
-  gc()
-  
-  quit()
-  
-  
   
   # Export images
   if (verbose) {message("Exporting normalized images...")}

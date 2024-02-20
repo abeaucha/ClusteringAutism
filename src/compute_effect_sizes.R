@@ -103,6 +103,9 @@ option_list <- list(
 
 SRCPATH <- Sys.getenv("SRCPATH")
 
+# REMOVE THESE LINES WHEN FINISHED
+# SRCPATH <- "src"
+
 
 # Functions ------------------------------------------------------------------
 
@@ -110,21 +113,22 @@ source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
 source(file.path(SRCPATH, "pipelines/processing.R"))
 
+
 # Main -----------------------------------------------------------------------
 
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
 
 # REMOVE THESE LINES WHEN FINISHED
-args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
-args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
-args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
-args[["outdir"]] <- "data/test/human/derivatives/v2/310/effect_sizes/resolution_3.0/absolute/"
-args[["batch"]] <- "Site-Scanner"
-args[["nbatches"]] <- 1
-args[["matrix-file"]] <- "effect_sizes.csv"
-args[["matrix-res"]] <- 3.0
-args[["nproc"]] <- 8
+# args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
+# args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
+# args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
+# args[["outdir"]] <- "data/test/human/derivatives/v2/310/effect_sizes/resolution_3.0/absolute/"
+# args[["batch"]] <- "Site-Scanner"
+# args[["nbatches"]] <- 1
+# args[["matrix-file"]] <- "effect_sizes.csv"
+# args[["matrix-res"]] <- 3.0
+# args[["nproc"]] <- 8
 
 imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
@@ -243,22 +247,26 @@ if (method == "normative-growth") {
        "{normative-growth, propensity-matching")
 }
 
-# Generate effect size matrix
-if (!is.null(matrix_file)) {
-  if (!is.null(matrix_res)) {
-    # Resample images if alternate resolution is specified
-    files <- resample_images(files = files,
-                             outdir = ...,
-                             isostep = matrix_res,
-                             nproc = nproc)
-  } 
-  
-  # Build effect size matrix
-  build_voxel_matrix(imgfiles = files,
-                     mask = ...,
-                     file_col = TRUE,
-                     sort = TRUE,
-                     outfile = matrix_file,
-                     nproc = nproc)
-}
+# # Generate effect size matrix
+# if (!is.null(matrix_file)) {
+#   if (!is.null(matrix_res)) {
+#     mask_res <- unique(minc.separation.sizes(mask))
+#     if (matrix_res != mask_res) {
+#       
+#       # Resample images if alternate resolution is specified
+#       files <- resample_images(files = files,
+#                                outdir = ...,
+#                                isostep = matrix_res,
+#                                nproc = nproc)
+#     }
+#   } 
+#   
+#   # Build effect size matrix
+#   build_voxel_matrix(imgfiles = files,
+#                      mask = ...,
+#                      file_col = TRUE,
+#                      sort = TRUE,
+#                      outfile = matrix_file,
+#                      nproc = nproc)
+# }
 

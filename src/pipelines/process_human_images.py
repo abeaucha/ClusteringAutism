@@ -7,6 +7,7 @@ import argparse
 import os
 import sys
 import utils
+import processing
 import pandas as pd
 from glob import glob
 from pyminc.volumes.factory import volumeFromFile
@@ -350,7 +351,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
                  nbatches = 1, df = 3, batch = ('Site', 'Scanner'),
                  ncontrols = None, matrix_file = 'effect_sizes.csv',
-                 matrix_res = 3.0,
+                 matrix_resolution = 3.0,
                  execution = 'local', nproc = 1,
                  slurm_mem = None, slurm_time = None):
 
@@ -360,18 +361,51 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                      else '-'.join(kwargs['batch']))
     kwargs['matrix-file'] = kwargs.pop('matrix_file')
     kwargs['matrix-res'] = kwargs.pop('matrix_res')
-
+    
     # Driver script
     script = 'compute_effect_sizes.R'
 
     # Iterate over Jacobians
     jacobians = ['absolute', 'relative']
     for j in jacobians:
-        kwargs['imgdir'] = os.path.join(kwargs['imgdir'], j, '')
-        kwargs['outdir'] = os.path.join(kwargs['outdir'], j, '')
-        utils.execute_local(script = script, kwargs = kwargs)
+        kwargs['imgdir'] = os.path.join(imgdir, j, '')
+        kwargs['outdir'] = os.path.join(outdir, j, '')
+        # utils.execute_local(script = script, kwargs = kwargs)
+        
+        # If the matrix file is not none, create the ES matrix
+        if matrix_file is not None:
+          
+          # If the matrix resolution is specified, resample to the matrix res
+          if matrix_resolution is not None: 
+            
+              # Image resolution
+              vol = volumeFromFile(mask)
+              resolution = vol.getSeparations()
+              if len(set(resolution)) == 1:
+                  resolution = resolution[0]
+              else:
+                  raise Exception
+              vol.closeVolume()
+              
+              if (matrix_resolution != resolution):
+                
+                # resample
+              
+              sys.exit()
+            
+          
+          imgfiles = os.listdir(os.path.join(outdir, j, ''))
+          imgfiles = [file for file in imgfiles if '.mnc' in file]
+          imgfiles = [os.path.join(outdir, j, file) for file in imgfiles]
+          
+          df_es = processing.build_voxel_matrix(imgfiles = imgfiles, mask = mask, file_col = True,
+                                              sort = True, parallel = True,
+                                              nproc = nproc)
+          df_es['file'] = [os.path.basename(file) for file in df_es['file']]
+          df_es.to_csv(os.path.join(outdir, j, matrix_file), index = False)
+          
+        
         break
-    sys.exit()
 
     return
 
@@ -432,22 +466,13 @@ def main(pipeline_dir, input_dir, demographics, mask,
              demographics = demographics,
              mask = mask,
              outdir = paths['effect_sizes'],
+             matrix_resolution = cluster_resolution,
              execution = execution,
              nproc = nproc,
              slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
     effect_sizes(**es_kwargs)
-
-    slurm_args = dict(
-        job_name = 'process_human_data_v2_0.8mm',
-        nodes = 1,
-        cpus_per_task = 8,
-        mem = '64G',
-        time = '72:00:00',
-        chdir = os.getcwd(),
-        output = 'logs/process_human_data_v2_0.8mm_%j.out'
-    )
 
     # clustering()
     # centroids()
