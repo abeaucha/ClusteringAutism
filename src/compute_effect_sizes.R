@@ -74,24 +74,24 @@ option_list <- list(
                            "resampled to this resolution before being",
                            "converted to a matrix.",
                            "Ignored if --matrix-file is NULL.")),
-    make_option("--execution",
-                type = "character",
-                default = "local",
-                help = paste("[default %default]")),
+  make_option("--execution",
+              type = "character",
+              default = "local",
+              help = paste("[default %default]")),
   make_option("--nproc",
               type = "numeric",
               default = 1,
               help = paste("Number of processors to use in parallel.",
                            "Executed serially if 1.",
                            "[default %default]")),
-    make_option("--slurm-mem",
-                type = "character",
-                default = "8G",
-                help = paste("Memory per CPU core")),
-    make_option("--slurm-time",
-                type = "numeric",
-                default = 60,
-                help = paste("Walltime in minutes")),
+  make_option("--slurm-mem",
+              type = "character",
+              default = "8G",
+              help = paste("Memory per CPU core")),
+  make_option("--slurm-time",
+              type = "numeric",
+              default = 60,
+              help = paste("Walltime in minutes")),
   make_option("--verbose",
               type = "character",
               default = "true",
@@ -116,12 +116,15 @@ source(file.path(SRCPATH, "pipelines/processing.R"))
 args <- parse_args(OptionParser(option_list = option_list))
 
 # REMOVE THESE LINES WHEN FINISHED
-# args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
-# args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
-# args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
-# args[["outdir"]] <- "data/test/human/derivatives/v2/310/effect_sizes/resolution_3.0/absolute/"
-# args[["nbatches"]] <- 1
-# args[["nproc"]] <- 8
+args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
+args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
+args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
+args[["outdir"]] <- "data/test/human/derivatives/v2/310/effect_sizes/resolution_3.0/absolute/"
+args[["batch"]] <- "Site-Scanner"
+args[["nbatches"]] <- 1
+args[["matrix-file"]] <- "effect_sizes.csv"
+args[["matrix-res"]] <- 3.0
+args[["nproc"]] <- 8
 
 imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
@@ -150,13 +153,13 @@ for (arg in args_req) {
 
 # Check execution option
 if (execution == "local") {
-    resources <- list() 
-    } else if (execution == "slurm") {
-    resources <- list(memory = args[["slurm-mem"]],
-                       walltime = args[["slurm-time"]]*60)
-    } else {
-    stop()
-    }
+  resources <- list() 
+} else if (execution == "slurm") {
+  resources <- list(memory = args[["slurm-mem"]],
+                    walltime = args[["slurm-time"]]*60)
+} else {
+  stop()
+}
 
 # Generate effect size images
 if (method == "normative-growth") {
@@ -216,7 +219,6 @@ if (method == "normative-growth") {
     
     quit()
   } else {
-      print(resources)
     files <- normative_growth_norm(imgdir = imgdir,
                                    demographics = demographics,
                                    mask = mask,
@@ -227,7 +229,7 @@ if (method == "normative-growth") {
                                    batch = batch,
                                    execution = execution,
                                    nproc = nproc,
-                                  resources = resources)
+                                   resources = resources)
   }
 } else if (method == "propensity-matching") {
   files <- propensity_matching_norm(imgdir = imgdir, 

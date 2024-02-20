@@ -201,8 +201,7 @@ def parse_args():
         choices = ['local', 'slurm'],
         help = "Method of pipeline execution."
     )
-    
-    
+
     parser.add_argument(
         '--nproc',
         type = int,
@@ -351,41 +350,28 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
                  nbatches = 1, df = 3, batch = ('Site', 'Scanner'),
                  ncontrols = None, matrix_file = 'effect_sizes.csv',
-                 execution = 'local', nproc = 1, slurm_kwargs = None):
+                 matrix_res = 3.0,
+                 execution = 'local', nproc = 1,
+                 slurm_mem = None, slurm_time = None):
 
-    print(execution)
-    
     # Clean up arguments
     kwargs = locals().copy()
     kwargs['batch'] = (None if kwargs['batch'] is None 
                      else '-'.join(kwargs['batch']))
     kwargs['matrix-file'] = kwargs.pop('matrix_file')
-    del kwargs['execution']
-    del kwargs['slurm_kwargs']
-    
+    kwargs['matrix-res'] = kwargs.pop('matrix_res')
+
+    # Driver script
     script = 'compute_effect_sizes.R'
+
+    # Iterate over Jacobians
     jacobians = ['absolute', 'relative']
-    if execution == 'local':
-        for j in jacobians:
-            kwargs['imgdir'] = os.path.join(kwargs['imgdir'], j, '')
-            kwargs['outdir'] = os.path.join(kwargs['outdir'], j, '')
-            utils.execute_local(script = script,
-                                kwargs = kwargs)
-            break
-        sys.exit()
-    elif execution == 'slurm':
-        for j in jacobians:
-            kwargs['imgdir'] = os.path.join(kwargs['imgdir'], j, '')
-            kwargs['outdir'] = os.path.join(kwargs['outdir'], j, '')
-            utils.execute_local(script = script,
-                                kwargs = kwargs)
-            break
-        sys.exit()
-        # utils.execute_slurm(script = 'compute_effect_sizes.R',
-        #                     args = ...,
-        #                     slurm_args = ...)
-    else:
-        raise ValueError
+    for j in jacobians:
+        kwargs['imgdir'] = os.path.join(kwargs['imgdir'], j, '')
+        kwargs['outdir'] = os.path.join(kwargs['outdir'], j, '')
+        utils.execute_local(script = script, kwargs = kwargs)
+        break
+    sys.exit()
 
     return
 
@@ -429,7 +415,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
          cluster_file = 'clusters.csv',
          cluster_affinity_file = 'affinity.csv',
          cluster_map_method = 'mean',
-         execution = 'local', nproc = 1):
+         execution = 'local', nproc = 1,
+         slurm_mem = None, slurm_time = None):
 
     # Get dictionary of function kwargs
     kwargs = locals().copy()
@@ -446,7 +433,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
              mask = mask,
              outdir = paths['effect_sizes'],
              execution = execution,
-             nproc = nproc)
+             nproc = nproc,
+             slurm_mem = slurm_mem,
+             slurm_time = slurm_time)
     )
     effect_sizes(**es_kwargs)
 
@@ -468,6 +457,4 @@ if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
     args['es_batch'] = tuple(args['es_batch'])
-    print(args)
-    sys.exit()
     main(**args)
