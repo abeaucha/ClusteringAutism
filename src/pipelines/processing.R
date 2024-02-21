@@ -146,8 +146,8 @@ compute_normative_zscore <- function(y, demographics, group = "patients",
 normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   key = "file", group = "patients",
                                   df = 3, batch = NULL, nbatches = 1,
-                                  execution = "local", nproc = 1, 
-                                  resources = list()) {
+                                  execution = "local", nproc = 1,
+                                  njobs = NULL, resources = list()) {
   
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
@@ -208,18 +208,18 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                          batch = batch,
                          df = df,
                          mask = mask,
-                         batches = nproc,
+                         batches = njobs,
                          source = c(file.path(SRCPATH, "pipelines/processing.R")),
-                         cleanup = FALSE,
+                         cleanup = TRUE,
                          return_raw = TRUE,
                          resources = resources)
   } else {
     stop()
   }
-  
+
   # Convert voxel list into matrix
   voxels <- simplify_masked(voxels[["vals"]])
-  
+
   # Export images
   if (verbose) {message("Exporting normalized images...")}
   if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
