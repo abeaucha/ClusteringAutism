@@ -67,7 +67,7 @@ option_list <- list(
               type = "character",
               help = paste("File in which to export effect size matrix.",
                            "Ignored if NULL.")),
-  make_option("--matrix-res",
+  make_option("--matrix-resolution",
               type = "numeric",
               help = paste("Resolution of the effect size matrix.",
                            "If specified, effect size images will be",
@@ -84,13 +84,14 @@ option_list <- list(
               help = paste("Number of processors to use in parallel.",
                            "Executed serially if 1.",
                            "[default %default]")),
+  make_option("--slurm-njobs",
+              type = "numeric",
+              help = "Number of jobs to deploy on Slurm."),
   make_option("--slurm-mem",
               type = "character",
-              default = "8G",
               help = paste("Memory per CPU core")),
   make_option("--slurm-time",
               type = "numeric",
-              default = 60,
               help = paste("Walltime in minutes")),
   make_option("--verbose",
               type = "character",
@@ -102,9 +103,6 @@ option_list <- list(
 # Environment variables ------------------------------------------------------
 
 SRCPATH <- Sys.getenv("SRCPATH")
-
-# REMOVE THESE LINES WHEN FINISHED
-# SRCPATH <- "src"
 
 
 # Functions ------------------------------------------------------------------
@@ -159,6 +157,7 @@ for (arg in args_req) {
 if (execution == "local") {
   resources <- list() 
 } else if (execution == "slurm") {
+  njobs <- args[["slurm-njobs"]]
   resources <- list(memory = args[["slurm-mem"]],
                     walltime = args[["slurm-time"]]*60)
 } else {
@@ -233,6 +232,7 @@ if (method == "normative-growth") {
                                    batch = batch,
                                    execution = execution,
                                    nproc = nproc,
+                                   njobs = njobs,
                                    resources = resources)
   }
 } else if (method == "propensity-matching") {
