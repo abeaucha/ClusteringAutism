@@ -117,6 +117,10 @@ def execute_local(script, kwargs = None):
     kwargs = sum(kwargs, [])
     cmd = [script] + kwargs
     subprocess.run(cmd)
+    # output = subprocess.run(cmd, capture_output = True)
+    # if output.stderr != b'':
+    #     raise Exception("Subprocess failed:\n{}"
+    #                     .format(output.stderr.decode("UTF-8")))
     return
 
 
