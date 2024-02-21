@@ -6,7 +6,6 @@ import tempfile
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
-from datatable import fread
 from functools import partial
 from glob import glob
 from pyminc.volumes.factory import volumeFromFile, volumeLikeFile
