@@ -516,13 +516,11 @@ qMincReduce <-
 
     results <- reduceResultsList(reg = registry, use.names = FALSE)
     result_attributes <- mincAttributes(results[[1]])
-    print(result_attributes)
 
     result_indices <- unlist(lapply(results, function(el) el$inds))
     result_order <- order(result_indices)
     results <- unlist(lapply(results, function(el) el$vals), recursive = FALSE)[result_order]
 
-    print(return_raw)
     if (return_raw) {
       results <- list(inds = result_indices, vals = results)
       return(results)
