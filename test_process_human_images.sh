@@ -2,7 +2,7 @@
 #SBATCH --job-name=test_process_human_images
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=128G
+#SBATCH --mem=32G
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_images_%j.out
