@@ -378,6 +378,8 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         kwargs['outdir'] = os.path.join(outdir, j, '')
         utils.execute_local(script = script, kwargs = kwargs)
 
+        sys.exit()
+
         # If the matrix file is not none, create the ES matrix
         if matrix_file is not None:
             print("Building {} effect size matrix...".format(j))
