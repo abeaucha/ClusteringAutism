@@ -5,6 +5,7 @@
 .venv_hpc/
 __pycache__/
 data/
+logs/
 scripts_old/
 templates/
 .env
