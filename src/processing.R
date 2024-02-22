@@ -2,6 +2,7 @@
 
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(parallel))
 suppressPackageStartupMessages(library(doSNOW))
 
 
@@ -169,12 +170,12 @@ vector_to_image <- function(x, outfile, mask) {
   mask <- mincGetVolume(mask)
   
   #Check that x and mask match
-  if (length(x) != sum(mask)) {
+  if (length(x) != sum(mask > 0.5)) {
     stop(paste("Number of elements in x does not match the number of non-zero",
                "voxels in the mask."))
   }
   
-  #Export vector as image
+  # Export vector as image
   img <- numeric(length(mask))
   img[mask == 1] <- x
   attributes(x) <- attributes(mask)
@@ -190,35 +191,41 @@ vector_to_image <- function(x, outfile, mask) {
 
 matrix_to_images <- function(x, outfiles, mask, margin = 1, nproc = NULL) {
   
-  #Check output files
+  # Check output files
   if (is.null(outfiles)) {
     stop("Specify output files.")
   }
   
-  #Check mask
+  # Check mask
   if (is.null(mask)) {
     stop("Specify mask file.")
   }
   
-  #Check that x is a matrix
+  # Check that x is a matrix
   if (!is.matrix(x)) {
     stop("x must be a matrix.")  
   }
   
-  #Split matrix into array along margin
+  # Split matrix into array along margin
   x <- asplit(x, MARGIN = margin)
-  
-  #Check that number of output files matches the number of images
+
+  # Check that number of output files matches the number of images
   if (length(x) != length(outfiles)) {
     stop("Number of entries in x along margin ", margin, 
          " must be equal to the number of entries in outfiles")  
   }
   
-  #Export to images
+  # Export to images
   if (!is.null(nproc)) {
-    out <- parallel::mcmapply(vector_to_image, x, outfiles, 
-                              MoreArgs = list(mask = mask),
-                              SIMPLIFY = TRUE, mc.cores = nproc)
+    # out <- mcmapply(vector_to_image, x, outfiles, 
+    #                 MoreArgs = list(mask = mask),
+    #                 SIMPLIFY = TRUE, mc.cores = nproc)
+    cl <- makeCluster(nproc)
+    snk <- clusterEvalQ(cl, library(RMINC))
+    out <- clusterMap(cl = cl, 
+                      fun = vector_to_image, x, outfiles, 
+                      MoreArgs = list(mask = mask))
+    stopCluster(cl)
   } else {
     out <- mapply(vector_to_image, x, outfiles,
                   MoreArgs = list(mask = mask),
