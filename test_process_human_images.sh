@@ -7,7 +7,7 @@
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_images_%j.out
 
-#source activate_venv_hpc.sh
+source activate_venv_hpc.sh
 
 #process_human_images.py \
 #--pipeline-dir data/test/human/derivatives/v2/ \
@@ -21,15 +21,27 @@
 #--slurm-time 30 \
 #--slurm-mem 16G
 
+#process_human_images.py \
+#--pipeline-dir data/test/human/derivatives/v2/ \
+#--input-dir data/human/registration/v2/jacobians_resampled/resolution_0.8/ \
+#--demographics data/human/registration/v2/subject_info/demographics.csv \
+#--mask data/human/registration/v2/reference_files/mask_0.8mm.mnc \
+#--es-nbatches 1 \
+#--execution slurm \
+#--nproc 8 \
+#--slurm-njobs 300 \
+#--slurm-time 30 \
+#--slurm-mem 16G
+
 process_human_images.py \
 --pipeline-dir data/test/human/derivatives/v2/ \
 --input-dir data/human/registration/v2/jacobians_resampled/resolution_0.8/ \
 --demographics data/human/registration/v2/subject_info/demographics.csv \
---mask data/human/registration/v2/reference_files/mask_0.8mm.mnc \
+--mask data/human/registration/v2/reference_files/mask_0.8mm_test.mnc \
 --es-nbatches 1 \
 --execution slurm \
 --nproc 8 \
---slurm-njobs 200 \
+--slurm-njobs 100 \
 --slurm-time 30 \
 --slurm-mem 16G
 
