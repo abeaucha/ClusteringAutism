@@ -220,10 +220,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # Convert voxel list into matrix
   voxels <- simplify_masked(voxels[["vals"]])
 
-  print(class(voxels))
-  print(dim(voxels))
-  print(object.size(voxels)/10^9)
-
   # Export images
   if (verbose) {message("Exporting normalized images...")}
   if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
