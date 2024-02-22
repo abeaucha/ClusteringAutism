@@ -257,14 +257,14 @@ def initialize(**kwargs):
     # Pipeline parameters
     params = dict(
         dataset = '-'.join(kwargs['datasets']),
-        resolution = resolution,
+        resolution = f'{resolution:.1f}',
         es_method = kwargs['es_method'],
         es_group = kwargs['es_group'],
         es_df = kwargs['es_df'],
         es_batch = (None if kwargs['es_batch'] is None
                     else '-'.join(kwargs['es_batch'])),
         es_ncontrols = kwargs['es_ncontrols'],
-        cluster_resolution = kwargs['cluster_resolution'],
+        cluster_resolution = f'{kwargs["cluster_resolution"]:.1f}',
         cluster_nk_max = kwargs['cluster_nk_max'],
         cluster_metric = kwargs['cluster_metric'],
         cluster_K = kwargs['cluster_K'],
