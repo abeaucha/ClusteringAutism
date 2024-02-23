@@ -1,4 +1,4 @@
-#!Rscript
+#!/usr/bin/env Rscript
 # ----------------------------------------------------------------------------
 # create_cluster_centroids.R
 # Author: Antoine Beauchamp
@@ -42,12 +42,25 @@ option_list <- list(
               help = paste("One of {mean, median} specifying how to",
                            "compute the centroids.",
                            "[default %default]")),
+  make_option("--execution",
+              type = "character",
+              default = "local",
+              help = paste("[default %default]")),
   make_option("--nproc",
               type = "numeric",
               default = 1,
               help = paste("Number of processors to use in parallel.",
                            "Executed serially if 1.",
                            "[default %default]")),
+  make_option("--slurm-njobs",
+              type = "numeric",
+              help = "Number of jobs to deploy on Slurm."),
+  make_option("--slurm-mem",
+              type = "character",
+              help = paste("Memory per CPU core")),
+  make_option("--slurm-time",
+              type = "numeric",
+              help = paste("Walltime in minutes")),
   make_option("--verbose",
               type = "character",
               default = "true",
@@ -66,6 +79,9 @@ outdir <- args[["outdir"]]
 method <- args[["method"]]
 nproc <- args[["nproc"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
+
+print(args)
+quit()
 
 # Check required arguments
 args_req <- c("cluster-file", "imgdir", "mask", "outdir")
