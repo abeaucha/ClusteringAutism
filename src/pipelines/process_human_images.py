@@ -188,7 +188,7 @@ def parse_args():
 
     # Cluster maps arguments ---------------------------------------------------
     parser.add_argument(
-        '--cluster-map-method',
+        '--centroid-method',
         type = str,
         default = 'mean',
         help = "The method to use to compute cluster centroid images."
@@ -281,7 +281,7 @@ def initialize(**kwargs):
         cluster_K = kwargs['cluster_K'],
         cluster_sigma = kwargs['cluster_sigma'],
         cluster_t = kwargs['cluster_t'],
-        cluster_map_method = kwargs['cluster_map_method']
+        centroid_method = kwargs['centroid_method']
     )
 
     pipeline_dir = kwargs['pipeline_dir']
@@ -305,8 +305,8 @@ def initialize(**kwargs):
                                'resolution_{}'.format(
                                    kwargs['cluster_resolution']),
                                '')
-    cluster_map_dir = os.path.join(pipeline_dir, 'cluster_maps',
-                                   'resolution_{}'.format(resolution), '')
+    centroid_dir = os.path.join(pipeline_dir, 'centroids',
+                                'resolution_{}'.format(resolution), '')
 
     # Check existence of input directory
     if not os.path.exists(input_dir):
@@ -319,8 +319,8 @@ def initialize(**kwargs):
         os.makedirs(es_dir)
     if not os.path.exists(cluster_dir):
         os.makedirs(cluster_dir)
-    if not os.path.exists(cluster_map_dir):
-        os.makedirs(cluster_map_dir)
+    if not os.path.exists(centroid_dir):
+        os.makedirs(centroid_dir)
 
     # Filter for data sets ----------------------------------------------------
 
@@ -359,7 +359,7 @@ def initialize(**kwargs):
         jacobians = imgdir,
         effect_sizes = es_dir,
         clusters = cluster_dir,
-        centroids = cluster_map_dir
+        centroids = centroid_dir
     )
 
     return paths
@@ -372,11 +372,41 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                  matrix_resolution = 3.0,
                  execution = 'local', nproc = 1,
                  slurm_njobs = None, slurm_mem = None, slurm_time = None):
+    """
+
+    Parameters
+    ----------
+    imgdir
+    demographics
+    mask
+    outdir
+    method
+    group
+    nbatches
+    df
+    batch
+    ncontrols
+    matrix_file
+    matrix_resolution
+    execution
+    nproc
+    slurm_njobs
+    slurm_mem
+    slurm_time
+
+    Returns
+    -------
+
+    """
+
     # Clean up arguments
     kwargs = locals().copy()
     kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
     kwargs['batch'] = (None if kwargs['batch'] is None
                        else '-'.join(kwargs['batch']))
+
+    # Driver script
+    script = 'compute_effect_sizes.R'
 
     # Dictionary to store outputs
     out = dict(
@@ -386,113 +416,167 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                         matrix = '')
     )
 
-    # Driver script
-    script = 'compute_effect_sizes.R'
-
     # Iterate over Jacobians
     for j in out.keys():
+
         print("Computing {} effect size images...".format(j))
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
         utils.execute_local(script = script, kwargs = kwargs)
 
-        # If the matrix file is not none, create the ES matrix
-        if matrix_file is not None:
-            print("Building {} effect size matrix...".format(j))
+        # Create the effect size matrix
+        print("Building {} effect size matrix...".format(j))
 
-            # Path to effect size images
-            imgfiles = os.listdir(os.path.join(outdir, j, ''))
-            imgfiles = [file for file in imgfiles if '.mnc' in file]
-            imgfiles = [os.path.join(outdir, j, file) for file in imgfiles]
+        # Path to effect size images
+        imgfiles = os.listdir(os.path.join(outdir, j, ''))
+        imgfiles = [file for file in imgfiles if '.mnc' in file]
+        imgfiles = [os.path.join(outdir, j, file) for file in imgfiles]
 
-            # If the matrix resolution is specified, resample to the matrix res
-            if matrix_resolution is None:
+        # If the matrix resolution is specified, resample to the matrix res
+        if matrix_resolution is None:
+            outdir_f = outdir
+            mask_f = mask
+            imgfiles_f = imgfiles
+
+        else:
+
+            # Get the image resolution
+            vol = volumeFromFile(mask)
+            resolution = vol.getSeparations()
+            if len(set(resolution)) == 1:
+                resolution = resolution[0]
+            else:
+                raise Exception
+            vol.closeVolume()
+
+            # Resample if needed
+            if (matrix_resolution != resolution):
+
+                print("Resampling effect size images to {}mm..."
+                      .format(matrix_resolution))
+
+                # Directory for resampled images
+                outdir_f = outdir.replace(
+                    'resolution_{}'.format(resolution),
+                    'resolution_{}'.format(matrix_resolution)
+                )
+
+                # Resample images
+                imgfiles_f = utils.resample_images(
+                    infiles = imgfiles,
+                    outdir = os.path.join(outdir_f, j, ''),
+                    isostep = matrix_resolution,
+                    parallel = True,
+                    nproc = nproc
+                )
+
+                # Resample mask
+                mask_f = utils.resample_image(
+                    infile = mask,
+                    isostep = matrix_resolution,
+                    outdir = outdir_f,
+                    suffix = f'_autocrop_{matrix_resolution:.1f}mm'
+                )
+
+            else:
                 outdir_f = outdir
                 mask_f = mask
                 imgfiles_f = imgfiles
-            else:
 
-                # Get the image resolution
-                vol = volumeFromFile(mask)
-                resolution = vol.getSeparations()
-                if len(set(resolution)) == 1:
-                    resolution = resolution[0]
-                else:
-                    raise Exception
-                vol.closeVolume()
+        # Build effect size matrix and export
+        df_es = processing.build_voxel_matrix(imgfiles = imgfiles_f,
+                                              mask = mask_f,
+                                              file_col = True,
+                                              sort = True,
+                                              parallel = True,
+                                              nproc = nproc)
+        df_es['file'] = [os.path.basename(file) for file in df_es['file']]
+        df_es.to_csv(os.path.join(outdir_f, j, matrix_file), index = False)
 
-                # Resample if needed
-                if (matrix_resolution == resolution):
-                    outdir_f = outdir
-                    mask_f = mask
-                    imgfiles_f = imgfiles
-                else:
-                    print("Resampling effect size images to {}mm..."
-                          .format(matrix_resolution))
-
-                    # Directory for resampled images
-                    outdir_f = outdir.replace(
-                        'resolution_{}'.format(resolution),
-                        'resolution_{}'.format(matrix_resolution)
-                    )
-
-                    # Resample images
-                    imgfiles_f = utils.resample_images(
-                        infiles = imgfiles,
-                        outdir = os.path.join(outdir_f, j, ''),
-                        isostep = matrix_resolution,
-                        parallel = True,
-                        nproc = nproc
-                    )
-
-                    # Resample mask
-                    mask_f = utils.resample_image(
-                        infile = mask,
-                        isostep = matrix_resolution,
-                        outdir = outdir_f,
-                        suffix = f'_autocrop_{matrix_resolution:.1f}mm'
-                    )
-
-            # Build effect size matrix and export
-            df_es = processing.build_voxel_matrix(imgfiles = imgfiles_f,
-                                                  mask = mask_f,
-                                                  file_col = True,
-                                                  sort = True,
-                                                  parallel = True,
-                                                  nproc = nproc)
-            df_es['file'] = [os.path.basename(file) for file in df_es['file']]
-            df_es.to_csv(os.path.join(outdir_f, j, matrix_file), index = False)
-
-    # Add outputs to dictionary
-    out[j]['imgdir'] = os.path.join(outdir, j, '')
-    out[j]['matrix'] = os.path.join(outdir_f, j, matrix_file)
+        # Add outputs to dictionary
+        out[j]['imgdir'] = os.path.join(outdir, j, '')
+        out[j]['matrix'] = os.path.join(outdir_f, j, matrix_file)
 
     return out
 
 
-def clustering(infiles, rownames = None, nk_max = 10,
+def clustering(infiles, rownames = 'file', nk_max = 10,
                metric = 'correlation', K = 10, sigma = 0.5, t = 20,
                cluster_file = 'clusters.csv',
                affinity_file = 'affinity.csv'):
+    """
+
+    Parameters
+    ----------
+    infiles
+    rownames
+    nk_max
+    metric
+    K
+    sigma
+    t
+    cluster_file
+    affinity_file
+
+    Returns
+    -------
+
+    """
 
     kwargs = locals().copy()
+    kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
+    kwargs['file1'] = kwargs['infiles'][0]
+    kwargs['file2'] = kwargs['infiles'][1]
+    del kwargs['infiles']
 
     # Driver script
     script = 'generate_clusters.R'
+    utils.execute_local(script = script, kwargs = kwargs)
 
-    return
+    return cluster_file
 
 
-def centroids():
-    if env == 'local':
-        utils.execute_local(script = 'create_cluster_centroids.R',
-                            args = ...)
-    elif env == 'slurm':
-        utils.execute_slurm(script = 'create_cluster_centroids.R',
-                            args = ...,
-                            slurm_args = ...)
-    else:
-        raise ValueError
+def centroids(clusters, imgdir, outdir, mask,
+              method = 'mean', execution = 'local', nproc = 1,
+              slurm_njobs = None, slurm_mem = None, slurm_time = None):
+    """
+
+    Parameters
+    ----------
+    clusters
+    imgdir
+    outdir
+    mask
+    method
+    execution
+    nproc
+    slurm_njobs
+    slurm_mem
+    slurm_time
+
+    Returns
+    -------
+
+    """
+
+    # Script args
+    kwargs = locals().copy()
+    kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
+    kwargs['cluster-file'] = kwargs.pop('clusters')
+
+    # Driver script
+    script = 'compute_cluster_centroids.R'
+
+    # Dictionary to store outputs
+    out = dict(absolute = '', relative = '')
+
+    # Iterate over Jacobians
+    for j in out.keys():
+        print("Computing {} cluster centroid images...".format(j))
+        kwargs['imgdir'] = os.path.join(imgdir, j, '')
+        kwargs['outdir'] = os.path.join(outdir, j, '')
+        utils.execute_local(script = script, kwargs = kwargs)
+
     return
 
 
@@ -507,13 +591,49 @@ def main(pipeline_dir, input_dir, demographics, mask,
          cluster_K = 10, cluster_sigma = 0.5, cluster_t = 20,
          cluster_file = 'clusters.csv',
          cluster_affinity_file = 'affinity.csv',
-         cluster_map_method = 'mean',
+         centroid_method = 'mean',
          execution = 'local', nproc = 1,
          slurm_njobs = None, slurm_mem = None, slurm_time = None):
+    """
+
+    Parameters
+    ----------
+    pipeline_dir
+    input_dir
+    demographics
+    mask
+    datasets
+    es_method
+    es_group
+    es_nbatches
+    es_df
+    es_batch
+    es_ncontrols
+    es_matrix_file
+    cluster_resolution
+    cluster_nk_max
+    cluster_metric
+    cluster_K
+    cluster_sigma
+    cluster_t
+    cluster_file
+    cluster_affinity_file
+    centroid_method
+    execution
+    nproc
+    slurm_njobs
+    slurm_mem
+    slurm_time
+
+    Returns
+    -------
+
+    """
+
     # Get dictionary of function kwargs
     kwargs = locals().copy()
 
-    # Initialize pipeline directory
+    # Initialize pipeline directory tree
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
 
@@ -522,35 +642,50 @@ def main(pipeline_dir, input_dir, demographics, mask,
     es_kwargs = {key.replace('es_', ''):val
                  for key, val in kwargs.items() if 'es_' in key}
     es_kwargs.update(
-        dict(imgdir = paths['jacobians'],
-             demographics = demographics,
-             mask = mask,
-             outdir = paths['effect_sizes'],
+        dict(imgdir = paths['jacobians'], demographics = demographics,
+             mask = mask, outdir = paths['effect_sizes'],
              matrix_resolution = cluster_resolution,
-             execution = execution,
-             nproc = nproc,
-             slurm_njobs = slurm_njobs,
-             slurm_mem = slurm_mem,
+             execution = execution, nproc = nproc,
+             slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
-    es_outputs = effect_sizes(**es_kwargs)
+    # es_outputs = effect_sizes(**es_kwargs)
 
-    print(es_outputs)
-    sys.exit()
+    # TODO: Remove this when done
+    es_outputs = dict(
+        absolute = dict(imgdir = os.path.join(paths['effect_sizes'], 'absolute', ''),
+                        matrix = os.path.join(paths['effect_sizes'], 'absolute', 'effect_sizes.csv')),
+        relative = dict(imgdir = os.path.join(paths['effect_sizes'], 'relative', ''),
+                        matrix = os.path.join(paths['effect_sizes'], 'relative', 'effect_sizes.csv'))
+    )
 
     # Generate clusters
     print("Generating clusters...")
-    cluster_kwargs = {key:val for key, val in kwargs.items()
-                      if 'cluster_' in key}
-    del cluster_kwargs['cluster_resolution']
-    del cluster_kwargs['cluster_map_method']
-    cluster_kwargs = {key.replace('cluster_', ''):val
-                      for key, val in cluster_kwargs.items()
-                      if 'cluster_file' not in key}
-    # clustering()
-    # centroids()
+    cluster_kwargs = dict(
+        infiles = [es_outputs[key]['matrix'] for key in es_outputs.keys()],
+        nk_max = cluster_nk_max, metric = cluster_metric, K = cluster_K,
+        sigma = cluster_sigma, t = cluster_t,
+        cluster_file = os.path.join(paths['clusters'], cluster_file),
+        affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
+    )
+    # clusters = clustering(**cluster_kwargs)
+
+    # TODO: Remove this when done
+    clusters = os.path.join(paths['clusters'], cluster_file)
+
+    # Compute cluster centroids
+    centroid_kwargs = dict(
+        clusters = clusters, imgdir = paths['effect_sizes'],
+        outdir = paths['centroids'], mask = mask,
+        method = centroid_method,
+        execution = execution, nproc = nproc,
+        slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
+        slurm_time = slurm_time
+    )
+    centroids_outputs = centroids(**centroid_kwargs)
 
 
+# Execution -------------------------------------------------------------------
 if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
