@@ -9,7 +9,6 @@
 # Description
 # -----------
 
-
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(optparse))
@@ -109,7 +108,8 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
-source(file.path(SRCPATH, "pipelines/processing.R"))
+#TODO remove line
+# source(file.path(SRCPATH, "pipelines/processing.R"))
 
 
 # Main -----------------------------------------------------------------------
@@ -117,6 +117,7 @@ source(file.path(SRCPATH, "pipelines/processing.R"))
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
 
+#TODO remove lines when script works
 # REMOVE THESE LINES WHEN FINISHED
 # args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
 # args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
@@ -153,6 +154,11 @@ for (arg in args_req) {
   }
 }
 
+# Create outdir if needed
+if (!dir.exists(outdir)) {
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+}
+
 # Check execution option
 if (execution == "local") {
   resources <- list() 
@@ -165,9 +171,11 @@ if (execution == "local") {
 }
 
 # Generate effect size images
+# TODO implement batched computation
 if (method == "normative-growth") {
   if (nbatches > 1) {
-    
+
+
     # Create voxel batches
     mask_array <- import_image(img = mask, mask = mask)
     batches <- parallel::splitIndices(length(mask_array), ncl = nbatches)
@@ -246,27 +254,3 @@ if (method == "normative-growth") {
   stop("Argument --method must be one of ",
        "{normative-growth, propensity-matching")
 }
-
-# # Generate effect size matrix
-# if (!is.null(matrix_file)) {
-#   if (!is.null(matrix_res)) {
-#     mask_res <- unique(minc.separation.sizes(mask))
-#     if (matrix_res != mask_res) {
-#       
-#       # Resample images if alternate resolution is specified
-#       files <- resample_images(files = files,
-#                                outdir = ...,
-#                                isostep = matrix_res,
-#                                nproc = nproc)
-#     }
-#   } 
-#   
-#   # Build effect size matrix
-#   build_voxel_matrix(imgfiles = files,
-#                      mask = ...,
-#                      file_col = TRUE,
-#                      sort = TRUE,
-#                      outfile = matrix_file,
-#                      nproc = nproc)
-# }
-
