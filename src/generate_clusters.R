@@ -1,4 +1,4 @@
-#!Rscript
+#!/usr/bin/env Rscript
 # ----------------------------------------------------------------------------
 # generate_clusters.R
 # Author: Antoine Beauchamp, Jacob Ellegood
@@ -86,7 +86,7 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 # Functions ------------------------------------------------------------------
 
-source(file.path(SRCPATH, "pipelines/processing.R"))
+source(file.path(SRCPATH, "processing.R"))
 
 
 # Main -----------------------------------------------------------------------
