@@ -1,6 +1,4 @@
 import os
-if os.getenv('MINC_TOOLKIT') is None:
-    os.environ['MINC_TOOLKIT'] = '/projects/tools/programs/ubuntu-20.04/spack/opt/spack/linux-ubuntu20.04-ivybridge/gcc-9.4.0/minc-toolkit-1.9.18.2-wlesmlgkrqe5fkdkcsspjvavmj6j6d4w'
 import random
 import tempfile
 import multiprocessing as mp
