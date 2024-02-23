@@ -378,7 +378,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
     kwargs['batch'] = (None if kwargs['batch'] is None
                        else '-'.join(kwargs['batch']))
 
-    # Dictionary to store returns
+    # Dictionary to store outputs
     out = dict(
         absolute = dict(imgdir = '',
                         matrix = ''),
