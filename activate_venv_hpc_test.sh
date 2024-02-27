@@ -1,15 +1,14 @@
 #!/bin/bash
 
-#On MICe machines: Remove all modules
 module purge
-module use /hpf/largeprojects/MICe/tools/modulefiles/linux-centos7-sandybridge/
-module load python-3.9.13-gcc-8.2.0-kagensa
+module use /hpf/largeprojects/MICe/tools/modulefiles
+module load mice-env/1.1.0
 
 #If venv does not exist, create it
-if [ ! -d ".venv_hpc" ]; then
+if [ ! -d ".venv_hpc_test" ]; then
 	echo "Initializing python virtual environment..."
-	python3 -m venv .venv_hpc
-	. .venv_hpc/bin/activate
+	python3 -m venv .venv_hpc_test
+	. .venv_hpc_test/bin/activate
 	echo "Upgrading pip..."
 	pip install pip --upgrade
 	echo "Installing python packages..."
@@ -17,24 +16,12 @@ if [ ! -d ".venv_hpc" ]; then
 	deactivate
 fi
 
-#Load necessary modules
-#NOTE: minc-stuffs module break python virtual environment
-#module load \
-#	minc-toolkit \
-#	r/3.6.3 \
-#	r-packages \
-#	ants
-module load minc-toolkit-1.9.18.2-gcc-8.2.0-p4ac6lj
-module load r-3.6.3-gcc-8.2.0-gypogri
-module load r-packages/20220704
-module load ants-20220609-gcc-8.2.0-lnn77l7 ants-2.4.0-gcc-8.2.0-z6w27gh
-
 #Activate the python venv
-source .venv_hpc/bin/activate
+source .venv_hpc_test/bin/activate
 SRCPATH="$PWD/src"
 PYTHONPATH="$SRCPATH:$PYTHONPATH"
 PATH="$SRCPATH:$SRCPATH/pipelines:$PATH"
-RMINC_BATCH_CONF=/hpf/largeprojects/MICe/tools/r-packages/20220704/packratting/packrat/lib/x86_64-pc-linux-gnu/3.6.3/RMINC/parallel/slurm_batchtools.R
+RMINC_BATCH_CONF=/hpf/largeprojects/MICe/tools/RMINC/1.5.2.2_2/packrat/lib/x86_64-pc-linux-gnu/3.6.1/RMINC/parallel/slurm_batchtools.R
 
 export SRCPATH
 export PYTHONPATH
