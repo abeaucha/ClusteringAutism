@@ -11,6 +11,7 @@ templates/
 .env
 .Rhistory
 .Rprofile
+activate_venv_hpc_old.sh
 dev.ipynb
 dev.py
 dev.R
