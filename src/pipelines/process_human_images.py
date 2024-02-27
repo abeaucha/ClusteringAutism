@@ -649,15 +649,15 @@ def main(pipeline_dir, input_dir, demographics, mask,
              slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
-    # es_outputs = effect_sizes(**es_kwargs)
+    es_outputs = effect_sizes(**es_kwargs)
 
     # TODO: Remove this when done
-    es_outputs = dict(
-        absolute = dict(imgdir = os.path.join(paths['effect_sizes'], 'absolute', ''),
-                        matrix = os.path.join(paths['effect_sizes'], 'absolute', 'effect_sizes.csv')),
-        relative = dict(imgdir = os.path.join(paths['effect_sizes'], 'relative', ''),
-                        matrix = os.path.join(paths['effect_sizes'], 'relative', 'effect_sizes.csv'))
-    )
+    # es_outputs = dict(
+    #     absolute = dict(imgdir = os.path.join(paths['effect_sizes'], 'absolute', ''),
+    #                     matrix = os.path.join(paths['effect_sizes'], 'absolute', 'effect_sizes.csv')),
+    #     relative = dict(imgdir = os.path.join(paths['effect_sizes'], 'relative', ''),
+    #                     matrix = os.path.join(paths['effect_sizes'], 'relative', 'effect_sizes.csv'))
+    # )
 
     # Generate clusters
     print("Generating clusters...")
@@ -668,7 +668,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
         cluster_file = os.path.join(paths['clusters'], cluster_file),
         affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
     )
-    # clusters = clustering(**cluster_kwargs)
+    clusters = clustering(**cluster_kwargs)
+
+    sys.exit()
 
     # TODO: Remove this when done
     clusters = os.path.join(paths['clusters'], cluster_file)
