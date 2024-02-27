@@ -538,7 +538,7 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
 
 def centroids(clusters, imgdir, outdir, mask,
               method = 'mean', execution = 'local', nproc = 1,
-              slurm_njobs = None, slurm_mem = None, slurm_time = None):
+              slurm_mem = None, slurm_time = None):
     """
 
     Parameters
@@ -680,7 +680,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
         outdir = paths['centroids'], mask = mask,
         method = centroid_method,
         execution = execution, nproc = nproc,
-        slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
+        slurm_mem = slurm_mem,
         slurm_time = slurm_time
     )
     centroid_outputs = centroids(**centroid_kwargs)
