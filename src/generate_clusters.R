@@ -190,6 +190,6 @@ W <- similarity_network(x1 = x1, x2 = x2,
                         outfile = affinity_file)
 
 # Identify clusters
-if (verbose) {message("Assigning clusters...")}
+if (verbose) {message("Identifying clusters...")}
 clusters <- create_clusters(W = W, nk = nk_max,
                             outfile = cluster_file)
