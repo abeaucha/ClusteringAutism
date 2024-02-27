@@ -576,8 +576,9 @@ def centroids(clusters, imgdir, outdir, mask,
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
         utils.execute_local(script = script, kwargs = kwargs)
+        out[j] = os.path.join(outdir, j, '')
 
-    return
+    return out
 
 
 def main(pipeline_dir, input_dir, demographics, mask,
@@ -649,15 +650,15 @@ def main(pipeline_dir, input_dir, demographics, mask,
              slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
-    es_outputs = effect_sizes(**es_kwargs)
-
     # TODO: Remove this when done
-    # es_outputs = dict(
-    #     absolute = dict(imgdir = os.path.join(paths['effect_sizes'], 'absolute', ''),
-    #                     matrix = os.path.join(paths['effect_sizes'], 'absolute', 'effect_sizes.csv')),
-    #     relative = dict(imgdir = os.path.join(paths['effect_sizes'], 'relative', ''),
-    #                     matrix = os.path.join(paths['effect_sizes'], 'relative', 'effect_sizes.csv'))
-    # )
+    # es_outputs = effect_sizes(**es_kwargs)
+    #
+    es_outputs = dict(
+        absolute = dict(imgdir = os.path.join(paths['effect_sizes'], 'absolute', ''),
+                        matrix = os.path.join(paths['effect_sizes'], 'absolute', 'effect_sizes.csv')),
+        relative = dict(imgdir = os.path.join(paths['effect_sizes'], 'relative', ''),
+                        matrix = os.path.join(paths['effect_sizes'], 'relative', 'effect_sizes.csv'))
+    )
 
     # Generate clusters
     print("Generating clusters...")
@@ -668,11 +669,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
         cluster_file = os.path.join(paths['clusters'], cluster_file),
         affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
     )
-    clusters = clustering(**cluster_kwargs)
-
-    sys.exit()
-
     # TODO: Remove this when done
+    # clusters = clustering(**cluster_kwargs)
+    #
     clusters = os.path.join(paths['clusters'], cluster_file)
 
     # Compute cluster centroids
@@ -684,7 +683,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
         slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
         slurm_time = slurm_time
     )
-    centroids_outputs = centroids(**centroid_kwargs)
+    centroid_outputs = centroids(**centroid_kwargs)
+
+    print(centroid_outputs)
 
 
 # Execution -------------------------------------------------------------------
