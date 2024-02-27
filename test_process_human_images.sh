@@ -7,7 +7,7 @@
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_images_%j.out
 
-source activate_venv_hpc.sh
+#source activate_venv_hpc.sh
 
 # 3.0mm executed locally
 #process_human_images.py \
