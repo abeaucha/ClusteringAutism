@@ -17,7 +17,7 @@
 
 suppressPackageStartupMessages(library(optparse))
 suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(batchtools))
 
 
 # Command line arguments -----------------------------------------------------
@@ -52,9 +52,6 @@ option_list <- list(
               help = paste("Number of processors to use in parallel.",
                            "Executed serially if 1.",
                            "[default %default]")),
-  make_option("--slurm-njobs",
-              type = "numeric",
-              help = "Number of jobs to deploy on Slurm."),
   make_option("--slurm-mem",
               type = "character",
               help = paste("Memory per CPU core")),
@@ -133,34 +130,79 @@ if (!dir.exists(outdir)) {
 if (execution == "local") {
   resources <- list() 
 } else if (execution == "slurm") {
-  njobs <- args[["slurm-njobs"]]
   resources <- list(memory = args[["slurm-mem"]],
-                    walltime = args[["slurm-time"]]*60)
+                    walltime = args[["slurm-time"]]*60,
+                    ncpus=nproc)
 } else {
   stop()
 }
 
 # Import cluster information
 if (verbose) {message("Importing cluster information...")}
-df_clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>% 
-  rename(file = ID) %>% 
-  mutate(file = file.path(imgdir, file))
+clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>% 
+  mutate(ID = file.path(imgdir, ID)) %>% 
+  column_to_rownames("ID")
+
+
+compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean",
+                                      execution = "local", nproc = 1, 
+                                      njobs = NULL, resources = list()){
+  
+  labels <- clusters[,i]
+  files <- rownames(clusters)
+  
+  # Iterate over clusters
+  krange <- sort(unique(labels))  
+  centroids <- character(length(krange))
+  for (k in krange) {
+    
+    if (verbose) {message(paste("Cluster", k, "of", max(krange)))}
+    
+    # Centroid function
+    if (method == "mean") {
+      centroid_fun <- mean
+    } else if (method == "median") {
+      centroid_fun <- median
+    } else {
+      stop("method must be one of {mean, median}.")
+    }
+    
+    # Images for cluster k
+    files_k <- files[labels == k]
+    
+    # Create centroid image
+    centroid <- mcMincApply(filenames = files_k,
+                            fun = centroid_fun,
+                            mask = mask,
+                            cores = nproc)
+    
+    # Export image
+    outfile <- paste0("centroid_nk_", max(krange), "_k_", k, ".mnc")
+    outfile <- file.path(outdir, outfile)
+    mincWriteVolume(centroid,
+                    output.filename = outfile,
+                    clobber = TRUE)
+    
+    centroids[[k]] <- outfile
+    
+  }
+  
+  return(centroids)
+  
+}
 
 
 # Create centroid images for all clusters
 if (verbose) {message("Creating centroid images...")}
-sink(nullfile(), type = "output")
-cols_iter <- colnames(df_clusters)[colnames(df_clusters) != "file"]
-for (col in cols_iter) {
-  clusters <- df_clusters[, c("file", col)]
-  colnames(clusters) <- c("file", "k")
-  centroids <- compute_cluster_centroids(clusters = clusters,
-                                         mask = mask,
-                                         outdir = outdir,
-                                         method = method,
-                                         execution = execution,
-                                         nproc = nproc,
-                                         njobs = njobs,
-                                         resources = resources)
-}
-sink(NULL)
+reg <- makeRegistry(seed=1)
+jobs <- batchMap(fun = compute_cluster_centroids, 
+                 1:ncol(clusters),
+                 more.args = list(clusters = clusters,
+                                  mask = mask, 
+                                  outdir = outdir, 
+                                  method = method, 
+                                  nproc = nproc))
+submitJobs(jobs, resources = resources)
+centroids <- reduceResults(c)
+removeRegistry(reg = reg)
+
