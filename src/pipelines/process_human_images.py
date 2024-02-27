@@ -685,8 +685,6 @@ def main(pipeline_dir, input_dir, demographics, mask,
     )
     centroid_outputs = centroids(**centroid_kwargs)
 
-    print(centroid_outputs)
-
 
 # Execution -------------------------------------------------------------------
 if __name__ == '__main__':
