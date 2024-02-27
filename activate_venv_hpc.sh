@@ -10,12 +10,22 @@ module load mice-env/1.1.0
 # If venv does not exist, create it
 if [ ! -d ".venv_hpc" ]; then
 	echo "Initializing python virtual environment..."
+
+	# Create the venv
 	python3 -m venv .venv_hpc
+
+	# Activate the venv
 	. .venv_hpc/bin/activate
+
+	# Upgrade pip
 	echo "Upgrading pip..."
 	pip install pip --upgrade
+
+	# Install required python packages
 	echo "Installing python packages..."
 	pip3 install -r python_reqs_hpc.txt
+
+	# Deactivate the venv
 	deactivate
 fi
 

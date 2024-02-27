@@ -1,31 +1,31 @@
 #!/bin/bash
 
-#On MICe machines: Remove all modules
+# Remove all modules
 module purge
 
-#If venv does not exist, create it
+# If venv does not exist, create it
 if [ ! -d ".venv" ]; then
 	echo "Initializing python virtual environment..."
 
-	#Create the venv
+	# Create the venv
 	python3 -m venv .venv
 
-	#Activate the venv
+	# Activate the venv
 	source .venv/bin/activate
 
-	#Upgrade pip
+	# Upgrade pip
 	echo "Upgrading pip..."
 	pip install pip --upgrade
 
-	#Install necessary python packages
+	# Install required python packages
 	echo "Installing python packages..."
 	pip3 install -r python_reqs.txt
 
-	#Deactivate the venv
+	# Deactivate the venv
 	deactivate
 fi
 
-#Load necessary modules 
+# Load necessary modules
 #NOTE: minc-stuffs module break python virtual environment
 module load \
 	minc-toolkit \
@@ -33,9 +33,10 @@ module load \
 	r-packages \
 	ants
 
-#Activate the python venv
+# Activate the python venv
 source .venv/bin/activate
 
+# Set environment variables
 SRCPATH="$PWD/src"
 PYTHONPATH="$SRCPATH:$PYTHONPATH"
 PATH="$SRCPATH:$SRCPATH/pipelines:$PATH"
