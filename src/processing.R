@@ -725,6 +725,13 @@ compute_cluster_centroids <- function(clusters, mask, outdir, method = "mean",
                             fun = centroid_fun,
                             mask = mask,
                             cores = nproc)
+    # centroid <- qMincApply(filenames = files_k,
+    #                        fun = centroid_fun,
+    #                        mask = mask,
+    #                        cores = nproc,
+    #                        local = (execution == "local")
+    #                        batches = njobs,
+    #                        resources = resources)
     
     # Export image
     outfile <- paste0("centroid_nk_", max(krange), "_k_", k, ".mnc")
@@ -740,3 +747,30 @@ compute_cluster_centroids <- function(clusters, mask, outdir, method = "mean",
   return(centroids)
   
 }
+
+
+# if (execution == "local") {
+#   print("Executing locally...")
+#   voxels <- mcMincApply(filenames = imgfiles,
+#                         fun = compute_normative_zscore,
+#                         demographics = demographics,
+#                         group = group,
+#                         batch = batch,
+#                         df = df,
+#                         mask = mask,
+#                         cores = nproc,
+#                         return_raw = TRUE)
+# } else if (execution == "slurm") {
+#   print("Executing on HPC...")
+#   voxels <- qMincApply(filenames = imgfiles,
+#                        fun = compute_normative_zscore,
+#                        demographics = demographics,
+#                        group = group,
+#                        batch = batch,
+#                        df = df,
+#                        mask = mask,
+#                        batches = njobs,
+#                        source = file.path(SRCPATH, "processing.R"),
+#                        cleanup = TRUE,
+#                        return_raw = TRUE,
+#                        resources = resources)
