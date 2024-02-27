@@ -1,8 +1,8 @@
 #!/bin/bash
 
 autocrop -quiet -clobber -isostep 3.0 \
-/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/human/registration/v2/reference_files/mask_0.8mm.mnc \
-mask_test.mnc
+test_input/mask_0.8mm.mnc \
+test_output/mask_test.mnc
 
 #python3 resample_images.py \
 #--imgdir test_input \
