@@ -235,6 +235,7 @@ def parse_args():
 
 # Modules ----------------------------------------------------------------------
 
+#TODO include proper arguments
 def initialize(**kwargs):
     """
     Initialize human image processing pipeline.
@@ -650,14 +651,14 @@ def main(pipeline_dir, input_dir, demographics, mask,
              slurm_time = slurm_time)
     )
     # TODO: Remove this when done
-    # es_outputs = effect_sizes(**es_kwargs)
+    es_outputs = effect_sizes(**es_kwargs)
     #
-    es_outputs = dict(
-        absolute = dict(imgdir = os.path.join(paths['effect_sizes'], 'absolute', ''),
-                        matrix = os.path.join(paths['effect_sizes'], 'absolute', 'effect_sizes.csv')),
-        relative = dict(imgdir = os.path.join(paths['effect_sizes'], 'relative', ''),
-                        matrix = os.path.join(paths['effect_sizes'], 'relative', 'effect_sizes.csv'))
-    )
+    # es_outputs = dict(
+    #     absolute = dict(imgdir = os.path.join(paths['effect_sizes'], 'absolute', ''),
+    #                     matrix = os.path.join(paths['effect_sizes'], 'absolute', 'effect_sizes.csv')),
+    #     relative = dict(imgdir = os.path.join(paths['effect_sizes'], 'relative', ''),
+    #                     matrix = os.path.join(paths['effect_sizes'], 'relative', 'effect_sizes.csv'))
+    # )
 
     # Generate clusters
     print("Generating clusters...")
@@ -669,9 +670,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
         affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
     )
     # TODO: Remove this when done
-    # clusters = clustering(**cluster_kwargs)
+    clusters = clustering(**cluster_kwargs)
     #
-    clusters = os.path.join(paths['clusters'], cluster_file)
+    #clusters = os.path.join(paths['clusters'], cluster_file)
 
     # Compute cluster centroids
     centroid_kwargs = dict(
