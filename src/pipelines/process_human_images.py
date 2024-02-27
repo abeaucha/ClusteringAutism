@@ -502,8 +502,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
 
 def clustering(infiles, rownames = 'file', nk_max = 10,
                metric = 'correlation', K = 10, sigma = 0.5, t = 20,
-               cluster_file = 'clusters.csv',
-               affinity_file = 'affinity.csv'):
+               cluster_file = 'clusters.csv', affinity_file = 'affinity.csv'):
     """
 
     Parameters
