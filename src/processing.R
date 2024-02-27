@@ -683,3 +683,60 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
   return(all_clusters)
 
 }
+
+
+#' Compute cluster centroids
+#'
+#' @param clusters (data.frame)
+#' @param mask (character scalar)
+#' @param outdir (character scalar)
+#' @param method (character scalar)
+#' @param execution (character scalar)
+#' @param nproc (numeric scalar)
+#' @param njobs (numeric scalar)
+#' @param resources (list)
+#'
+#' @return (character vector)
+compute_cluster_centroids <- function(clusters, mask, outdir, method = "mean",
+                                      execution = "local", nproc = 1, 
+                                      njobs = NULL, resources = list()){
+  
+  # Iterate over clusters
+  krange <- sort(unique(clusters[["k"]]))  
+  centroids <- character(length(krange))
+  for (k in krange) {
+    
+    if (verbose) {message(paste("Cluster", k, "of", max(krange)))}
+    
+    # Centroid function
+    if (method == "mean") {
+      centroid_fun <- mean
+    } else if (method == "median") {
+      centroid_fun <- median
+    } else {
+      stop("method must be one of {mean, median}.")
+    }
+    
+    # Images for cluster k        
+    files_k <- clusters[["file"]][clusters[["k"]] == k]
+    
+    # Create centroid image
+    centroid <- mcMincApply(filenames = files_k,
+                            fun = centroid_fun,
+                            mask = mask,
+                            cores = nproc)
+    
+    # Export image
+    outfile <- paste0("centroid_nk_", max(krange), "_k_", k, ".mnc")
+    outfile <- file.path(outdir, outfile)
+    mincWriteVolume(centroid,
+                    output.filename = outfile,
+                    clobber = TRUE)
+    
+    centroids[[k]] <- outfile
+    
+  }
+  
+  return(centroids)
+  
+}
