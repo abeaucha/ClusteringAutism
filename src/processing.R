@@ -685,28 +685,36 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
 }
 
 
+
 #' Compute cluster centroids
 #'
-#' @param clusters (data.frame)
-#' @param mask (character scalar)
-#' @param outdir (character scalar)
-#' @param method (character scalar)
-#' @param execution (character scalar)
-#' @param nproc (numeric scalar)
-#' @param njobs (numeric scalar)
-#' @param resources (list)
+#' @param i 
+#' @param clusters 
+#' @param mask 
+#' @param outdir 
+#' @param method 
+#' @param execution 
+#' @param nproc 
+#' @param njobs 
+#' @param resources 
 #'
-#' @return (character vector)
-compute_cluster_centroids <- function(clusters, mask, outdir, method = "mean",
+#' @return
+#' @export
+#'
+#' @examples
+compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean",
                                       execution = "local", nproc = 1, 
                                       njobs = NULL, resources = list()){
   
+  labels <- clusters[,i]
+  files <- rownames(clusters)
+  
   # Iterate over clusters
-  krange <- sort(unique(clusters[["k"]]))  
+  krange <- sort(unique(labels))  
   centroids <- character(length(krange))
   for (k in krange) {
     
-    if (verbose) {message(paste("Cluster", k, "of", max(krange)))}
+    message(paste("Cluster", k, "of", max(krange)))
     
     # Centroid function
     if (method == "mean") {
@@ -717,21 +725,14 @@ compute_cluster_centroids <- function(clusters, mask, outdir, method = "mean",
       stop("method must be one of {mean, median}.")
     }
     
-    # Images for cluster k        
-    files_k <- clusters[["file"]][clusters[["k"]] == k]
+    # Images for cluster k
+    files_k <- files[labels == k]
     
     # Create centroid image
     centroid <- mcMincApply(filenames = files_k,
                             fun = centroid_fun,
                             mask = mask,
                             cores = nproc)
-    # centroid <- qMincApply(filenames = files_k,
-    #                        fun = centroid_fun,
-    #                        mask = mask,
-    #                        cores = nproc,
-    #                        local = (execution == "local")
-    #                        batches = njobs,
-    #                        resources = resources)
     
     # Export image
     outfile <- paste0("centroid_nk_", max(krange), "_k_", k, ".mnc")
@@ -747,30 +748,3 @@ compute_cluster_centroids <- function(clusters, mask, outdir, method = "mean",
   return(centroids)
   
 }
-
-
-# if (execution == "local") {
-#   print("Executing locally...")
-#   voxels <- mcMincApply(filenames = imgfiles,
-#                         fun = compute_normative_zscore,
-#                         demographics = demographics,
-#                         group = group,
-#                         batch = batch,
-#                         df = df,
-#                         mask = mask,
-#                         cores = nproc,
-#                         return_raw = TRUE)
-# } else if (execution == "slurm") {
-#   print("Executing on HPC...")
-#   voxels <- qMincApply(filenames = imgfiles,
-#                        fun = compute_normative_zscore,
-#                        demographics = demographics,
-#                        group = group,
-#                        batch = batch,
-#                        df = df,
-#                        mask = mask,
-#                        batches = njobs,
-#                        source = file.path(SRCPATH, "processing.R"),
-#                        cleanup = TRUE,
-#                        return_raw = TRUE,
-#                        resources = resources)

@@ -82,13 +82,13 @@ args <- parse_args(OptionParser(option_list = option_list))
 
 # TODO remove lines when script works
 # REMOVE THESE LINES WHEN FINISHED
-args[["imgdir"]] <- "data/test/human/derivatives/v2/547/effect_sizes/resolution_3.0/absolute/"
-args[["cluster-file"]] <- "data/test/human/derivatives/v2/547/clusters/resolution_3.0/clusters.csv"
-args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
-args[["outdir"]] <- "data/test/human/derivatives/v2/547/centroids/resolution_3.0/absolute/"
-args[["method"]] <- "mean"
-args[["execution"]] <- "local"
-args[["nproc"]] <- 8
+# args[["imgdir"]] <- "data/test/human/derivatives/v2/547/effect_sizes/resolution_3.0/absolute/"
+# args[["cluster-file"]] <- "data/test/human/derivatives/v2/547/clusters/resolution_3.0/clusters.csv"
+# args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
+# args[["outdir"]] <- "data/test/human/derivatives/v2/547/centroids/resolution_3.0/absolute/"
+# args[["method"]] <- "mean"
+# args[["execution"]] <- "local"
+# args[["nproc"]] <- 8
 
 imgdir <- args[["imgdir"]]
 clusterfile <- args[["cluster-file"]]
@@ -126,75 +126,32 @@ if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 }
 
-# Check execution option
-if (execution == "local") {
-  resources <- list() 
-} else if (execution == "slurm") {
-  resources <- list(memory = args[["slurm-mem"]],
-                    walltime = args[["slurm-time"]]*60,
-                    ncpus=nproc)
-} else {
-  stop()
-}
-
 # Import cluster information
 if (verbose) {message("Importing cluster information...")}
 clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>% 
   mutate(ID = file.path(imgdir, ID)) %>% 
   column_to_rownames("ID")
 
-
-compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean",
-                                      execution = "local", nproc = 1, 
-                                      njobs = NULL, resources = list()){
-  
-  labels <- clusters[,i]
-  files <- rownames(clusters)
-  
-  # Iterate over clusters
-  krange <- sort(unique(labels))  
-  centroids <- character(length(krange))
-  for (k in krange) {
-    
-    if (verbose) {message(paste("Cluster", k, "of", max(krange)))}
-    
-    # Centroid function
-    if (method == "mean") {
-      centroid_fun <- mean
-    } else if (method == "median") {
-      centroid_fun <- median
-    } else {
-      stop("method must be one of {mean, median}.")
-    }
-    
-    # Images for cluster k
-    files_k <- files[labels == k]
-    
-    # Create centroid image
-    centroid <- mcMincApply(filenames = files_k,
-                            fun = centroid_fun,
-                            mask = mask,
-                            cores = nproc)
-    
-    # Export image
-    outfile <- paste0("centroid_nk_", max(krange), "_k_", k, ".mnc")
-    outfile <- file.path(outdir, outfile)
-    mincWriteVolume(centroid,
-                    output.filename = outfile,
-                    clobber = TRUE)
-    
-    centroids[[k]] <- outfile
-    
-  }
-  
-  return(centroids)
-  
+# Execution options
+if (execution == "local") {
+  resources <- list()
+  conf_file <- NA
+} else if (execution == "slurm") {
+  resources <- list(memory = args[["slurm-mem"]],
+                    walltime = args[["slurm-time"]]*60,
+                    ncpus=nproc)
+  conf_file <- getOption("RMINC_BATCH_CONF")
+} else {
+  stop()
 }
-
 
 # Create centroid images for all clusters
 if (verbose) {message("Creating centroid images...")}
-reg <- makeRegistry(seed=1)
+ti <- Sys.time()
+reg <- makeRegistry(file.dir = "centroid_registry",
+                    packages = "RMINC",
+                    conf.file = conf_file,
+                    seed = 1)
 jobs <- batchMap(fun = compute_cluster_centroids, 
                  1:ncol(clusters),
                  more.args = list(clusters = clusters,
@@ -203,6 +160,6 @@ jobs <- batchMap(fun = compute_cluster_centroids,
                                   method = method, 
                                   nproc = nproc))
 submitJobs(jobs, resources = resources)
+waitForJobs(reg = reg)
 centroids <- reduceResults(c)
 removeRegistry(reg = reg)
-
