@@ -236,7 +236,6 @@ def parse_args():
 # Modules ----------------------------------------------------------------------
 
 
-#TODO include proper arguments
 @utils.timing
 def initialize(**kwargs):
     """
@@ -368,6 +367,7 @@ def initialize(**kwargs):
     return paths
 
 
+@utils.timing
 def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
                  nbatches = 1, df = 3, batch = ('Site', 'Scanner'),
@@ -503,6 +503,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
     return out
 
 
+@utils.timing
 def clustering(infiles, rownames = 'file', nk_max = 10,
                metric = 'correlation', K = 10, sigma = 0.5, t = 20,
                cluster_file = 'clusters.csv', affinity_file = 'affinity.csv'):
@@ -539,6 +540,7 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
     return cluster_file
 
 
+@utils.timing
 def centroids(clusters, imgdir, outdir, mask,
               method = 'mean', execution = 'local', nproc = 1,
               slurm_mem = None, slurm_time = None):
