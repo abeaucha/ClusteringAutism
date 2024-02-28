@@ -8,10 +8,12 @@ import os
 import sys
 import utils
 import processing
-import time
 import pandas as pd
 from glob import glob
 from pyminc.volumes.factory import volumeFromFile
+
+from functools import wraps
+from time import time
 
 
 # Command line arguments -----------------------------------------------------
@@ -236,7 +238,20 @@ def parse_args():
 
 # Modules ----------------------------------------------------------------------
 
+def timing(f):
+    @wraps(f)
+    def wrap(*args, **kw):
+        ts = time()
+        result = f(*args, **kw)
+        te = time()
+        print('func:%r args:[%r, %r] took: %2.4f sec' % \
+          (f.__name__, args, kw, te-ts))
+        return result
+    return wrap
+
+
 #TODO include proper arguments
+@timing
 def initialize(**kwargs):
     """
     Initialize human image processing pipeline.
@@ -583,6 +598,7 @@ def centroids(clusters, imgdir, outdir, mask,
     return out
 
 
+@timing
 def main(pipeline_dir, input_dir, demographics, mask,
          datasets = ('POND', 'SickKids'),
          es_method = 'normative-growth', es_group = 'patients',
@@ -699,8 +715,4 @@ if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
     args['es_batch'] = tuple(args['es_batch'])
-    ti = time.time()
     main(**args)
-    tf = time.time()
-    tdelta = (tf-ti)/60.0
-    print(tdelta)
