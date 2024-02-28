@@ -5,9 +5,22 @@ import multiprocessing as mp
 import pandas as pd
 import tempfile as tf
 from functools import partial
+from functools import wraps
 from random import randint
 from re import sub
 from tqdm import tqdm
+from time import time
+
+
+def timing(f):
+    @wraps(f)
+    def wrap(*args, **kw):
+        ti = time()
+        result = f(*args, **kw)
+        tf = time()
+        print('%r: %2.4f minutes' % (f.__name__, (tf-ti)/60))
+        return result
+    return wrap
 
 
 def slurm_build(script, args, resources):
