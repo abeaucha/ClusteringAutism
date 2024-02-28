@@ -534,7 +534,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # Run normative growth modelling
   if (verbose) {message("Evaluating normative growth models...")}
   if (execution == "local") {
-    print("Executing locally...")
     voxels <- mcMincApply(filenames = imgfiles,
                           fun = compute_normative_zscore,
                           demographics = demographics,
@@ -545,7 +544,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                           cores = nproc,
                           return_raw = TRUE)
   } else if (execution == "slurm") {
-    print("Executing on HPC...")
     voxels <- qMincApply(filenames = imgfiles,
                          fun = compute_normative_zscore,
                          demographics = demographics,
