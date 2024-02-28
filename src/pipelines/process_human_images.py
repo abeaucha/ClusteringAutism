@@ -383,27 +383,52 @@ def effect_sizes(imgdir, demographics, mask, outdir,
 
     Parameters
     ----------
-    imgdir
-    demographics
-    mask
-    outdir
-    method
-    group
-    nbatches
-    df
-    batch
-    ncontrols
-    matrix_file
-    matrix_resolution
-    execution
-    nproc
-    slurm_njobs
-    slurm_mem
-    slurm_time
+    imgdir: str
+        Path to the directory containing the input Jacobian images. Must
+        contain sub-directories 'absolute' and 'relative', which hold the
+        image files (.mnc).
+    demographics: str
+        Path to the file (.csv) containing the demographics information
+    mask: str
+        Path to the mask file (.mnc)
+    outdir: str
+        Path to the directory in which to export the effect size sub-directories
+        and images.
+    method: {'normative-growth', 'propensity-matching'}
+        Method used to compute the effect size images.
+    group: {'patients', 'controls', 'all'}
+        Group of participants for which to compute effect sizes.
+    nbatches: int, default 1
+        Number of batches to use in effect size computation.
+    df: int, default 3
+        Number of degrees of freedom to use when `method`='normative-growth'
+    batch: str or tuple of str, default ('Site', 'Scanner')
+        Batch variables to normalize against when `method` =
+        'normative-growth'
+    ncontrols: int, default 10
+        Number of controls to use for propensity matching when `method` =
+        'propensity-matching'
+    matrix_file: str, default 'effect_sizes.csv'
+        Basename of the file (.csv) in which to write the absolute and relative
+        effect size matrices.
+    matrix_resolution: float, default 3.0
+        Resolution (mm) of the images used for computing the effect size
+        matrices. Images will be resampled to this resolution if it is not
+        equal to the resolution of the input images.
+    execution: {'local', 'slurm'}
+        Flag indicating whether to run locally or using Slurm
+    nproc: int, default 1
+        Number of processors to use. Executed in parallel if > 1.
+    slurm_njobs: int, default None
+        Number of jobs to deploy when execution = 'slurm'.
+    slurm_mem: str, default None
+        Memory per CPU when execution = 'slurm', e.g. '16G'.
+    slurm_time: int, default = None
+        Walltime (minutes) for Slurm jobs when execution = 'slurm'
 
     Returns
     -------
-
+    out: dict of str
     """
 
     # Clean up arguments
@@ -621,7 +646,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
     datasets: tuple of str
         Datasets to include in processing.
     es_method: {'normative-growth', 'propensity-matching'}
-        Method used to compute effect size images.
+        Method used to compute the effect size images.
     es_group: {'patients', 'controls', 'all'}
         Group of participants for which to compute effect sizes.
     es_nbatches: int, default 1
@@ -660,6 +685,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
     centroid_method: {'mean', 'median'}
         Method used to compute cluster centroid images.
     execution: {'local', 'slurm'}
+        Flag indicating whether the pipeline should be executed or using the
+        Slurm scheduler on an HPC cluster.
     nproc: int, default 1
         Number of processors to use in parallel.
     slurm_njobs: int, default None
