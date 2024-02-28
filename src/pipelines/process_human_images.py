@@ -244,7 +244,7 @@ def timing(f):
         ti = time()
         result = f(*args, **kw)
         tf = time()
-        print('Function main %r took: %2.4f sec' % (f.__name__, tf-ti))
+        print('%r: %2.4f minutes' % (f.__name__, (tf-ti)/60))
         return result
     return wrap
 
