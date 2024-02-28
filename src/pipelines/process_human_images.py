@@ -8,6 +8,7 @@ import os
 import sys
 import utils
 import processing
+import time
 import pandas as pd
 from glob import glob
 from pyminc.volumes.factory import volumeFromFile
@@ -639,6 +640,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
 
+    return
+
     # Compute effect sizes
     print("Computing effect sizes...")
     es_kwargs = {key.replace('es_', ''):val
@@ -688,10 +691,16 @@ def main(pipeline_dir, input_dir, demographics, mask,
 
     print("Pipeline complete.")
 
+    return
+
 
 # Execution -------------------------------------------------------------------
 if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
     args['es_batch'] = tuple(args['es_batch'])
+    ti = time.time()
     main(**args)
+    tf = time.time()
+    tdelta = (tf-ti)/60.0
+    print(tdelta)
