@@ -606,39 +606,72 @@ def main(pipeline_dir, input_dir, demographics, mask,
          execution = 'local', nproc = 1,
          slurm_njobs = None, slurm_mem = None, slurm_time = None):
     """
+    Execute the image processing pipeline.
 
     Parameters
     ----------
-    pipeline_dir
-    input_dir
-    demographics
-    mask
-    datasets
-    es_method
-    es_group
-    es_nbatches
-    es_df
-    es_batch
-    es_ncontrols
-    es_matrix_file
-    cluster_resolution
-    cluster_nk_max
-    cluster_metric
-    cluster_K
-    cluster_sigma
-    cluster_t
-    cluster_file
-    cluster_affinity_file
-    centroid_method
-    execution
-    nproc
-    slurm_njobs
-    slurm_mem
-    slurm_time
+    pipeline_dir: str
+        Path to the directory in which to store pipeline outputs.
+    input_dir: str
+        Path to the directory containing Jacobian images.
+    demographics: str
+        Path to the file (.csv) containing the demographics information
+    mask: str
+        Path to the mask file (.mnc) for the registration.
+    datasets: tuple of str
+        Datasets to include in processing.
+    es_method: {'normative-growth', 'propensity-matching'}
+        Method used to compute effect size images.
+    es_group: {'patients', 'controls', 'all'}
+        Group of participants for which to compute effect sizes.
+    es_nbatches: int, default 1
+        Number of batches to use in effect size computation.
+    es_df: int, default 3
+        Number of degrees of freedom to use when `es_method`='normative-growth'
+    es_batch: str or tuple of str
+        Batch variables to normalize against when `es_method` =
+        'normative-growth'
+    es_ncontrols: int, default 10
+        Number of controls to use for propensity matching when `es_method` =
+        'propensity-matching'
+    es_matrix_file: str, default 'effect_sizes.csv'
+        Basename of the file (.csv) in which to write the absolute and relative
+        effect size matrices.
+    cluster_resolution: float, default 3.0
+        Resolution (mm) of effect size images at which to execute clustering.
+    cluster_nk_max: int, default 10
+        Maximum number of clusters to identify. Clustering solutions are
+        identified from nk = 2 to nk = `cluster_nk_max`
+    cluster_metric: str, default 'correlation'
+        Distance metric used to generate affinity matrices during clustering.
+    cluster_K: int, default 10
+        Number of nearest-neighbours to consider when building affinity matrices
+        during clustering.
+    cluster_sigma: float, default 0.5
+        Variance of the local model used to generate affinity matrices during
+        clustering.
+    cluster_t: int, default 20
+        Number of iterations for the diffusion process in similarity network
+        fusion during clustering.
+    cluster_file: str, default 'clusters.csv'
+        Basename of the file (.csv) in which to write the cluster assignments.
+    cluster_affinity_file: str, default 'affinity.csv'
+        Basename of the file (.csv) in which to write the fused affinity matrix.
+    centroid_method: {'mean', 'median'}
+        Method used to compute cluster centroid images.
+    execution: {'local', 'slurm'}
+    nproc: int, default 1
+        Number of processors to use in parallel.
+    slurm_njobs: int, default None
+        Number of jobs to deploy on Slurm
+    slurm_mem: str, default None
+        Memory per CPU for Slurm jobs.
+    slurm_time: int, default = None
+        Walltime (minutes) for Slurm jobs.
 
     Returns
     -------
-
+    None
     """
 
     # Get dictionary of function kwargs
