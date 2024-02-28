@@ -523,6 +523,7 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
 
     """
 
+    # Clean up arguments
     kwargs = locals().copy()
     kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
     kwargs['file1'] = kwargs['infiles'][0]
@@ -684,6 +685,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
         slurm_time = slurm_time
     )
     centroid_outputs = centroids(**centroid_kwargs)
+
+    print("Pipeline complete.")
 
 
 # Execution -------------------------------------------------------------------
