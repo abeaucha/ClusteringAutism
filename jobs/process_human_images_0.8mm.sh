@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=process_human_images
+#SBATCH --job-name=process_human_images_0.8mm
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
 #SBATCH --time=48:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
-#SBATCH --output=logs/process_human_images_%j.out
+#SBATCH --output=logs/process_human_images_0.8mm_%j.out
 
 # Activate virtual environment
 source activate_venv_hpc.sh
