@@ -28,25 +28,24 @@ def parse_args():
         type = str,
         default = 'data/human/derivatives/v2/',
         help = ("Path to the directory in which to store pipeline outputs. "
-                "A sub-directory will be created based on the datasets "
-                "specified using --datasets. Directories for the various "
-                "pipeline stages will be created within this sub-directory.")
+                "A sub-directory will be created based on the parameters "
+                "used to run the pipeline.")
     )
 
     parser.add_argument(
         '--input-dir',
         type = str,
         default = 'data/human/registration/v2/jacobians_resampled/resolution_0.8/',
-        help = ("Path to the directory containing Jacobian images. The program "
-                "will look for a sub-directory 'resolution_##' using the value "
-                "passed to --resolution.")
+        help = ("Path to the directory containing Jacobian images. "
+                "This directory must contain sub-directories named 'absolute' "
+                "and 'relative' containing the Jacobian images.")
     )
 
     parser.add_argument(
         '--demographics',
         type = str,
         default = 'data/human/registration/v2/subject_info/demographics.csv',
-        help = "Path to file (.csv) containing demographics information."
+        help = "Path to the file (.csv) containing demographics information."
     )
 
     parser.add_argument(
@@ -127,7 +126,9 @@ def parse_args():
         '--cluster-resolution',
         type = float,
         default = 3.0,
-        help = ""
+        help = ("The resolution (mm) at which to run the clustering stage. "
+                "Effect size images will be resampled to this resolution "
+                "if it is different from the resolution of the input images.")
     )
 
     parser.add_argument(
@@ -181,9 +182,8 @@ def parse_args():
         '--cluster-affinity-file',
         type = str,
         default = 'affinity.csv',
-        help = (
-            "The basename of the file (.csv) in which to store the affinity "
-            "matrix produced by similarity network fusion.")
+        help = ("The basename of the file (.csv) in which to store the "
+                "affinity matrix produced by similarity network fusion.")
     )
 
     # Cluster maps arguments ---------------------------------------------------
@@ -191,6 +191,7 @@ def parse_args():
         '--centroid-method',
         type = str,
         default = 'mean',
+        choices = ['mean', 'median'],
         help = "The method to use to compute cluster centroid images."
     )
 
@@ -200,7 +201,8 @@ def parse_args():
         type = str,
         default = 'local',
         choices = ['local', 'slurm'],
-        help = "Method of pipeline execution."
+        help = ("Flag indicating whether the pipeline should be executed "
+                "or using the Slurm scheduler on a HPC cluster.")
     )
 
     parser.add_argument(
@@ -239,15 +241,17 @@ def parse_args():
 @utils.timing
 def initialize(**kwargs):
     """
-    Initialize human image processing pipeline.
+    Initialize the image processing pipeline.
 
     Parameters
     ----------
-    kwargs
+    kwargs: dict
+        All arguments passed to the main() function.
 
     Returns
     -------
-
+    paths: list of str
+        List of paths to the pipeline sub-directories
     """
     # Effect size calculation method parameters
     if kwargs['es_method'] == 'normative-growth':
@@ -289,7 +293,7 @@ def initialize(**kwargs):
     pipeline_dir = kwargs['pipeline_dir']
     input_dir = kwargs['input_dir']
 
-    # Create pipeline directory
+    # Create pipeline directory based on the pipeline parameters
     print("Creating pipeline directories...")
     params_id = utils.random_id(3)
     metadata = os.path.join(pipeline_dir, 'metadata.csv')
@@ -299,7 +303,7 @@ def initialize(**kwargs):
     params_id = utils.fetch_params_id(metadata = metadata,
                                       params = params)
 
-    # Directories for pipeline stages
+    # Define sub-directories for pipeline stages
     imgdir = os.path.join(pipeline_dir, 'jacobians', '')
     es_dir = os.path.join(pipeline_dir, 'effect_sizes',
                           'resolution_{}'.format(resolution), '')
@@ -310,7 +314,7 @@ def initialize(**kwargs):
     centroid_dir = os.path.join(pipeline_dir, 'centroids',
                                 'resolution_{}'.format(resolution), '')
 
-    # Check existence of input directory
+    # Check existence of the input directory
     if not os.path.exists(input_dir):
         raise OSError("Input directory not found: ".format(input_dir))
 
