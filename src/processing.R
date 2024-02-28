@@ -553,7 +553,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                          mask = mask,
                          batches = njobs,
                          source = file.path(SRCPATH, "processing.R"),
-                         cleanup = TRUE,
+                         cleanup = FALSE,
                          return_raw = TRUE,
                          resources = resources)
   } else {
