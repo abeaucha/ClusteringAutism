@@ -217,7 +217,7 @@ def vector_to_image(x, outfile, maskfile):
 
     # Fill voxels in mask with image values
     img = np.zeros_like(mask.flatten())
-    img[(mask == 1).flatten()] = x
+    img[(mask > 0.5).flatten()] = x
     img = img.reshape(mask.shape)
 
     # Write the image to file
@@ -387,7 +387,7 @@ def import_image(img, mask = None, flatten = True):
 
         if flatten:
             mask = mask.flatten()
-            img = img[mask == 1]
+            img = img[mask > 0.5]
         else:
             img[mask == 0] = 0
 

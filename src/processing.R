@@ -186,7 +186,7 @@ vector_to_image <- function(x, outfile, mask) {
   
   # Export vector as image
   img <- numeric(length(mask))
-  img[mask == 1] <- x
+  img[mask > 0.5] <- x
   attributes(x) <- attributes(mask)
   sink(nullfile(), type = "output")
   mincWriteVolume(buffer = img,
