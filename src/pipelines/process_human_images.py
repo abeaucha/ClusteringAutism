@@ -241,11 +241,10 @@ def parse_args():
 def timing(f):
     @wraps(f)
     def wrap(*args, **kw):
-        ts = time()
+        ti = time()
         result = f(*args, **kw)
-        te = time()
-        print('func:%r args:[%r, %r] took: %2.4f sec' % \
-          (f.__name__, args, kw, te-ts))
+        tf = time()
+        print('Function main %r took: %2.4f sec' % (f.__name__, tf-ti))
         return result
     return wrap
 
