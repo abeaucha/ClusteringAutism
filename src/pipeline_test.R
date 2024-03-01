@@ -113,11 +113,12 @@ args <- parse_args(OptionParser(option_list = option_list))
 # args[["outdir"]] <- "data/test/human/derivatives/v2/700/effect_sizes/resolution_0.8/absolute/"
 # args[["slurm-njobs"]] <- 300
 # args[["slurm-time"]] <- 60
-# args[["slurm-mem"]] <- "16G"
+# args[["slurm-mem"]] <- "32G"
 
 args[["imgdir"]] <- "data/test/human/derivatives/v2/547/jacobians/absolute/"
 args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
-args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
+# args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
+args[["mask"]] <- "data/human/registration/v2/reference_files/mask_0.8mm_3.0mm.mnc"
 args[["outdir"]] <- "data/test/human/derivatives/v2/547/effect_sizes/resolution_3.0/absolute/"
 args[["slurm-njobs"]] <- 50
 args[["slurm-time"]] <- 30
@@ -222,6 +223,27 @@ if (execution == "local") {
 } else {
   stop()
 }
+
+
+filenames = imgfiles
+fun = compute_normative_zscore
+demographics = demographics
+group = group
+batch = batch
+df = df
+mask = mask
+batches = njobs
+source = file.path(SRCPATH, "processing.R")
+cleanup = FALSE
+return_raw = TRUE
+resources = resources
+cores = nproc
+slab_sizes <- NULL
+temp_dir <- getwd()
+mask_vals <- NULL
+tinyMask = FALSE
+
+
 
 # Convert voxel list into matrix
 voxels_simplify_masked <- simplify_masked(voxels[["vals"]])
