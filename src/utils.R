@@ -54,6 +54,34 @@ fetch_params_metadata <- function(metadata, ...) {
 #'
 #' @return (character scalar) Path to the resampled image.
 resample_image <- function(infile, isostep, outdir = NULL, suffix = NULL){
+  
+  # Append suffix if specified
+  if (!is.null(suffix)) {
+    outfile <- paste0(tools::file_path_sans_ext(infile), 
+                      suffix, ".", tools::file_ext(infile))
+  } else {
+    outfile <- infile
+  }
+  
+  # Create output directory if needed
+  if (!is.null(outdir)) {
+    if (!dir.exists(outdir)) {
+      dir.create(outdir, 
+                 showWarnings = FALSE, 
+                 recursive = TRUE)
+    }
+    outfile <- basename(outfile)
+    outfile <- file.path(outdir, outfile)
+  } else {
+    if (is.null(suffix)) {
+      stop("Parameters outdir and suffix cannot both be NULL.")
+    }
+  }
+  
+  cmd_autocrop <- paste("autocrop", "-quiet", "-clobber",
+                        "-isostep", isostep, infile, outfile)
+  
+  system(cmd_autocrop)
+  
   return(outfile)
 }
-
