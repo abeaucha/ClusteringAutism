@@ -20,12 +20,9 @@ create_parallel_mask <-
       mask_values <- mincGetVolume(mask)
       if(tinyMask) mask_values[mask_values > 1.5] <- 0 #THIS LINE DOESN'T DO ANYTHING
 
-      # nVoxels <- sum(mask_values > .5)
-      nVoxels <- sum(mask_values == 1)
+      nVoxels <- sum(mask_values > .5)
 
-      # mask_values[mask_values > .5] <-
-      #   groupingVector(nVoxels, n)
-      mask_values[mask_values == 1] <-
+      mask_values[mask_values > .5] <-
         groupingVector(nVoxels, n)
 
     }
