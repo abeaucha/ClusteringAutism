@@ -143,7 +143,7 @@ def mouse_signature(img: str, expr: str, mask: str, signed: bool = True,
     # Create a mask from the (thresholded) image
     img_mask = processing.mask_from_image(img = img, signed = signed)
     img_mask = img_mask.flatten()
-    img_mask = img_mask[mask > 0.5]
+    img_mask = img_mask[mask == 1]
 
     # If signed, return signatures for positive and negative image values
     if signed:

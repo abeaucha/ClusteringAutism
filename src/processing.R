@@ -34,7 +34,7 @@ import_image <- function(img, mask = NULL, flatten = TRUE) {
       stop("Input image and mask contain a different number of voxels.")
     }
     if (flatten) {
-      img <- img[mask > 0.5]
+      img <- img[mask == 1]
     } else {
       mask <- mincArray(mask)
       img[mask < 0.5] <- 0
@@ -179,14 +179,14 @@ vector_to_image <- function(x, outfile, mask) {
   mask <- mincGetVolume(mask)
   
   #Check that x and mask match
-  if (length(x) != sum(mask > 0.5)) {
+  if (length(x) != sum(mask == 1)) {
     stop(paste("Number of elements in x does not match the number of non-zero",
                "voxels in the mask."))
   }
   
   # Export vector as image
   img <- numeric(length(mask))
-  img[mask > 0.5] <- x
+  img[mask == 1] <- x
   attributes(x) <- attributes(mask)
   sink(nullfile(), type = "output")
   mincWriteVolume(buffer = img,
