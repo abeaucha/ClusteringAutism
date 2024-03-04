@@ -17,33 +17,7 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 source(file.path(SRCPATH, "minc_parallel.R"))
 
-import_image_v1 <- function(img, mask = NULL, flatten = TRUE) {
-  
-  # Import image
-  img <- mincGetVolume(img)
-  
-  # Convert to 3D if specified
-  if (!flatten) {
-    img <- mincArray(img)
-  }
-  
-  # Apply mask if specified
-  if (!is.null(mask)) {
-    mask <- mincGetVolume(mask)
-    if (length(img) != length(mask)) {
-      stop("Input image and mask contain a different number of voxels.")
-    }
-    if (flatten) {
-      img <- img[mask == 1]
-    } else {
-      mask <- mincArray(mask)
-      img[mask == 0] <- 0
-    }
-  }
-  return(img)
-}
-
-import_image_v2 <- function(img, mask = NULL, flatten = TRUE) {
+import_image <- function(img, mask = NULL, flatten = TRUE, version = "v1") {
 
   # Import image
   img <- mincGetVolume(img)
@@ -60,27 +34,36 @@ import_image_v2 <- function(img, mask = NULL, flatten = TRUE) {
       stop("Input image and mask contain a different number of voxels.")
     }
     if (flatten) {
-      img <- img[mask > 0.5]
+      if (version == "v2") {
+        img <- img[mask > 0.5]
+      } else {
+        img <- img[mask == 1]
+      }
     } else {
       mask <- mincArray(mask)
-      img[mask < 0.5] <- 0
+      if (version == "v2") {
+        img[mask < 0.5] <- 0
+      } else {
+        img[mask == 0] <- 0
+      }
     }
   }
   return(img)
 }
 
-import_images <- function(imgfiles, mask = NULL, output_format = "list", 
-                          flatten = TRUE, margin = 1, inparallel = FALSE, nproc = NULL) {
-  
+import_images <- function(imgfiles, mask = NULL, output_format = "list",
+                          flatten = TRUE, margin = 1, version = "v1",
+                          inparallel = FALSE, nproc = NULL) {
+
   #Check output format
   format_opts <- c("list", "matrix", "tibble")
   if (!(output_format %in% format_opts)) {
-    format_err <- str_c("Argument output_format must be one of (", 
-                        str_flatten(format_opts, collapse = ", "), 
+    format_err <- str_c("Argument output_format must be one of (",
+                        str_flatten(format_opts, collapse = ", "),
                         "): ", output_format)
     stop(format_err)
   }
-  
+
   #Warning when flatten FALSE
   if (!flatten) {
     if (output_format != "list") {
@@ -89,7 +72,7 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
       flatten <- TRUE
     }
   }
-  
+
   #Import images
   pb <- txtProgressBar(max = length(imgfiles), style = 3)
   progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
@@ -102,29 +85,31 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
                     .packages = "RMINC",
                     .export = c("import_image"),
                     .options.snow = opts) %dopar% {
-                      import_image(img = imgfiles[i],
-                                   mask = mask,
-                                   flatten = flatten)
-                    }
+      import_image(img = imgfiles[i],
+                   mask = mask,
+                   flatten = flatten,
+                   version = version)
+    }
     close(pb)
     stopCluster(cl)
   } else {
     imgs <- foreach(i = 1:length(imgfiles),
                     .packages = "RMINC") %do% {
-                      progress(n = i)
-                      import_image(img = imgfiles[i],
-                                   mask = mask,
-                                   flatten = flatten)
-                    }
+      progress(n = i)
+      import_image(img = imgfiles[i],
+                   mask = mask,
+                   flatten = flatten,
+                   version = version)
+    }
   }
-  
+
   #Check image sizes
   imgsize <- unique(map_dbl(imgs, length))
   imgsize_test <- length(imgsize)
   if (imgsize_test != 1) {
     stop("Images provided contain different numbers of voxels.")
   }
-  
+
   #Convert to output format
   if (output_format != "list") {
     if (margin == 1) {
@@ -151,66 +136,73 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
   } else {
     out <- imgs
   }
-  
+
   return(out)
-  
+
 }
 
 
-build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE, 
-                               sort = FALSE, save = FALSE, 
-                               outfile = "voxel_matrix.csv", inparallel = FALSE,
-                               nproc = NULL) {
-  
+build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE,
+                               sort = FALSE, save = FALSE,
+                               outfile = "voxel_matrix.csv", version = "v1",
+                               inparallel = FALSE, nproc = NULL) {
+
   #Import images as tibble
-  df_imgs <- import_images(imgfiles = imgfiles, 
-                           mask = mask, 
+  df_imgs <- import_images(imgfiles = imgfiles,
+                           mask = mask,
                            output_format = "tibble",
                            flatten = TRUE,
+                           version = version,
                            inparallel = inparallel,
                            nproc = nproc)
-  
+
   #Save input files in a column
   df_imgs[["file"]] = imgfiles
-  
+
   #Sort if desired
   if (sort) {df_imgs <- arrange(df_imgs, file)}
-  
+
   #Remove input file column if desired
   if (!file_col) {df_imgs <- select(df_imgs, -file)}
-  
+
   #Save data frame to file if desired
   if (save) {data.table::fwrite(x = df_imgs, file = outfile)}
-  
+
   return(df_imgs)
-  
+
 }
 
 
-vector_to_image <- function(x, outfile, mask) {
-  
+vector_to_image <- function(x, outfile, mask, version = "v1") {
+
   #Check output file
   if (is.null(outfile)) {
     stop("Specify output file.")
   }
-  
+
   #Check mask
   if (is.null(mask)) {
     stop("Specify mask file.")
   }
-  
+
   #Import mask
   mask <- mincGetVolume(mask)
-  
+
+  if (version == "v2") {
+    ind_mask <- mask > 0.5
+  } else {
+    ind_mask <- mask == 1
+  }
+
   #Check that x and mask match
-  if (length(x) != sum(mask == 1)) {
+  if (length(x) != sum(ind_mask)) {
     stop(paste("Number of elements in x does not match the number of non-zero",
                "voxels in the mask."))
   }
-  
+
   # Export vector as image
   img <- numeric(length(mask))
-  img[mask == 1] <- x
+  img[ind_mask] <- x
   attributes(x) <- attributes(mask)
   sink(nullfile(), type = "output")
   mincWriteVolume(buffer = img,
@@ -218,36 +210,37 @@ vector_to_image <- function(x, outfile, mask) {
                   clobber = TRUE,
                   like.filename = attr(mask, "likeVolume"))
   sink(NULL)
-  
+
 }
 
 
-matrix_to_images <- function(x, outfiles, mask, margin = 1, nproc = NULL) {
-  
+matrix_to_images <- function(x, outfiles, mask, margin = 1, version = "v1",
+                             nproc = NULL) {
+
   # Check output files
   if (is.null(outfiles)) {
     stop("Specify output files.")
   }
-  
+
   # Check mask
   if (is.null(mask)) {
     stop("Specify mask file.")
   }
-  
+
   # Check that x is a matrix
   if (!is.matrix(x)) {
-    stop("x must be a matrix.")  
+    stop("x must be a matrix.")
   }
-  
+
   # Split matrix into array along margin
   x <- asplit(x, MARGIN = margin)
 
   # Check that number of output files matches the number of images
   if (length(x) != length(outfiles)) {
-    stop("Number of entries in x along margin ", margin, 
-         " must be equal to the number of entries in outfiles")  
+    stop("Number of entries in x along margin ", margin,
+         " must be equal to the number of entries in outfiles")
   }
-  
+
   # Export to images
   if (!is.null(nproc)) {
     # out <- mcmapply(vector_to_image, x, outfiles, 
@@ -255,22 +248,23 @@ matrix_to_images <- function(x, outfiles, mask, margin = 1, nproc = NULL) {
     #                 SIMPLIFY = TRUE, mc.cores = nproc)
     cl <- makeCluster(nproc)
     snk <- clusterEvalQ(cl, library(RMINC))
-    out <- clusterMap(cl = cl, 
-                      fun = vector_to_image, x, outfiles, 
-                      MoreArgs = list(mask = mask))
+    out <- clusterMap(cl = cl,
+                      fun = vector_to_image, x, outfiles,
+                      MoreArgs = list(mask = mask,
+                                      version = version))
     stopCluster(cl)
   } else {
     out <- mapply(vector_to_image, x, outfiles,
-                  MoreArgs = list(mask = mask),
+                  MoreArgs = list(mask = mask,
+                                  version = version),
                   SIMPLIFY = TRUE)
   }
-  
+
 }
 
 
-
 threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE, comparison = "gt") {
-  
+
   out <- img
   if (symmetric) {
     if (comparison == "gt") {
@@ -289,40 +283,40 @@ threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE, comparis
       stop(paste("Argument comparison must be one of ['gt', 'lt']:", comparison))
     }
   }
-  
+
   if (sum(ind) == 0) {
     stop("No voxels survive the threshold. Select another threshold.")
   }
-  
+
   out[!ind] = 0
-  
+
   return(out)
-  
+
 }
 
 threshold_top_n <- function(img, n = 0.2, symmetric = TRUE, tolerance = 1e-5) {
-  
+
   # Raise error if symmetric is True and n < 0
   if (symmetric & (n < 0)) {
     stop(paste("Setting n < 0 while symmetric = True",
                "will return an empty mask."))
   }
-  
+
   # Flatten image
   values <- as.numeric(img)
-  
+
   # If symmetric, use absolute values
   if (symmetric) {
     values <- abs(values)
   }
-  
+
   # Sort values and corresponding indices
   sorted_index <- order(values)
   sorted_values <- values[sorted_index]
-  
+
   # Tolerance filter
   tolerance_filter <- abs(sorted_values) > tolerance
-  
+
   # Compute top n values
   if (n > 0) {
     positive_filter <- sorted_values > 0
@@ -340,23 +334,23 @@ threshold_top_n <- function(img, n = 0.2, symmetric = TRUE, tolerance = 1e-5) {
   } else {
     stop("Argument n cannot be 0.")
   }
-  
+
   # Threshold the image
   out <- as.numeric(img)
   index <- 1:length(out)
   out[!(index %in% top_n_index)] <- 0
   attributes(out) <- attributes(img)
   out <- mincArray(out)
-  
+
   return(out)
-  
+
 }
 
 
 threshold_image <- function(img, method = "top_n", threshold = 0.2, symmetric = TRUE, comparison = "gt") {
-  
+
   if (method == "intensity") {
-    img <- threshold_intensity(img = img, 
+    img <- threshold_intensity(img = img,
                                threshold = threshold,
                                symmetric = symmetric,
                                comparison = comparison)
@@ -368,14 +362,14 @@ threshold_image <- function(img, method = "top_n", threshold = 0.2, symmetric = 
     stop(paste("Argument method must be one of ",
                "['intensity', 'top_n']"))
   }
-  
+
   return(img)
-  
+
 }
 
 
 mask_from_image <- function(img, signed = FALSE) {
-  
+
   mask <- img
   if (signed) {
     mask[img > 0] = 1
@@ -383,9 +377,9 @@ mask_from_image <- function(img, signed = FALSE) {
   } else {
     mask[abs(img) > 0] = 1
   }
-  
+
   return(mask)
-  
+
 }
 
 
@@ -725,19 +719,19 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
 #'
 #' @examples
 compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean",
-                                      execution = "local", nproc = 1, 
+                                      execution = "local", nproc = 1,
                                       njobs = NULL, resources = list()){
-  
+
   labels <- clusters[,i]
   files <- rownames(clusters)
-  
+
   # Iterate over clusters
-  krange <- sort(unique(labels))  
+  krange <- sort(unique(labels))
   centroids <- character(length(krange))
   for (k in krange) {
-    
+
     message(paste("Cluster", k, "of", max(krange)))
-    
+
     # Centroid function
     if (method == "mean") {
       centroid_fun <- mean
@@ -746,27 +740,27 @@ compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean"
     } else {
       stop("method must be one of {mean, median}.")
     }
-    
+
     # Images for cluster k
     files_k <- files[labels == k]
-    
+
     # Create centroid image
     centroid <- mcMincApply(filenames = files_k,
                             fun = centroid_fun,
                             mask = mask,
                             cores = nproc)
-    
+
     # Export image
     outfile <- paste0("centroid_nk_", max(krange), "_k_", k, ".mnc")
     outfile <- file.path(outdir, outfile)
     mincWriteVolume(centroid,
                     output.filename = outfile,
                     clobber = TRUE)
-    
+
     centroids[[k]] <- outfile
-    
+
   }
-  
+
   return(centroids)
-  
+
 }

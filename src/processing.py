@@ -192,7 +192,7 @@ def propensity_matching_norm(imgdir, demographics, mask, outdir,
     return outfiles
 
 
-def vector_to_image_v1(x, outfile, maskfile):
+def vector_to_image(x, outfile, maskfile, version = "v1"):
     """
     Create a MINC image from a vector of voxel values.
     
@@ -217,44 +217,10 @@ def vector_to_image_v1(x, outfile, maskfile):
 
     # Fill voxels in mask with image values
     img = np.zeros_like(mask.flatten())
-    img[(mask == 1).flatten()] = x
-    img = img.reshape(mask.shape)
-
-    # Write the image to file
-    img_vol = volumeLikeFile(likeFilename = maskfile,
-                             outputFilename = outfile,
-                             labels = False)
-    img_vol.data = img
-    img_vol.writeFile()
-    img_vol.closeVolume()
-
-
-def vector_to_image_v2(x, outfile, maskfile):
-    """
-    Create a MINC image from a vector of voxel values.
-
-    Arguments
-    ---------
-    x: numpy.ndarray
-        Vector of voxel values.
-    outfile: str
-        Path to the MINC file in which to write the image.
-    maskfile: str
-        Path to the MINC file containing the mask.
-
-    Returns
-    -------
-    None
-    """
-
-    # Import image mask
-    mask_vol = volumeFromFile(maskfile)
-    mask = np.array(mask_vol.data)
-    mask_vol.closeVolume()
-
-    # Fill voxels in mask with image values
-    img = np.zeros_like(mask.flatten())
-    img[(mask > 0.5).flatten()] = x
+    if version == "v2":
+        img[(mask > 0.5).flatten()] = x
+    else:
+        img[(mask == 1).flatten()] = x
     img = img.reshape(mask.shape)
 
     # Write the image to file
@@ -286,14 +252,10 @@ def matrix_to_images(x, outfiles, maskfile, version = "v1"):
     """
 
     # Function to export image
-    if version == "v2":
-        exporter = lambda i:vector_to_image_v2(x = x[i,],
-                                               outfile = outfiles[i],
-                                               maskfile = maskfile)
-    else:
-        exporter = lambda i:vector_to_image_v1(x = x[i,],
-                                               outfile = outfiles[i],
-                                               maskfile = maskfile)
+    exporter = lambda i:vector_to_image_v2(x = x[i,],
+                                           outfile = outfiles[i],
+                                           maskfile = maskfile,
+                                           version = version)
 
     # Error checking
     if type(x) is not np.ndarray:
@@ -383,7 +345,7 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
     return outfiles
 
 
-def import_image_v1(img, mask = None, flatten = True):
+def import_image(img, mask = None, flatten = True, version = "v1"):
     """
     Import a MINC image.
     
@@ -430,63 +392,15 @@ def import_image_v1(img, mask = None, flatten = True):
 
         if flatten:
             mask = mask.flatten()
-            img = img[mask == 1]
+            if version == "v2":
+                img = img[mask > 0.5]
+            else:
+                img = img[mask == 1]
         else:
-            img[mask == 0] = 0
-
-    return img
-
-
-def import_image_v2(img, mask = None, flatten = True):
-    """
-    Import a MINC image.
-
-    Arguments
-    ---------
-    img: str
-        Path to the image (.mnc) to import.
-    mask: str, default None
-        Path to a mask image (.mnc).
-    flatten: bool, default True
-        Option to flatten image into a 1-dimensional array. If True and a mask
-        is provided, only the voxels in the mask will be returned.
-
-    Returns
-    -------
-    img: numpy.ndarray
-        Image voxel values.
-    """
-
-    # Import image
-    img_vol = volumeFromFile(img)
-    img_dims = img_vol.getSizes()
-    img_seps = img_vol.getSeparations()
-    img = np.array(img_vol.data)
-    img_vol.closeVolume()
-
-    # Flatten if specified
-    if flatten:
-        img = img.flatten()
-
-    # Apply mask if specified
-    if mask is not None:
-
-        mask_vol = volumeFromFile(mask)
-        mask_dims = mask_vol.getSizes()
-        mask_seps = mask_vol.getSeparations()
-        mask = np.array(mask_vol.data)
-        mask_vol.closeVolume()
-
-        if mask_seps != img_seps:
-            raise Exception("Input image and mask have different resolutions.")
-        if mask_dims != img_dims:
-            raise Exception("Input image and mask have different dimensions.")
-
-        if flatten:
-            mask = mask.flatten()
-            img = img[mask > 0.5]
-        else:
-            img[mask < 0.5] = 0
+            if version == "v2":
+                img[mask < 0.5] = 0
+            else :
+                img[mask == 0] = 0
 
     return img
 
@@ -534,14 +448,10 @@ def import_images(imgfiles, mask = None, output_format = 'list', flatten = True,
             warn(msg_warn)
             flatten = True
 
-    if version == "v2":
-        importer = partial(import_image_v2,
-                           mask = mask,
-                           flatten = flatten)
-    else:
-        importer = partial(import_image_v1,
-                           mask = mask,
-                           flatten = flatten)
+    importer = partial(import_image,
+                       mask = mask,
+                       flatten = flatten,
+                       version = version)
 
     if parallel:
         if nproc is None:

@@ -108,8 +108,6 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
-#TODO remove line
-# source(file.path(SRCPATH, "pipelines/processing.R"))
 
 
 # Main -----------------------------------------------------------------------
