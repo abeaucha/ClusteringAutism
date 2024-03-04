@@ -456,6 +456,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         kwargs['outdir'] = os.path.join(outdir, j, '')
         utils.execute_local(script = script, kwargs = kwargs)
 
+        sys.exit()
         # Create the effect size matrix
         print("Building {} effect size matrix...".format(j))
 
