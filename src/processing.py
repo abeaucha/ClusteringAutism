@@ -192,7 +192,7 @@ def propensity_matching_norm(imgdir, demographics, mask, outdir,
     return outfiles
 
 
-def vector_to_image(x, outfile, maskfile):
+def vector_to_image_v1(x, outfile, maskfile):
     """
     Create a MINC image from a vector of voxel values.
     
@@ -229,7 +229,44 @@ def vector_to_image(x, outfile, maskfile):
     img_vol.closeVolume()
 
 
-def matrix_to_images(x, outfiles, maskfile):
+def vector_to_image_v2(x, outfile, maskfile):
+    """
+    Create a MINC image from a vector of voxel values.
+
+    Arguments
+    ---------
+    x: numpy.ndarray
+        Vector of voxel values.
+    outfile: str
+        Path to the MINC file in which to write the image.
+    maskfile: str
+        Path to the MINC file containing the mask.
+
+    Returns
+    -------
+    None
+    """
+
+    # Import image mask
+    mask_vol = volumeFromFile(maskfile)
+    mask = np.array(mask_vol.data)
+    mask_vol.closeVolume()
+
+    # Fill voxels in mask with image values
+    img = np.zeros_like(mask.flatten())
+    img[(mask > 0.5).flatten()] = x
+    img = img.reshape(mask.shape)
+
+    # Write the image to file
+    img_vol = volumeLikeFile(likeFilename = maskfile,
+                             outputFilename = outfile,
+                             labels = False)
+    img_vol.data = img
+    img_vol.writeFile()
+    img_vol.closeVolume()
+
+
+def matrix_to_images(x, outfiles, maskfile, version = "v1"):
     """
     Convert a matrix of voxel values to a set of images.
     
@@ -249,9 +286,15 @@ def matrix_to_images(x, outfiles, maskfile):
     """
 
     # Function to export image
-    exporter = lambda i:vector_to_image(x = x[i,],
-                                        outfile = outfiles[i],
-                                        maskfile = maskfile)
+    if version == "v2":
+        exporter = lambda i:vector_to_image_v2(x = x[i,],
+                                               outfile = outfiles[i],
+                                               maskfile = maskfile)
+    else:
+        exporter = lambda i:vector_to_image_v1(x = x[i,],
+                                               outfile = outfiles[i],
+                                               maskfile = maskfile)
+
     # Error checking
     if type(x) is not np.ndarray:
         raise ValueError("Argument x must have type numpy.ndarray.")
@@ -325,11 +368,11 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
     # Compute effect sizes using normative growth modelling
     elif method == 'normative-growth':
 
-        kwargs.update(dict(imgdir=imgdir,
-                           demographics=demographics,
-                           mask=mask,
-                           outdir=outdir,
-                           nproc=nproc))
+        kwargs.update(dict(imgdir = imgdir,
+                           demographics = demographics,
+                           mask = mask,
+                           outdir = outdir,
+                           nproc = nproc))
         outfiles = normative_growth_norm(**kwargs)
 
     else:
@@ -340,7 +383,7 @@ def calculate_human_effect_sizes(imgdir, demographics, mask, outdir,
     return outfiles
 
 
-def import_image(img, mask = None, flatten = True):
+def import_image_v1(img, mask = None, flatten = True):
     """
     Import a MINC image.
     
@@ -394,8 +437,62 @@ def import_image(img, mask = None, flatten = True):
     return img
 
 
+def import_image_v2(img, mask = None, flatten = True):
+    """
+    Import a MINC image.
+
+    Arguments
+    ---------
+    img: str
+        Path to the image (.mnc) to import.
+    mask: str, default None
+        Path to a mask image (.mnc).
+    flatten: bool, default True
+        Option to flatten image into a 1-dimensional array. If True and a mask
+        is provided, only the voxels in the mask will be returned.
+
+    Returns
+    -------
+    img: numpy.ndarray
+        Image voxel values.
+    """
+
+    # Import image
+    img_vol = volumeFromFile(img)
+    img_dims = img_vol.getSizes()
+    img_seps = img_vol.getSeparations()
+    img = np.array(img_vol.data)
+    img_vol.closeVolume()
+
+    # Flatten if specified
+    if flatten:
+        img = img.flatten()
+
+    # Apply mask if specified
+    if mask is not None:
+
+        mask_vol = volumeFromFile(mask)
+        mask_dims = mask_vol.getSizes()
+        mask_seps = mask_vol.getSeparations()
+        mask = np.array(mask_vol.data)
+        mask_vol.closeVolume()
+
+        if mask_seps != img_seps:
+            raise Exception("Input image and mask have different resolutions.")
+        if mask_dims != img_dims:
+            raise Exception("Input image and mask have different dimensions.")
+
+        if flatten:
+            mask = mask.flatten()
+            img = img[mask > 0.5]
+        else:
+            img[mask < 0.5] = 0
+
+    return img
+
+
 def import_images(imgfiles, mask = None, output_format = 'list', flatten = True,
-                  parallel = False, nproc = None):
+                  version = "v1", parallel = False, nproc = None):
     """
     Import a set of MINC images.
     
@@ -437,9 +534,14 @@ def import_images(imgfiles, mask = None, output_format = 'list', flatten = True,
             warn(msg_warn)
             flatten = True
 
-    importer = partial(import_image,
-                       mask = mask,
-                       flatten = flatten)
+    if version == "v2":
+        importer = partial(import_image_v2,
+                           mask = mask,
+                           flatten = flatten)
+    else:
+        importer = partial(import_image_v1,
+                           mask = mask,
+                           flatten = flatten)
 
     if parallel:
         if nproc is None:
@@ -469,7 +571,7 @@ def import_images(imgfiles, mask = None, output_format = 'list', flatten = True,
 
 def build_voxel_matrix(imgfiles, mask = None, file_col = False, sort = False,
                        save = False, outfile = 'voxel_matrix.csv',
-                       parallel = False, nproc = None):
+                       version = "v1", parallel = False, nproc = None):
     """
     Create a data frame of voxels from a set of images.
     
@@ -503,6 +605,7 @@ def build_voxel_matrix(imgfiles, mask = None, file_col = False, sort = False,
                             mask = mask,
                             output_format = 'pandas',
                             flatten = True,
+                            version = version,
                             parallel = parallel,
                             nproc = nproc)
     df_imgs['file'] = imgfiles
@@ -824,7 +927,6 @@ def permute_cluster_labels(cluster_file, outdir, npermutations = 100, start = 1,
         outfiles.append(outfile)
 
     return outfiles
-
 
 # def create_image_mask(infile, outfile, mask, method = 'top_n', threshold = 0.2,
 #                       symmetric = True, comparison = None, signed = False):

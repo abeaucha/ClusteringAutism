@@ -17,7 +17,7 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 source(file.path(SRCPATH, "minc_parallel.R"))
 
-import_image <- function(img, mask = NULL, flatten = TRUE) {
+import_image_v1 <- function(img, mask = NULL, flatten = TRUE) {
   
   # Import image
   img <- mincGetVolume(img)
@@ -37,13 +37,37 @@ import_image <- function(img, mask = NULL, flatten = TRUE) {
       img <- img[mask == 1]
     } else {
       mask <- mincArray(mask)
-      img[mask < 0.5] <- 0
+      img[mask == 0] <- 0
     }
   }
   return(img)
 }
 
+import_image_v2 <- function(img, mask = NULL, flatten = TRUE) {
 
+  # Import image
+  img <- mincGetVolume(img)
+
+  # Convert to 3D if specified
+  if (!flatten) {
+    img <- mincArray(img)
+  }
+
+  # Apply mask if specified
+  if (!is.null(mask)) {
+    mask <- mincGetVolume(mask)
+    if (length(img) != length(mask)) {
+      stop("Input image and mask contain a different number of voxels.")
+    }
+    if (flatten) {
+      img <- img[mask > 0.5]
+    } else {
+      mask <- mincArray(mask)
+      img[mask < 0.5] <- 0
+    }
+  }
+  return(img)
+}
 
 import_images <- function(imgfiles, mask = NULL, output_format = "list", 
                           flatten = TRUE, margin = 1, inparallel = FALSE, nproc = NULL) {
