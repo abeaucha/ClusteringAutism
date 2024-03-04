@@ -549,6 +549,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   row_match <- match(basename(imgfiles), demographics[[key]])
   demographics <- demographics[row_match,]
 
+  ti <- Sys.time()
   # Run normative growth modelling
   if (verbose) {message("Evaluating normative growth models...")}
   if (execution == "local") {
@@ -579,7 +580,12 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   }
 
   # Convert voxel list into matrix
+  # This matrix has number of voxels consistent with mask > 0.5
   voxels <- simplify_masked(voxels[["vals"]])
+
+  tf <- Sys.time()
+  print(tf-ti)
+  print(paste("Matrix dimensions:", dim(voxels)))
 
   # Export images
   if (verbose) {message("Exporting normalized images...")}
@@ -593,7 +599,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   }
   outfiles <- file.path(outdir, outfiles)
   matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
-                   margin = 2, nproc = nproc)
+                   margin = 2, version = "v2", nproc = nproc)
 
   return(outfiles)
 }
