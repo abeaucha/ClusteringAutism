@@ -5,7 +5,7 @@
 #SBATCH --mem=128G
 #SBATCH --time=6:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
-#SBATCH --output=logs/process_human_images_0.8mm_%j.out
+#SBATCH --output=logs/process_human_images_v2_0.8mm_%j.out
 
 # This pipeline ran in 148 minutes with --time=48:00:00.
 # Should be able to run it with a shorter walltime.
@@ -15,7 +15,7 @@ source activate_venv_hpc.sh
 
 # Execute pipeline
 process_human_images.py \
---pipeline-dir data/test/human/derivatives/v2/ \
+--pipeline-dir data/human/derivatives/v2/ \
 --input-dir data/human/registration/v2/jacobians_resampled/resolution_0.8/ \
 --demographics data/human/registration/v2/subject_info/demographics.csv \
 --mask data/human/registration/v2/reference_files/mask_0.8mm.mnc \
