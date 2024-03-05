@@ -119,6 +119,7 @@ es_dir_rel <- map(.x = es_dir, .f = function(x){file.path(x, resolution, "relati
 es_files_abs <- map(.x = es_dir_abs, .f = function(x){sort(list.files(x, full.names = TRUE, pattern = "*.mnc"))})
 es_files_rel <- map(.x = es_dir_rel, .f = function(x){sort(list.files(x, full.names = TRUE, pattern = "*.mnc"))})
 
+
 ### Absolute effect sizes ----------------------------------------------------
 length(es_files_abs[["old"]]) == length(es_files_abs[["new"]])
 
@@ -147,8 +148,8 @@ print(which(es_abs_cor < 0.90))
 hist(es_abs_cor)
 
 # Outcomes: 
-# Mean correlation of 0.997
-# Min correlation of 0.960
+# Mean correlation of 1.0
+# Min correlation of 1.0
 # Images with correlation < 0.95: None
 # Images with correlation < 0.9: None
 
@@ -179,8 +180,8 @@ print(which(es_rel_cor < 0.90))
 hist(es_rel_cor)
 
 # Outcomes: 
-# Mean correlation of 0.998
-# Min correlation of 0.994
+# Mean correlation of 1.0
+# Min correlation of 1.0
 # Images with correlation < 0.95: 0
 # Images with correlation < 0.9: 0
 
@@ -192,6 +193,23 @@ es_files_abs <- map(.x = es_dir_abs, .f = function(x){file.path(x, "effect_sizes
 es_matrices_abs <- map(.x = es_files_abs, .f = function(x){as_tibble(data.table::fread(x, header = TRUE))})
 map(es_matrices_abs, dim)
 
+es_matrices_abs <- map(.x = es_matrices_abs, .f = function(x){x %>% select(-file)})
+
+es_matrices_abs_cor <- map2_dbl(.x = es_matrices_abs[["new"]],
+                                .y = es_matrices_abs[["old"]], 
+                                .f = cor)
+
+mean(es_matrices_abs_cor)
+median(es_matrices_abs_cor)
+
+es_matrices_abs_dist <- map2_dbl(.x = es_matrices_abs[["new"]],
+                                 .y = es_matrices_abs[["old"]], 
+                                 .f = function(x,y){sum((x-y)^2)})
+
+mean(es_matrices_abs_dist)
+median(es_matrices_abs_dist)
+hist(es_matrices_abs_dist)
+
 
 ### Relative effect sizes ----------------------------------------------------
 
@@ -199,28 +217,47 @@ es_files_rel <- map(.x = es_dir_rel, .f = function(x){file.path(x, "effect_sizes
 es_matrices_rel <- map(.x = es_files_rel, .f = function(x){as_tibble(data.table::fread(x, header = TRUE))})
 map(es_matrices_rel, dim)
 
+es_matrices_rel <- map(.x = es_matrices_rel, .f = function(x){x %>% select(-file)})
 
-# So the matrices have different numbers of voxels. That could explain the difference in clustering. 
-# This has to do with the masks right? 
+es_matrices_rel_cor <- map2_dbl(.x = es_matrices_rel[["new"]],
+                                .y = es_matrices_rel[["old"]], 
+                                .f = cor)
 
-mask_vols <- map(masks, mincGetVolume)
-map(mask_vols, length)
+mean(es_matrices_rel_cor)
+median(es_matrices_rel_cor)
 
-# The masks have the same number of voxels. 
+es_matrices_rel_dist <- map2_dbl(.x = es_matrices_rel[["new"]],
+                                 .y = es_matrices_rel[["old"]], 
+                                 .f = function(x,y){sum((x-y)^2)})
 
-map(mask_vols, .f = function(x){sum(x == 1)})
-
-# Using mask == 1 gives the old number of voxels
-
-map(mask_vols, .f = function(x){sum(x > 0.5)})
-
-# Using mask > 0.5 gives the new number of voxels
-
-
-
+mean(es_matrices_rel_dist)
+median(es_matrices_rel_dist)
+hist(es_matrices_rel_dist)
 
 
 ## Affinity matrices 
+
+affinity <- cluster_dir %>% 
+  map(.f = function(x){file.path(x, resolution, "affinity.csv")}) %>% 
+  map(.f = read_csv, show_col_types = FALSE)
+
+map(affinity, dim)
+
+affinity_cor <- map2_dbl(.x = affinity[["new"]],
+                         .y = affinity[["old"]], 
+                         .f = cor)
+
+mean(affinity_cor)
+median(affinity_cor)
+
+affinity_dist <- map2_dbl(.x = affinity[["new"]],
+                                 .y = affinity[["old"]], 
+                                 .f = function(x,y){sum((x-y)^2)})
+
+mean(affinity_dist)
+median(affinity_dist)
+hist(affinity_dist)
+
 
 ## Clusters ------------------------------------------------------------------
 resolution <- "resolution_3.0"
@@ -266,19 +303,67 @@ df_cluster_comparison <- bind_rows(cluster_comparison, .id = "nk")
 
 df_cluster_comparison %>% 
   group_by(nk, k_new) %>% 
-  filter(overlap == max(overlap))
+  filter(overlap == max(overlap)) %>% 
+  pull(overlap)
 
+## Centroids -----------------------------------------------------------------
+resolution <- "resolution_0.8"
+masks <- map(.x = registration_dir, .f = function(x){file.path(x, "reference_files", "mask_0.8mm.mnc")})
 
-ncol(clusters[["old"]]) == ncol(clusters[["new"]])
+centroid_dir_abs <- map(.x = centroid_dir, .f = function(x){file.path(x, resolution, "absolute")}) 
+centroid_dir_rel <- map(.x = centroid_dir, .f = function(x){file.path(x, resolution, "relative")}) 
 
-nclust <- ncol(clusters[["new"]])
-overlap <- numeric(nclust)
-for (j in 1:nclust) {
-  k_old <- clusters[["old"]][,j]
-  k_new <- clusters[["new"]][,j]
-  overlap[j] <- sum(k_old == k_new)/nfiles
+centroid_files_abs <- map(.x = centroid_dir_abs, .f = function(x){sort(list.files(x, full.names = TRUE, pattern = "*.mnc"))})
+centroid_files_rel <- map(.x = centroid_dir_rel, .f = function(x){sort(list.files(x, full.names = TRUE, pattern = "*.mnc"))})
+
+### Absolute centroids -------------------------------------------------------
+length(centroid_files_abs[["old"]]) == length(centroid_files_abs[["new"]])
+
+nfiles <- length(centroid_files_abs[["old"]])
+
+centroid_files_abs_reorder <- vector(mode = "list", length = nfiles)
+for (i in 1:nfiles) {
+  centroid_files_abs_reorder[[i]][["old"]] <- centroid_files_abs[["old"]][[i]]
+  centroid_files_abs_reorder[[i]][["new"]] <- centroid_files_abs[["new"]][[i]]
 }
 
-overlap
+ti <- Sys.time()
+centroid_abs_cor <- mclapply(X = centroid_files_abs_reorder, 
+                       FUN = image_cor, 
+                       masks = masks, 
+                       mc.cores = 12)
+centroid_abs_cor <- reduce(centroid_abs_cor, c)
+tf <- Sys.time()
+print(tf - ti)
 
-# This doesn't work. Cluster labels might be different in the different runs. 
+message(paste("Mean correlation:", mean(centroid_abs_cor)))
+message(paste("Minimum correlation:", min(centroid_abs_cor)))
+print(which(centroid_abs_cor < 0.95))
+print(which(centroid_abs_cor < 0.90))
+
+hist(centroid_abs_cor)
+
+
+### Relative centroids -------------------------------------------------------
+
+centroid_files_rel_reorder <- vector(mode = "list", length = nfiles)
+for (i in 1:nfiles) {
+  centroid_files_rel_reorder[[i]][["old"]] <- centroid_files_rel[["old"]][[i]]
+  centroid_files_rel_reorder[[i]][["new"]] <- centroid_files_rel[["new"]][[i]]
+}
+
+ti <- Sys.time()
+centroid_rel_cor <- mclapply(X = centroid_files_rel_reorder, 
+                             FUN = image_cor, 
+                             masks = masks, 
+                             mc.cores = 12)
+centroid_rel_cor <- reduce(centroid_rel_cor, c)
+tf <- Sys.time()
+print(tf - ti)
+
+message(paste("Mean correlation:", mean(centroid_rel_cor)))
+message(paste("Minimum correlation:", min(centroid_rel_cor)))
+print(which(centroid_rel_cor < 0.95))
+print(which(centroid_rel_cor < 0.90))
+
+hist(centroid_rel_cor)
