@@ -530,8 +530,6 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         out[j]['imgdir'] = os.path.join(outdir, j, '')
         out[j]['matrix'] = os.path.join(outdir_f, j, matrix_file)
 
-        sys.exit()
-
     return out
 
 
