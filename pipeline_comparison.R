@@ -16,7 +16,7 @@ registration_dir_old <- "data/human/registration/v2/"
 registration_dir_new <- "/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/human/registration/v2/"
 
 pipeline_dir_old <- "data/human/derivatives/v2/700/"
-pipeline_dir_new <- "/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/test/human/derivatives/v2/700/"
+pipeline_dir_new <- "/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/human/derivatives/v2/700/"
 
 registration_dir <- list(old = registration_dir_old,
                          new = registration_dir_new)
@@ -61,7 +61,7 @@ ti <- Sys.time()
 es_abs_cor <- mclapply(X = es_files_abs_reorder, 
                        FUN = image_cor, 
                        masks = masks, 
-                       mc.cores = 12)
+                       mc.cores = 8)
 es_abs_cor <- reduce(es_abs_cor, c)
 tf <- Sys.time()
 print(tf - ti)
@@ -72,10 +72,10 @@ message(paste("Minimum correlation:", min(es_abs_cor)))
 hist(es_abs_cor)
 
 # Outcomes: 
-# Mean correlation of 0.990
-# Min correlation of 0.862 (indices: 288)
-# Images with correlation < 0.95: 215, 288, 432, 537
-# Images with correlation < 0.9: 288
+# Mean correlation of 1.0
+# Min correlation of 1.0
+# Images with correlation < 0.95: 0
+# Images with correlation < 0.9: 0
 
 
 ### Relative effect sizes ----------------------------------------------------
