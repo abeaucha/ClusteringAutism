@@ -567,7 +567,7 @@ def mnc_to_nii(infile, keep = True, outdir = None):
 
 
 def convert_images(infiles, input_format = 'nifty', output_format = 'minc',
-                   keep = True, outdir = None, parallel = False, nproc = None):
+                   keep = True, outdir = None, nproc = None):
     """
     Convert a set of images between NIFTY and MINC formats.
     
@@ -585,10 +585,8 @@ def convert_images(infiles, input_format = 'nifty', output_format = 'minc',
     outdir: str
         Path to the output directory. If None, the converted
         images will be stored in the native directory.
-    parallel: bool
-        Option to run in parallel.
     nproc: int
-        Number of processors to use in parallel.
+        Number of processors to use. Executed in parallel when > 1.
         
     Returns
     -------
@@ -603,10 +601,7 @@ def convert_images(infiles, input_format = 'nifty', output_format = 'minc',
     else:
         raise ValueError
 
-    if parallel:
-        if nproc is None:
-            raise ValueError("Set the nproc argument to specify the number ",
-                             "of processors to use")
+    if nproc > 1:
         pool = mp.Pool(nproc)
         outfiles = []
         for outfile in tqdm(pool.imap(converter, infiles),
