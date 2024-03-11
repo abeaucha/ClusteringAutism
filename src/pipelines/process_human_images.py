@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# ----------------------------------------------------------------------------
+# process_human_images.py
+# Author: Antoine Beauchamp
+# Created: March 11th, 2024
+
+"""
+Execute human image processing pipeline.
+
+Description
+-----------
+"""
 
 
 # Packages -------------------------------------------------------------------
@@ -22,7 +33,7 @@ def parse_args():
         formatter_class = argparse.ArgumentDefaultsHelpFormatter
     )
 
-    # General arguments ---------------------------------------------------
+    # General arguments ------------------------------------------------------
     parser.add_argument(
         '--pipeline-dir',
         type = str,
@@ -64,7 +75,7 @@ def parse_args():
                 "processing.")
     )
 
-    # Effect size arguments ---------------------------------------------------
+    # Effect size arguments --------------------------------------------------
     parser.add_argument(
         '--es-method',
         type = str,
@@ -186,7 +197,7 @@ def parse_args():
                 "affinity matrix produced by similarity network fusion.")
     )
 
-    # Cluster maps arguments ---------------------------------------------------
+    # Centroid arguments -----------------------------------------------------
     parser.add_argument(
         '--centroid-method',
         type = str,
@@ -195,7 +206,7 @@ def parse_args():
         help = "The method to use to compute cluster centroid images."
     )
 
-    # Execution arguments ------------------------------------------------------
+    # Execution arguments ----------------------------------------------------
     parser.add_argument(
         '--execution',
         type = str,
@@ -235,8 +246,7 @@ def parse_args():
     return args
 
 
-# Modules ----------------------------------------------------------------------
-
+# Modules --------------------------------------------------------------------
 
 @utils.timing
 def initialize(**kwargs):
@@ -328,7 +338,7 @@ def initialize(**kwargs):
     if not os.path.exists(centroid_dir):
         os.makedirs(centroid_dir)
 
-    # Filter for data sets ----------------------------------------------------
+    # Filter for data sets ---------------------------------------------------
 
     demographics = kwargs['demographics']
     datasets = kwargs['datasets']
@@ -641,7 +651,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
     input_dir: str
         Path to the directory containing Jacobian images.
     demographics: str
-        Path to the file (.csv) containing the demographics information
+        Path to the file (.csv) containing the demographics information.
     mask: str
         Path to the mask file (.mnc) for the registration.
     datasets: tuple of str
@@ -653,41 +663,46 @@ def main(pipeline_dir, input_dir, demographics, mask,
     es_nbatches: int, default 1
         Number of batches to use in effect size computation.
     es_df: int, default 3
-        Number of degrees of freedom to use when `es_method`='normative-growth'
+        Number of degrees of freedom to use when `es_method` =
+        'normative-growth'
     es_batch: str or tuple of str
         Batch variables to normalize against when `es_method` =
         'normative-growth'
     es_ncontrols: int, default 10
-        Number of controls to use for propensity matching when `es_method` =
-        'propensity-matching'
+        Number of controls to use for propensity matching when
+        `es_method` = 'propensity-matching'
     es_matrix_file: str, default 'effect_sizes.csv'
-        Basename of the file (.csv) in which to write the absolute and relative
-        effect size matrices.
+        Basename of the file (.csv) in which to write the absolute and
+        relative effect size matrices.
     cluster_resolution: float, default 3.0
-        Resolution (mm) of effect size images at which to execute clustering.
-    cluster_nk_max: int, default 10
-        Maximum number of clusters to identify. Clustering solutions are
-        identified from nk = 2 to nk = `cluster_nk_max`
-    cluster_metric: str, default 'correlation'
-        Distance metric used to generate affinity matrices during clustering.
-    cluster_K: int, default 10
-        Number of nearest-neighbours to consider when building affinity matrices
-        during clustering.
-    cluster_sigma: float, default 0.5
-        Variance of the local model used to generate affinity matrices during
+        Resolution (mm) of effect size images at which to execute
         clustering.
+    cluster_nk_max: int, default 10
+        Maximum number of clusters to identify. Clustering solutions
+        are identified from nk = 2 to nk = `cluster_nk_max`
+    cluster_metric: str, default 'correlation'
+        Distance metric used to generate affinity matrices during
+        clustering.
+    cluster_K: int, default 10
+        Number of nearest-neighbours to consider when building affinity
+        matrices during clustering.
+    cluster_sigma: float, default 0.5
+        Variance of the local model used to generate affinity matrices
+        during clustering.
     cluster_t: int, default 20
-        Number of iterations for the diffusion process in similarity network
-        fusion during clustering.
+        Number of iterations for the diffusion process in similarity
+        network fusion during clustering.
     cluster_file: str, default 'clusters.csv'
-        Basename of the file (.csv) in which to write the cluster assignments.
+        Basename of the file (.csv) in which to write the cluster
+        assignments.
     cluster_affinity_file: str, default 'affinity.csv'
-        Basename of the file (.csv) in which to write the fused affinity matrix.
+        Basename of the file (.csv) in which to write the fused
+        affinity matrix.
     centroid_method: {'mean', 'median'}
         Method used to compute cluster centroid images.
     execution: {'local', 'slurm'}
-        Flag indicating whether the pipeline should be executed or using the
-        Slurm scheduler on an HPC cluster.
+        Flag indicating whether the pipeline should be executed or
+        using the Slurm scheduler on an HPC cluster.
     nproc: int, default 1
         Number of processors to use in parallel.
     slurm_njobs: int, default None
@@ -709,7 +724,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
 
-    # Compute effect sizes
+    # Compute effect size images
     print("Computing effect sizes...")
     es_kwargs = {key.replace('es_', ''):val
                  for key, val in kwargs.items() if 'es_' in key}
@@ -721,15 +736,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
              slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
-    # TODO: Remove this when done
     es_outputs = effect_sizes(**es_kwargs)
-    #
-    # es_outputs = dict(
-    #     absolute = dict(imgdir = os.path.join(paths['effect_sizes'], 'absolute', ''),
-    #                     matrix = os.path.join(paths['effect_sizes'], 'absolute', 'effect_sizes.csv')),
-    #     relative = dict(imgdir = os.path.join(paths['effect_sizes'], 'relative', ''),
-    #                     matrix = os.path.join(paths['effect_sizes'], 'relative', 'effect_sizes.csv'))
-    # )
 
     # Generate clusters
     print("Generating clusters...")
@@ -740,12 +747,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
         cluster_file = os.path.join(paths['clusters'], cluster_file),
         affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
     )
-    # TODO: Remove this when done
     clusters = clustering(**cluster_kwargs)
-    #
-    #clusters = os.path.join(paths['clusters'], cluster_file)
 
-    # Compute cluster centroids
+    # Compute cluster centroid images
     centroid_kwargs = dict(
         clusters = clusters, imgdir = paths['effect_sizes'],
         outdir = paths['centroids'], mask = mask,
@@ -761,7 +765,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
     return
 
 
-# Execution -------------------------------------------------------------------
+# Execution ------------------------------------------------------------------
 if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
