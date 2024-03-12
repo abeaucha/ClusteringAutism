@@ -1,4 +1,4 @@
-#!.venv/bin/python3
+#!/usr/bin/env python3
 # ----------------------------------------------------------------------------
 # resample_images.py 
 # Author: Antoine Beauchamp
@@ -43,19 +43,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--parallel',
-        type = str,
-        default = 'false',
-        choices = ['true', 'false'],
-        help = "Option to run in parallel."
-    )
-
-    parser.add_argument(
         '--nproc',
         type = int,
-        default = None,
-        help = ("Number of processors to use in parallel. "
-                "Ignored if --parallel set to false.")
+        default = 1,
+        help = "Number of processors to use. Executed in parallel when > 1."
     )
 
     return vars(parser.parse_args())
@@ -70,17 +61,10 @@ if __name__ == '__main__':
     imgdir = args['imgdir']
     outdir = args['outdir']
     isostep = args['isostep']
-    parallel = True if args['parallel'] == 'true' else False
     nproc = args['nproc']
 
     if isostep is None:
         raise Exception("Argument --isostep must be specified")
-
-    # Parallel checks
-    if parallel:
-        if nproc is None:
-            raise Exception("Argument --nproc must be specified "
-                            "when --parallel true")
 
     # Ensure proper paths
     imgdir = os.path.join(imgdir, '')
@@ -99,5 +83,4 @@ if __name__ == '__main__':
     outfiles = utils.resample_images(infiles = imgfiles,
                                      isostep = isostep,
                                      outdir = outdir,
-                                     parallel = parallel,
                                      nproc = nproc)

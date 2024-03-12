@@ -728,8 +728,8 @@ def resample_image(infile, isostep, outdir = None, suffix = None):
     return outfile
 
 
-def resample_images(infiles, isostep, outdir = None, suffix = None,
-                    parallel = False, nproc = None):
+def resample_images(infiles, isostep, outdir = None,
+                    suffix = None, nproc = None):
     """
     Resample a set of MINC images.
      
@@ -744,10 +744,9 @@ def resample_images(infiles, isostep, outdir = None, suffix = None,
         images will be stored in the native directory.
     suffix: str, default None
         Suffix to append to output filename before the file extension.
-    parallel: bool, default False
-        Option to run in parallel.
     nproc: int, default None
-        Number of processors to use in parallel.
+        Number of processors to use. If `nproc` > 1, the program is executed
+        in parallel.
         
     Returns
     -------
@@ -767,10 +766,7 @@ def resample_images(infiles, isostep, outdir = None, suffix = None,
                         outdir = outdir,
                         suffix = suffix)
 
-    if parallel:
-        if nproc is None:
-            raise ValueError("Set the nproc argument to specify the "
-                             "number of processors to use in parallel.")
+    if nproc > 1:
         pool = mp.Pool(nproc)
         outfiles = []
         for outfile in tqdm(pool.imap(resampler, infiles),
