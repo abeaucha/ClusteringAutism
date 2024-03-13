@@ -3,11 +3,11 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=64G
-#SBATCH --time=12:00:00
+#SBATCH --time=5:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/preprocess_human_images_v3_%j.out
 
-# This pipeline ran in ___ minutes with --time=__:__:__
+# This pipeline ran in about 200 minutes with --time=12:00:00
 # Should be able to run it with a shorter walltime.
 
 # Activate virtual environment
