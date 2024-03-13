@@ -80,7 +80,9 @@ if __name__ == '__main__':
                 if '.mnc' in file]
 
     # Resample images
-    outfiles = utils.resample_images(infiles = imgfiles,
-                                     isostep = isostep,
-                                     outdir = outdir,
-                                     nproc = nproc)
+    outfiles = utils.timing(
+        utils.resample_images(infiles = imgfiles,
+                              isostep = isostep,
+                              outdir = outdir,
+                              nproc = nproc)
+    )
