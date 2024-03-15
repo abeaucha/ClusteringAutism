@@ -362,6 +362,9 @@ def initialize(**kwargs):
 
         # Create symlinks to Jacobian images
         input_files = glob(os.path.join(input_dir, jac, '') + '*.mnc')
+        print(input_files[:10])
+        sys.exit()
+
         if len(input_files) == 0:
             raise OSError("No input files in directory: ".format(input_dir))
         input_files_in_dataset = [[f for f in input_files if g in f][0]
