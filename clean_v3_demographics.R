@@ -128,16 +128,44 @@ hbn_basic <- hbn_basic_files %>%
   bind_rows(.id = "Site") %>% 
   mutate(Sex = ifelse(Sex == 1, "Female", "Male"))
 
+# These CSVs seem to have duplicated entries. 
+# Remove those.
+hbn_basic <- distinct(hbn_basic)
+
 # Create a data frame with image files and IDs
-hbn_imgs <- imgs %>% 
+hbn_imgs_all <- imgs %>% 
   filter(str_starts(file, "sub-N")) %>% 
   mutate(Subject_ID = Scan_ID %>% 
            str_remove("sub-") %>% 
            str_remove("_.*"))
 
+# Some participants have multiple scans
+# Pull the IDs for those participants
+hbn_participants_multiple_imgs <- hbn_imgs_all %>% 
+  group_by(Subject_ID) %>% 
+  count() %>% 
+  ungroup() %>% 
+  filter(n > 1) %>% 
+  pull(Subject_ID)
+
+# Extract imgs for participants with a single scan
+hbn_imgs_unique <- hbn_imgs_all %>% 
+  filter(!(Subject_ID %in% hbn_participants_multiple_imgs))
+
+# Extract imgs for participants with multiple scans
+hbn_imgs_multiple <- hbn_imgs_all %>% 
+  filter(Subject_ID %in% hbn_participants_multiple_imgs)
+
+# For participants with multiple scans, select Run 1 scans
+hbn_imgs_multiple <- hbn_imgs_multiple %>% 
+  filter(str_detect(Scan_ID, "run-01"))
+
+# Data frame of unique scans
+hbn_imgs <- bind_rows(hbn_imgs_unique, hbn_imgs_multiple)
+
 # Join image files to basic demographics info
-hbn_imgs <- hbn_imgs %>% 
-  left_join(hbn_basic, by = "Subject_ID") 
+hbn_imgs <- hbn_imgs %>%
+  left_join(hbn_basic, by = "Subject_ID")
 
 # Import HBN diagnostic information
 hbn_dx <- "9994_ConsensusDx_20220728.csv"
@@ -167,8 +195,13 @@ hbn_dx <- hbn_dx %>%
          DX_01_Cat,
          DX_01) %>% 
   filter(DX_01_Cat %in% hbn_dx_include,
-         !(DX_01 %in% hbn_dx_exclude)) %>% 
+         !(DX_01 %in% hbn_dx_exclude),
+         !is.na(DX_01)) %>% 
   arrange(DX_01_Cat, DX_01)
+
+# The diagnostic data frame seems to have duplicated entries.
+# Remove those.
+hbn_dx <- distinct(hbn_dx)
 
 # Export full set of DX information
 outfile <- "HBN_DX_categories.csv"
@@ -189,26 +222,27 @@ hbn_dx_labels <- tibble(DX_01 = c("ADHD-Combined Type",
                                   "Provisional Tic Disorder",
                                   "Tourettes Disorder",
                                   "Unspecified Attention-Deficit/Hyperactivity Disorder",
-                                  "Obsessive-Compulsive Disorder"),
-                         DX = c("ADHD", 
-                                "ADHD",
-                                "ADHD",
-                                "ASD",
-                                "ID",
-                                "ID",
-                                "ID",
-                                "ADHD",
-                                "Tourette Syndrome",
-                                "Tourette Syndrome",
-                                "Tourette Syndrome",
-                                "Tourette Syndrome",
-                                "ADHD", 
-                                "OCD"))
+                                  "Obsessive-Compulsive Disorder",
+                                  "No Diagnosis Given"),
+                        DX = c("ADHD", 
+                               "ADHD",
+                               "ADHD",
+                               "ASD",
+                               "ID",
+                               "ID",
+                               "ID",
+                               "ADHD",
+                               "Tourette Syndrome",
+                               "Tourette Syndrome",
+                               "Tourette Syndrome",
+                               "Tourette Syndrome",
+                               "ADHD", 
+                               "OCD",
+                               "Control"))
 
 # Join new labels to DX data frame
 hbn_dx <- hbn_dx %>% 
   left_join(hbn_dx_labels, by = "DX_01") %>% 
-  filter(!is.na(DX)) %>% 
   select(Subject_ID, DX)
 
 # Join image and diagnostic data frames
@@ -224,6 +258,10 @@ hbn <- left_join(hbn_imgs,
 # Combine demographics data frames
 demographics <- bind_rows(pond, sickkids, hbn)
 
+# Replace file NIFTY extension with MINC
+demographics <- demographics %>% 
+  mutate(file = str_replace(file, ".nii.gz", ".mnc"))
+
 # Remove participants with missing demographics
 demographics <- demographics %>% 
   filter(!is.na(DX), 
@@ -238,7 +276,7 @@ demographics <- demographics %>%
          Age, Sex, DX, 
          Site, Scanner,
          file) %>% 
-arrange(Dataset, Subject_ID)
+  arrange(Dataset, Subject_ID)
 
 # Export
 outfile <- "demographics.csv"
