@@ -355,8 +355,6 @@ def initialize(**kwargs):
     demographics = os.path.join(pipeline_dir, os.path.basename(demographics))
     df_demographics.to_csv(demographics, index = False)
 
-    print(df_demographics['file'])
-
     # Create symlinks to Jacobian images
     print("Creating symlinks to Jacobian images...")
     jacobians = ['absolute', 'relative']
@@ -365,6 +363,8 @@ def initialize(**kwargs):
         # Create symlinks to Jacobian images
         input_files = glob(os.path.join(input_dir, jac, '') + '*.mnc')
         print(input_files[:10])
+
+        print(df_demographics['file'].to_list()[:10])
         sys.exit()
 
         if len(input_files) == 0:
