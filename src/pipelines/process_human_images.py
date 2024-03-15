@@ -724,8 +724,6 @@ def main(pipeline_dir, input_dir, demographics, mask,
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
 
-    sys.exit()
-
     # Compute effect size images
     print("Computing effect sizes...")
     es_kwargs = {key.replace('es_', ''):val
