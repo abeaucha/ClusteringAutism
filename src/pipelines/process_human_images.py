@@ -362,11 +362,6 @@ def initialize(**kwargs):
 
         # Create symlinks to Jacobian images
         input_files = glob(os.path.join(input_dir, jac, '') + '*.mnc')
-        print(input_files[:10])
-
-        print(df_demographics['file'].to_list()[:10])
-        sys.exit()
-
         if len(input_files) == 0:
             raise OSError("No input files in directory: ".format(input_dir))
         input_files_in_dataset = [[f for f in input_files if g in f][0]
@@ -728,6 +723,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
     # Initialize pipeline directory tree
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
+
+    sys.exit()
 
     # Compute effect size images
     print("Computing effect sizes...")
