@@ -508,7 +508,6 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                     infiles = imgfiles,
                     outdir = os.path.join(outdir_f, j, ''),
                     isostep = matrix_resolution,
-                    parallel = True,
                     nproc = nproc
                 )
 
