@@ -15,100 +15,67 @@ suppressPackageStartupMessages(library(tidyverse))
 
 # Main -----------------------------------------------------------------------
 
-
 ## Directories ---------------------------------------------------------------
 
 # Registration base directories
-registration_dir <- "data/human/registration/v3/"
+registration_dir_v2 <- "data/human/registration/v2/"
+registration_dir_v3 <- "data/human/registration/v3/"
 
 # Jacobian image directories
-imgdir <- file.path(registration_dir, "jacobians")
+imgdir_v3 <- file.path(registration_dir_v3, "jacobians")
 
 # Demographics directories
-demographics_dir <- file.path(registration_dir, "subject_info/")
+demographics_dir_v2 <- file.path(registration_dir_v2, "subject_info/")
+demographics_dir_v3 <- file.path(registration_dir_v3, "subject_info/")
 
 # File suffix for the Jacobian images
-file_suffix <- ".denoise_fwhm_2mm.nii.gz"
+file_suffix_v2 <- ".denoise.extracted_fwhm_2mm.mnc"
+file_suffix_v3 <- ".denoise_fwhm_2mm.nii.gz"
 
 # Images files and IDs
 jacobians <- "absolute"
-imgfiles <- imgdir %>% 
+imgfiles <- imgdir_v3 %>% 
   file.path(jacobians, "smooth") %>% 
   list.files(pattern = "*.nii.gz")
 
 # Create a data frame with image files and IDs
 imgs <- tibble(file = imgfiles) %>% 
   mutate(Scan_ID = file %>% 
-           str_remove(file_suffix))
+           str_remove(file_suffix_v3))
 
 
-## SickKids data -------------------------------------------------------------
+## POND + SickKids data ------------------------------------------------------
 
-# Clean up SickKids demographics
-sickkids <- "Sickkids_dbm_input_demo_n500.csv"
-sickkids <- file.path(demographics_dir, "SickKids", sickkids)
-sickkids <- read_csv(sickkids, show_col_types = FALSE) %>% 
-  select(Subject_ID, Scan_ID,
-         Rating_Motion, Rating_IN3, QC_Status,
+# Import v2 demographics
+demographics_v2 <- "demographics.csv"
+demographics_v2 <- file.path(demographics_dir_v2, demographics_v2)
+demographics_v2 <- read_csv(demographics_v2, show_col_types = FALSE)
+
+# Create a copy of v2 demographics for v3
+demographics_v3 <- demographics_v2 
+
+# Update image file names for v3
+demographics_v3 <- demographics_v3 %>% 
+  mutate(file = file %>% 
+           str_remove(file_suffix_v2) %>% 
+           str_c(file_suffix_v3)) 
+
+# Rename POND subject IDs for v3
+demographics_v3 <- demographics_v3 %>% 
+  mutate(Subject_ID = str_replace(Subject_ID, "POND_", "sub-")) 
+
+# Select desired columns
+demographics_v3 <- demographics_v3 %>% 
+  select(Subject_ID, Scan_ID, Dataset,
+         Age, Sex, DX, 
          Site, Scanner,
-         Age, DX, Sex) %>%
-  mutate(Dataset = "SickKids",
-         file = str_c(Subject_ID, file_suffix)) %>% 
-  select(-Rating_Motion, -Rating_IN3, -QC_Status)
-
-
-## POND data -----------------------------------------------------------------
-
-# Import POND neuroanatomy export
-# pond_neuro <- "pond-neuroanatomy-20240212.csv"
-pond_neuro <- "pond-neuroanatomy-20230111.csv"
-pond_neuro <- file.path(demographics_dir, "POND", pond_neuro)
-pond_neuro <- read_csv(pond_neuro, show_col_types = FALSE) %>% 
-  select(Subject_ID = subject, Scan_ID = scan,
-         Scanner = scanned_on, Age = age_at_scan) 
-
-# POND site and scanner information
-pond_sites <- tibble(Scanner = c("SickKids_Trio", "SickKids_Prisma", 
-                                 "Queens_Trio", "Queens_Prisma", 
-                                 "Bloorview_Prisma"),
-                     Site = c("Toronto", "Toronto", 
-                              "Queens", "Queens", 
-                              "Bloorview"))
-
-# Update site and scanner info
-pond_neuro <- pond_neuro %>%   
-  left_join(pond_sites, by = "Scanner")
-
-# Join POND neuro export to v3 imgs 
-pond <- pond_neuro %>% 
-  inner_join(imgs, by = "Scan_ID")
-
-# Import POND metadata
-pond_metadata <- "pond-metadata-20240110.csv"
-pond_metadata <- file.path(demographics_dir, "POND", pond_metadata)
-pond_metadata <- read_csv(pond_metadata, show_col_types = FALSE) %>% 
-  distinct() %>% 
-  select(Subject_ID = SUBJECT,
-         Sex = NSI_SEX,
-         DX = PRIMARY_DIAGNOSIS) %>% 
-  mutate(Subject_ID = as.character(Subject_ID),
-         Subject_ID = ifelse(str_starts(Subject_ID, "88"), 
-                             str_c("0", Subject_ID),
-                             Subject_ID),
-         Subject_ID = str_c("sub", Subject_ID, sep = "-"), 
-         DX = ifelse(DX == "Typically Developing", "Control", DX),
-         DX = ifelse(DX == "Unaffected Sibling", "Control", DX))
-
-# Combine imaging and demographics information
-pond <- pond %>% 
-  left_join(pond_metadata, by = "Subject_ID") %>% 
-  mutate(Dataset = "POND")
+         file)  
 
 
 ## HBN data ------------------------------------------------------------------
 
 # HBN demographics directory
-hbn_dir <- file.path(demographics_dir, "HBN")
+hbn_dir <- file.path(demographics_dir_v3, "HBN")
 
 # Files containing basic demographics information (e.g. age, sex)
 hbn_basic_files <- c("MRI_CBIC_participants.csv", 
@@ -256,7 +223,7 @@ hbn <- left_join(hbn_imgs,
 ## Combine data --------------------------------------------------------------
 
 # Combine demographics data frames
-demographics <- bind_rows(pond, sickkids, hbn)
+demographics <- bind_rows(demographics_v3, hbn)
 
 # Replace file NIFTY extension with MINC
 demographics <- demographics %>% 
@@ -280,5 +247,5 @@ demographics <- demographics %>%
 
 # Export
 outfile <- "demographics.csv"
-outfile <- file.path(demographics_dir, outfile)
+outfile <- file.path(demographics_dir_v3, outfile)
 write_csv(x = demographics, file = outfile)
