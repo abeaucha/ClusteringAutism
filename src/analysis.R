@@ -1,5 +1,13 @@
 library(tools)
 
+# Environment variables ------------------------------------------------------
+
+SRCPATH <- Sys.getenv("SRCPATH")
+
+# Functions ------------------------------------------------------------------
+
+source(file.path(SRCPATH, "processing.R"))
+
 
 #' Compute the fraction of voxels
 #'
