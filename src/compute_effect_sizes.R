@@ -123,9 +123,6 @@ source(file.path(SRCPATH, "processing.R"))
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
 
-print(args)
-quit()
-
 #TODO remove lines when script works
 # REMOVE THESE LINES WHEN FINISHED
 # args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
@@ -182,6 +179,10 @@ if (execution == "local") {
 } else {
   stop()
 }
+
+print(registry_name)
+print(registry_cleanup)
+quit()
 
 # Generate effect size images
 # TODO implement batched computation
