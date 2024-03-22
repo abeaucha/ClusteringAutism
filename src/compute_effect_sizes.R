@@ -123,6 +123,9 @@ source(file.path(SRCPATH, "processing.R"))
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
 
+print(args)
+quit()
+
 #TODO remove lines when script works
 # REMOVE THESE LINES WHEN FINISHED
 # args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"

@@ -486,8 +486,6 @@ def effect_sizes(imgdir, demographics, mask, outdir,
             registry_name_es = registry_name + "_es_" + j
             kwargs['registry-name'] = registry_name_es
         kwargs['registry-cleanup'] = "true" if registry_cleanup else "false"
-        print(kwargs)
-        sys.exit()
         utils.execute_local(script = script, kwargs = kwargs)
 
         # Create the effect size matrix
