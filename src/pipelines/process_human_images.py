@@ -742,9 +742,6 @@ def main(pipeline_dir, input_dir, demographics, mask,
     # Get dictionary of function kwargs
     kwargs = locals().copy()
 
-    print(kwargs)
-    sys.exit()
-
     # Initialize pipeline directory tree
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
@@ -763,6 +760,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
              slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
+    print(es_kwargs)
+    sys.exit()
     es_outputs = effect_sizes(**es_kwargs)
 
     # Generate clusters
@@ -799,5 +798,4 @@ if __name__ == '__main__':
     args['es_batch'] = tuple(args['es_batch'])
     args['registry_cleanup'] = True if args['registry_cleanup'] == 'true' \
         else False
-    print(args)
     main(**args)
