@@ -742,6 +742,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
     # Get dictionary of function kwargs
     kwargs = locals().copy()
 
+    print(kwargs)
+    sys.exit()
+
     # Initialize pipeline directory tree
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
@@ -794,4 +797,5 @@ if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
     args['es_batch'] = tuple(args['es_batch'])
+    print(args)
     main(**args)
