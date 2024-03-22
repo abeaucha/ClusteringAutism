@@ -503,7 +503,16 @@ compute_normative_zscore <- function(y, demographics, group = "patients",
 #' model natural splines.
 #' @param batch (character scalar) Variables to use in normalization
 #' prior to modelling.
-#' @param nproc (numeric scalar) Number of processors to use.
+#' @param execution (character scalar) Flag indicating whether to run
+#' locally or using Slurm.
+#' @param nproc (numeric scalar) Number of processors to use. Executed
+#' in parallel if > 1
+#' @param registry_name (character scalar) Name of the registry directory
+#' for batched jobs.
+#' @param registry_cleanup (logical scalar) Option to clean up registry
+#' after completion of batched jobs.
+#' @param njobs (numeric scalar) Number of jobs to deploy on Slurm.
+#' @param resources (list) List of resources for Slurm jobs.
 #'
 #' @return (character vector) Paths to the effect size images.
 normative_growth_norm <- function(imgdir, demographics, mask, outdir,
@@ -626,6 +635,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
 #' @return (character vector) Paths to the effect size images.
 propensity_matching_norm <- function(imgdir, demographics, mask, outdir,
                                      ncontrols = 10, nproc = 1) {
+  #TODO: Fill out this function
   return(outfiles)
 }
 

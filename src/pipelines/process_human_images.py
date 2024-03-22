@@ -431,7 +431,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         matrices. Images will be resampled to this resolution if it is not
         equal to the resolution of the input images.
     execution: {'local', 'slurm'}
-        Flag indicating whether to run locally or using Slurm
+        Flag indicating whether to run locally or using Slurm.
     nproc: int, default 1
         Number of processors to use. Executed in parallel if > 1.
     registry_name: str, default None
