@@ -93,13 +93,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--es-nbatches',
-        type = int,
-        default = 1,
-        help = "Number of batches to use to process effect sizes."
-    )
-
-    parser.add_argument(
         '--es-df',
         type = int,
         default = 3,
