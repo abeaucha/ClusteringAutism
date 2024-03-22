@@ -181,9 +181,6 @@ if (execution == "local") {
   stop()
 }
 
-print(registry_name)
-quit()
-
 # Generate effect size images
 # TODO implement batched computation
 if (method == "normative-growth") {
