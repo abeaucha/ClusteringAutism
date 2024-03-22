@@ -87,17 +87,6 @@ source(file.path(SRCPATH, "processing.R"))
 
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-
-# TODO remove lines when script works
-# REMOVE THESE LINES WHEN FINISHED
-# args[["imgdir"]] <- "data/test/human/derivatives/v2/547/effect_sizes/resolution_3.0/absolute/"
-# args[["cluster-file"]] <- "data/test/human/derivatives/v2/547/clusters/resolution_3.0/clusters.csv"
-# args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
-# args[["outdir"]] <- "data/test/human/derivatives/v2/547/centroids/resolution_3.0/absolute/"
-# args[["method"]] <- "mean"
-# args[["execution"]] <- "local"
-# args[["nproc"]] <- 8
-
 imgdir <- args[["imgdir"]]
 clusterfile <- args[["cluster-file"]]
 mask <- args[["mask"]]

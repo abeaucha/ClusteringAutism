@@ -560,22 +560,35 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
                metric = 'correlation', K = 10, sigma = 0.5, t = 20,
                cluster_file = 'clusters.csv', affinity_file = 'affinity.csv'):
     """
+    Identify clusters of patients.
 
     Parameters
     ----------
-    infiles
-    rownames
-    nk_max
-    metric
-    K
-    sigma
-    t
-    cluster_file
-    affinity_file
+    infiles: list of str
+        Paths to the files (.csv) containing the effect size matrices.
+    rownames: str, default 'file'
+        Column in the input files containing row names.
+    nk_max: int, default 10
+        Maximum number of clusters to identify. Solutions will be
+        obtained for nk = 2 to nk = nk_max
+    metric: str, default 'correlation'
+        Similarity metric used to compute the SNF affinity matrices.
+    K: int, default 10
+        Number of nearest-neighbours used to compute the SNF affinity
+        matrices.
+    sigma: float, default 0.5
+        Variance for the local model in the SNF affinity matrices.
+    t: int, default 20
+        Number of iterations for the diffusion process in SNF.
+    cluster_file: str, default 'clusters.csv'
+        Path to the file (.csv) in which to save the cluster assignments.
+    affinity_file: str, default 'affinity.csv'
+        Path to the file (.csv) in which to save the SNF affinity matrix.
 
     Returns
     -------
-
+    cluster_file: str
+        Path to the cluster file.
     """
 
     # Clean up arguments
@@ -598,14 +611,20 @@ def centroids(clusters, imgdir, outdir, mask,
               registry_name = None, registry_cleanup = True,
               slurm_mem = None, slurm_time = None):
     """
+    Compute cluster centroid images.
 
     Parameters
     ----------
-    clusters
-    imgdir
-    outdir
-    mask
-    method
+    clusters: str
+        Path to the file (.csv) containing cluster assignments.
+    imgdir: str
+        Path to the directory containing the individual images (.mnc).
+    outdir: str
+        Path to the output directory.
+    mask: str
+        Path to a mask image (.mnc).
+    method: {'mean', 'median'}
+        Method used to compute the cluster centroids.
     execution: {'local', 'slurm'}
         Flag indicating whether to run locally or using Slurm
     nproc: int, default 1
@@ -621,7 +640,8 @@ def centroids(clusters, imgdir, outdir, mask,
 
     Returns
     -------
-
+    out: str
+        The directory containing the centroid image files.
     """
 
     # Script args
@@ -684,8 +704,6 @@ def main(pipeline_dir, input_dir, demographics, mask,
         Method used to compute the effect size images.
     es_group: {'patients', 'controls', 'all'}
         Group of participants for which to compute effect sizes.
-    es_nbatches: int, default 1
-        Number of batches to use in effect size computation.
     es_df: int, default 3
         Number of degrees of freedom to use when `es_method` =
         'normative-growth'
