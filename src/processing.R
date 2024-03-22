@@ -565,9 +565,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                           cores = nproc,
                           return_raw = TRUE)
   } else if (execution == "slurm") {
-    print(registry_name)
-    print(registry_cleanup)
-    quit()
     voxels <- qMincApply(filenames = imgfiles,
                          fun = compute_normative_zscore,
                          demographics = demographics,
@@ -584,6 +581,8 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   } else {
     stop()
   }
+
+  quit()
 
   # Convert voxel list into matrix
   # This matrix has number of voxels consistent with mask > 0.5
