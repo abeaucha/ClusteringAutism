@@ -26,6 +26,8 @@ process_human_images.py \
 --cluster-resolution 3.0 \
 --execution slurm \
 --nproc $SLURM_CPUS_PER_TASK \
+--registry-name "registry_${SLURM_JOB_ID}" \
+--registry-cleanup true \
 --slurm-njobs 50 \
 --slurm-time 30 \
 --slurm-mem 8G
