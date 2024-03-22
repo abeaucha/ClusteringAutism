@@ -35,7 +35,7 @@ source .venv_hpc/bin/activate
 # Set environment variables
 SRCPATH="$PWD/src"
 PYTHONPATH="$SRCPATH:$PYTHONPATH"
-PATH="$SRCPATH:$SRCPATH/pipelines:$PATH"
+PATH="$SRCPATH:$SRCPATH/drivers:$SRCPATH/pipelines:$PATH"
 RMINC_BATCH_CONF=/hpf/largeprojects/MICe/tools/RMINC/1.5.2.2_2/packrat/lib/x86_64-pc-linux-gnu/3.6.1/RMINC/parallel/slurm_batchtools.R
 
 export SRCPATH

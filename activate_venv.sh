@@ -39,7 +39,7 @@ source .venv/bin/activate
 # Set environment variables
 SRCPATH="$PWD/src"
 PYTHONPATH="$SRCPATH:$PYTHONPATH"
-PATH="$SRCPATH:$SRCPATH/pipelines:$PATH"
+PATH="$SRCPATH:$SRCPATH/drivers:$SRCPATH/pipelines:$PATH"
 
 export SRCPATH
 export PYTHONPATH
