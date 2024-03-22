@@ -27,7 +27,6 @@ process_human_images.py \
 --execution slurm \
 --nproc $SLURM_CPUS_PER_TASK \
 --registry-name $SLURM_JOB_ID \
---registry-cleanup false \
 --slurm-njobs 50 \
 --slurm-time 30 \
 --slurm-mem 8G
