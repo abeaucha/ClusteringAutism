@@ -476,6 +476,10 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                         matrix = '')
     )
 
+    print(registry_name)
+    print(registry_cleanup)
+    sys.exit()
+
     # Iterate over Jacobians
     for j in out.keys():
 
@@ -760,8 +764,6 @@ def main(pipeline_dir, input_dir, demographics, mask,
              slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
-    print(es_kwargs)
-    sys.exit()
     es_outputs = effect_sizes(**es_kwargs)
 
     # Generate clusters
