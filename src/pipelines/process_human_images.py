@@ -219,6 +219,7 @@ def parse_args():
     parser.add_argument(
         '--registry-name',
         type = str,
+        default = "process_human_images_registry",
         help = "Name of the registry directory for batched jobs."
     )
 
@@ -740,6 +741,9 @@ def main(pipeline_dir, input_dir, demographics, mask,
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
 
+    print(paths)
+    sys.exit()
+
     # Compute effect size images
     print("Computing effect sizes...")
     es_kwargs = {key.replace('es_', ''):val
@@ -754,7 +758,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
              slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
-    es_outputs = effect_sizes(**es_kwargs)
+    # es_outputs = effect_sizes(**es_kwargs)
 
     # Generate clusters
     print("Generating clusters...")
@@ -765,7 +769,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
         cluster_file = os.path.join(paths['clusters'], cluster_file),
         affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
     )
-    clusters = clustering(**cluster_kwargs)
+    # clusters = clustering(**cluster_kwargs)
+    # clusters =
 
     # Compute cluster centroid images
     centroid_kwargs = dict(
@@ -773,6 +778,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
         outdir = paths['centroids'], mask = mask,
         method = centroid_method,
         execution = execution, nproc = nproc,
+        registry_name = registry_name,
+        registry_cleanup = registry_cleanup,
         slurm_mem = slurm_mem,
         slurm_time = slurm_time
     )

@@ -14,7 +14,7 @@
 source activate_venv_hpc.sh
 
 # Pipeline registry directory
-REGISTRY="pipeline_registry_${SLURM_JOB_ID}"
+REGISTRY="process_human_images_registry_${SLURM_JOB_ID}"
 
 # Execute pipeline
 process_human_images.py \
