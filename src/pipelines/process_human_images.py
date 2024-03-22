@@ -476,6 +476,11 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                         matrix = '')
     )
 
+    if registry_name is not None:
+        registry_name = registry_name + "_es"
+
+    registry_cleanup = "true" if registry_cleanup else "false"
+    
     print(registry_name)
     print(registry_cleanup)
     sys.exit()
