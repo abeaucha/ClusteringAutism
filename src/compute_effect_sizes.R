@@ -119,7 +119,6 @@ source(file.path(SRCPATH, "processing.R"))
 
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-
 imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
 mask <- args[["mask"]]

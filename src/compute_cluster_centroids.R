@@ -52,6 +52,14 @@ option_list <- list(
               help = paste("Number of processors to use in parallel.",
                            "Executed serially if 1.",
                            "[default %default]")),
+  make_option("--registry-name",
+              type = "character",
+              help = "Name of the registry directory for batched jobs."),
+  make_option("--registry-cleanup",
+              type = "character",
+              default = "true",
+              help = paste("Option to clean up registry after completion",
+                           "of batched jobs. [default %default]" )),
   make_option("--slurm-mem",
               type = "character",
               help = paste("Memory per CPU core")),
@@ -135,15 +143,24 @@ clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>%
 # Execution options
 if (execution == "local") {
   resources <- list()
+  registry_name <- NULL
+  registry_cleanup <- NULL
   conf_file <- NA
 } else if (execution == "slurm") {
   resources <- list(memory = args[["slurm-mem"]],
                     walltime = args[["slurm-time"]]*60,
                     ncpus=nproc)
+  registry_name <- args[["registry-name"]]
+  registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
+                             TRUE, FALSE)
   conf_file <- getOption("RMINC_BATCH_CONF")
 } else {
   stop()
 }
+
+print(registry_name)
+print(registry_cleanup)
+quit()
 
 # Create centroid images for all clusters
 if (verbose) {message("Creating centroid images...")}
