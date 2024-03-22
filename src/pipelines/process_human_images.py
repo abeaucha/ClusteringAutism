@@ -759,13 +759,13 @@ def main(pipeline_dir, input_dir, demographics, mask,
 
     # Generate clusters
     print("Generating clusters...")
-    cluster_kwargs = dict(
-        infiles = [es_outputs[key]['matrix'] for key in es_outputs.keys()],
-        nk_max = cluster_nk_max, metric = cluster_metric, K = cluster_K,
-        sigma = cluster_sigma, t = cluster_t,
-        cluster_file = os.path.join(paths['clusters'], cluster_file),
-        affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
-    )
+    # cluster_kwargs = dict(
+    #     infiles = [es_outputs[key]['matrix'] for key in es_outputs.keys()],
+    #     nk_max = cluster_nk_max, metric = cluster_metric, K = cluster_K,
+    #     sigma = cluster_sigma, t = cluster_t,
+    #     cluster_file = os.path.join(paths['clusters'], cluster_file),
+    #     affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
+    # )
     # clusters = clustering(**cluster_kwargs)
     clusters = os.path.join(paths['clusters'], 'clusters.csv')
 
