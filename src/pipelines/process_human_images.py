@@ -646,7 +646,6 @@ def centroids(clusters, imgdir, outdir, mask,
         kwargs['registry-cleanup'] = "true" if registry_cleanup else "false"
         utils.execute_local(script = script, kwargs = kwargs)
         out[j] = os.path.join(outdir, j, '')
-        sys.exit()
 
     return out
 

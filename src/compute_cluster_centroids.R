@@ -158,10 +158,6 @@ if (execution == "local") {
   stop()
 }
 
-print(registry_name)
-print(registry_cleanup)
-quit()
-
 # Create centroid images for all clusters
 if (verbose) { message("Creating centroid images...") }
 ti <- Sys.time()
