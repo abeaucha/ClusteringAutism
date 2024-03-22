@@ -596,6 +596,7 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
 @utils.timing
 def centroids(clusters, imgdir, outdir, mask,
               method = 'mean', execution = 'local', nproc = 1,
+              registry_name = None, registry_cleanup = True,
               slurm_mem = None, slurm_time = None):
     """
 
@@ -606,11 +607,18 @@ def centroids(clusters, imgdir, outdir, mask,
     outdir
     mask
     method
-    execution
-    nproc
-    slurm_njobs
-    slurm_mem
-    slurm_time
+    execution: {'local', 'slurm'}
+        Flag indicating whether to run locally or using Slurm
+    nproc: int, default 1
+        Number of processors to use. Executed in parallel if > 1.
+    registry_name: str, default None
+        Name of the registry directory for batched jobs.
+    registry_cleanup: bool, default True
+        Option to clean up registry after completion of batched jobs.
+    slurm_mem: str, default None
+        Memory per CPU when execution = 'slurm', e.g. '16G'.
+    slurm_time: int, default = None
+        Walltime (minutes) for Slurm jobs when execution = 'slurm'
 
     Returns
     -------
@@ -633,6 +641,11 @@ def centroids(clusters, imgdir, outdir, mask,
         print("Computing {} cluster centroid images...".format(j))
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
+        if registry_name is not None:
+            registry_name_es = registry_name + "_centroids_" + j
+            kwargs['registry-name'] = registry_name_es
+        kwargs['registry-cleanup'] = "true" if registry_cleanup else "false"
+        sys.exit()
         utils.execute_local(script = script, kwargs = kwargs)
         out[j] = os.path.join(outdir, j, '')
 
@@ -780,8 +793,6 @@ def main(pipeline_dir, input_dir, demographics, mask,
         slurm_mem = slurm_mem,
         slurm_time = slurm_time
     )
-    print(centroid_kwargs)
-    sys.exit()
     centroid_outputs = centroids(**centroid_kwargs)
 
     print("Pipeline complete.")
