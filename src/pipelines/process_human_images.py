@@ -480,7 +480,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         registry_name = registry_name + "_es"
 
     registry_cleanup = "true" if registry_cleanup else "false"
-    
+
     print(registry_name)
     print(registry_cleanup)
     sys.exit()
