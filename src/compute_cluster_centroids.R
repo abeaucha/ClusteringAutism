@@ -59,7 +59,7 @@ option_list <- list(
               type = "character",
               default = "true",
               help = paste("Option to clean up registry after completion",
-                           "of batched jobs. [default %default]" )),
+                           "of batched jobs. [default %default]")),
   make_option("--slurm-mem",
               type = "character",
               help = paste("Memory per CPU core")),
@@ -70,7 +70,7 @@ option_list <- list(
               type = "character",
               default = "true",
               help = paste("Verbosity option. [default %default]"))
-) 
+)
 
 
 # Environment variables ------------------------------------------------------
@@ -135,9 +135,9 @@ if (!dir.exists(outdir)) {
 }
 
 # Import cluster information
-if (verbose) {message("Importing cluster information...")}
-clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>% 
-  mutate(ID = file.path(imgdir, ID)) %>% 
+if (verbose) { message("Importing cluster information...") }
+clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>%
+  mutate(ID = file.path(imgdir, ID)) %>%
   column_to_rownames("ID")
 
 # Execution options
@@ -148,8 +148,8 @@ if (execution == "local") {
   conf_file <- NA
 } else if (execution == "slurm") {
   resources <- list(memory = args[["slurm-mem"]],
-                    walltime = args[["slurm-time"]]*60,
-                    ncpus=nproc)
+                    walltime = args[["slurm-time"]] * 60,
+                    ncpus = nproc)
   registry_name <- args[["registry-name"]]
   registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
                              TRUE, FALSE)
@@ -163,20 +163,22 @@ print(registry_cleanup)
 quit()
 
 # Create centroid images for all clusters
-if (verbose) {message("Creating centroid images...")}
+if (verbose) { message("Creating centroid images...") }
 ti <- Sys.time()
-reg <- makeRegistry(file.dir = "centroid_registry",
+reg <- makeRegistry(file.dir = ifelse(is.null(registry_name),
+                                      "registry_centroid",
+                                      registry_name),
                     packages = "RMINC",
                     conf.file = conf_file,
                     seed = 1)
-jobs <- batchMap(fun = compute_cluster_centroids, 
+jobs <- batchMap(fun = compute_cluster_centroids,
                  1:ncol(clusters),
                  more.args = list(clusters = clusters,
-                                  mask = mask, 
-                                  outdir = outdir, 
-                                  method = method, 
+                                  mask = mask,
+                                  outdir = outdir,
+                                  method = method,
                                   nproc = nproc))
 submitJobs(jobs, resources = resources)
 waitForJobs(reg = reg)
 centroids <- reduceResults(c)
-removeRegistry(reg = reg)
+if (registry_cleanup) {removeRegistry(reg = reg)}
