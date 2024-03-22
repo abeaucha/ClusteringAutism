@@ -13,6 +13,9 @@
 # Activate virtual environment
 source activate_venv_hpc.sh
 
+# Pipeline registry directory
+REGISTRY="pipeline_registry_${SLURM_JOB_ID}"
+
 # Execute pipeline
 process_human_images.py \
 --pipeline-dir data/test/human/derivatives/v3/ \
@@ -26,7 +29,7 @@ process_human_images.py \
 --cluster-resolution 3.0 \
 --execution slurm \
 --nproc $SLURM_CPUS_PER_TASK \
---registry-name "registry_${SLURM_JOB_ID}" \
+--registry-name $REGISTRY \
 --registry-cleanup true \
 --slurm-njobs 50 \
 --slurm-time 30 \
