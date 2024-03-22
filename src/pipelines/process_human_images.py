@@ -231,8 +231,8 @@ def parse_args():
 
     parser.add_argument(
         '--registry-cleanup',
-        type = bool,
-        default = True,
+        type = str,
+        default = "true",
         help = "Option to clean up registry after completion of batched jobs."
     )
 
