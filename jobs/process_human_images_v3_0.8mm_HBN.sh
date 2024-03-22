@@ -13,11 +13,14 @@
 # Activate virtual environment
 source activate_venv_hpc.sh
 
+# Pipeline registry directory
+REGISTRY="process_human_images_registry_${SLURM_JOB_ID}"
+
 # Execute pipeline
 process_human_images.py \
 --pipeline-dir data/human/derivatives/v3/ \
 --input-dir data/human/registration/v3/jacobians_resampled/resolution_0.8/ \
---demographics data/human/registration/v3/subject_info/demographics.csv \
+--demographics data/human/registration/v3/subject_info/demographics_v3_test.csv \
 --mask data/human/registration/v3/reference_files/mask_0.8mm.mnc \
 --datasets HBN \
 --es-method normative-growth \
@@ -26,6 +29,8 @@ process_human_images.py \
 --cluster-resolution 3.0 \
 --execution slurm \
 --nproc 8 \
+--registry-name $REGISTRY \
+--registry-cleanup true \
 --slurm-njobs 300 \
 --slurm-time 60 \
 --slurm-mem 16G
