@@ -476,19 +476,17 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                         matrix = '')
     )
 
-    if registry_name is not None:
-        registry_name = registry_name + "_es"
-
     registry_cleanup = "true" if registry_cleanup else "false"
-
-    print(registry_name)
-    print(registry_cleanup)
-    sys.exit()
 
     # Iterate over Jacobians
     for j in out.keys():
 
         print("Computing {} effect size images...".format(j))
+        if registry_name is not None:
+            registry_name_es = registry_name + "_es_" + j
+        print(registry_name_es)
+        print(kwargs)
+        sys.exit()
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
         utils.execute_local(script = script, kwargs = kwargs)

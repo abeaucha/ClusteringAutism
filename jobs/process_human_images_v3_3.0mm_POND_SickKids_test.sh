@@ -26,11 +26,10 @@ process_human_images.py \
 --cluster-resolution 3.0 \
 --execution slurm \
 --nproc 8 \
+--registry-name test_registry \
 --registry-cleanup false \
 --slurm-njobs 50 \
 --slurm-time 30 \
 --slurm-mem 8G
 
 deactivate
-
-# --registry-name test_registry \
