@@ -25,8 +25,8 @@ process_human_images.py \
 --es-df 3 \
 --cluster-resolution 3.0 \
 --execution slurm \
---nproc 8 \
---registry-name test_registry \
+--nproc $SLURM_CPUS_PER_TASK \
+--registry-name $SLURM_JOB_ID \
 --registry-cleanup false \
 --slurm-njobs 50 \
 --slurm-time 30 \
