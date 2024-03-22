@@ -510,6 +510,8 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   key = "file", group = "patients",
                                   df = 3, batch = NULL,
                                   execution = "local", nproc = 1,
+                                  registry_name = NULL,
+                                  registry_cleanup = TRUE,
                                   njobs = NULL, resources = list()) {
 
   # Import demographics data
@@ -572,6 +574,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                          mask = mask,
                          batches = njobs,
                          source = file.path(SRCPATH, "processing.R"),
+                         registry_name = registry,
                          cleanup = FALSE,
                          return_raw = TRUE,
                          resources = resources)

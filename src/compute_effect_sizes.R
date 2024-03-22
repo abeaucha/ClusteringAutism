@@ -83,6 +83,14 @@ option_list <- list(
               help = paste("Number of processors to use in parallel.",
                            "Executed serially if 1.",
                            "[default %default]")),
+  make_option("--registry-name",
+              type = "character",
+              help = "Name of the registry directory for batched jobs."),
+  make_option("--registry-cleanup",
+              type = "character",
+              default = "true",
+              help = paste("Option to clean up registry after completion",
+                           "of batched jobs. [default %default]" )),
   make_option("--slurm-njobs",
               type = "numeric",
               help = "Number of jobs to deploy on Slurm."),
@@ -159,9 +167,13 @@ if (!dir.exists(outdir)) {
 
 # Check execution option
 if (execution == "local") {
-  resources <- list() 
+  resources <- list()
+  registry_name <- NULL
+  registry_cleanup <- NULL
 } else if (execution == "slurm") {
   njobs <- args[["slurm-njobs"]]
+  registry_name <- args[["registry-name"]]
+  registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true", TRUE, FALSE)
   resources <- list(memory = args[["slurm-mem"]],
                     walltime = args[["slurm-time"]]*60)
 } else {
@@ -238,6 +250,8 @@ if (method == "normative-growth") {
                                    batch = batch,
                                    execution = execution,
                                    nproc = nproc,
+                                   registry_name = registry_name,
+                                   registry_cleanup = registry_cleanup,
                                    njobs = njobs,
                                    resources = resources)
   }

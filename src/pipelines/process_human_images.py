@@ -224,6 +224,19 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--registry-name',
+        type = str,
+        help = "Name of the registry directory for batched jobs."
+    )
+
+    parser.add_argument(
+        '--registry-cleanup',
+        type = bool,
+        default = True,
+        help = "Option to clean up registry after completion of batched jobs."
+    )
+
+    parser.add_argument(
         '--slurm-njobs',
         type = int,
         help = "Number of jobs to deploy on Slurm."
@@ -388,6 +401,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                  ncontrols = None, matrix_file = 'effect_sizes.csv',
                  matrix_resolution = 3.0,
                  execution = 'local', nproc = 1,
+                 registry_name = None, registry_cleanup = True,
                  slurm_njobs = None, slurm_mem = None, slurm_time = None):
     """
 
@@ -429,6 +443,10 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         Flag indicating whether to run locally or using Slurm
     nproc: int, default 1
         Number of processors to use. Executed in parallel if > 1.
+    registry_name: str, default None
+        Name of the registry directory for batched jobs.
+    registry_cleanup: bool, default True
+        Option to clean up registry after completion of batched jobs.
     slurm_njobs: int, default None
         Number of jobs to deploy when execution = 'slurm'.
     slurm_mem: str, default None
@@ -639,6 +657,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
          cluster_affinity_file = 'affinity.csv',
          centroid_method = 'mean',
          execution = 'local', nproc = 1,
+         registry_name = None, registry_cleanup = True,
          slurm_njobs = None, slurm_mem = None, slurm_time = None):
     """
     Execute the image processing pipeline.
@@ -704,6 +723,10 @@ def main(pipeline_dir, input_dir, demographics, mask,
         using the Slurm scheduler on an HPC cluster.
     nproc: int, default 1
         Number of processors to use in parallel.
+    registry_name: str, default None
+        Name of the registry directory to use in batched jobs.
+    registry_cleanup: bool, default True
+        Option to clean up registry after completion of batched jobs.
     slurm_njobs: int, default None
         Number of jobs to deploy on Slurm
     slurm_mem: str, default None
@@ -732,6 +755,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
              mask = mask, outdir = paths['effect_sizes'],
              matrix_resolution = cluster_resolution,
              execution = execution, nproc = nproc,
+             registry_name = registry_name,
+             registry_cleanup = registry_cleanup,
              slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
