@@ -770,7 +770,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
         affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
     )
     # clusters = clustering(**cluster_kwargs)
-    # clusters =
+    clusters = os.path.join(paths['clusters'], 'clusters.csv')
 
     # Compute cluster centroid images
     centroid_kwargs = dict(
@@ -783,6 +783,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
         slurm_mem = slurm_mem,
         slurm_time = slurm_time
     )
+    print(centroid_kwargs)
+    sys.exit()
     centroid_outputs = centroids(**centroid_kwargs)
 
     print("Pipeline complete.")
