@@ -797,5 +797,7 @@ if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
     args['es_batch'] = tuple(args['es_batch'])
+    args['registry_cleanup'] = True if args['registry_cleanup'] == 'true' \
+        else False
     print(args)
     main(**args)
