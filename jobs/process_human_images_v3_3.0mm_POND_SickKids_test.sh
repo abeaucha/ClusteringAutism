@@ -32,5 +32,5 @@ process_human_images.py \
 
 deactivate
 
-#--registry-name $SLURM_JOB_ID \
+#--registry-name "registry_${SLURM_JOB_ID}" \
 #--registry-cleanup false \
