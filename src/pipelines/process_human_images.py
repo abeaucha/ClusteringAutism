@@ -397,9 +397,8 @@ def initialize(**kwargs):
 @utils.timing
 def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
-                 nbatches = 1, df = 3, batch = ('Site', 'Scanner'),
-                 ncontrols = None, matrix_file = 'effect_sizes.csv',
-                 matrix_resolution = 3.0,
+                  df = 3, batch = ('Site', 'Scanner'), ncontrols = None,
+                 matrix_file = 'effect_sizes.csv', matrix_resolution = 3.0,
                  execution = 'local', nproc = 1,
                  registry_name = None, registry_cleanup = True,
                  slurm_njobs = None, slurm_mem = None, slurm_time = None):
@@ -422,8 +421,6 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         Method used to compute the effect size images.
     group: {'patients', 'controls', 'all'}
         Group of participants for which to compute effect sizes.
-    nbatches: int, default 1
-        Number of batches to use in effect size computation.
     df: int, default 3
         Number of degrees of freedom to use when `method`='normative-growth'
     batch: str or tuple of str, default ('Site', 'Scanner')
