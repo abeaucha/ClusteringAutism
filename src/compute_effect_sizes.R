@@ -173,16 +173,13 @@ if (execution == "local") {
 } else if (execution == "slurm") {
   njobs <- args[["slurm-njobs"]]
   registry_name <- args[["registry-name"]]
-  registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true", TRUE, FALSE)
+  registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
+                             TRUE, FALSE)
   resources <- list(memory = args[["slurm-mem"]],
                     walltime = args[["slurm-time"]]*60)
 } else {
   stop()
 }
-
-print(registry_name)
-print(registry_cleanup)
-quit()
 
 # Generate effect size images
 # TODO implement batched computation

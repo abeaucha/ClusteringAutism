@@ -565,6 +565,9 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                           cores = nproc,
                           return_raw = TRUE)
   } else if (execution == "slurm") {
+    print(registry_name)
+    print(registry_cleanup)
+    quit()
     voxels <- qMincApply(filenames = imgfiles,
                          fun = compute_normative_zscore,
                          demographics = demographics,
@@ -574,8 +577,8 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                          mask = mask,
                          batches = njobs,
                          source = file.path(SRCPATH, "processing.R"),
-                         registry_name = registry,
-                         cleanup = FALSE,
+                         registry_name = registry_name,
+                         cleanup = registry_cleanup,
                          return_raw = TRUE,
                          resources = resources)
   } else {
