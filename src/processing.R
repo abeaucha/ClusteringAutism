@@ -560,8 +560,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   row_match <- match(basename(imgfiles), demographics[[key]])
   demographics <- demographics[row_match,]
 
-  print(length(imgfiles))
-  print(sum(is.na(imgfiles)))
+  print(imgs_in_demographics)
   quit()
 
   ti <- Sys.time()
