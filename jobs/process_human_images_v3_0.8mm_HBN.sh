@@ -20,7 +20,7 @@ REGISTRY="process_human_images_registry_${SLURM_JOB_ID}"
 process_human_images.py \
 --pipeline-dir data/human/derivatives/v3/ \
 --input-dir data/human/registration/v3/jacobians_resampled/resolution_0.8/ \
---demographics data/human/registration/v3/subject_info/demographics_v3.csv \
+--demographics data/human/registration/v3/subject_info/demographics.csv \
 --mask data/human/registration/v3/reference_files/mask_0.8mm.mnc \
 --datasets HBN \
 --es-method normative-growth \
