@@ -358,6 +358,9 @@ def initialize(**kwargs):
                        .loc[df_demographics['Dataset'].isin(datasets)]
                        .copy())
 
+    print(df_demographics.shape)
+    sys.exit()
+
     # Write out demographics subset to subset directory
     demographics = os.path.join(pipeline_dir, os.path.basename(demographics))
     df_demographics.to_csv(demographics, index = False)
