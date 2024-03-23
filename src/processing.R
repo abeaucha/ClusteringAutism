@@ -553,15 +553,16 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # Image files
   imgfiles <- list.files(imgdir, full.names = TRUE)
 
-  print(imgfiles[1:10])
-  quit()
-
   # Match image files to demographics
   if (verbose) {message("Matching image files to demographics...")}
   imgs_in_demographics <- basename(imgfiles) %in% demographics[[key]]
   imgfiles <- imgfiles[imgs_in_demographics]
   row_match <- match(basename(imgfiles), demographics[[key]])
   demographics <- demographics[row_match,]
+
+  print(length(imgfiles))
+  print(sum(is.na(imgfiles)))
+  quit()
 
   ti <- Sys.time()
   # Run normative growth modelling
