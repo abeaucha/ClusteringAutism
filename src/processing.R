@@ -560,9 +560,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   row_match <- match(basename(imgfiles), demographics[[key]])
   demographics <- demographics[row_match,]
 
-  print(length(imgfiles))
-  quit()
-
   ti <- Sys.time()
   # Run normative growth modelling
   if (verbose) {message("Evaluating normative growth models...")}
