@@ -593,8 +593,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
     stop()
   }
 
-  quit()
-
   # Convert voxel list into matrix
   # This matrix has number of voxels consistent with mask > 0.5
   voxels <- simplify_masked(voxels[["vals"]])
