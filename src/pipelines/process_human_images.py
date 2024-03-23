@@ -93,13 +93,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--es-nbatches',
-        type = int,
-        default = 1,
-        help = "Number of batches to use to process effect sizes."
-    )
-
-    parser.add_argument(
         '--es-df',
         type = int,
         default = 3,
@@ -221,6 +214,20 @@ def parse_args():
         type = int,
         default = 1,
         help = "Number of processors to use in parallel."
+    )
+
+    parser.add_argument(
+        '--registry-name',
+        type = str,
+        default = "process_human_images_registry",
+        help = "Name of the registry directory for batched jobs."
+    )
+
+    parser.add_argument(
+        '--registry-cleanup',
+        type = str,
+        default = "true",
+        help = "Option to clean up registry after completion of batched jobs."
     )
 
     parser.add_argument(
@@ -384,10 +391,10 @@ def initialize(**kwargs):
 @utils.timing
 def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
-                 nbatches = 1, df = 3, batch = ('Site', 'Scanner'),
-                 ncontrols = None, matrix_file = 'effect_sizes.csv',
-                 matrix_resolution = 3.0,
+                 df = 3, batch = ('Site', 'Scanner'), ncontrols = None,
+                 matrix_file = 'effect_sizes.csv', matrix_resolution = 3.0,
                  execution = 'local', nproc = 1,
+                 registry_name = None, registry_cleanup = True,
                  slurm_njobs = None, slurm_mem = None, slurm_time = None):
     """
 
@@ -408,8 +415,6 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         Method used to compute the effect size images.
     group: {'patients', 'controls', 'all'}
         Group of participants for which to compute effect sizes.
-    nbatches: int, default 1
-        Number of batches to use in effect size computation.
     df: int, default 3
         Number of degrees of freedom to use when `method`='normative-growth'
     batch: str or tuple of str, default ('Site', 'Scanner')
@@ -426,9 +431,13 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         matrices. Images will be resampled to this resolution if it is not
         equal to the resolution of the input images.
     execution: {'local', 'slurm'}
-        Flag indicating whether to run locally or using Slurm
+        Flag indicating whether to run locally or using Slurm.
     nproc: int, default 1
         Number of processors to use. Executed in parallel if > 1.
+    registry_name: str, default None
+        Name of the registry directory for batched jobs.
+    registry_cleanup: bool, default True
+        Option to clean up registry after completion of batched jobs.
     slurm_njobs: int, default None
         Number of jobs to deploy when execution = 'slurm'.
     slurm_mem: str, default None
@@ -464,7 +473,12 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         print("Computing {} effect size images...".format(j))
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
+        if registry_name is not None:
+            registry_name_es = registry_name + "_es_" + j
+            kwargs['registry-name'] = registry_name_es
+        kwargs['registry-cleanup'] = "true" if registry_cleanup else "false"
         utils.execute_local(script = script, kwargs = kwargs)
+        sys.exit()
 
         # Create the effect size matrix
         print("Building {} effect size matrix...".format(j))
@@ -547,22 +561,35 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
                metric = 'correlation', K = 10, sigma = 0.5, t = 20,
                cluster_file = 'clusters.csv', affinity_file = 'affinity.csv'):
     """
+    Identify clusters of patients.
 
     Parameters
     ----------
-    infiles
-    rownames
-    nk_max
-    metric
-    K
-    sigma
-    t
-    cluster_file
-    affinity_file
+    infiles: list of str
+        Paths to the files (.csv) containing the effect size matrices.
+    rownames: str, default 'file'
+        Column in the input files containing row names.
+    nk_max: int, default 10
+        Maximum number of clusters to identify. Solutions will be
+        obtained for nk = 2 to nk = nk_max
+    metric: str, default 'correlation'
+        Similarity metric used to compute the SNF affinity matrices.
+    K: int, default 10
+        Number of nearest-neighbours used to compute the SNF affinity
+        matrices.
+    sigma: float, default 0.5
+        Variance for the local model in the SNF affinity matrices.
+    t: int, default 20
+        Number of iterations for the diffusion process in SNF.
+    cluster_file: str, default 'clusters.csv'
+        Path to the file (.csv) in which to save the cluster assignments.
+    affinity_file: str, default 'affinity.csv'
+        Path to the file (.csv) in which to save the SNF affinity matrix.
 
     Returns
     -------
-
+    cluster_file: str
+        Path to the cluster file.
     """
 
     # Clean up arguments
@@ -582,25 +609,40 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
 @utils.timing
 def centroids(clusters, imgdir, outdir, mask,
               method = 'mean', execution = 'local', nproc = 1,
+              registry_name = None, registry_cleanup = True,
               slurm_mem = None, slurm_time = None):
     """
+    Compute cluster centroid images.
 
     Parameters
     ----------
-    clusters
-    imgdir
-    outdir
-    mask
-    method
-    execution
-    nproc
-    slurm_njobs
-    slurm_mem
-    slurm_time
+    clusters: str
+        Path to the file (.csv) containing cluster assignments.
+    imgdir: str
+        Path to the directory containing the individual images (.mnc).
+    outdir: str
+        Path to the output directory.
+    mask: str
+        Path to a mask image (.mnc).
+    method: {'mean', 'median'}
+        Method used to compute the cluster centroids.
+    execution: {'local', 'slurm'}
+        Flag indicating whether to run locally or using Slurm
+    nproc: int, default 1
+        Number of processors to use. Executed in parallel if > 1.
+    registry_name: str, default None
+        Name of the registry directory for batched jobs.
+    registry_cleanup: bool, default True
+        Option to clean up registry after completion of batched jobs.
+    slurm_mem: str, default None
+        Memory per CPU when execution = 'slurm', e.g. '16G'.
+    slurm_time: int, default = None
+        Walltime (minutes) for Slurm jobs when execution = 'slurm'
 
     Returns
     -------
-
+    out: str
+        The directory containing the centroid image files.
     """
 
     # Script args
@@ -619,6 +661,10 @@ def centroids(clusters, imgdir, outdir, mask,
         print("Computing {} cluster centroid images...".format(j))
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
+        if registry_name is not None:
+            registry_name_es = registry_name + "_centroids_" + j
+            kwargs['registry-name'] = registry_name_es
+        kwargs['registry-cleanup'] = "true" if registry_cleanup else "false"
         utils.execute_local(script = script, kwargs = kwargs)
         out[j] = os.path.join(outdir, j, '')
 
@@ -629,8 +675,7 @@ def centroids(clusters, imgdir, outdir, mask,
 def main(pipeline_dir, input_dir, demographics, mask,
          datasets = ('POND', 'SickKids'),
          es_method = 'normative-growth', es_group = 'patients',
-         es_nbatches = 1, es_df = 3,
-         es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
+         es_df = 3, es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
          es_matrix_file = 'effect_sizes.csv',
          cluster_resolution = 3.0,
          cluster_nk_max = 10, cluster_metric = 'correlation',
@@ -639,6 +684,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
          cluster_affinity_file = 'affinity.csv',
          centroid_method = 'mean',
          execution = 'local', nproc = 1,
+         registry_name = None, registry_cleanup = True,
          slurm_njobs = None, slurm_mem = None, slurm_time = None):
     """
     Execute the image processing pipeline.
@@ -659,8 +705,6 @@ def main(pipeline_dir, input_dir, demographics, mask,
         Method used to compute the effect size images.
     es_group: {'patients', 'controls', 'all'}
         Group of participants for which to compute effect sizes.
-    es_nbatches: int, default 1
-        Number of batches to use in effect size computation.
     es_df: int, default 3
         Number of degrees of freedom to use when `es_method` =
         'normative-growth'
@@ -704,6 +748,10 @@ def main(pipeline_dir, input_dir, demographics, mask,
         using the Slurm scheduler on an HPC cluster.
     nproc: int, default 1
         Number of processors to use in parallel.
+    registry_name: str, default None
+        Name of the registry directory to use in batched jobs.
+    registry_cleanup: bool, default True
+        Option to clean up registry after completion of batched jobs.
     slurm_njobs: int, default None
         Number of jobs to deploy on Slurm
     slurm_mem: str, default None
@@ -732,6 +780,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
              mask = mask, outdir = paths['effect_sizes'],
              matrix_resolution = cluster_resolution,
              execution = execution, nproc = nproc,
+             registry_name = registry_name,
+             registry_cleanup = registry_cleanup,
              slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
              slurm_time = slurm_time)
     )
@@ -754,6 +804,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
         outdir = paths['centroids'], mask = mask,
         method = centroid_method,
         execution = execution, nproc = nproc,
+        registry_name = registry_name,
+        registry_cleanup = registry_cleanup,
         slurm_mem = slurm_mem,
         slurm_time = slurm_time
     )
@@ -769,4 +821,6 @@ if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
     args['es_batch'] = tuple(args['es_batch'])
+    args['registry_cleanup'] = True if args['registry_cleanup'] == 'true' \
+        else False
     main(**args)

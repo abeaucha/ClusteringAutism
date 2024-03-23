@@ -46,9 +46,6 @@ option_list <- list(
               default = "patients",
               help = paste("Group of participants for which to compute",
                            "effect sizes. [default %default]")),
-  make_option("--nbatches",
-              type = "numeric",
-              default = 1),
   make_option("--df",
               type = "numeric",
               default = 3, 
@@ -76,22 +73,33 @@ option_list <- list(
   make_option("--execution",
               type = "character",
               default = "local",
-              help = paste("[default %default]")),
+              help = paste("Flag indicating whether to run locally or",
+                           "using Slurm. [default %default]")),
   make_option("--nproc",
               type = "numeric",
               default = 1,
-              help = paste("Number of processors to use in parallel.",
-                           "Executed serially if 1.",
+              help = paste("Number of processors to use.",
+                           "Executed in parallel if > 1.",
                            "[default %default]")),
+  make_option("--registry-name",
+              type = "character",
+              help = "Name of the registry directory for batched jobs."),
+  make_option("--registry-cleanup",
+              type = "character",
+              default = "true",
+              help = paste("Option to clean up registry after completion",
+                           "of batched jobs. [default %default]" )),
   make_option("--slurm-njobs",
               type = "numeric",
               help = "Number of jobs to deploy on Slurm."),
   make_option("--slurm-mem",
               type = "character",
-              help = paste("Memory per CPU core")),
+              help = paste("Memory per CPU  when --execution slurm.",
+                           "Example: '16G'")),
   make_option("--slurm-time",
               type = "numeric",
-              help = paste("Walltime in minutes")),
+              help = paste("Walltime in minutes for Slurm jobs",
+                           "when --execution slurm.")),
   make_option("--verbose",
               type = "character",
               default = "true",
@@ -114,19 +122,6 @@ source(file.path(SRCPATH, "processing.R"))
 
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-
-#TODO remove lines when script works
-# REMOVE THESE LINES WHEN FINISHED
-# args[["imgdir"]] <- "data/test/human/derivatives/v2/310/jacobians/absolute/"
-# args[["demographics"]] <- "data/human/registration/v2/subject_info/demographics.csv"
-# args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
-# args[["outdir"]] <- "data/test/human/derivatives/v2/310/effect_sizes/resolution_3.0/absolute/"
-# args[["batch"]] <- "Site-Scanner"
-# args[["nbatches"]] <- 1
-# args[["matrix-file"]] <- "effect_sizes.csv"
-# args[["matrix-res"]] <- 3.0
-# args[["nproc"]] <- 8
-
 imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
 mask <- args[["mask"]]
@@ -134,7 +129,6 @@ outdir <- args[["outdir"]]
 method <- args[["method"]]
 key <- args[["key"]]
 group <- args[["group"]]
-nbatches <- args[["nbatches"]]
 df <- args[["df"]]
 batch <- args[["batch"]]
 matrix_file <- args[["matrix-file"]]
@@ -159,9 +153,14 @@ if (!dir.exists(outdir)) {
 
 # Check execution option
 if (execution == "local") {
-  resources <- list() 
+  resources <- list()
+  registry_name <- NULL
+  registry_cleanup <- NULL
 } else if (execution == "slurm") {
   njobs <- args[["slurm-njobs"]]
+  registry_name <- args[["registry-name"]]
+  registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
+                             TRUE, FALSE)
   resources <- list(memory = args[["slurm-mem"]],
                     walltime = args[["slurm-time"]]*60)
 } else {
@@ -169,65 +168,7 @@ if (execution == "local") {
 }
 
 # Generate effect size images
-# TODO implement batched computation
 if (method == "normative-growth") {
-  if (nbatches > 1) {
-
-
-    # Create voxel batches
-    mask_array <- import_image(img = mask, mask = mask)
-    batches <- parallel::splitIndices(length(mask_array), ncl = nbatches)
-    
-    # Execute script in batches
-    batch_dirs <- character(nbatches)
-    for (i in 1:nbatches) {
-      batch_dir <- file.path(outdir, paste("batch", i, sep = "_"))
-      batch_mask <- numeric(length(mask_array))
-      batch_mask[batches[[i]]] <- 1
-      
-      if (!dir.exists(batch_dir)) {
-        dir.create(batch_dir, showWarnings = FALSE, recursive = TRUE)
-      }
-      batch_maskfile <- file.path(batch_dir, "batch_mask.mnc")
-      vector_to_image(x = batch_mask, 
-                      outfile = batch_maskfile,
-                      mask = mask)
-      
-      files <- normative_growth_norm(imgdir = imgdir, 
-                                     demographics = demographics,
-                                     mask = batch_maskfile,
-                                     outdir = batch_dir,
-                                     key = key,
-                                     group = group,
-                                     df = df,
-                                     batch = batch,
-                                     execution = execution,
-                                     nproc = nproc)
-      
-    }
-    
-    # Collate batch images
-    # print("Collating batched images...")
-    # outfiles = os.listdir(batch_dirs[0])
-    # outfiles = [file for file in outfiles if file != 'batch_mask.mnc']
-    # for outfile in outfiles:
-    #   
-    #   img = np.zeros_like(mask_array)
-    # for b, batch in enumerate(batches):
-    #   batch_img = os.path.join(batch_dirs[b], outfile)
-    # batch_mask = os.path.join(batch_dirs[b], 'batch_mask.mnc')
-    # img[batch] = import_image(img = batch_img, mask = batch_mask)
-    # 
-    # outfile = os.path.join(outdir, outfile)
-    # vector_to_image(x = img, outfile = outfile, maskfile = mask)
-    # 
-    # print("Cleaning up...")
-    # for batch_dir in batch_dirs:
-    #   rmtree(batch_dir)
-    
-    
-    quit()
-  } else {
     files <- normative_growth_norm(imgdir = imgdir,
                                    demographics = demographics,
                                    mask = mask,
@@ -238,9 +179,10 @@ if (method == "normative-growth") {
                                    batch = batch,
                                    execution = execution,
                                    nproc = nproc,
+                                   registry_name = registry_name,
+                                   registry_cleanup = registry_cleanup,
                                    njobs = njobs,
                                    resources = resources)
-  }
 } else if (method == "propensity-matching") {
   files <- propensity_matching_norm(imgdir = imgdir, 
                                     demographics = demographics,

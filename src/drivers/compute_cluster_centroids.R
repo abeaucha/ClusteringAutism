@@ -52,6 +52,14 @@ option_list <- list(
               help = paste("Number of processors to use in parallel.",
                            "Executed serially if 1.",
                            "[default %default]")),
+  make_option("--registry-name",
+              type = "character",
+              help = "Name of the registry directory for batched jobs."),
+  make_option("--registry-cleanup",
+              type = "character",
+              default = "true",
+              help = paste("Option to clean up registry after completion",
+                           "of batched jobs. [default %default]")),
   make_option("--slurm-mem",
               type = "character",
               help = paste("Memory per CPU core")),
@@ -62,7 +70,7 @@ option_list <- list(
               type = "character",
               default = "true",
               help = paste("Verbosity option. [default %default]"))
-) 
+)
 
 
 # Environment variables ------------------------------------------------------
@@ -79,17 +87,6 @@ source(file.path(SRCPATH, "processing.R"))
 
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-
-# TODO remove lines when script works
-# REMOVE THESE LINES WHEN FINISHED
-# args[["imgdir"]] <- "data/test/human/derivatives/v2/547/effect_sizes/resolution_3.0/absolute/"
-# args[["cluster-file"]] <- "data/test/human/derivatives/v2/547/clusters/resolution_3.0/clusters.csv"
-# args[["mask"]] <- "data/human/registration/v2/reference_files/mask_3.0mm.mnc"
-# args[["outdir"]] <- "data/test/human/derivatives/v2/547/centroids/resolution_3.0/absolute/"
-# args[["method"]] <- "mean"
-# args[["execution"]] <- "local"
-# args[["nproc"]] <- 8
-
 imgdir <- args[["imgdir"]]
 clusterfile <- args[["cluster-file"]]
 mask <- args[["mask"]]
@@ -127,39 +124,46 @@ if (!dir.exists(outdir)) {
 }
 
 # Import cluster information
-if (verbose) {message("Importing cluster information...")}
-clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>% 
-  mutate(ID = file.path(imgdir, ID)) %>% 
+if (verbose) { message("Importing cluster information...") }
+clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>%
+  mutate(ID = file.path(imgdir, ID)) %>%
   column_to_rownames("ID")
 
 # Execution options
 if (execution == "local") {
   resources <- list()
+  registry_name <- NULL
+  registry_cleanup <- NULL
   conf_file <- NA
 } else if (execution == "slurm") {
   resources <- list(memory = args[["slurm-mem"]],
-                    walltime = args[["slurm-time"]]*60,
-                    ncpus=nproc)
+                    walltime = args[["slurm-time"]] * 60,
+                    ncpus = nproc)
+  registry_name <- args[["registry-name"]]
+  registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
+                             TRUE, FALSE)
   conf_file <- getOption("RMINC_BATCH_CONF")
 } else {
   stop()
 }
 
 # Create centroid images for all clusters
-if (verbose) {message("Creating centroid images...")}
+if (verbose) { message("Creating centroid images...") }
 ti <- Sys.time()
-reg <- makeRegistry(file.dir = "centroid_registry",
+reg <- makeRegistry(file.dir = ifelse(is.null(registry_name),
+                                      "registry_centroid",
+                                      registry_name),
                     packages = "RMINC",
                     conf.file = conf_file,
                     seed = 1)
-jobs <- batchMap(fun = compute_cluster_centroids, 
+jobs <- batchMap(fun = compute_cluster_centroids,
                  1:ncol(clusters),
                  more.args = list(clusters = clusters,
-                                  mask = mask, 
-                                  outdir = outdir, 
-                                  method = method, 
+                                  mask = mask,
+                                  outdir = outdir,
+                                  method = method,
                                   nproc = nproc))
 submitJobs(jobs, resources = resources)
 waitForJobs(reg = reg)
 centroids <- reduceResults(c)
-removeRegistry(reg = reg)
+if (registry_cleanup) {removeRegistry(reg = reg)}
