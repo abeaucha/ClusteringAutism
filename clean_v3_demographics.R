@@ -237,6 +237,23 @@ demographics <- demographics %>%
          !is.na(Site),
          !is.na(Scanner))
 
+ids_to_remove <- c("sub-NDAREK255DEE_acq-HCP_T1w",
+                   "d8_0033_01",
+                   "d8_0034_01",
+                   "d8_0035_01",
+                   "d8_0036_01",
+                   "d8_0037_01",
+                   "d8_0038_01",
+                   "d8_0039_01",
+                   "d8_0040_01",
+                   "d8_0041_01",
+                   "d8_0042_01",
+                   "d8_0043_01",
+                   "d8_0044_01")
+
+demographics <- demographics %>% 
+  filter(!(Subject_ID %in% ids_to_remove))
+
 # Arrange columns and rows
 demographics <- demographics %>% 
   select(Subject_ID, Scan_ID, Dataset,
