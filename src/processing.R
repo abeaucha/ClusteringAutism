@@ -560,7 +560,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   row_match <- match(basename(imgfiles), demographics[[key]])
   demographics <- demographics[row_match,]
 
-  print(imgs_in_demographics)
+  print(length(imgfiles))
   quit()
 
   ti <- Sys.time()
@@ -595,6 +595,8 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   } else {
     stop()
   }
+
+  quit()
 
   # Convert voxel list into matrix
   # This matrix has number of voxels consistent with mask > 0.5
