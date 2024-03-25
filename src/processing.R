@@ -523,6 +523,25 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   registry_cleanup = TRUE,
                                   njobs = NULL, resources = list()) {
 
+  
+  # imgdir <- "data/human/derivatives/v3/700/jacobians/absolute/"
+  # demographics <- "data/human/registration/v3/subject_info/demographics.csv"
+  # mask <- "data/human/registration/v3/reference_files/mask_0.8mm.mnc"
+  # outdir <- "data/human/derivatives/v3/700/effect_sizes/resolution_0.8/absolute/"
+  # key <- "file"
+  # group <- "patients"
+  # df <- 3
+  # batch <- "Site-Scanner"
+  # execution <- "slurm"
+  # nproc <- 8
+  # registry_name <- "test"
+  # registry_cleanup <- FALSE
+  # njobs <- 300
+  # resources <- list(memory="20G",
+  #                   walltime=90*60)
+  # verbose <- TRUE
+  
+  
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
