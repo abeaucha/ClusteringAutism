@@ -24,13 +24,14 @@ process_human_images.py \
 --mask data/human/registration/v3/reference_files/mask_3.0mm.mnc \
 --datasets HBN \
 --es-method normative-growth \
---es-group patients \
+--es-batch Site \
+--es-group controls \
 --es-df 3 \
 --cluster-resolution 3.0 \
 --execution slurm \
 --nproc 8 \
 --registry-name $REGISTRY \
---registry-cleanup true \
+--registry-cleanup false \
 --slurm-njobs 50 \
 --slurm-time 30 \
 --slurm-mem 8G

@@ -30,7 +30,7 @@ process_human_images.py \
 --execution slurm \
 --nproc 8 \
 --registry-name $REGISTRY \
---registry-cleanup true \
+--registry-cleanup false \
 --slurm-njobs 300 \
 --slurm-time 90 \
 --slurm-mem 20G
