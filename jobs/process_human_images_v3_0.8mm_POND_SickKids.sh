@@ -32,7 +32,7 @@ process_human_images.py \
 --registry-name $REGISTRY \
 --registry-cleanup false \
 --slurm-njobs 300 \
---slurm-time 90 \
---slurm-mem 20G
+--slurm-time 60 \
+--slurm-mem 16G
 
 deactivate
