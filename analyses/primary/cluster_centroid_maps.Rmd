@@ -26,73 +26,79 @@ source("../../src/analysis.R")
 output_dir <- "outputs/cluster_centroid_maps/"
 
 #Similarity pipeline
-version <- "v2"
-pipeline_dir <- "../../data/cross_species/"
-pipeline_dir <- file.path(pipeline_dir, version)
-
-#Human parameters
-human_resolution <- 0.8
-human_es_method <- "normative-growth"
-human_es_df <- 3
-human_cluster_map_method <- "mean"
-
-#Mouse parameters
+version <- "v3"
+# version <- "v2"
+# pipeline_dir <- "../../data/cross_species/"
+# pipeline_dir <- file.path(pipeline_dir, version)
+# 
+# #Human parameters
+human_resolution <- "3.0"
+# human_es_method <- "normative-growth"
+# human_es_df <- 3
+# human_cluster_map_method <- "mean"
+# 
+# #Mouse parameters
 mouse_resolution <- 0.2
-mouse_cluster_map_method <- human_cluster_map_method
-
-#Similarity parameters
-metric <- "correlation"
-
-metadata <- file.path(pipeline_dir, "metadata.csv")
-params <- fetch_params_metadata(metadata = metadata,
-                                human_resolution = human_resolution,
-                                human_es_method = human_es_method,
-                                human_es_df = human_es_df,
-                                human_cluster_map_method = human_cluster_map_method,
-                                metric = metric)
-params
+# mouse_cluster_map_method <- human_cluster_map_method
+# 
+# #Similarity parameters
+# metric <- "correlation"
+# 
+# metadata <- file.path(pipeline_dir, "metadata.csv")
+# params <- fetch_params_metadata(metadata = metadata,
+#                                 human_resolution = human_resolution,
+#                                 human_es_method = human_es_method,
+#                                 human_es_df = human_es_df,
+#                                 human_cluster_map_method = human_cluster_map_method,
+#                                 metric = metric)
+# params
 ```
 
 ```{r directories}
 #Parameter set ID
 # params_id <- 405
-params_id <- 654
+# params_id <- 654
 
 #Jacobians
 jacobians <- c("absolute", "relative")
 
 #Human parameter set ID
-human_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_id)
+# human_params_id <- params %>% 
+  # filter(id == params_id) %>% 
+  # pull(human_id)
+human_params_id <- "952"
 
 #Mouse parameter set ID
-mouse_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(mouse_id)
+# mouse_params_id <- params %>% 
+  # filter(id == params_id) %>% 
+  # pull(mouse_id)
+mouse_params_id <- 107
 
 #Human pipeline directory
 human_pipeline_dir <- "../../data/human/derivatives/"
 human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
 
 #Human cluster map directories
-human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
-human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
-human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
-names(human_cluster_map_dirs) <- jacobians
+human_centroid_dirs <- file.path(human_pipeline_dir, "centroids")
+human_centroid_dirs <- file.path(human_centroid_dirs, str_c("resolution_", human_resolution))
+human_centroid_dirs <- file.path(human_centroid_dirs, jacobians)
+names(human_centroid_dirs) <- jacobians
 
 #Mouse pipeline directory
 mouse_pipeline_dir <- "../../data/mouse/derivatives/"
 mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
 
 #Mouse cluster map directories
-mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
-mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
-mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
-names(mouse_cluster_map_dirs) <- jacobians 
+mouse_centroid_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_centroid_dirs <- file.path(mouse_centroid_dirs, str_c("resolution_", mouse_resolution))
+mouse_centroid_dirs <- file.path(mouse_centroid_dirs, jacobians)
+names(mouse_centroid_dirs) <- jacobians 
 
 #Output directory
-output_dir <- file.path(output_dir, version, params_id)
+# output_dir <- file.path(output_dir, version, params_id)
+# output_dir <- file.path(output_dir, version, "POND_SickKids_controls")
+# output_dir <- file.path(output_dir, version, "HBN_patients")
+output_dir <- file.path(output_dir, version, "HBN_controls")
 if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
@@ -103,40 +109,48 @@ mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
 
 #Human anatomy
-human_anat_file <- "../../data/human/registration/v2/reference_files/model_0.8mm.mnc"
+human_anat_file <- "../../data/human/registration/v3/reference_files/model_3.0mm.mnc"
+# human_anat_file <- "../../data/human/registration/v2/reference_files/model_0.8mm.mnc"
 human_anat <- mincGetVolume(human_anat_file)
 human_anat_vol <- mincArray(human_anat)
 
 #Cropped human images along sagittal and transverse planes
-human_slices_dim_1 <- 25:200
-human_slices_dim_3 <- 25:220
+# human_slices_dim_1 <- 25:200
+# human_slices_dim_3 <- 25:220
+human_slices_dim_1 <- 1:66
+human_slices_dim_3 <- 1:63
 human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
 
 #Human mask
-human_mask <- "../../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
+# human_mask <- "../../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
+human_mask <- "../../data/human/registration/v3/reference_files/mask_3.0mm.mnc"
 
 #Mouse mask
 mouse_mask <- "../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
 
 #Threshold method
-threshold <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold)
+# threshold <- params %>% 
+#   filter(id == params_id) %>% 
+#   pull(threshold)
+threshold <- "top_n"
 
 #Threshold value
-threshold_value <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_value)
+# threshold_value <- params %>% 
+#   filter(id == params_id) %>% 
+#   pull(threshold_value)
+threshold_value <- 0.2
 
 #Threshold symmetric option
-threshold_symmetric <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_symmetric)
+# threshold_symmetric <- params %>% 
+#   filter(id == params_id) %>% 
+#   pull(threshold_symmetric)
+threshold_symmetric <- TRUE
 
 #Max nk
-nk_max <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_cluster_nk_max)
+# nk_max <- params %>% 
+#   filter(id == params_id) %>% 
+#   pull(human_cluster_nk_max)
+nk_max <- 10
 ```
 
 ```{r human-centroids}
@@ -154,7 +168,7 @@ for (nk in 2:nk_max) {
     for (j in jacobians) {
       
       #Import centroid image for specific cluster using threshold
-      img <- import_cluster_map(imgdir = human_cluster_map_dirs[[j]],
+      img <- import_cluster_map(imgdir = human_centroid_dirs[[j]],
                                 mask = human_mask,
                                 nk = nk, k = k,
                                 threshold = threshold,
@@ -174,8 +188,8 @@ for (nk in 2:nk_max) {
     }
     
     #Slice series for absolute and relative centroid
-    ss <- sliceSeries(nrow = 6, ncol = 2, begin = 50, end = 200) %>% 
-      anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
+    ss <- sliceSeries(nrow = 6, ncol = 2, begin = 15, end = 60) %>% 
+      anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
       overlay(list_human_centroids[["absolute"]], 
               low = list_human_overlay[["absolute"]][1],
               high = list_human_overlay[["absolute"]][2],
@@ -216,7 +230,7 @@ for (nk in 2:nk_max) {
     for (j in jacobians) {
       
       #Import centroid image for specific cluster using threshold
-      img <- import_cluster_map(imgdir = mouse_cluster_map_dirs[[j]],
+      img <- import_cluster_map(imgdir = mouse_centroid_dirs[[j]],
                                 mask = mouse_mask,
                                 nk = nk, k = k,
                                 threshold = threshold,

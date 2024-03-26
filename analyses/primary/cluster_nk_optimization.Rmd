@@ -22,7 +22,7 @@ suppressPackageStartupMessages(library(RColorBrewer))
 ```{r functions}
 source("../../src/utils.R")
 
-#Function to estimate cluster metrics over a range of solutions
+# Function to estimate cluster metrics over a range of solutions
 estimate_cluster_metrics <- function (W, NUMC = 2:5){
   if (min(NUMC) == 1) {
     warning("Note that we always assume there are more than one cluster.")
@@ -70,17 +70,15 @@ estimate_cluster_metrics <- function (W, NUMC = 2:5){
 ```
 
 ```{r directories}
-#Output directory
+# Output directory
 output_dir <- "outputs/cluster_nk_optimization/"
 
-#Human pipeline
-# human_version <- "v1"
-human_version <- "v2"
-# human_version <- "v2_test"
+# Human pipeline
+human_version <- "v3"
 human_pipeline_dir <- "../../data/human/derivatives/"
 human_pipeline_dir <- file.path(human_pipeline_dir, human_version)
 
-#Mouse pipeline
+# Mouse pipeline
 mouse_version <- "v2"
 mouse_pipeline_dir <- "../../data/mouse/derivatives/"
 mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_version)
@@ -90,7 +88,7 @@ mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_version)
 mouse_resolution <- 0.2
 mouse_cluster_map_method <- "mean"
 
-#Identify mouse parameter set ID
+# Identify mouse parameter set ID
 mouse_metadata <- file.path(mouse_pipeline_dir, "metadata.csv")
 mouse_params <- fetch_params_metadata(mouse_metadata, 
                                       resolution = mouse_resolution,
@@ -99,23 +97,29 @@ mouse_params
 ```
 
 ```{r human-params}
-human_resolution <- 0.8
+# dataset <- "POND-SickKids"
+dataset <- "HBN"
+human_resolution <- 3.0
 human_es_method <- "normative-growth"
-# human_es_method <- "propensity-matching"
+human_es_group <- "patients"
 human_es_df <- 3
-# human_es_df <- NA
-# human_es_ncontrols <- 10
 human_es_ncontrols <- NA
 human_cluster_map_method <- mouse_cluster_map_method
+
+# human_es_method <- "propensity-matching"
+# human_es_df <- NA
+# human_es_ncontrols <- 10
 
 #Identify human parameter set ID
 human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
 human_params <- fetch_params_metadata(metadata = human_metadata,
+                                      dataset = dataset,
                                       resolution = human_resolution,
                                       es_method = human_es_method,
+                                      es_group = human_es_group,
                                       es_df = human_es_df,
                                       es_ncontrols = human_es_ncontrols,
-                                      cluster_map_method = human_cluster_map_method)
+                                      centroid_method = human_cluster_map_method)
 human_params
 ```
 
@@ -123,15 +127,17 @@ human_params
 #Parameter set IDs
 mouse_params_id <- 107
 # human_params_id <- 256
-human_params_id <- 700
-# human_params_id <- 547
+# human_params_id <- 700
+# human_params_id <- "547"
+human_params_id <- "664"
 
 #Mouse clustering directory
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters")
 human_cluster_dir <- file.path(human_pipeline_dir, human_params_id, "clusters")
 
 #Human clustering directory
-human_params <- fetch_params_metadata(metadata = human_metadata,id = human_params_id)
+human_params <- fetch_params_metadata(metadata = human_metadata,
+                                      id = human_params_id)
 human_cluster_resolution <- human_params[["cluster_resolution"]]
 human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
 human_cluster_dir <- file.path(human_cluster_dir, str_c("resolution_", human_cluster_resolution))
