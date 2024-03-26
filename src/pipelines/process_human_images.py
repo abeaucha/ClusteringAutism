@@ -379,6 +379,7 @@ def initialize(**kwargs):
     # Dictionary containing pipeline paths
     paths = dict(
         pipeline = pipeline_dir,
+        demographics = demographics,
         jacobians = imgdir,
         effect_sizes = es_dir,
         clusters = cluster_dir,
@@ -455,7 +456,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
     kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
     kwargs['batch'] = (None if kwargs['batch'] is None
                        else '-'.join(kwargs['batch']))
-
+                       
     # Driver script
     script = 'compute_effect_sizes.R'
 
@@ -765,17 +766,17 @@ def main(pipeline_dir, input_dir, demographics, mask,
 
     # Get dictionary of function kwargs
     kwargs = locals().copy()
-
+    
     # Initialize pipeline directory tree
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
-
+    
     # Compute effect size images
     print("Computing effect sizes...")
     es_kwargs = {key.replace('es_', ''):val
                  for key, val in kwargs.items() if 'es_' in key}
     es_kwargs.update(
-        dict(imgdir = paths['jacobians'], demographics = demographics,
+        dict(imgdir = paths['jacobians'], demographics = paths['demographics'],
              mask = mask, outdir = paths['effect_sizes'],
              matrix_resolution = cluster_resolution,
              execution = execution, nproc = nproc,
