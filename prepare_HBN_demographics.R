@@ -106,8 +106,8 @@ hbn_dx <- read_csv(hbn_dx, show_col_types = FALSE)
 hbn_dx <- hbn_dx[2:nrow(hbn_dx),]
 
 # dx_group <- "NDD"
-# dx_group <- "Anxiety"
-dx_group <- "AnxietyDepression"
+dx_group <- "Anxiety"
+# dx_group <- "AnxietyDepression"
 if (dx_group == "NDD") {
   
   #Disorder groups to include
