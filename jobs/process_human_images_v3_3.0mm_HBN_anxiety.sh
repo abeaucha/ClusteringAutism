@@ -18,7 +18,7 @@ REGISTRY="process_human_images_registry_${SLURM_JOB_ID}"
 
 # Execute pipeline
 process_human_images.py \
---pipeline-dir data/human/derivatives/v3/ \
+--pipeline-dir data/human/derivatives/v3_HBN_anxiety/ \
 --input-dir data/human/registration/v3/jacobians_resampled/resolution_3.0/ \
 --demographics data/human/registration/v3/subject_info/demographics_HBN_Anxiety.csv \
 --mask data/human/registration/v3/reference_files/mask_3.0mm.mnc \
