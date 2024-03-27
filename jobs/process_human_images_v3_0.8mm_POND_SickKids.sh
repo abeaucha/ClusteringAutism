@@ -16,6 +16,9 @@ source activate_venv_hpc.sh
 # Pipeline registry directory
 REGISTRY="process_human_images_registry_${SLURM_JOB_ID}"
 
+# What node is executing?
+echo $SLURM_NODELIST
+
 # Execute pipeline
 process_human_images.py \
 --pipeline-dir data/human/derivatives/v3/ \
