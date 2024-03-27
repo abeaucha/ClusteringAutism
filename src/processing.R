@@ -541,12 +541,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   #                   walltime=90*60)
   # verbose <- TRUE
 
-  # demographics <- "data/human/derivatives/v3/664/demographics.csv"
-  # imgdir <- "data/human/derivatives/v3/664/jacobians/absolute/"
-  # batch <- "Site"
-  # key <- "file"
-  # verbose <- TRUE
-
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
@@ -582,9 +576,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   imgfiles <- imgfiles[imgs_in_demographics]
   row_match <- match(basename(imgfiles), demographics[[key]])
   demographics <- demographics[row_match,]
-
-  print(imgfiles[1:10])
-  quit()
 
   ti <- Sys.time()
   # Run normative growth modelling
