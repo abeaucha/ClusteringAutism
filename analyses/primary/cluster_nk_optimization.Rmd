@@ -129,7 +129,7 @@ mouse_params_id <- 107
 # human_params_id <- 256
 # human_params_id <- 700
 # human_params_id <- "547"
-human_params_id <- "664"
+# human_params_id <- "664"
 
 #Mouse clustering directory
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters")

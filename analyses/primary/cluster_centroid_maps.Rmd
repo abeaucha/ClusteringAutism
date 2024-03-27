@@ -66,7 +66,11 @@ jacobians <- c("absolute", "relative")
 # human_params_id <- params %>% 
   # filter(id == params_id) %>% 
   # pull(human_id)
+# human_params_id <- "547"
+# human_params_id <- "664"
+# human_params_id <- "577"
 human_params_id <- "952"
+
 
 #Mouse parameter set ID
 # mouse_params_id <- params %>% 
@@ -98,7 +102,7 @@ names(mouse_centroid_dirs) <- jacobians
 # output_dir <- file.path(output_dir, version, params_id)
 # output_dir <- file.path(output_dir, version, "POND_SickKids_controls")
 # output_dir <- file.path(output_dir, version, "HBN_patients")
-output_dir <- file.path(output_dir, version, "HBN_controls")
+output_dir <- file.path(output_dir, version, human_params_id)
 if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
