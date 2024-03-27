@@ -541,9 +541,12 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   #                   walltime=90*60)
   # verbose <- TRUE
 
-  print(batch)
-  quit()
-  
+  # demographics <- "data/human/derivatives/v3/664/demographics.csv"
+  # imgdir <- "data/human/derivatives/v3/664/jacobians/absolute/"
+  # batch <- "Site"
+  # key <- "file"
+  # verbose <- TRUE
+
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
@@ -557,10 +560,9 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   demographics <- demographics %>%
     filter(!is.na(DX),
            !is.na(Age),
-           !is.na(Sex),
-           !is.na(Site),
-           !is.na(Scanner))
+           !is.na(Sex))
 
+  # TODO: Remove rows where batch columns are NA
   # Check existence of batch columns
   if (!is.null(batch)) {
     batch <- str_split(batch, pattern = "-")[[1]]
@@ -573,9 +575,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
 
   # Image files
   imgfiles <- list.files(imgdir, full.names = TRUE)
-
-  print(imgfiles[1:10])
-  quit()
 
   # Match image files to demographics
   if (verbose) {message("Matching image files to demographics...")}
