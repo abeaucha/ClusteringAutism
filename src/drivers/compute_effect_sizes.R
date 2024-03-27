@@ -137,10 +137,6 @@ nproc <- args[["nproc"]]
 execution <- args[["execution"]]
 verbose <- ifelse(args[["verbose"]] == "true", TRUE, FALSE)
 
-
-print(demographics)
-quit()
-
 # Check required arguments
 args_req <- c("imgdir", "demographics", "mask", "outdir")
 for (arg in args_req) {
