@@ -106,8 +106,9 @@ hbn_dx <- read_csv(hbn_dx, show_col_types = FALSE)
 hbn_dx <- hbn_dx[2:nrow(hbn_dx),]
 
 # dx_group <- "NDD"
-dx_group <- "Anxiety"
+# dx_group <- "Anxiety"
 # dx_group <- "AnxietyDepression"
+dx_group <- "Depression"
 if (dx_group == "NDD") {
   
   #Disorder groups to include
@@ -175,6 +176,19 @@ if (dx_group == "NDD") {
   
   hbn_dx_include <- c("Anxiety Disorders",
                       "Depressive Disorders",
+                      "No Diagnosis Given")
+  hbn_dx_exclude <- c("")
+  
+  hbn_dx_labels <- hbn_dx %>% 
+    filter(DX_01_Cat %in% hbn_dx_include) %>% 
+    select(DX_01) %>% 
+    distinct() %>% 
+    mutate(DX = ifelse(DX_01 == "No Diagnosis Given",
+                       "Control", DX_01)) 
+  
+} else if (dx_group == "Depression") {
+  
+  hbn_dx_include <- c("Depressive Disorders",
                       "No Diagnosis Given")
   hbn_dx_exclude <- c("")
   
