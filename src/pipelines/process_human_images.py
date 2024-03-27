@@ -248,9 +248,7 @@ def parse_args():
         help = "Walltime in minutes for Slurm jobs."
     )
 
-    args = vars(parser.parse_args())
-
-    return args
+    return vars(parser.parse_args())
 
 
 # Modules --------------------------------------------------------------------
