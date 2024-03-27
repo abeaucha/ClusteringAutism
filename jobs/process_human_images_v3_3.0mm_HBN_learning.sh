@@ -5,7 +5,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=1:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
-#SBATCH --output=logs/process_human_images_v3_3.0mm_HBN_anxiety_%j.out
+#SBATCH --output=logs/process_human_images_v3_3.0mm_HBN_learning_%j.out
 
 # This pipeline ran in 32 minutes with --time=2:00:00.
 # Should be able to run it with a shorter walltime.
