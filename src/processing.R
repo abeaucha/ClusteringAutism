@@ -540,7 +540,9 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # resources <- list(memory="20G",
   #                   walltime=90*60)
   # verbose <- TRUE
-  
+
+  print(batch)
+  quit()
   
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
