@@ -108,7 +108,9 @@ hbn_dx <- hbn_dx[2:nrow(hbn_dx),]
 # dx_group <- "NDD"
 # dx_group <- "Anxiety"
 # dx_group <- "AnxietyDepression"
-dx_group <- "Depression"
+# dx_group <- "Depression"
+dx_group <- "Learning"
+# dx_group <- "Language"
 if (dx_group == "NDD") {
   
   #Disorder groups to include
@@ -199,19 +201,59 @@ if (dx_group == "NDD") {
     mutate(DX = ifelse(DX_01 == "No Diagnosis Given",
                        "Control", DX_01)) 
   
+} else if (dx_group == "Learning") {
+  
+  hbn_dx_include <- c("Specific Learning Disorder with Impairment in Mathematics",
+                      "Specific Learning Disorder with Impairment in Reading",
+                      "Specific Learning Disorder with Impairment in Written Expression",
+                      "No Diagnosis Given")
+  hbn_dx_exclude <- c("")
+  
+  hbn_dx_labels <- hbn_dx %>% 
+    filter(DX_01 %in% hbn_dx_include) %>% 
+    select(DX_01) %>% 
+    distinct() %>% 
+    mutate(DX = ifelse(DX_01 == "No Diagnosis Given",
+                       "Control", DX_01)) 
+  
+} else if (dx_group == "Language") {
+  
+  hbn_dx_include <- c("Language Disorder",
+                      "Speech Sound Disorder",
+                      "Social (Pragmatic) Communication Disorder",
+                      "No Diagnosis Given")
+  hbn_dx_exclude <- c("")
+  
+  hbn_dx_labels <- hbn_dx %>% 
+    filter(DX_01 %in% hbn_dx_include) %>% 
+    select(DX_01) %>% 
+    distinct() %>% 
+    mutate(DX = ifelse(DX_01 == "No Diagnosis Given",
+                       "Control", DX_01)) 
+  
 } else {
   stop()
 }
 
 # Select DX columns and rows
+# hbn_dx <- hbn_dx %>% 
+#   select(Subject_ID = EID, 
+#          DX_01_Cat,
+#          DX_01) %>% 
+#   filter(DX_01_Cat %in% hbn_dx_include,
+#          !(DX_01 %in% hbn_dx_exclude),
+#          !is.na(DX_01)) %>% 
+#   arrange(DX_01_Cat, DX_01)
+
 hbn_dx <- hbn_dx %>% 
   select(Subject_ID = EID, 
          DX_01_Cat,
          DX_01) %>% 
-  filter(DX_01_Cat %in% hbn_dx_include,
+  filter(DX_01 %in% hbn_dx_include,
          !(DX_01 %in% hbn_dx_exclude),
          !is.na(DX_01)) %>% 
   arrange(DX_01_Cat, DX_01)
+
 
 # The diagnostic data frame seems to have duplicated entries.
 # Remove those.
