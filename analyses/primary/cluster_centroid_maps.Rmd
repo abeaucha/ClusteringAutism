@@ -27,6 +27,7 @@ output_dir <- "outputs/cluster_centroid_maps/"
 
 #Similarity pipeline
 version <- "v3"
+version <- "v3_HBN_anxiety"
 # version <- "v2"
 # pipeline_dir <- "../../data/cross_species/"
 # pipeline_dir <- file.path(pipeline_dir, version)
@@ -69,8 +70,8 @@ jacobians <- c("absolute", "relative")
 # human_params_id <- "547"
 # human_params_id <- "664"
 # human_params_id <- "577"
-human_params_id <- "952"
-
+# human_params_id <- "952"
+human_params_id <- "593"
 
 #Mouse parameter set ID
 # mouse_params_id <- params %>% 
