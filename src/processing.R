@@ -523,7 +523,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   registry_cleanup = TRUE,
                                   njobs = NULL, resources = list()) {
 
-  
   # imgdir <- "data/human/derivatives/v3/700/jacobians/absolute/"
   # demographics <- "data/human/registration/v3/subject_info/demographics.csv"
   # mask <- "data/human/registration/v3/reference_files/mask_0.8mm.mnc"

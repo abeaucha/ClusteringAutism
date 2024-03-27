@@ -4,7 +4,7 @@
 # Author: Antoine Beauchamp
 # Created: December 23rd, 2023
 #
-# Calculate voxel-wise effect sizes for human patients
+# Calculate voxel-wise effect size images for human patients
 
 # Description
 # -----------
