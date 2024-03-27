@@ -25,7 +25,7 @@ process_human_images.py \
 --datasets HBN \
 --es-method normative-growth \
 --es-batch Site \
---es-group controls \
+--es-group patients \
 --es-df 3 \
 --cluster-resolution 3.0 \
 --execution slurm \

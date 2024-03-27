@@ -25,7 +25,7 @@ process_human_images.py \
 --datasets POND SickKids \
 --es-method normative-growth \
 --es-batch Site Scanner \
---es-group controls \
+--es-group patients \
 --es-df 3 \
 --cluster-resolution 3.0 \
 --execution slurm \
