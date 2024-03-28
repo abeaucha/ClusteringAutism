@@ -331,7 +331,7 @@ def initialize(**kwargs):
 
     # Check existence of the input directory
     if not os.path.exists(input_dir):
-        raise OSError("Input directory not found: ".format(input_dir))
+        raise OSError("Input directory not found: {}".format(input_dir))
 
     # Create pipeline sub-directories
     if not os.path.exists(imgdir):
@@ -368,7 +368,7 @@ def initialize(**kwargs):
         # Create symlinks to Jacobian images
         input_files = glob(os.path.join(input_dir, jac, '') + '*.mnc')
         if len(input_files) == 0:
-            raise OSError("No input files in directory: ".format(input_dir))
+            raise OSError("No input files in directory: {}".format(input_dir))
         input_files_in_dataset = [[f for f in input_files if g in f][0]
                                   for g in df_demographics['file'].to_list()]
         imgfiles = utils.mk_symlinks(src = input_files_in_dataset,
