@@ -21,6 +21,9 @@ Parameters governing the evaluation of the similarity computations are mappable.
 # Packages -------------------------------------------------------------------
 
 import argparse
+import os
+import utils
+from itertools import product
 
 
 # Command line arguments -----------------------------------------------------
@@ -72,6 +75,7 @@ def parse_args():
 
     parser.add_argument(
         '--masks',
+        nargs = 2,
         type = str,
         help = ("Paths to the mask files (.mnc).")
     )
@@ -130,7 +134,7 @@ def parse_args():
         '--threshold',
         type = str,
         default = 'top_n',
-        choices = ['none', 'top_n', 'intensity'],
+        choices = ['top_n', 'intensity', 'none'],
         help = ("Method used to threshold mouse and human cluster centroid "
                 "images prior to constructing gene expression signatures.")
     )
@@ -172,7 +176,6 @@ def parse_args():
 
 # Modules --------------------------------------------------------------------
 
-
 def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
          microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study_v3.csv',
          gene_space = 'average-latent-space',
@@ -182,11 +185,113 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
          threshold_symmetric = True,
          jacobians = ('absolute', 'relative'),
          nproc = 1):
-    pass
+    # Check jacobians type
+    if type(jacobians) is tuple:
+        jacobians = list(jacobians)
+    elif type(jacobians) is str:
+        jacobians = [jacobians]
+    else:
+        raise TypeError("`jacobians` must be a string or a tuple of strings.")
+
+    # Ensure proper paths
+    pipeline_dir = os.path.join(pipeline_dir, '')
+    input_dirs = [os.path.join(path, '') for path in input_dirs]
+    expr_dirs = [os.path.join(path, '') for path in expr_dirs]
+
+    # Fetch pipeline parameters
+    params = dict()
+    metadata = [os.path.join(path, 'metadata.csv') for path in input_dirs]
+    for i in range(len(metadata)):
+        if not os.path.exists(metadata[i]):
+            raise OSError("Input pipeline metadata file not found: {}"
+                          .format(metadata[i]))
+        params_i = utils.fetch_params_metadata(metadata[i],
+                                               id = param_ids[i])
+        params_i = params_i.to_dict(orient = 'list')
+        params_i['species'] = [species[i]]
+        params_i = {'_'.join(['input', str(i + 1), key]):val[0]
+                    for key, val in params_i.items()}
+        params.update(params_i)
+
+    # Update parameter sets with pipeline parameters
+    params.update(
+        dict(gene_space = gene_space,
+             n_latent_spaces = n_latent_spaces,
+             latent_space_id = latent_space_id,
+             metric = metric,
+             signed = signed,
+             threshold = threshold,
+             threshold_value = threshold_value,
+             threshold_symmetric = threshold_symmetric)
+    )
+
+    # Create pipeline directory for parameter set
+    pipeline_dir = utils.mkdir_from_params(params = params,
+                                           outdir = pipeline_dir)
+    pipeline_dir = os.path.join(pipeline_dir, 'similarity', '')
+    if not os.path.exists(pipeline_dir):
+        os.makedirs(pipeline_dir)
+
+    # Image resolutions
+    resolutions = list([params['input_1_resolution'],
+                        params['input_2_resolution']])
+
+    # Centroid directories
+    centroid_dirs = [os.path.join(input_dirs[i], param_ids[i],
+                                 'centroids',
+                                 'resolution_{}'.format(resolutions[i]), '')
+                    for i in range(len(input_dirs))]
+
+    # Iterate over Jacobians
+    for j, jac in enumerate(jacobians):
+
+        # Update input paths with jacobians
+        centroid_dirs_j = [os.path.join(path, jac, '')
+                           for path in centroid_dirs]
+
+        # Get input centroid image files
+        centroids_j = [os.listdir(path) for path in centroid_dirs_j]
+
+        # Prepend directory path to centroid image files
+        centroids_j = [[os.path.join(centroid_dirs_j[i], file)
+                      for file in centroids_j[i]]
+                     for i in range(len(centroids_j))]
+
+        # Expand centroid combinations for current Jacobians
+        centroid_pairs_j = list(product(centroids_j[0], centroids_j[1]))
+
+        # Concatenate Jacobian image pairs
+        if j == 0:
+            centroid_pairs = centroid_pairs_j
+        else:
+            centroid_pairs = centroid_pairs + centroid_pairs_j
+
+
+
+    return
 
 
 # Execution ------------------------------------------------------------------
 if __name__ == '__main__':
     args = parse_args()
-    print(args)
-    # main(**args)
+    args['input_dirs'] = tuple(args['input_dirs'])
+    args['param_ids'] = tuple(args['param_ids'])
+    args['species'] = tuple(args['species'])
+    args['expr_dirs'] = tuple(args['expr_dirs'])
+    args['masks'] = tuple(args['masks'])
+    args['jacobians'] = tuple(args['jacobians'])
+    args['signed'] = True if args['signed'] == 'true' else False
+    args['threshold_symmetric'] = (True if args['threshold_symmetric'] == 'true'
+                                   else False)
+    if args['gene_space'] == 'average-latent-space':
+        args['latent_space_id'] = None
+    elif args['gene_space'] == 'latent-space':
+        args['n_latent_spaces'] = None
+    else:
+        args['latent_space_id'] = None
+        args['n_latent_spaces'] = None
+    if args['threshold'] == 'none':
+        args['threshold'] = None
+        args['threshold_value'] = None
+        args['threshold_symmetric'] = None
+    main(**args)
