@@ -5,7 +5,7 @@
 # Created: March 11th, 2024
 
 """
-Execute human image processing pipeline.
+Execute the human image processing pipeline.
 
 Description
 -----------
