@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
-#SBATCH --time=12:00:00
+#SBATCH --time=24:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_images_v3_0.8mm_HBN_%j.out
 
@@ -27,6 +27,7 @@ process_human_images.py \
 --mask data/human/registration/v3/reference_files/mask_0.8mm.mnc \
 --datasets HBN \
 --es-method normative-growth \
+--es-batch Site \
 --es-group patients \
 --es-df 3 \
 --cluster-resolution 3.0 \
@@ -35,7 +36,7 @@ process_human_images.py \
 --registry-name $REGISTRY \
 --registry-cleanup true \
 --slurm-njobs 300 \
---slurm-time 90 \
---slurm-mem 20G
+--slurm-time 60 \
+--slurm-mem 16G
 
 deactivate
