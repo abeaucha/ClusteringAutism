@@ -201,6 +201,14 @@ def parse_args():
 
     # Execution arguments ----------------------------------------------------
     parser.add_argument(
+        '--stages',
+        nargs = '*',
+        type = str,
+        default = ['effect-sizes', 'clusters', 'centroids'],
+        help = "List of strings indicating which pipeline stages to execute."
+    )
+
+    parser.add_argument(
         '--execution',
         type = str,
         default = 'local',
@@ -681,6 +689,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
          cluster_file = 'clusters.csv',
          cluster_affinity_file = 'affinity.csv',
          centroid_method = 'mean',
+         stages = ('effect-sizes', 'clusters', 'centroids'),
          execution = 'local', nproc = 1,
          registry_name = None, registry_cleanup = True,
          slurm_njobs = None, slurm_mem = None, slurm_time = None):
@@ -741,6 +750,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
         affinity matrix.
     centroid_method: {'mean', 'median'}
         Method used to compute cluster centroid images.
+    stages: tuple of str
+        Strings indicating which pipeline stages to execute.
     execution: {'local', 'slurm'}
         Flag indicating whether the pipeline should be executed or
         using the Slurm scheduler on an HPC cluster.
@@ -764,50 +775,77 @@ def main(pipeline_dir, input_dir, demographics, mask,
 
     # Get dictionary of function kwargs
     kwargs = locals().copy()
-    
+
+    stages = ('effect-sizes', 'clusters', 'centroids')
+    stages = ('effect-sizes', 'clusters')
+    stages = ('clusters', 'centroids')
+
+    # Error if > 3 stages passed
+    if len(stages) > 3:
+        raise Exception
+
+    # Error if stages not in options list
+    stages_opt = ('effect-sizes', 'clusters', 'centroids')
+    for stage in stages:
+        if stage not in stages_opt:
+            raise Exception
+
+    # Generate stages flags
+    stages = {stage:True if stage in stages else False for stage in stages_opt}
+
+    # Create dictionary
+    stages_dict = dict(
+        es = True if 'effect-sizes' in stages else False,
+        clusters = True if 'clusters' in stages else False,
+        centroids = True if 'centroids' in stages else False,
+    )
+
     # Initialize pipeline directory tree
     print("Initializing pipeline...")
     paths = initialize(**kwargs)
     
     # Compute effect size images
-    print("Computing effect sizes...")
-    es_kwargs = {key.replace('es_', ''):val
-                 for key, val in kwargs.items() if 'es_' in key}
-    es_kwargs.update(
-        dict(imgdir = paths['jacobians'], demographics = paths['demographics'],
-             mask = mask, outdir = paths['effect_sizes'],
-             matrix_resolution = cluster_resolution,
-             execution = execution, nproc = nproc,
-             registry_name = registry_name,
-             registry_cleanup = registry_cleanup,
-             slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
-             slurm_time = slurm_time)
-    )
-    es_outputs = effect_sizes(**es_kwargs)
+    if stages['effect-sizes']:
+        print("Computing effect sizes...")
+        es_kwargs = {key.replace('es_', ''):val
+                     for key, val in kwargs.items() if 'es_' in key}
+        es_kwargs.update(
+            dict(imgdir = paths['jacobians'], demographics = paths['demographics'],
+                 mask = mask, outdir = paths['effect_sizes'],
+                matrix_resolution = cluster_resolution,
+                execution = execution, nproc = nproc,
+                registry_name = registry_name,
+                registry_cleanup = registry_cleanup,
+                slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
+                slurm_time = slurm_time)
+        )
+        es_outputs = effect_sizes(**es_kwargs)
 
     # Generate clusters
-    print("Generating clusters...")
-    cluster_kwargs = dict(
-        infiles = [es_outputs[key]['matrix'] for key in es_outputs.keys()],
-        nk_max = cluster_nk_max, metric = cluster_metric, K = cluster_K,
-        sigma = cluster_sigma, t = cluster_t,
-        cluster_file = os.path.join(paths['clusters'], cluster_file),
-        affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
-    )
-    clusters = clustering(**cluster_kwargs)
+    if stages['clusters']:
+        print("Generating clusters...")
+        cluster_kwargs = dict(
+            infiles = [es_outputs[key]['matrix'] for key in es_outputs.keys()],
+            nk_max = cluster_nk_max, metric = cluster_metric, K = cluster_K,
+            sigma = cluster_sigma, t = cluster_t,
+            cluster_file = os.path.join(paths['clusters'], cluster_file),
+            affinity_file = os.path.join(paths['clusters'], cluster_affinity_file)
+        )
+        clusters = clustering(**cluster_kwargs)
 
     # Compute cluster centroid images
-    centroid_kwargs = dict(
-        clusters = clusters, imgdir = paths['effect_sizes'],
-        outdir = paths['centroids'], mask = mask,
-        method = centroid_method,
-        execution = execution, nproc = nproc,
-        registry_name = registry_name,
-        registry_cleanup = registry_cleanup,
-        slurm_mem = slurm_mem,
-        slurm_time = slurm_time
-    )
-    centroid_outputs = centroids(**centroid_kwargs)
+    if stages['centroids']:
+        centroid_kwargs = dict(
+            clusters = clusters, imgdir = paths['effect_sizes'],
+            outdir = paths['centroids'], mask = mask,
+            method = centroid_method,
+            execution = execution, nproc = nproc,
+            registry_name = registry_name,
+            registry_cleanup = registry_cleanup,
+            slurm_mem = slurm_mem,
+            slurm_time = slurm_time
+        )
+        centroid_outputs = centroids(**centroid_kwargs)
 
     print("Pipeline complete.")
 
@@ -819,6 +857,7 @@ if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
     args['es_batch'] = tuple(args['es_batch'])
+    args['stages'] = tuple(args['stages'])
     args['registry_cleanup'] = True if args['registry_cleanup'] == 'true' \
         else False
     main(**args)
