@@ -176,30 +176,30 @@ def parse_args():
 
 # Modules --------------------------------------------------------------------
 
-def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
-         microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study_v3.csv',
-         gene_space = 'average-latent-space',
-         n_latent_spaces = 100, latent_space_id = 1,
-         metric = 'correlation', signed = True,
-         threshold = 'top_n', threshold_value = 0.2,
-         threshold_symmetric = True,
-         jacobians = ('absolute', 'relative'),
-         nproc = 1):
-    # Check jacobians type
-    if type(jacobians) is tuple:
-        jacobians = list(jacobians)
-    elif type(jacobians) is str:
-        jacobians = [jacobians]
-    else:
-        raise TypeError("`jacobians` must be a string or a tuple of strings.")
+@utils.timing
+def initialize(**kwargs):
+    """
+    Initialize the image processing pipeline.
+
+    Parameters
+    ----------
+    kwargs: dict
+        All arguments passed to the main() function.
+
+    Returns
+    -------
+    paths: list of str
+        List of paths to the pipeline sub-directories
+    """
 
     # Ensure proper paths
-    pipeline_dir = os.path.join(pipeline_dir, '')
-    input_dirs = [os.path.join(path, '') for path in input_dirs]
-    expr_dirs = [os.path.join(path, '') for path in expr_dirs]
+    pipeline_dir = os.path.join(kwargs['pipeline_dir'], '')
+    input_dirs = [os.path.join(path, '') for path in kwargs['input_dirs']]
+    expr_dirs = [os.path.join(path, '') for path in kwargs['expr_dirs']]
 
     # Fetch pipeline parameters
     params = dict()
+    param_ids = kwargs['param_ids']
     metadata = [os.path.join(path, 'metadata.csv') for path in input_dirs]
     for i in range(len(metadata)):
         if not os.path.exists(metadata[i]):
@@ -208,21 +208,21 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         params_i = utils.fetch_params_metadata(metadata[i],
                                                id = param_ids[i])
         params_i = params_i.to_dict(orient = 'list')
-        params_i['species'] = [species[i]]
+        params_i['species'] = [kwargs['species'][i]]
         params_i = {'_'.join(['input', str(i + 1), key]):val[0]
                     for key, val in params_i.items()}
         params.update(params_i)
 
     # Update parameter sets with pipeline parameters
     params.update(
-        dict(gene_space = gene_space,
-             n_latent_spaces = n_latent_spaces,
-             latent_space_id = latent_space_id,
-             metric = metric,
-             signed = signed,
-             threshold = threshold,
-             threshold_value = threshold_value,
-             threshold_symmetric = threshold_symmetric)
+        dict(gene_space = kwargs['gene_space'],
+             n_latent_spaces = kwargs['n_latent_spaces'],
+             latent_space_id = kwargs['latent_space_id'],
+             metric = kwargs['metric'],
+             signed = kwargs['signed'],
+             threshold = kwargs['threshold'],
+             threshold_value = kwargs['threshold_value'],
+             threshold_symmetric = kwargs['threshold_symmetric'])
     )
 
     # Create pipeline directory for parameter set
@@ -238,9 +238,37 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 
     # Centroid directories
     centroid_dirs = [os.path.join(input_dirs[i], param_ids[i],
-                                 'centroids',
-                                 'resolution_{}'.format(resolutions[i]), '')
-                    for i in range(len(input_dirs))]
+                                  'centroids',
+                                  'resolution_{}'.format(resolutions[i]), '')
+                     for i in range(len(input_dirs))]
+
+    # Dictionary containing pipeline paths
+    paths = dict(
+        pipeline = pipeline_dir,
+        centroids = centroid_dirs
+    )
+
+    return paths
+
+
+@utils.timing
+def generate_centroid_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
+    """
+    Generate pairs of centroid images
+
+    Parameters
+    ----------
+    centroid_dirs: list of str
+        List of paths to the directories containing the centroid images.
+        Expects sub-directories named 'absolute', 'relative', or both.
+    jacobians: tuple of str
+        Strings indicating which Jacobian images to use.
+
+    Returns
+    -------
+    centroid_pairs: list of tuple of str
+        List of tuples containing the pairs of centroid images.
+    """
 
     # Iterate over Jacobians
     for j, jac in enumerate(jacobians):
@@ -254,8 +282,8 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 
         # Prepend directory path to centroid image files
         centroids_j = [[os.path.join(centroid_dirs_j[i], file)
-                      for file in centroids_j[i]]
-                     for i in range(len(centroids_j))]
+                        for file in centroids_j[i]]
+                       for i in range(len(centroids_j))]
 
         # Expand centroid combinations for current Jacobians
         centroid_pairs_j = list(product(centroids_j[0], centroids_j[1]))
@@ -266,7 +294,49 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         else:
             centroid_pairs = centroid_pairs + centroid_pairs_j
 
+    return centroid_pairs
 
+
+@utils.timing
+def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
+         microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study_v3.csv',
+         gene_space = 'average-latent-space',
+         n_latent_spaces = 100, latent_space_id = 1,
+         metric = 'correlation', signed = True,
+         threshold = 'top_n', threshold_value = 0.2,
+         threshold_symmetric = True,
+         jacobians = ('absolute', 'relative'),
+         nproc = 1):
+    # Adapt gene space parameters to selected gene space
+    if gene_space == 'average-latent-space':
+        latent_space_id = None
+    elif gene_space == 'latent-space':
+        n_latent_spaces = None
+    elif gene_space == 'homologous-genes':
+        latent_space_id = None
+        n_latent_spaces = None
+    else:
+        raise ValueError
+
+    # Adapt thresholding parameters if no thresholding specified
+    if threshold is None:
+        threshold_value = None
+        threshold_symmetric = None
+
+    kwargs = locals().copy()
+
+    # Initialize pipeline directory tree
+    print("Initializing pipeline...")
+    paths = initialize(**kwargs)
+
+    # Generate pairs of centroid images
+    print("Generating centroid image pairs...")
+    centroid_pairs = generate_centroid_pairs(centroid_dirs = paths['centroids'],
+                                             jacobians = jacobians)
+
+    # Next step is execution. Depends on whether this is local or on Slurm.
+    # On Slurm, will need to create a bunch of job scripts and then deploy
+    # those. Means I need a Python driver script.
 
     return
 
@@ -281,17 +351,8 @@ if __name__ == '__main__':
     args['masks'] = tuple(args['masks'])
     args['jacobians'] = tuple(args['jacobians'])
     args['signed'] = True if args['signed'] == 'true' else False
+    args['threshold'] = (None if args['threshold'] == 'none'
+                         else args['threshold'])
     args['threshold_symmetric'] = (True if args['threshold_symmetric'] == 'true'
                                    else False)
-    if args['gene_space'] == 'average-latent-space':
-        args['latent_space_id'] = None
-    elif args['gene_space'] == 'latent-space':
-        args['n_latent_spaces'] = None
-    else:
-        args['latent_space_id'] = None
-        args['n_latent_spaces'] = None
-    if args['threshold'] == 'none':
-        args['threshold'] = None
-        args['threshold_value'] = None
-        args['threshold_symmetric'] = None
     main(**args)
