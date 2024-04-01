@@ -44,7 +44,7 @@ import_image <- function(img, mask = NULL, flatten = TRUE, version = "v1") {
       if (version == "v2") {
         img[mask < 0.5] <- 0
       } else {
-        img[mask == 0] <- 0
+        img[mask != 1] <- 0
       }
     }
   }
