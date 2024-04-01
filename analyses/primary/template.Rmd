@@ -1,0 +1,44 @@
+---
+title: "Title"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r env}
+SRCPATH <- Sys.getenv("SRCPATH")
+# SRCPATH <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main/src"
+```
+
+```{r functions}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r directories}
+# Output directory
+output_dir <- "outputs/"
+
+# Pipeline 
+version <- "v3"
+pipeline_dir <- ""
+pipeline_dir <- file.path(pipeline_dir, version)
+```
+
+```{r params}
+# Identify parameter set ID
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata, ...)
+```
+
