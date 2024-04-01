@@ -2,7 +2,7 @@
 #SBATCH --job-name=process_human_images_0.8mm
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=128G
+#SBATCH --mem=160G
 #SBATCH --time=24:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_images_v3_0.8mm_HBN_%j.out
@@ -34,7 +34,7 @@ process_human_images.py \
 --execution slurm \
 --nproc 8 \
 --registry-name $REGISTRY \
---registry-cleanup true \
+--registry-cleanup false \
 --slurm-njobs 300 \
 --slurm-time 60 \
 --slurm-mem 16G
