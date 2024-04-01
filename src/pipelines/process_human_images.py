@@ -751,7 +751,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
     centroid_method: {'mean', 'median'}
         Method used to compute cluster centroid images.
     stages: tuple of str
-        Strings indicating which pipeline stages to execute.
+        Strings indicating which pipeline stages to execute. Must be a
+        combination of 'effect-sizes', 'clusters', and 'centroids'.
     execution: {'local', 'slurm'}
         Flag indicating whether the pipeline should be executed or
         using the Slurm scheduler on an HPC cluster.
@@ -776,29 +777,20 @@ def main(pipeline_dir, input_dir, demographics, mask,
     # Get dictionary of function kwargs
     kwargs = locals().copy()
 
-    stages = ('effect-sizes', 'clusters', 'centroids')
-    stages = ('effect-sizes', 'clusters')
-    stages = ('clusters', 'centroids')
-
     # Error if > 3 stages passed
     if len(stages) > 3:
-        raise Exception
+        raise Exception("Got more than three stages: {}".format(stages))
 
     # Error if stages not in options list
     stages_opt = ('effect-sizes', 'clusters', 'centroids')
     for stage in stages:
         if stage not in stages_opt:
-            raise Exception
+            raise ValueError("Pipeline stage '{}' not recognized."
+                             .format(stage))
 
     # Generate stages flags
-    stages = {stage:True if stage in stages else False for stage in stages_opt}
-
-    # Create dictionary
-    stages_dict = dict(
-        es = True if 'effect-sizes' in stages else False,
-        clusters = True if 'clusters' in stages else False,
-        centroids = True if 'centroids' in stages else False,
-    )
+    stages = {stage:True if stage in stages else False
+              for stage in stages_opt}
 
     # Initialize pipeline directory tree
     print("Initializing pipeline...")
@@ -835,6 +827,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
 
     # Compute cluster centroid images
     if stages['centroids']:
+        print("Generating cluster centroids...")
         centroid_kwargs = dict(
             clusters = clusters, imgdir = paths['effect_sizes'],
             outdir = paths['centroids'], mask = mask,
