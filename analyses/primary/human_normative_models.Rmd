@@ -168,17 +168,3 @@ voxels <- qMincApply(filenames = imgfiles,
                      resources = resources)
 ```
 
-
-```{r}
-# voxels <- mcMincApply(filenames = imgfiles,
-#                       fun = compute_normative_zscore,
-#                       demographics = demographics,
-#                       group = group,
-#                       batch = batch,
-#                       df = df,
-#                       mask = mask,
-#                       cores = nproc,
-#                       return_raw = TRUE)
-```
-
-
