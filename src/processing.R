@@ -523,21 +523,21 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   registry_cleanup = TRUE,
                                   njobs = NULL, resources = list()) {
 
-  # imgdir <- "data/human/derivatives/v3/700/jacobians/absolute/"
+  # imgdir <- "data/human/derivatives/v3/013/jacobians/absolute/"
   # demographics <- "data/human/registration/v3/subject_info/demographics.csv"
   # mask <- "data/human/registration/v3/reference_files/mask_0.8mm.mnc"
-  # outdir <- "data/human/derivatives/v3/700/effect_sizes/resolution_0.8/absolute/"
+  # outdir <- "data/human/derivatives/v3/013/effect_sizes/resolution_0.8/absolute/"
   # key <- "file"
   # group <- "patients"
   # df <- 3
-  # batch <- "Site-Scanner"
+  # batch <- "Site"
   # execution <- "slurm"
   # nproc <- 8
   # registry_name <- "test"
   # registry_cleanup <- FALSE
   # njobs <- 300
-  # resources <- list(memory="20G",
-  #                   walltime=90*60)
+  # resources <- list(memory="16G",
+  #                   walltime=60*60)
   # verbose <- TRUE
 
   # Import demographics data
@@ -615,7 +615,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
 
   tf <- Sys.time()
   print(tf-ti)
-  print(paste("Matrix dimensions:", dim(voxels)))
 
   # Export images
   if (verbose) {message("Exporting normalized images...")}
