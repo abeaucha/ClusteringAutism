@@ -1,0 +1,145 @@
+---
+title: "Title"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r env}
+SRCPATH <- Sys.getenv("SRCPATH")
+# SRCPATH <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main/src"
+```
+
+```{r functions}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r directories}
+# Output directory
+output_dir <- "outputs/human_nk2_cluster_comparison/"
+dir.create(output_dir, recursive = TRUE)
+
+# Pipeline 
+pipeline_dir <- "../../data/human/derivatives/"
+pipeline_dirs_HBN <- list.files(pipeline_dir, full.names = TRUE, pattern = "v3")
+pipeline_dirs_HBN <- file.path(pipeline_dirs_HBN, "664")
+pipeline_dirs_PONDSK <- file.path(pipeline_dir, "v3", "547")
+pipeline_dirs <- c(pipeline_dirs_PONDSK, pipeline_dirs_HBN)
+
+centroid_dirs <- file.path(pipeline_dirs, "centroids", "resolution_3.0")
+
+datasets <- c("POND_SK_NDD",
+              "HBN_NDD", "HBN_Anx", "HBN_AnxDep", "HBN_Dep", "HBN_Learn")
+```
+
+```{r}
+maskfile <- "../../data/human/registration/v3/reference_files/mask_3.0mm.mnc"
+mask <- mincGetVolume(maskfile)
+
+modelfile <- "../../data/human/registration/v3/reference_files/model_3.0mm.mnc"
+```
+
+```{r}
+jacobians <- c("absolute", "relative")
+nk <- 2
+
+centroid_names <- c(paste(datasets, "2-1", sep = "_"),
+                    paste(datasets, "2-2", sep = "_"))
+
+list_centroids <- vector(mode = "list", length = length(jacobians))
+for (j in 1:length(jacobians)) {
+  
+  centroid_dirs_j <- file.path(centroid_dirs, jacobians[j])
+  
+  centroid_files_j <- c()
+  for (k in 1:nk) {
+    
+    file <- paste("centroid", "nk", nk, "k", k, sep = "_")
+    file <- paste0(file, ".mnc")
+    
+    centroid_files_j <- c(centroid_files_j, file.path(centroid_dirs_j, file))
+    
+  }
+  
+  centroids_j <- import_images(imgfiles = centroid_files_j, mask = maskfile,
+                               output_format = "matrix", flatten = TRUE, margin = 2)
+  colnames(centroids_j) <- centroid_names
+  
+  list_centroids[[j]] <- centroids_j 
+  # as_tibble(rownames = "Dataset1") %>% 
+  # pivot_longer(cols = -Dataset1, names_to = "Dataset2", values_to = "Correlation") %>% 
+  # mutate(Jacobians = jacobians[j])
+  
+}
+
+
+# df_centroids_cor <- bind_rows(list_centroids) %>% 
+#   mutate(Dataset1 = factor(Dataset1, levels = centroid_names),
+#          Dataset2 = factor(Dataset2, levels = centroid_names))
+```
+
+```{r}
+library(pheatmap)
+
+ind_AnxDep <- str_detect(centroid_names, "AnxDep")
+centroid_names_noAnxDep <- centroid_names[!ind_AnxDep]
+
+mat_rel <- list_centroids[[2]]
+mat_rel <- mat_rel[,!ind_AnxDep]
+mat_rel_cor <- cor(mat_rel)
+
+max_cor <- max(mat_rel_cor[mat_rel_cor != 1])
+min_cor <- min(mat_rel_cor)
+
+# for (i in 1:nrow(mat_rel_cor)) {
+#   mat_rel_cor[i,i] <- NA
+# }
+
+
+palette_length <- 255
+palette_colours <- rev(RColorBrewer::brewer.pal(n = 11, name = "RdYlBu"))
+palette_values <- seq(-0.7, 0.7, length.out = palette_length)
+palette <- colorRampPalette(palette_colours)(palette_length)
+
+outfile <- "centroid_cor_rel_pheatmap.pdf"
+outfile <- file.path(output_dir, outfile)
+pheatmap_rel <- pheatmap(mat_rel_cor, 
+                         breaks = palette_values, 
+                         color = palette,
+                         na_col = "grey20",
+                         main = "Correlations between 2-cluster relative centroids",
+                         filename = outfile, 
+                         width = 9, height = 8)
+```
+
+```{r}
+mat_abs <- list_centroids[[1]]
+mat_abs <- mat_abs[,!ind_AnxDep]
+mat_abs_cor <- cor(mat_abs)
+
+# for (i in 1:nrow(mat_abs_cor)) {
+#   mat_abs_cor[i,i] <- NA
+# }
+
+outfile <- "centroid_cor_abs_pheatmap.pdf"
+outfile <- file.path(output_dir, outfile)
+pheatmap_abs <- pheatmap(mat_abs_cor, 
+                         breaks = palette_values, 
+                         color = palette,
+                         na_col = "grey20",
+                         main = "Correlations between 2-cluster absolute centroids",
+                         filename = outfile, 
+                         width = 9, height = 8)
+```
