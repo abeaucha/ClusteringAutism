@@ -25,6 +25,7 @@ import os
 import sys
 import utils
 import numpy as np
+import pandas as pd
 from itertools import product
 
 
@@ -338,7 +339,9 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
                                              jacobians = jacobians)
 
     test = np.array(centroid_pairs)
+    test = pd.DataFrame(centroid_pairs)
     print(test.shape)
+    print(test.head())
     sys.exit()
 
 
