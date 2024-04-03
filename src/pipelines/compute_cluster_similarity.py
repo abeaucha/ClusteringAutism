@@ -287,13 +287,8 @@ def generate_centroid_pairs(centroid_dirs, jacobians = ('absolute', 'relative'))
                        for i in range(len(centroids_j))]
 
         # Expand centroid combinations for current Jacobians
-        centroid_pairs_j = [list(pair) for pair in list(product(centroids_j[0], centroids_j[1]))]
-
-        print(len(centroid_pairs_j))
-        print(type(centroid_pairs_j[0]))
-        print(len(centroid_pairs_j[0]))
-        print(centroid_pairs_j[:5])
-        sys.exit()
+        centroid_pairs_j = [list(pair) for pair in
+                            list(product(centroids_j[0], centroids_j[1]))]
 
         # Concatenate Jacobian image pairs
         if j == 0:
