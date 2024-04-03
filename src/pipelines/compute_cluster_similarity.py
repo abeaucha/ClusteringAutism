@@ -283,12 +283,6 @@ def generate_centroid_pairs(centroid_dirs, jacobians = ('absolute', 'relative'))
         # Get input centroid image files
         centroids_j = [os.listdir(path) for path in centroid_dirs_j]
 
-        print(type(centroids_j))
-        print(len(centroids_j))
-        print(type(centroids_j[0]))
-        print(len(centroids_j[0]))
-        sys.exit()
-
         # Prepend directory path to centroid image files
         centroids_j = [[os.path.join(centroid_dirs_j[i], file)
                         for file in centroids_j[i]]
@@ -296,6 +290,9 @@ def generate_centroid_pairs(centroid_dirs, jacobians = ('absolute', 'relative'))
 
         # Expand centroid combinations for current Jacobians
         centroid_pairs_j = list(product(centroids_j[0], centroids_j[1]))
+
+        print(len(centroid_pairs_j))
+        sys.exit()
 
         # Concatenate Jacobian image pairs
         if j == 0:
