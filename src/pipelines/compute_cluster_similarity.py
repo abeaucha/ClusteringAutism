@@ -46,7 +46,7 @@ def parse_args():
         '--species',
         nargs = 2,
         type = str,
-        help = ("Strings indicating which species are being compared.")
+        help = "Strings indicating which species are being compared."
     )
 
     parser.add_argument(
