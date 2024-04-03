@@ -285,6 +285,7 @@ def generate_centroid_pairs(centroid_dirs, jacobians = ('absolute', 'relative'))
 
         print(type(centroids_j))
         print(len(centroids_j))
+        print(type(centroids_j[0]))
         sys.exit()
 
         # Prepend directory path to centroid image files
