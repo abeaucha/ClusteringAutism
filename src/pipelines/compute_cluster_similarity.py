@@ -255,9 +255,9 @@ def initialize(**kwargs):
 
 
 @utils.timing
-def generate_centroid_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
+def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
     """
-    Generate pairs of centroid images
+    Generate pairs of cluster centroid images
 
     Parameters
     ----------
@@ -289,16 +289,16 @@ def generate_centroid_pairs(centroid_dirs, jacobians = ('absolute', 'relative'))
                        for i in range(len(centroids_j))]
 
         # Expand centroid combinations for current Jacobians
-        centroid_pairs_j = [list(pair) for pair in
+        cluster_pairs_j = [list(pair) for pair in
                             list(product(centroids_j[0], centroids_j[1]))]
 
         # Concatenate Jacobian image pairs
         if j == 0:
-            centroid_pairs = centroid_pairs_j
+            cluster_pairs = cluster_pairs_j
         else:
-            centroid_pairs = centroid_pairs + centroid_pairs_j
+            cluster_pairs = cluster_pairs + cluster_pairs_j
 
-    return centroid_pairs
+    return cluster_pairs
 
 
 @utils.timing
@@ -335,19 +335,22 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 
     # Generate pairs of centroid images
     print("Generating centroid image pairs...")
-    centroid_pairs = generate_centroid_pairs(centroid_dirs = paths['centroids'],
+    cluster_pairs = generate_cluster_pairs(centroid_dirs = paths['centroids'],
                                              jacobians = jacobians)
 
-    test = np.array(centroid_pairs)
-    test = pd.DataFrame(centroid_pairs)
+    test = pd.DataFrame(cluster_pairs)
     print(test.shape)
     print(test.head())
     sys.exit()
 
 
-    # Next step is execution. Depends on whether this is local or on Slurm.
-    # On Slurm, will need to create a bunch of job scripts and then deploy
-    # those. Means I need a Python driver script.
+    # Next steps
+    # - Split centroid pairs into batches. Export the pairs in each batch to
+    #   a csv.
+    # - Execute locally or on slurm? If executing on slurm, create a job script
+    #   for each batch. If executed locally, maybe there's no point in batching?
+    #   Just export a csv with all the pairs, and run the driver script using
+    #   that file.
 
     return
 
