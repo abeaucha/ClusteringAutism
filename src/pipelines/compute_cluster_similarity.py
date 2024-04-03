@@ -334,6 +334,9 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     centroid_pairs = generate_centroid_pairs(centroid_dirs = paths['centroids'],
                                              jacobians = jacobians)
 
+    print(type(centroid_pairs))
+    print(len(centroid_pairs))
+
     # Next step is execution. Depends on whether this is local or on Slurm.
     # On Slurm, will need to create a bunch of job scripts and then deploy
     # those. Means I need a Python driver script.
