@@ -106,7 +106,8 @@ for (i in 1:nrow(params)) {
   
   # Path to demographics
   demographics <- file.path(pipeline_dir, param_id, "demographics.csv")
-  demographics <- read_csv(demographics, show_col_types = FALSE) %>%
+  # demographics <- read_csv(demographics, show_col_types = FALSE) %>%
+  demographics <- read_csv(demographics) %>% 
     filter(!is.na(DX),
            !is.na(Age),
            !is.na(Sex))
@@ -146,7 +147,7 @@ for (i in 1:nrow(params)) {
                            demographics = demographics,
                            batch = batch,
                            df = df,
-                           mask = maskfile,
+                           mask = mask,
                            batches = 50,
                            source = file.path(SRCPATH, "processing.R"),
                            registry_name = "registry_normative_growth",
