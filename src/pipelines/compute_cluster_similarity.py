@@ -381,6 +381,14 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     cluster_pairs = generate_cluster_pairs(centroid_dirs = paths['centroids'],
                                              jacobians = jacobians)
 
+    if execution == 'local':
+        # Export cluster pairs
+        utils.execute_local(...)
+    elif execution == 'slurm':
+        pass
+    else:
+        raise ValueError
+
 
     test = pd.DataFrame(cluster_pairs)
     print(test.shape)
