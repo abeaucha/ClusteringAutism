@@ -22,6 +22,7 @@ Parameters governing the evaluation of the similarity computations are mappable.
 
 import argparse
 import os
+import sys
 import utils
 from itertools import product
 
