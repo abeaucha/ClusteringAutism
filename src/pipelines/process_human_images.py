@@ -221,7 +221,7 @@ def parse_args():
         '--nproc',
         type = int,
         default = 1,
-        help = "Number of processors to use in parallel."
+        help = "Number of processors to use."
     )
 
     parser.add_argument(

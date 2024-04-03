@@ -168,10 +168,51 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--execution',
+        type = str,
+        default = 'local',
+        choices = ['local', 'slurm'],
+        help = ("Flag indicating whether the pipeline should be executed "
+                "or using the Slurm scheduler on a HPC cluster.")
+    )
+
+    parser.add_argument(
         '--nproc',
         type = int,
         default = 1,
-        help = "Number of processors to use in parallel."
+        help = "Number of processors to use."
+    )
+
+    parser.add_argument(
+        '--registry-name',
+        type = str,
+        default = "compute_cluster_similarity_registry",
+        help = "Name of the registry directory for batched jobs."
+    )
+
+    parser.add_argument(
+        '--registry-cleanup',
+        type = str,
+        default = "true",
+        help = "Option to clean up registry after completion of batched jobs."
+    )
+
+    parser.add_argument(
+        '--slurm-njobs',
+        type = int,
+        help = "Number of jobs to deploy on Slurm."
+    )
+
+    parser.add_argument(
+        '--slurm-mem',
+        type = str,
+        help = "Memory per CPU."
+    )
+
+    parser.add_argument(
+        '--slurm-time',
+        type = int,
+        help = "Walltime in minutes for Slurm jobs."
     )
 
     return vars(parser.parse_args())
@@ -310,7 +351,9 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
          threshold = 'top_n', threshold_value = 0.2,
          threshold_symmetric = True,
          jacobians = ('absolute', 'relative'),
-         nproc = 1):
+         execution = 'local', nproc = 1,
+         registry_name = None, registry_cleanup = True,
+         slurm_njobs = None, slurm_mem = None, slurm_time = None):
     # Adapt gene space parameters to selected gene space
     if gene_space == 'average-latent-space':
         latent_space_id = None
@@ -337,6 +380,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     print("Generating centroid image pairs...")
     cluster_pairs = generate_cluster_pairs(centroid_dirs = paths['centroids'],
                                              jacobians = jacobians)
+
 
     test = pd.DataFrame(cluster_pairs)
     print(test.shape)
