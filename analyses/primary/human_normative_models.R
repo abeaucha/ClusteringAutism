@@ -165,7 +165,6 @@ for (i in 1:nrow(params)) {
       if (!is.null(batch)) {outfile <- paste(outfile, "wbatch", sep = "_")}
       outfile <- paste0(outfile, ".csv")
       outfile = file.path(output_dir, outfile)
-      print(outfile)
       write_csv(x = df_voxels, path = outfile)
       
     }
