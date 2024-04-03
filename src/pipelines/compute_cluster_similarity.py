@@ -336,6 +336,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 
     print(type(centroid_pairs))
     print(len(centroid_pairs))
+    print(centroid_pairs[:5])
 
     # Next step is execution. Depends on whether this is local or on Slurm.
     # On Slurm, will need to create a bunch of job scripts and then deploy
