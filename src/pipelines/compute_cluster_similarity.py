@@ -381,6 +381,9 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     cluster_pairs = generate_cluster_pairs(centroid_dirs = paths['centroids'],
                                              jacobians = jacobians)
 
+    outfile = os.path.join(paths['pipeline'], 'centroid_pairs.csv')
+    pd.DataFrame(cluster_pairs).to_csv(outfile, index = False)
+
     if execution == 'local':
         # Export cluster pairs
         utils.execute_local(...)
@@ -389,10 +392,8 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     else:
         raise ValueError
 
+    tmp = pd.read_csv('data/test/cross_species/v3/metadata.csv')
 
-    test = pd.DataFrame(cluster_pairs)
-    print(test.shape)
-    print(test.head())
     sys.exit()
 
 

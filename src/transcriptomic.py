@@ -356,7 +356,7 @@ def tempfunc(inputs, **kwargs):
                                              **kwargs)
 
 
-def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
+def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
                               gene_space = 'average-latent-space',
                               n_latent_spaces = 100, latent_space_id = 1,
                               metric = 'correlation', signed = True,
@@ -413,6 +413,12 @@ def transcriptomic_similarity(imgs, expr, masks, microarray_coords,
     out: pandas.DataFrame
         A data frame containing the similarity values for all input images.
     """
+
+    if imgs is None: raise ValueError
+    if species is None: raise ValueError
+    if expr is None: raise ValueError
+    if masks is None: raise ValueError
+    if microarray_coords is None: raise ValueError
 
     # If imgs is tuple, convert to list of tuple
     if type(imgs) is tuple:
