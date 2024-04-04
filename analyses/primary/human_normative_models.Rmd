@@ -24,29 +24,47 @@ SRCPATH <- Sys.getenv("SRCPATH")
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
 
-fit_predict_mean <- function(y, demographics, newdata, batch = NULL, df = 3) {
+plot_normative_splines <- function(voxels, nv = 1000, seed = 123, 
+                                   age_range = c(5, 30), subtitle = NULL, 
+                                   outfile = "normative_splines.jpeg") {
   
-  # Residualize using batch variable if specified
-  if (!is.null(batch)) {
-    batch <- demographics %>%
-      select(all_of(batch)) %>%
-      unite(col = batch) %>%
-      pull(batch)
-    y <- residuals(lm(y ~ batch))
-    names(y) <- NULL
-  }
+  demo <- voxels %>% 
+    select(!starts_with("V"))
   
-  ind_fit <- demographics[["DX"]] == "Control"
+  voxels <- voxels %>% 
+    select(starts_with("V"))
   
-  # Training data frame
-  df_fit <- demographics[ind_fit, c("Age", "Sex")]
-  df_fit[["y"]] <- y[ind_fit]
+  set.seed(seed)
+  vsample <- sample(x = 1:ncol(voxels), size = nv, replace = FALSE)
   
-  model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
+  voxel_sample <- voxels[,vsample]
   
-  y_pred <- predict(model_fit, newdata = newdata)
+  voxel_sample <- demo %>% 
+    bind_cols(voxel_sample) %>% 
+    pivot_longer(cols = c(-Age, -Sex), names_to = "Voxel", values_to = "Intensity")
   
-  return(y_pred)
+  
+  title <- paste("Normative models for", nv, "voxels")
+  pvoxels <- ggplot(voxel_sample, aes(x = Age, y = Intensity, group = Voxel)) +
+    geom_line(size = 0.1,
+              alpha = 0.05) +
+    coord_cartesian(xlim = age_range,
+                    ylim = c(-0.4, 0.4)) +
+    scale_x_continuous(breaks = seq(age_range[1], age_range[2], by = 2)) +
+    scale_y_continuous(breaks = seq(-0.4, 0.4, by = 0.1)) +
+    labs(x = "Age",
+         y = "Intensity",
+         title = title,
+         subtitle = subtitle) +
+    theme_bw()
+  
+  jpeg(file = outfile,
+       width = 10,
+       height = 5,
+       units= "in",
+       res = 200)
+  print(pvoxels)
+  dev.off()
   
 }
 ```
@@ -65,106 +83,184 @@ registration_dir <- "../../data/human/registration/v3/"
 ```
 
 ```{r params}
+# params_id <- "547"
+params_id <- "664"
+
 # Identify parameter set ID
 metadata <- file.path(pipeline_dir, "metadata.csv")
-params <- fetch_params_metadata(metadata, 
-                                dataset = "POND-SickKids",
-                                resolution = 3.0,
-                                es_group = "patients")
+params <- fetch_params_metadata(metadata,
+                                id = params_id)
 params
 ```
 
 ```{r directories-2}
 # Parameter set ID
-param_id <- "547"
+# params_id <- "547"
+params_id <- "664"
+
+# Update output directory
+output_dir <- file.path(output_dir, params_id)
 
 # Image resolution
 resolution <- params %>% 
-  filter(id == param_id) %>% 
+  filter(id == params_id) %>% 
   pull(resolution)
 resolution <- sprintf("%.1f", resolution)
 
-# Effect size batch variables
-batch <- params %>% 
-  filter(id == param_id) %>% 
-  pull(es_batch)
-
-df <- params %>% 
-  filter(id == param_id) %>% 
-  pull(es_df)
-
-# Jacobians
-jacobians <- c("absolute", "relative")
-
-# Directory to Jacobian images
-jacobians_dir <- file.path(registration_dir, "jacobians_resampled/resolution_3.0/")
-
-# Image mask
+# Mask
 mask <- paste0("mask_", resolution, "mm.mnc")
 mask <- file.path(registration_dir, "reference_files", mask)
+mask <- mincGetVolume(mask)
 
-# Path to demographics
-demographics <- file.path(pipeline_dir, param_id, "demographics.csv")
+# Template
+template <- paste0("model_", resolution, "mm.mnc")
+template <- file.path(registration_dir, "reference_files", template)
+template <- mincGetVolume(template)
+
+# List of input files
+input_files <- list.files(output_dir, full.names = TRUE)
 ```
 
-```{r import-demographics}
-demographics <- read_csv(demographics, show_col_types = FALSE)
+```{r directories-2}
+nsample <- 10000
 
-demographics <- demographics %>%
-  filter(!is.na(DX),
-         !is.na(Age),
-         !is.na(Sex))
-
-if (!is.null(batch)) {
-  batch <- str_split(batch, pattern = "-")[[1]]
-  batch_check <- batch %in% colnames(demographics)
-  if (!all(batch_check)) {
-    stop("Batch columns not found in demographics:\n",
-         str_flatten(batch, collapse = "\n"))
+df_inputs <- expand_grid(jacobians = c("absolute", "relative"),
+                         sex = c("male", "female"),
+                         batch = c(TRUE, FALSE))
+for (i in 1:nrow(df_inputs)) {
+  
+  print(paste(i, "of", nrow(df_inputs)))
+  
+  j <- df_inputs[[i, "jacobians"]]
+  s <- df_inputs[[i, "sex"]]
+  b <- df_inputs[[i, "batch"]]
+  
+  input_file <- input_files %>% 
+    str_subset(".csv") %>% 
+    str_subset(paste0("_", j)) %>% 
+    str_subset(paste0("_", s)) %>% 
+    str_subset("_wbatch", negate = !b)
+  
+  df_voxels <- as_tibble(data.table::fread(input_file, header = TRUE))
+  
+  subtitle <- paste("Jacobians:", j, "; Sex:", s, "; Batch-normalized:", b)
+  outfile <- "normative_model_splines"
+  outfile <- paste(outfile, j, s, "batch", b, sep = "_")
+  outfile <- paste0(outfile, ".jpeg")
+  outfile <- file.path(output_dir, outfile)
+  
+  plot_normative_splines(voxels = df_voxels, nv = nsample,
+                         subtitle = subtitle, outfile = outfile)
+  
+  ages_ss <- seq(5, 30, by = 5)
+  
+  df_voxels_ss <- df_voxels %>% 
+    filter(Age %in% ages_ss) %>% 
+    select(-Age, -Sex)
+  
+  mat_voxels_ss <- df_voxels_ss %>%
+    as.matrix() %>% 
+    t() 
+  
+  ss <- sliceSeries(nrow = 10, ncol = 1, begin = 14, end = 66) %>% 
+    anatomy(mincArray(template), low = 40, high = 110)
+  
+  for (c in 1:ncol(mat_voxels_ss)) {
+    
+    img <- numeric(length(template))
+    img[mask > 0.5] <- mat_voxels_ss[,c]
+    attributes(img) <- attributes(template)
+    
+    
+    if (c == 1) {
+      ss <- ss %>% 
+        overlay(mincArray(img), low = 0.1, high = 0.3, symmetric = TRUE) %>% 
+        addtitle(paste0("Age = ", ages_ss[c]))
+    } else {
+      ss <- ss %>% 
+        sliceSeries() %>% anatomy() %>% 
+        overlay(mincArray(img), low = 0.1, high = 0.3, symmetric = TRUE) %>% 
+        addtitle(paste0("Age = ", ages_ss[c]))
+    }
   }
+  
+  ss <- ss %>% 
+    legend("")
+  
+  outfile <- "normative_model_ss"
+  outfile <- paste(outfile, j, s, "batch", b, sep = "_")
+  outfile <- paste0(outfile, ".jpeg")
+  outfile <- file.path(output_dir, outfile)
+  jpeg(file = outfile,
+       width = 10,
+       height = 10,
+       units= "in",
+       res = 200)
+  draw(ss)
+  dev.off()
+  
 }
 ```
 
-```{r image-files}
-j <- 1
 
-# Image files
-imgdir <- file.path(jacobians_dir, jacobians[j])
-imgfiles <- list.files(imgdir, full.names = TRUE)
+```{r}
+demographics <- file.path(registration_dir, "subject_info", "demographics.csv")
+demographics <- read_csv(demographics, show_col_types = FALSE)
 
-imgs_in_demographics <- basename(imgfiles) %in% demographics[["file"]]
-imgfiles <- imgfiles[imgs_in_demographics]
-row_match <- match(basename(imgfiles), demographics[["file"]])
-demographics <- demographics[row_match,]
+demographics <- demographics %>% 
+  filter(!is.na(Age), 
+         !is.na(Sex),
+         !is.na(DX))
+
+ggplot(demographics, 
+       aes(x = Age, fill = Dataset)) + 
+  geom_histogram(position = "dodge")
 ```
 
 ```{r}
-# imgs <- import_images(imgfiles = imgfiles, mask = mask, output_format = "matrix", version = "v2", inparallel = TRUE, nproc = 8)
+controls <- demographics %>% 
+  filter(DX == "Control")
 ```
 
 
 ```{r}
-ages <- seq(5, 25, by = 5)
-sex <- c("Male", "Female")
-df_pred <- expand_grid(Age = ages,
-                       Sex = sex)
+controls %>% 
+  filter(Dataset %in% c("POND", "SickKids")) %>% 
+  pull(Age) %>% 
+  quantile(c(0.025, 0.975))
 ```
 
 ```{r}
-voxels <- qMincApply(filenames = imgfiles,
-                     fun = fit_predict_mean,
-                     newdata = df_pred,
-                     demographics = demographics,
-                     batch = batch,
-                     df = df,
-                     mask = mask,
-                     batches = njobs,
-                     source = file.path(SRCPATH, "processing.R"),
-                     registry_name = ifelse(is.null(registry_name),
-                                            "registry_normative_growth",
-                                            registry_name),
-                     cleanup = registry_cleanup,
-                     return_raw = TRUE,
-                     resources = resources)
+controls %>% 
+  filter(Dataset %in% c("POND", "SickKids")) %>% 
+  pull(Age) %>% 
+  range()
+```
+
+```{r}
+controls %>% 
+  filter(Dataset == "POND") %>% 
+  pull(Age) %>% 
+  quantile(c(0.025, 0.975))
+```
+
+```{r}
+controls %>% 
+  filter(Dataset == "SickKids") %>% 
+  pull(Age) %>% 
+  quantile(c(0.025, 0.975))
+```
+```{r}
+controls %>% 
+  filter(Dataset == "HBN") %>% 
+  pull(Age) %>% 
+  quantile(c(0.025, 0.975))
+```
+
+```{r}
+controls %>% 
+  filter(Dataset == "HBN") %>% 
+  pull(Age) %>% 
+  range()
 ```
 
