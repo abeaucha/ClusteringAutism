@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(pheatmap))
 ```
 
 ```{r env}
@@ -91,8 +92,6 @@ for (j in 1:length(jacobians)) {
 ```
 
 ```{r}
-library(pheatmap)
-
 ind_AnxDep <- str_detect(centroid_names, "AnxDep")
 centroid_names_noAnxDep <- centroid_names[!ind_AnxDep]
 
