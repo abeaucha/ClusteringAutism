@@ -16,41 +16,84 @@ microarray samples.
 
 # Packages -------------------------------------------------------------------
 
+import argparse
 import os
 import transcriptomic
 from pyminc.volumes.factory import volumeFromFile
 
-# Global variables -----------------------------------------------------------
 
-# Directories
-expr_dir = 'data/human/expression'
-registration_dir = 'data/human/registration/'
-# version = 'v1'
-version = 'v2'
+# Command line arguments -----------------------------------------------------
 
-# Expression inputs
-metadata = 'SampleInformation_pipeline_abagen.csv'
-annotations = 'AHBA_microarray_sample_annotations.csv'
+def parse_args():
+    """Parse command line arguments"""
 
-# Registration inputs
-template = 'model_0.8mm.mnc'
-# transforms = ['average_to_icbm_nlin_sym_09c0GenericAffine.mat', 
-#               'average_to_icbm_nlin_sym_09c1Warp.nii.gz']
-transforms = ['to_target_0GenericAffine.mat',
-              'to_target_1Warp.nii']
+    parser = argparse.ArgumentParser(
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
 
-# Main -----------------------------------------------------------------------
-if __name__ == '__main__':
+    parser.add_argument(
+        '--pipeline-dir',
+        type = str,
+        default = 'data/human/expression/v3/',
+        help = "Path to the expression data directory."
+    )
 
-    # Paths to expression inputs
-    metadata = os.path.join(expr_dir, metadata)
-    annotations = os.path.join(expr_dir, annotations)
+    parser.add_argument(
+        '--transforms',
+        nargs = '*',
+        type = str,
+        help = ("List of paths to the transforms from the registration ",
+                "consensus average space to the MNI ICBM 152 NLIN 09c space.")
+    )
 
-    # Paths to registration inputs
-    registration_dir = os.path.join(registration_dir, version)
-    template = os.path.join(registration_dir, 'reference_files', template)
-    transforms = [os.path.join(registration_dir, 'average_to_MNI', i)
-                  for i in transforms]
+    parser.add_argument(
+        '--template',
+        type = str,
+        help = "Path to the consensus average template image (.mnc)."
+    )
+
+    parser.add_argument(
+        '--metadata',
+        type = str,
+        default = 'data/human/expression/SampleInformation_pipeline_abagen.csv',
+        help = ("Name of the metadata file (.csv) for the AHBA microarray ",
+                "samples.")
+    )
+
+    parser.add_argument(
+        '--annotations',
+        type = str,
+        default = 'data/human/expression/AHBA_microarray_sample_annotations.csv'
+    )
+
+    return vars(parser.parse_args())
+
+
+# Modules --------------------------------------------------------------------
+
+
+# # Directories
+# expr_dir = 'data/human/expression'
+# registration_dir = 'data/human/registration/'
+# # version = 'v1'
+# version = 'v2'
+#
+# # Expression inputs
+# metadata = 'SampleInformation_pipeline_abagen.csv'
+# annotations = 'AHBA_microarray_sample_annotations.csv'
+#
+# # Registration inputs
+# template = 'model_0.8mm.mnc'
+# # transforms = ['average_to_icbm_nlin_sym_09c0GenericAffine.mat',
+# #               'average_to_icbm_nlin_sym_09c1Warp.nii.gz']
+# transforms = ['to_target_0GenericAffine.mat',
+#               'to_target_1Warp.nii']
+
+def main(
+    pipeline_dir, transforms, template,
+    metadata = 'data/human/expression/SampleInformation_pipeline_abagen.csv',
+    annotations = 'data/human/expression/AHBA_microarray_sample_annotations.csv'
+):
 
     # Fetch microarray coordinates and transform to study space
     print("Fetching microarray coordinates...")
@@ -92,3 +135,11 @@ if __name__ == '__main__':
                                               template = template,
                                               outfile = mask,
                                               type = 'mask')
+
+
+# Main -----------------------------------------------------------------------
+if __name__ == '__main__':
+
+    args = parse_args()
+    main()
+
