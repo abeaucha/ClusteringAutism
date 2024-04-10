@@ -9,8 +9,15 @@ Execute the human image processing pipeline.
 
 Description
 -----------
-"""
+The human image processing pipeline consists of three stages:
+1. Compute effect size images for patients based on absolute and relative
+   Jacobian images.
+2. Generate clusters of patients based on absolute and relative Jacobian
+   effect size images.
+3. Generate cluster centroid images for all cluster solutions.
 
+The pipeline can be deployed locally or on an HPC cluster that uses Slurm.
+"""
 
 # Packages -------------------------------------------------------------------
 
@@ -37,7 +44,7 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/human/derivatives/v2/',
+        default = 'data/human/derivatives/v3/',
         help = ("Path to the directory in which to store pipeline outputs. "
                 "A sub-directory will be created based on the parameters "
                 "used to run the pipeline.")
@@ -46,7 +53,7 @@ def parse_args():
     parser.add_argument(
         '--input-dir',
         type = str,
-        default = 'data/human/registration/v2/jacobians_resampled/resolution_0.8/',
+        default = 'data/human/registration/v3/jacobians_resampled/resolution_0.8/',
         help = ("Path to the directory containing Jacobian images. "
                 "This directory must contain sub-directories named 'absolute' "
                 "and 'relative' containing the Jacobian images.")
@@ -55,14 +62,14 @@ def parse_args():
     parser.add_argument(
         '--demographics',
         type = str,
-        default = 'data/human/registration/v2/subject_info/demographics.csv',
+        default = 'data/human/registration/v3/subject_info/demographics.csv',
         help = "Path to the file (.csv) containing demographics information."
     )
 
     parser.add_argument(
         '--mask',
         type = str,
-        default = 'data/human/registration/v2/reference_files/mask_0.8mm.mnc',
+        default = 'data/human/registration/v3/reference_files/mask_0.8mm.mnc',
         help = "Path to mask file (.mnc) associated with the study images."
     )
 
@@ -81,7 +88,7 @@ def parse_args():
         type = str,
         default = 'normative-growth',
         choices = ['normative-growth', 'propensity-matching'],
-        help = "Method to use to compute effect size images."
+        help = "Method to use to compute the effect size images."
     )
 
     parser.add_argument(
@@ -130,9 +137,10 @@ def parse_args():
         '--cluster-resolution',
         type = float,
         default = 3.0,
-        help = ("The resolution (mm) at which to run the clustering stage. "
-                "Effect size images will be resampled to this resolution "
-                "if it is different from the resolution of the input images.")
+        help = ("The isotropic resolution (mm) at which to run the clustering "
+                "stage. Effect size images will be resampled to this "
+                "resolution if it is different from the resolution of the "
+                "input images.")
     )
 
     parser.add_argument(
@@ -140,8 +148,8 @@ def parse_args():
         type = int,
         default = 10,
         help = ("The maximum number of clusters to identify when clustering. "
-                "The program will obtain cluster solutions from 2 up to the "
-                "value provided.")
+                "Solutions will be obtained from 2 clusters to the value "
+                "provided.")
     )
 
     parser.add_argument(
@@ -214,7 +222,7 @@ def parse_args():
         default = 'local',
         choices = ['local', 'slurm'],
         help = ("Flag indicating whether the pipeline should be executed "
-                "or using the Slurm scheduler on a HPC cluster.")
+                "locally or using the Slurm scheduler on an HPC cluster.")
     )
 
     parser.add_argument(
@@ -264,7 +272,7 @@ def parse_args():
 @utils.timing
 def initialize(**kwargs):
     """
-    Initialize the image processing pipeline.
+    Initialize the pipeline
 
     Parameters
     ----------
@@ -404,6 +412,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                  registry_name = None, registry_cleanup = True,
                  slurm_njobs = None, slurm_mem = None, slurm_time = None):
     """
+    Compute the effect size images.
 
     Parameters
     ----------
@@ -412,9 +421,9 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         contain sub-directories 'absolute' and 'relative', which hold the
         image files (.mnc).
     demographics: str
-        Path to the file (.csv) containing the demographics information
+        Path to the file (.csv) containing the demographics information.
     mask: str
-        Path to the mask file (.mnc)
+        Path to the mask file (.mnc).
     outdir: str
         Path to the directory in which to export the effect size sub-directories
         and images.
@@ -567,7 +576,7 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
                metric = 'correlation', K = 10, sigma = 0.5, t = 20,
                cluster_file = 'clusters.csv', affinity_file = 'affinity.csv'):
     """
-    Identify clusters of patients.
+    Identify clusters.
 
     Parameters
     ----------
@@ -595,7 +604,7 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
     Returns
     -------
     cluster_file: str
-        Path to the cluster file.
+        Path to the cluster assignment file.
     """
 
     # Clean up arguments

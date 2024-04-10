@@ -53,9 +53,9 @@ import_image <- function(img, mask = NULL, flatten = TRUE, version = "v1") {
 
 import_images <- function(imgfiles, mask = NULL, output_format = "list",
                           flatten = TRUE, margin = 1, version = "v1",
-                          inparallel = FALSE, nproc = NULL) {
+                          nproc = 1) {
 
-  #Check output format
+  # Check output format
   format_opts <- c("list", "matrix", "tibble")
   if (!(output_format %in% format_opts)) {
     format_err <- str_c("Argument output_format must be one of (",
@@ -64,7 +64,7 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
     stop(format_err)
   }
 
-  #Warning when flatten FALSE
+  # Warning when flatten FALSE
   if (!flatten) {
     if (output_format != "list") {
       message(paste("flatten = FALSE is only valid when output_format = 'list'.",
@@ -73,11 +73,10 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
     }
   }
 
-  #Import images
+  # Import images
   pb <- txtProgressBar(max = length(imgfiles), style = 3)
   progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
-  if (inparallel) {
-    if (is.null(nproc)) {stop("Specific nproc when running in parallel.")}
+  if (nproc > 1) {
     cl <- makeSOCKcluster(nproc)
     registerDoSNOW(cl)
     opts <- list(progress=progress)
@@ -103,21 +102,21 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
     }
   }
 
-  #Check image sizes
+  # Check image sizes
   imgsize <- unique(map_dbl(imgs, length))
   imgsize_test <- length(imgsize)
   if (imgsize_test != 1) {
     stop("Images provided contain different numbers of voxels.")
   }
 
-  #Convert to output format
+  # Convert to output format
   if (output_format != "list") {
     if (margin == 1) {
-      nrow = length(imgs)
-      ncol = imgsize
+      nrow <- length(imgs)
+      ncol <- imgsize
     } else if (margin == 2) {
-      nrow = imgsize
-      ncol = length(imgs)
+      nrow <- imgsize
+      ncol <- length(imgs)
     } else {
       stop()
     }
@@ -145,27 +144,26 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
 build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE,
                                sort = FALSE, save = FALSE,
                                outfile = "voxel_matrix.csv", version = "v1",
-                               inparallel = FALSE, nproc = NULL) {
+                               nproc = 1) {
 
-  #Import images as tibble
+  # Import images as tibble
   df_imgs <- import_images(imgfiles = imgfiles,
                            mask = mask,
                            output_format = "tibble",
                            flatten = TRUE,
                            version = version,
-                           inparallel = inparallel,
                            nproc = nproc)
 
-  #Save input files in a column
-  df_imgs[["file"]] = imgfiles
+  # Save input files in a column
+  df_imgs[["file"]] <- imgfiles
 
-  #Sort if desired
+  # Sort if desired
   if (sort) {df_imgs <- arrange(df_imgs, file)}
 
-  #Remove input file column if desired
+  # Remove input file column if desired
   if (!file_col) {df_imgs <- select(df_imgs, -file)}
 
-  #Save data frame to file if desired
+  # Save data frame to file if desired
   if (save) {data.table::fwrite(x = df_imgs, file = outfile)}
 
   return(df_imgs)
@@ -175,17 +173,17 @@ build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE,
 
 vector_to_image <- function(x, outfile, mask, version = "v1") {
 
-  #Check output file
+  # Check output file
   if (is.null(outfile)) {
     stop("Specify output file.")
   }
 
-  #Check mask
+  # Check mask
   if (is.null(mask)) {
     stop("Specify mask file.")
   }
 
-  #Import mask
+  # Import mask
   mask <- mincGetVolume(mask)
 
   if (version == "v2") {
@@ -194,7 +192,7 @@ vector_to_image <- function(x, outfile, mask, version = "v1") {
     ind_mask <- mask == 1
   }
 
-  #Check that x and mask match
+  # Check that x and mask match
   if (length(x) != sum(ind_mask)) {
     stop(paste("Number of elements in x does not match the number of non-zero",
                "voxels in the mask."))
@@ -215,7 +213,7 @@ vector_to_image <- function(x, outfile, mask, version = "v1") {
 
 
 matrix_to_images <- function(x, outfiles, mask, margin = 1, version = "v1",
-                             nproc = NULL) {
+                             nproc = 1) {
 
   # Check output files
   if (is.null(outfiles)) {
@@ -242,10 +240,7 @@ matrix_to_images <- function(x, outfiles, mask, margin = 1, version = "v1",
   }
 
   # Export to images
-  if (!is.null(nproc)) {
-    # out <- mcmapply(vector_to_image, x, outfiles, 
-    #                 MoreArgs = list(mask = mask),
-    #                 SIMPLIFY = TRUE, mc.cores = nproc)
+  if (nproc > 1) {
     cl <- makeCluster(nproc)
     snk <- clusterEvalQ(cl, library(RMINC))
     out <- clusterMap(cl = cl,
@@ -263,7 +258,8 @@ matrix_to_images <- function(x, outfiles, mask, margin = 1, version = "v1",
 }
 
 
-threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE, comparison = "gt") {
+threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE,
+                                comparison = "gt") {
 
   out <- img
   if (symmetric) {
@@ -288,7 +284,7 @@ threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE, comparis
     stop("No voxels survive the threshold. Select another threshold.")
   }
 
-  out[!ind] = 0
+  out[!ind] <- 0
 
   return(out)
 
@@ -347,7 +343,8 @@ threshold_top_n <- function(img, n = 0.2, symmetric = TRUE, tolerance = 1e-5) {
 }
 
 
-threshold_image <- function(img, method = "top_n", threshold = 0.2, symmetric = TRUE, comparison = "gt") {
+threshold_image <- function(img, method = "top_n", threshold = 0.2,
+                            symmetric = TRUE, comparison = "gt") {
 
   if (method == "intensity") {
     img <- threshold_intensity(img = img,
@@ -369,20 +366,15 @@ threshold_image <- function(img, method = "top_n", threshold = 0.2, symmetric = 
 
 
 mask_from_image <- function(img, signed = FALSE) {
-
   mask <- img
   if (signed) {
-    mask[img > 0] = 1
-    mask[img < 0] = -1
+    mask[img > 0] <- 1
+    mask[img < 0] <- -1
   } else {
-    mask[abs(img) > 0] = 1
+    mask[abs(img) > 0] <- 1
   }
-
   return(mask)
-
 }
-
-
 
 
 #' Fit and predict normative model
@@ -735,7 +727,6 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
   return(all_clusters)
 
 }
-
 
 
 #' Compute cluster centroids

@@ -142,29 +142,6 @@ def execute_slurm(script, kwargs, slurm_kwargs):
     return
 
 
-def execute_R(script, **kwargs):
-    """
-    Execute an R script.
-    
-    Parameters
-    ---------
-    script: str
-        Name of the R script to execute.
-    **kwargs: dict, optional
-        Key-value pairs containing command line arguments to pass to the script.
-
-    Returns
-    -------
-    None
-    """
-
-    kwargs = [['--' + str(key), str(val)] for key, val in kwargs.items()]
-    kwargs = sum(kwargs, [])
-    cmd = ['Rscript'] + [script] + kwargs
-    subprocess.run(cmd)
-    return
-
-
 def mkdir_from_list(strings, outdir = './', sep = '_'):
     """
     Create a directory from a list of strings.
@@ -191,20 +168,6 @@ def mkdir_from_list(strings, outdir = './', sep = '_'):
     return outdir
 
 
-def get_params_id(params, metadata):
-    df_params = pd.DataFrame(params, index = [0], dtype = str)
-    if os.path.exists(metadata):
-        df_metadata = pd.read_csv(metadata, dtype = str)
-        df_match = pd.merge(df_metadata, df_params, how = 'inner')
-        nmatch = df_match.shape[0]
-        if nmatch == 1:
-            return df_match['id'].values[0]
-        else:
-            return None
-    else:
-        return None
-
-
 def fetch_params_metadata(metadata, **kwargs):
     """
     Fetch the metadata for a set of parameters.
@@ -224,6 +187,7 @@ def fetch_params_metadata(metadata, **kwargs):
         matches found.
     """
 
+    # Check if metadata file exists
     if not os.path.exists(metadata):
         raise OSError("Metadata file not found: {}".format(metadata))
 
