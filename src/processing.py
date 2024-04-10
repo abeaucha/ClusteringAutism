@@ -9,187 +9,187 @@ from glob import glob
 from pyminc.volumes.factory import volumeFromFile, volumeLikeFile
 from shutil import rmtree
 from tqdm import tqdm
-from utils import execute_R
+# from utils import execute_R
 from warnings import warn
 
 
-def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
-                          group = 'patients', df = 3, batch = None,
-                          nbatches = 1, nproc = None):
-    """
-    Calculate human effect sizes using normative growth modelling.
+# def normative_growth_norm(imgdir, demographics, mask, outdir, key = 'file',
+#                           group = 'patients', df = 3, batch = None,
+#                           nbatches = 1, nproc = None):
+#     """
+#     Calculate human effect sizes using normative growth modelling.
+#
+#     Arguments
+#     ---------
+#     imgdir: str
+#         Path to the directory containing the images (.mnc) to use to
+#         compute the effect sizes.
+#     demographics: str
+#         Path to the file (.csv) containing the demographics data.
+#     mask: str
+#         Path to the mask file (.mnc).
+#     outdir: str
+#         Path to the directory in which to save the effect size images.
+#     key: str, default 'file'
+#         Primary key between demographics data and constructed voxel matrix.
+#     group: {'patients', 'controls', 'all'}
+#         Group of participants for which to compute effect sizes.
+#     df: int, default 3
+#         Degrees of freedom to use in normative model natural splines.
+#     batch: list of str
+#         Variables to use in normalization prior to modelling.
+#     nbatches: int, default 1
+#         Number of voxel batches to use for computation of voxel-wise
+#         normative models.
+#     nproc: int, default None
+#         Number of processors to use in parallel. Executed sequentially when
+#         None.
+#
+#     Returns
+#     -------
+#     outfiles: list of str
+#         List of paths to the effect size images.
+#     """
+#
+#     # Unpack function args into dictionary
+#     script_args = dict(imgdir = imgdir,
+#                        demographics = demographics,
+#                        mask = mask,
+#                        outdir = outdir,
+#                        key = key,
+#                        group = group,
+#                        df = df,
+#                        batch = batch,
+#                        nproc = nproc)
+#
+#     # ComBat normalization options
+#     if batch is not None:
+#         if type(batch) is str:
+#             batch = [batch]
+#         script_args['batch'] = '-'.join(batch)
+#     else:
+#         del script_args['batch']
+#
+#     # Parallel check
+#     if nproc is None:
+#         raise ValueError("Set the nproc argument to specify the number of "
+#                          "processors to use")
+#
+#     # R script
+#     script = 'normative_growth_normalization.R'
+#
+#     # Option to run in batches
+#     if nbatches > 1:
+#
+#         print("Executing script in batches...")
+#
+#         # Create voxel batches
+#         mask_array = import_image(img = mask, mask = mask)
+#         mask_ind = np.arange(len(mask_array))
+#         batches = np.array_split(mask_ind, nbatches)
+#
+#         # Batch directories
+#         batch_dirs = ['batch_{}'.format(batch) for batch in range(nbatches)]
+#         batch_dirs = [os.path.join(outdir, dir, '') for dir in batch_dirs]
+#
+#         # Execute script in batches
+#         for i, batch in enumerate(batches):
+#
+#             print("Processing batch {}...".format(i))
+#
+#             # Create batch mask
+#             batch_mask = np.zeros(len(mask_array))
+#             batch_mask[batch] = 1
+#
+#             # Export batch mask
+#             batch_dir = batch_dirs[i]
+#             if not os.path.exists(batch_dir):
+#                 os.makedirs(batch_dir)
+#             batch_maskfile = os.path.join(batch_dir, 'batch_mask.mnc')
+#             vector_to_image(x = batch_mask, outfile = batch_maskfile,
+#                             maskfile = mask)
+#
+#             # Update script args with batch paths
+#             script_args.update(dict(mask = batch_maskfile, outdir = batch_dir))
+#
+#             # Execute script
+#             execute_R(script = script, **script_args)
+#
+#         # Collate batch images
+#         print("Collating batched images...")
+#         outfiles = os.listdir(batch_dirs[0])
+#         outfiles = [file for file in outfiles if file != 'batch_mask.mnc']
+#         for outfile in outfiles:
+#
+#             img = np.zeros_like(mask_array)
+#             for b, batch in enumerate(batches):
+#                 batch_img = os.path.join(batch_dirs[b], outfile)
+#                 batch_mask = os.path.join(batch_dirs[b], 'batch_mask.mnc')
+#                 img[batch] = import_image(img = batch_img, mask = batch_mask)
+#
+#             outfile = os.path.join(outdir, outfile)
+#             vector_to_image(x = img, outfile = outfile, maskfile = mask)
+#
+#         print("Cleaning up...")
+#         for batch_dir in batch_dirs:
+#             rmtree(batch_dir)
+#
+#     else:
+#
+#         execute_R(script = script, **script_args)
+#
+#     outfiles = os.listdir(outdir)
+#     outfiles = [file for file in outfiles if '.mnc' in file]
+#     outfiles = [os.path.join(outdir, file) for file in outfiles]
+#     return outfiles
 
-    Arguments
-    ---------
-    imgdir: str
-        Path to the directory containing the images (.mnc) to use to
-        compute the effect sizes.
-    demographics: str
-        Path to the file (.csv) containing the demographics data.
-    mask: str
-        Path to the mask file (.mnc).
-    outdir: str
-        Path to the directory in which to save the effect size images.
-    key: str, default 'file'
-        Primary key between demographics data and constructed voxel matrix.
-    group: {'patients', 'controls', 'all'}
-        Group of participants for which to compute effect sizes.
-    df: int, default 3
-        Degrees of freedom to use in normative model natural splines.
-    batch: list of str
-        Variables to use in normalization prior to modelling.
-    nbatches: int, default 1
-        Number of voxel batches to use for computation of voxel-wise
-        normative models.
-    nproc: int, default None
-        Number of processors to use in parallel. Executed sequentially when
-        None.
 
-    Returns
-    -------
-    outfiles: list of str
-        List of paths to the effect size images.
-    """
-
-    # Unpack function args into dictionary
-    script_args = dict(imgdir = imgdir,
-                       demographics = demographics,
-                       mask = mask,
-                       outdir = outdir,
-                       key = key,
-                       group = group,
-                       df = df,
-                       batch = batch,
-                       nproc = nproc)
-
-    # ComBat normalization options
-    if batch is not None:
-        if type(batch) is str:
-            batch = [batch]
-        script_args['batch'] = '-'.join(batch)
-    else:
-        del script_args['batch']
-
-    # Parallel check
-    if nproc is None:
-        raise ValueError("Set the nproc argument to specify the number of "
-                         "processors to use")
-
-    # R script
-    script = 'normative_growth_normalization.R'
-
-    # Option to run in batches
-    if nbatches > 1:
-
-        print("Executing script in batches...")
-
-        # Create voxel batches
-        mask_array = import_image(img = mask, mask = mask)
-        mask_ind = np.arange(len(mask_array))
-        batches = np.array_split(mask_ind, nbatches)
-
-        # Batch directories
-        batch_dirs = ['batch_{}'.format(batch) for batch in range(nbatches)]
-        batch_dirs = [os.path.join(outdir, dir, '') for dir in batch_dirs]
-
-        # Execute script in batches
-        for i, batch in enumerate(batches):
-
-            print("Processing batch {}...".format(i))
-
-            # Create batch mask
-            batch_mask = np.zeros(len(mask_array))
-            batch_mask[batch] = 1
-
-            # Export batch mask
-            batch_dir = batch_dirs[i]
-            if not os.path.exists(batch_dir):
-                os.makedirs(batch_dir)
-            batch_maskfile = os.path.join(batch_dir, 'batch_mask.mnc')
-            vector_to_image(x = batch_mask, outfile = batch_maskfile,
-                            maskfile = mask)
-
-            # Update script args with batch paths
-            script_args.update(dict(mask = batch_maskfile, outdir = batch_dir))
-
-            # Execute script
-            execute_R(script = script, **script_args)
-
-        # Collate batch images
-        print("Collating batched images...")
-        outfiles = os.listdir(batch_dirs[0])
-        outfiles = [file for file in outfiles if file != 'batch_mask.mnc']
-        for outfile in outfiles:
-
-            img = np.zeros_like(mask_array)
-            for b, batch in enumerate(batches):
-                batch_img = os.path.join(batch_dirs[b], outfile)
-                batch_mask = os.path.join(batch_dirs[b], 'batch_mask.mnc')
-                img[batch] = import_image(img = batch_img, mask = batch_mask)
-
-            outfile = os.path.join(outdir, outfile)
-            vector_to_image(x = img, outfile = outfile, maskfile = mask)
-
-        print("Cleaning up...")
-        for batch_dir in batch_dirs:
-            rmtree(batch_dir)
-
-    else:
-
-        execute_R(script = script, **script_args)
-
-    outfiles = os.listdir(outdir)
-    outfiles = [file for file in outfiles if '.mnc' in file]
-    outfiles = [os.path.join(outdir, file) for file in outfiles]
-    return outfiles
-
-
-def propensity_matching_norm(imgdir, demographics, mask, outdir,
-                             ncontrols = 10, parallel = False, nproc = None):
-    """
-    Calculate human effect size images using propensity-matching.
-    
-    Arguments
-    ---------
-    imgdir: str
-        Path to the directory containing the images (.mnc) to use to
-        compute the effect sizes.
-    demographics: str
-        Path to the file (.csv) containing the demographics data.
-    mask: str
-        Path to the mask file (.mnc).
-    outdir: str
-        Path to the directory in which to save the effect size images.
-    ncontrols: int, default 10
-        Number of propensity-matched controls to use when computing 
-        the effect sizes.
-    parallel: bool, default False
-        Option to run in parallel.
-    nproc: int, default None
-        Number of processors to use in parallel.
-    
-    Returns
-    -------
-    outfiles: list of str
-        List of paths to the effect size images.
-    """
-
-    # Unpack function args into dictionary
-    script_args = locals().copy()
-
-    # Parallel options
-    if parallel:
-        script_args['parallel'] = 'true'
-        if nproc is None:
-            raise ValueError("Set the nproc argument to specify the ",
-                             "number of processors to use")
-    else:
-        script_args['parallel'] = 'false'
-
-    script = 'propensity_matching_normalization.R'
-    execute_R(script = script, **script_args)
-    outfiles = glob(outdir + '*.mnc')
-    return outfiles
+# def propensity_matching_norm(imgdir, demographics, mask, outdir,
+#                              ncontrols = 10, parallel = False, nproc = None):
+#     """
+#     Calculate human effect size images using propensity-matching.
+#
+#     Arguments
+#     ---------
+#     imgdir: str
+#         Path to the directory containing the images (.mnc) to use to
+#         compute the effect sizes.
+#     demographics: str
+#         Path to the file (.csv) containing the demographics data.
+#     mask: str
+#         Path to the mask file (.mnc).
+#     outdir: str
+#         Path to the directory in which to save the effect size images.
+#     ncontrols: int, default 10
+#         Number of propensity-matched controls to use when computing
+#         the effect sizes.
+#     parallel: bool, default False
+#         Option to run in parallel.
+#     nproc: int, default None
+#         Number of processors to use in parallel.
+#
+#     Returns
+#     -------
+#     outfiles: list of str
+#         List of paths to the effect size images.
+#     """
+#
+#     # Unpack function args into dictionary
+#     script_args = locals().copy()
+#
+#     # Parallel options
+#     if parallel:
+#         script_args['parallel'] = 'true'
+#         if nproc is None:
+#             raise ValueError("Set the nproc argument to specify the ",
+#                              "number of processors to use")
+#     else:
+#         script_args['parallel'] = 'false'
+#
+#     script = 'propensity_matching_normalization.R'
+#     execute_R(script = script, **script_args)
+#     outfiles = glob(outdir + '*.mnc')
+#     return outfiles
 
 
 def vector_to_image(x, outfile, maskfile, version = "v1"):
@@ -532,123 +532,123 @@ def build_voxel_matrix(imgfiles, mask = None, file_col = False, sort = False,
     return df_imgs
 
 
-def cluster_human_data(infiles, rownames = None, nk_max = 10,
-                       metric = 'correlation', K = 10, sigma = 0.5, t = 20,
-                       cluster_file = 'clusters.csv', affinity_file = None):
-    """
-    Cluster matrices of voxel values using similarity network fusion.
-    
-    Arguments
-    ---------
-    infiles: list of str
-        List of paths to the files (.csv) containing voxel-wise data.
-    rownames: str, default None
-        Column in the input files containing row names.
-    nk_max: int, default 10
-        Maximum number of clusters to identify. Solutions will be obtained for
-        nk = 2 to nk = `nk_max`.
-    metric: str, default 'correlation'
-        Similarity metric used to compute the SNF affinity matrices.
-    K: int, default 10
-        Number of nearest-neighbours used to compute the SNF 
-        affinity matrices.
-    sigma: float, default 0.5
-        Variance for the local model in the SNF affinity matrices.
-    t: int, default 20
-        Number of iterations for the diffusion process in SNF.
-    cluster_file: str, default 'clusters.csv'
-        Path to the file (.csv) in which to write the cluster assignments.
-    affinity_file: str, default None
-        Path to the file (.csv) in which to write the affinity matrix. If None,
-        the affinity matrix is not saved.
-        
-    Returns
-    -------
-    cluster_file: str
-    Path to the file (.csv) containing the cluster assignments
-    """
+# def cluster_human_data(infiles, rownames = None, nk_max = 10,
+#                        metric = 'correlation', K = 10, sigma = 0.5, t = 20,
+#                        cluster_file = 'clusters.csv', affinity_file = None):
+#     """
+#     Cluster matrices of voxel values using similarity network fusion.
+#
+#     Arguments
+#     ---------
+#     infiles: list of str
+#         List of paths to the files (.csv) containing voxel-wise data.
+#     rownames: str, default None
+#         Column in the input files containing row names.
+#     nk_max: int, default 10
+#         Maximum number of clusters to identify. Solutions will be obtained for
+#         nk = 2 to nk = `nk_max`.
+#     metric: str, default 'correlation'
+#         Similarity metric used to compute the SNF affinity matrices.
+#     K: int, default 10
+#         Number of nearest-neighbours used to compute the SNF
+#         affinity matrices.
+#     sigma: float, default 0.5
+#         Variance for the local model in the SNF affinity matrices.
+#     t: int, default 20
+#         Number of iterations for the diffusion process in SNF.
+#     cluster_file: str, default 'clusters.csv'
+#         Path to the file (.csv) in which to write the cluster assignments.
+#     affinity_file: str, default None
+#         Path to the file (.csv) in which to write the affinity matrix. If None,
+#         the affinity matrix is not saved.
+#
+#     Returns
+#     -------
+#     cluster_file: str
+#     Path to the file (.csv) containing the cluster assignments
+#     """
+#
+#     # Unpack function args into dictionary
+#     script_args = locals().copy()
+#
+#     # Input files options
+#     if type(script_args['infiles']) is not list:
+#         raise TypeError("Argument infiles must be a list.")
+#     else:
+#         if len(script_args['infiles']) != 2:
+#             raise Exception("Argument infiles must have length 2.")
+#
+#         script_args['file1'] = script_args['infiles'][0]
+#         script_args['file2'] = script_args['infiles'][1]
+#         del script_args['infiles']
+#
+#     # Update dictionary keys to match R command line args
+#     script_args['nk-max'] = script_args.pop('nk_max')
+#     script_args['cluster-file'] = script_args.pop('cluster_file')
+#     script_args['affinity-file'] = script_args.pop('affinity_file')
+#
+#     # Remove command line args if None
+#     if rownames is None:
+#         del script_args['rownames']
+#
+#     if affinity_file is None:
+#         del script_args['affinity-file']
+#
+#     script = 'cluster_human_data.R'
+#     execute_R(script = script, **script_args)
+#     return cluster_file
 
-    # Unpack function args into dictionary
-    script_args = locals().copy()
 
-    # Input files options
-    if type(script_args['infiles']) is not list:
-        raise TypeError("Argument infiles must be a list.")
-    else:
-        if len(script_args['infiles']) != 2:
-            raise Exception("Argument infiles must have length 2.")
-
-        script_args['file1'] = script_args['infiles'][0]
-        script_args['file2'] = script_args['infiles'][1]
-        del script_args['infiles']
-
-    # Update dictionary keys to match R command line args
-    script_args['nk-max'] = script_args.pop('nk_max')
-    script_args['cluster-file'] = script_args.pop('cluster_file')
-    script_args['affinity-file'] = script_args.pop('affinity_file')
-
-    # Remove command line args if None
-    if rownames is None:
-        del script_args['rownames']
-
-    if affinity_file is None:
-        del script_args['affinity-file']
-
-    script = 'cluster_human_data.R'
-    execute_R(script = script, **script_args)
-    return cluster_file
-
-
-def create_cluster_maps(clusters, imgdir, outdir, mask = None,
-                        method = 'mean', nproc = 2, verbose = True):
-    """
-    Create cluster centroid images.
-    
-    Arguments
-    ---------
-    clusters: str
-        Path to the file (.csv) containing cluster assignments.
-    imgdir: str
-        Path to the directory containing images.
-    outdir: str
-        Path to the output directory.
-    mask: str, default None
-        Path to a mask image (.mnc).
-    method: {'mean', 'median'}
-        Method used to compute the centroid images.
-    nproc: int, default 2
-        Number of processors to use in parallel.
-    verbose: bool
-        Verbosity option.
-        
-    Returns
-    -------
-    outfiles: list of str
-        Paths to the cluster centroid images.
-    """
-
-    # Unpack function args into dictionary
-    script_args = locals().copy()
-
-    # Check existence of cluster file
-    if not os.path.exists(script_args['clusters']):
-        raise OSError(
-            "Cluster file not found: {}".format(script_args['clusters']))
-
-    # Convert bools to str
-    script_args['verbose'] = 'true' if script_args['verbose'] else 'false'
-
-    # Update dictionary keys to match R command line args
-    script_args['cluster-file'] = script_args.pop('clusters')
-
-    # Remove command line args if None
-    if mask is None:
-        del script_args['mask']
-
-    script = 'create_cluster_maps.R'
-    execute_R(script = script, **script_args)
-    outfiles = glob(outdir + '*.mnc')
-    return outfiles
+# def create_cluster_maps(clusters, imgdir, outdir, mask = None,
+#                         method = 'mean', nproc = 2, verbose = True):
+#     """
+#     Create cluster centroid images.
+#
+#     Arguments
+#     ---------
+#     clusters: str
+#         Path to the file (.csv) containing cluster assignments.
+#     imgdir: str
+#         Path to the directory containing images.
+#     outdir: str
+#         Path to the output directory.
+#     mask: str, default None
+#         Path to a mask image (.mnc).
+#     method: {'mean', 'median'}
+#         Method used to compute the centroid images.
+#     nproc: int, default 2
+#         Number of processors to use in parallel.
+#     verbose: bool
+#         Verbosity option.
+#
+#     Returns
+#     -------
+#     outfiles: list of str
+#         Paths to the cluster centroid images.
+#     """
+#
+#     # Unpack function args into dictionary
+#     script_args = locals().copy()
+#
+#     # Check existence of cluster file
+#     if not os.path.exists(script_args['clusters']):
+#         raise OSError(
+#             "Cluster file not found: {}".format(script_args['clusters']))
+#
+#     # Convert bools to str
+#     script_args['verbose'] = 'true' if script_args['verbose'] else 'false'
+#
+#     # Update dictionary keys to match R command line args
+#     script_args['cluster-file'] = script_args.pop('clusters')
+#
+#     # Remove command line args if None
+#     if mask is None:
+#         del script_args['mask']
+#
+#     script = 'create_cluster_maps.R'
+#     execute_R(script = script, **script_args)
+#     outfiles = glob(outdir + '*.mnc')
+#     return outfiles
 
 
 def threshold_intensity(img, threshold = 0.5, symmetric = True,
