@@ -1,4 +1,4 @@
-#!.venv/bin/python3
+#!/usr/bin/env python3
 # ----------------------------------------------------------------------------
 # prepare_microarray_data.py
 # Author: Antoine Beauchamp
@@ -98,9 +98,10 @@ def main(
     # Fetch microarray coordinates and transform to study space
     print("Fetching microarray coordinates...")
     coords = transcriptomic.prepare_microarray_coordinates(
+        outdir = pipeline_dir,
         metadata = metadata,
         annotations = annotations,
-        transforms = tuple(transforms)
+        transforms = transforms
     )
 
     # Rename coordinates file
@@ -141,5 +142,6 @@ def main(
 if __name__ == '__main__':
 
     args = parse_args()
-    main()
+    args['transforms'] = tuple(args['transforms'])
+    main(**args)
 
