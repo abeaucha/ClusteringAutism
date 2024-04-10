@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 # ----------------------------------------------------------------------------
 # fetch_microarray_coordinates.R
 # Author: Antoine Beauchamp
