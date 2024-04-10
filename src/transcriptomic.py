@@ -28,7 +28,8 @@ def fetch_microarray_coordinates(metadata, outfile, labels = True,
     script_args['labels'] = 'true' if script_args['labels'] else 'false'
     script_args['verbose'] = 'true' if script_args['verbose'] else 'false'
     script = 'fetch_microarray_coordinates.R'
-    utils.execute_R(script = script, **script_args)
+    # utils.execute_R(script = script, **script_args)
+    utils.execute_local(script = script, kwargs = script_args)
     return outfile
 
 
