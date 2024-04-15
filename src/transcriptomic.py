@@ -24,6 +24,27 @@ def silence():
 
 def fetch_microarray_coordinates(metadata, outfile, labels = True,
                                  verbose = False):
+    """
+    Fetch the AHBA microarray sample coordinates from the web.
+
+    Parameters
+    ----------
+    metadata: str
+        Path to file (.csv) containing the AHBA microarray sample
+        metadata.
+    outfile: str
+        Path to the file (.csv) in which to save the sample coordinates.
+    labels: bool, default True
+        Option to attach atlas labels for the individual microarray
+        samples.
+    verbose: bool, default False
+        Verbosity option.
+
+    Returns
+    -------
+    outfile: str
+        Path to the file (.csv) containing the sample coordinates.
+    """
     kwargs = locals().copy()
     kwargs['labels'] = 'true' if kwargs['labels'] else 'false'
     kwargs['verbose'] = 'true' if kwargs['verbose'] else 'false'
@@ -35,6 +56,32 @@ def fetch_microarray_coordinates(metadata, outfile, labels = True,
 def prepare_microarray_coordinates(metadata, transforms,
                                    outdir = 'data/human/expression/',
                                    annotations = None):
+    """
+    Prepare the AHBA microarray coordinates for the imaging study.
+
+    Parameters
+    ----------
+    metadata: str
+        Path to file (.csv) containing the AHBA microarray sample
+        metadata.
+    transforms: tuple of str
+        Transforms from the MNI ICBM 152 NLIN 09c space to the
+        registration consensus average space, to be passed to
+        antsApplyTransformsToPoints.
+    outdir: str
+        Path to the directory in which to export the microarray
+        sample coordinates.
+    annotations: str
+        Path to the file (.csv) containing AHBA microarray sample
+        annotations indicating whether to keep or discard the sample.
+
+    Returns
+    -------
+    coords: str
+        Path to the file (.csv) containing the AHBA microarray sample
+        coordinates in the imaging study space.
+    """
+
     # MNI coordinates output file
     coords_mni = 'AHBA_microarray_coordinates_mni.csv'
     coords_mni = os.path.join(outdir, coords_mni)

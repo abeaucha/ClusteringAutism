@@ -8,10 +8,10 @@ Prepare the AHBA microarray sample coordinates for the similarity pipelines.
 
 Description
 -----------
-This script transforms the AHBA microarray coordinates from the
+This script transforms the AHBA microarray sample coordinates from the
 MNI ICBM NLIN SYM 09c input space to the consensus average space of the
-study. It also creates label and mask image in the study space for the
-microarray samples.
+imaging study. It also creates label and mask images in the study space
+for the microarray samples.
 """
 
 # Packages -------------------------------------------------------------------
@@ -36,15 +36,16 @@ def parse_args():
         '--pipeline-dir',
         type = str,
         default = 'data/human/expression/v3/',
-        help = "Path to the expression data directory."
+        help = ("Path to the directory in which to export the microarray "
+                "coordinates data.")
     )
 
     parser.add_argument(
         '--transforms',
         nargs = '*',
         type = str,
-        help = ("List of paths to the transforms from the registration ",
-                "consensus average space to the MNI ICBM 152 NLIN 09c space.")
+        help = ("List of paths to the transforms from the MNI ICBM 152 NLIN "
+                "09c space to the registration consensus average space.")
     )
 
     parser.add_argument(
@@ -58,14 +59,17 @@ def parse_args():
         '--metadata',
         type = str,
         default = 'data/human/expression/SampleInformation_pipeline_abagen.csv',
-        help = ("Name of the metadata file (.csv) for the AHBA microarray ",
-                "samples.")
+        help = ("Path to the file (.csv) containing the AHBA microarray "
+                "sample metadata.")
     )
 
     parser.add_argument(
         '--annotations',
         type = str,
-        default = 'data/human/expression/AHBA_microarray_sample_annotations.csv'
+        default = 'data/human/expression/AHBA_microarray_sample_annotations.csv',
+        help = ("Path to the file (.csv) containing AHBA microarray sample "
+                "annotations indicating whether to keep or discard the "
+                "sample.")
     )
 
     return vars(parser.parse_args())
@@ -73,12 +77,35 @@ def parse_args():
 
 # Modules --------------------------------------------------------------------
 
-
 def main(
     pipeline_dir, transforms, template,
     metadata = 'data/human/expression/SampleInformation_pipeline_abagen.csv',
     annotations = 'data/human/expression/AHBA_microarray_sample_annotations.csv'
 ):
+    """
+
+    Parameters
+    ----------
+    pipeline_dir: str
+        Path to the directory in which to export the microarray
+        coordinates data.
+    transforms: tuple of str
+        Transforms from the MNI ICBM 152 NLIN 09c space to the
+        registration consensus average space, to be passed to
+        antsApplyTransformsToPoints.
+    template: str
+        Path to the consensus average template image (.mnc).
+    metadata: str
+        Path to file (.csv) containing the AHBA microarray sample
+        metadata.
+    annotations: str
+        Path to the file (.csv) containing AHBA microarray sample
+        annotations indicating whether to keep or discard the sample.
+
+    Returns
+    -------
+    None
+    """
 
     # Fetch microarray coordinates and transform to study space
     print("Fetching microarray coordinates...")

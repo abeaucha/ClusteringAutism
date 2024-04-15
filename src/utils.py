@@ -751,9 +751,10 @@ def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
     Parameters
     ----------
     infile: str
-        Path to the coordinates to transform (.csv)
+        Path to the file (.csv) containing the coordinates to transform.
     outfile: str
-        Path to the file in which to save transformed coordinates (.csv)
+        Path to the file (.csv) in which to save the transformed
+        coordinates.
     transforms: tuple of str
         Paths to the transform files specified in the order of application.
     orientation: str, default 'RAS'
@@ -762,7 +763,7 @@ def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
     Returns
     -------
     outfile: str
-        Path to the file in which to save transformed coordinates (.csv)
+        Path to the file (.csv) containing the transformed coordinates.
     """
 
     # If RAS orientation, convert to LPS
@@ -777,7 +778,7 @@ def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
     else:
         raise ValueError("`orientation` must be one of {'RAS', 'LPS'}")
 
-    # Concatenate transforms
+    # Concatenate transforms in the order following ANTs convention
     transforms = list(reversed(transforms))
     transforms = [['-t', i] for i in transforms]
     transforms = sum(transforms, [])
@@ -803,6 +804,29 @@ def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
 
 def coordinates_to_minc(coordinates, template, outfile, type = 'labels',
                         verbose = False):
+    """
+
+    Parameters
+    ----------
+    coordinates: str
+        Path to the file (.csv) containing coordinates.
+    template: str
+        Path to the template image (.mnc) defining the space for the
+        coordinates.
+    outfile: str
+        Path to the file (.mnc) in which to export the coordinates
+        image.
+    type: {'labels', 'mask'}
+        Option specifying whether to create a label or mask image
+        from the coordinates.
+    verbose: bool, default False
+        Verbosity option.
+
+    Returns
+    -------
+    outfile: str
+        Path to the file (.mnc) containing the coordinates image.
+    """
     kwargs = locals().copy()
     kwargs['verbose'] = 'true' if kwargs['verbose'] else 'false'
     script = 'coordinates_to_minc.R'
