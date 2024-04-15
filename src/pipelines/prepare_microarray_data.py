@@ -19,6 +19,7 @@ microarray samples.
 import argparse
 import os
 import transcriptomic
+import utils
 from pyminc.volumes.factory import volumeFromFile
 
 
@@ -49,6 +50,7 @@ def parse_args():
     parser.add_argument(
         '--template',
         type = str,
+        default = 'data/human/registration/v3/reference_files/model_0.8mm.mnc',
         help = "Path to the consensus average template image (.mnc)."
     )
 
@@ -72,23 +74,6 @@ def parse_args():
 # Modules --------------------------------------------------------------------
 
 
-# # Directories
-# expr_dir = 'data/human/expression'
-# registration_dir = 'data/human/registration/'
-# # version = 'v1'
-# version = 'v2'
-#
-# # Expression inputs
-# metadata = 'SampleInformation_pipeline_abagen.csv'
-# annotations = 'AHBA_microarray_sample_annotations.csv'
-#
-# # Registration inputs
-# template = 'model_0.8mm.mnc'
-# # transforms = ['average_to_icbm_nlin_sym_09c0GenericAffine.mat',
-# #               'average_to_icbm_nlin_sym_09c1Warp.nii.gz']
-# transforms = ['to_target_0GenericAffine.mat',
-#               'to_target_1Warp.nii']
-
 def main(
     pipeline_dir, transforms, template,
     metadata = 'data/human/expression/SampleInformation_pipeline_abagen.csv',
@@ -104,11 +89,6 @@ def main(
         transforms = transforms
     )
 
-    # Rename coordinates file
-    coords_new = coords.replace('.csv', '_{}.csv'.format(version))
-    os.rename(coords, coords_new)
-    coords = coords_new
-
     # Get template resolution
     vol = volumeFromFile(template)
     resolution = vol.getSeparations()
@@ -120,28 +100,25 @@ def main(
 
     # Create label image from microarray samples
     print("Creating label image...")
-    labels = 'AHBA_microarray_labels_study_{}_{}mm.mnc'.format(version,
-                                                               resolution)
-    labels = os.path.join(expr_dir, labels)
-    labels = transcriptomic.coordinates_to_minc(coordinates = coords,
-                                                template = template,
-                                                outfile = labels,
-                                                type = 'labels')
+    labels = 'AHBA_microarray_labels_study_{}mm.mnc'.format(resolution)
+    labels = os.path.join(pipeline_dir, labels)
+    labels = utils.coordinates_to_minc(coordinates = coords,
+                                       template = template,
+                                       outfile = labels,
+                                       type = 'labels')
 
     # Create mask image from microarray samples
     print("Creating mask image...")
-    mask = 'AHBA_microarray_mask_study_{}_{}mm.mnc'.format(version, resolution)
-    mask = os.path.join(expr_dir, mask)
-    mask = transcriptomic.coordinates_to_minc(coordinates = coords,
-                                              template = template,
-                                              outfile = mask,
-                                              type = 'mask')
+    mask = 'AHBA_microarray_mask_study_{}mm.mnc'.format(resolution)
+    mask = os.path.join(pipeline_dir, mask)
+    mask = utils.coordinates_to_minc(coordinates = coords,
+                                     template = template,
+                                     outfile = mask,
+                                     type = 'mask')
 
 
 # Main -----------------------------------------------------------------------
 if __name__ == '__main__':
-
     args = parse_args()
     args['transforms'] = tuple(args['transforms'])
     main(**args)
-
