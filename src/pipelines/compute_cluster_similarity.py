@@ -80,7 +80,7 @@ def parse_args():
         '--masks',
         nargs = 2,
         type = str,
-        help = ("Paths to the mask files (.mnc).")
+        help = "Paths to the mask image files (.mnc)."
     )
 
     parser.add_argument(
