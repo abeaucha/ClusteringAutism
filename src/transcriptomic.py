@@ -24,21 +24,11 @@ def silence():
 
 def fetch_microarray_coordinates(metadata, outfile, labels = True,
                                  verbose = False):
-    script_args = locals().copy()
-    script_args['labels'] = 'true' if script_args['labels'] else 'false'
-    script_args['verbose'] = 'true' if script_args['verbose'] else 'false'
+    kwargs = locals().copy()
+    kwargs['labels'] = 'true' if kwargs['labels'] else 'false'
+    kwargs['verbose'] = 'true' if kwargs['verbose'] else 'false'
     script = 'fetch_microarray_coordinates.R'
-    # utils.execute_R(script = script, **script_args)
-    utils.execute_local(script = script, kwargs = script_args)
-    return outfile
-
-
-def coordinates_to_minc(coordinates, template, outfile, type = 'labels',
-                        verbose = False):
-    script_args = locals().copy()
-    script_args['verbose'] = 'true' if script_args['verbose'] else 'false'
-    script = 'coordinates_to_minc.R'
-    utils.execute_R(script = script, **script_args)
+    utils.execute_local(script = script, kwargs = kwargs)
     return outfile
 
 
@@ -70,7 +60,7 @@ def prepare_microarray_coordinates(metadata, transforms,
         (pd.read_csv(defs)
          .loc[annotations['keep']]
          .to_csv(defs, index = False))
-
+        
     # Transform MNI coordinates to study space
     coords_study = coords_mni.replace('mni', 'study')
     coords = utils.transform_coordinates(infile = coords_mni,

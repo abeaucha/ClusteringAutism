@@ -781,7 +781,7 @@ def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
     transforms = list(reversed(transforms))
     transforms = [['-t', i] for i in transforms]
     transforms = sum(transforms, [])
-
+    
     # ANTs transform command
     cmd = ['antsApplyTransformsToPoints',
            '-d', str(3),
@@ -798,4 +798,13 @@ def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
         coordinates.to_csv(outfile, index = False)
         os.remove(infile)
 
+    return outfile
+
+
+def coordinates_to_minc(coordinates, template, outfile, type = 'labels',
+                        verbose = False):
+    kwargs = locals().copy()
+    kwargs['verbose'] = 'true' if kwargs['verbose'] else 'false'
+    script = 'coordinates_to_minc.R'
+    execute_local(script = script, kwargs = kwargs)
     return outfile
