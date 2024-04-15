@@ -1,12 +1,10 @@
-#!/bin/bash
+#!/usr/bin/bash
 # coordinates_to_tags.sh
 # Author: Antoine Beauchamp
 # Convert a CSV of coordinates to Tag point format
 
-outdir=data/human/expression/
-# coordinates=${outdir}AHBA_microarray_coordinates_mni.csv
-# coordinates=${outdir}AHBA_microarray_coordinates_study_v1.csv
-coordinates=${outdir}AHBA_microarray_coordinates_study_v2.csv
+outdir=data/human/expression/v3
+coordinates=${outdir}AHBA_microarray_coordinates_study.csv
 
 tags=$(basename $coordinates .csv).tag
 tags=${outdir}$tags
