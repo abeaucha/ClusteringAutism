@@ -27,7 +27,14 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--file',
+        '--output-file',
+        type = str,
+        help = ("Path to the file (.csv) in which to export the similarity "
+                "values.")
+    )
+
+    parser.add_argument(
+        '--input-file',
         type = str,
         help = ("Path to the file (.csv) containing image pairs for ",
                 "which to evaluate the similarity.")
@@ -146,35 +153,25 @@ if __name__ == '__main__':
 
     # Parse command line args
     args = parse_args()
+    args['signed'] = True if args['signed'] == 'true' else False
+    args['threshold_symmetric'] = (True if args['threshold_symmetric'] == 'true'
+                                   else False)
 
     # Import image pairs
-    df_imgs = pd.read_csv(args['file'])
+    df_imgs = pd.read_csv(args['input_file'])
     imgs = df_imgs.values.tolist()
     imgs = [tuple(x) for x in imgs]
 
+    # Extract kwargs for module
     kwargs = args.copy()
-    del kwargs['file']
-    kwargs['imgs'] = imgs
+    del kwargs['input_file']
+    del kwargs['output_file']
+    # kwargs['imgs'] = imgs
+    #TODO remove this when working
+    kwargs['imgs'] = imgs[:10]
 
-    transcriptomic_similarity(**kwargs)
+    # Compute pairwise similarity between cluster centroids
+    out = transcriptomic_similarity(**kwargs)
 
-    # Compute pairwise similarity between cluster maps
-    out = transcriptomic_similarity(
-        imgs = imgs,
-        expr = expr,
-        masks = masks,
-        microarray_coords = microarray_coords,
-        gene_space = gene_space,
-        n_latent_spaces = n_latent_spaces,
-        latent_space_id = latent_space_id,
-        metric = metric,
-        signed = signed,
-        threshold = threshold,
-        threshold_value = threshold_value,
-        threshold_symmetric = threshold_symmetric,
-        nproc = nproc
-    )
-
-
-
-    pass
+    # Export similarity data frame
+    out.to_csv(args['output_file'], index = False)

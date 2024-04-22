@@ -225,7 +225,7 @@ def human_signature(img, expr, mask, coords, signed = True, threshold = 'top_n',
     # Create a mask from the (thresholded) image
     img_mask = processing.mask_from_image(img = img, signed = signed)
 
-    # Create a mask for voxels with microarray date
+    # Create a mask for voxels with microarray data
     vol = volumeFromFile(mask)
     microarray_mask = np.zeros(coords.shape[0], dtype = int)
     for i, row in coords.iterrows():
@@ -321,12 +321,12 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
         The similarity between the images.
     """
 
-    #Unpack the input tuples
+    # Unpack the input tuples
     img_human, img_mouse = imgs
     expr_human, expr_mouse = expr
     mask_human, mask_mouse = masks
 
-    #Evaluate the human expression signature
+    # Evaluate the human expression signature
     human = human_signature(img = img_human,
                             expr = expr_human,
                             mask = mask_human,
@@ -336,7 +336,7 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                             threshold_value = threshold_value,
                             threshold_symmetric = threshold_symmetric)
 
-    #Evaluate the mouse expression signature
+    # Evaluate the mouse expression signature
     mouse = mouse_signature(img = img_mouse,
                             expr = expr_mouse,
                             mask = mask_mouse,
@@ -369,9 +369,23 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
 
 
 def get_latent_spaces(expr, ids = None):
+    """
+    Fetch gene expression latent space files
+
+    Parameters
+    ----------
+    expr: list of str
+        Path to the directory containing the latent space files (.csv).
+    ids: list of int
+        List containing latent space IDs to return.
+
+    Returns
+    -------
+    latent_spaces: list of tuple of str
+        Paths to the files (.csv) containing the latent space data.
+    """
     latent_spaces = []
     for e in expr:
-        e = os.path.join(e, 'latent_space')
         files = os.listdir(e)
         ids_all = [int(i.split('_')[-1]) for i in
                    [os.path.splitext(file)[0] for file in files]]
@@ -399,8 +413,7 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
                               n_latent_spaces = 100, latent_space_id = 1,
                               metric = 'correlation', signed = True,
                               threshold = 'top_n', threshold_value = 0.2,
-                              threshold_symmetric = True, parallel = False,
-                              nproc = None):
+                              threshold_symmetric = True, nproc = 1):
 
     """
     Compute the transcriptomic similarity for a set of mouse and human images.
@@ -441,9 +454,7 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
     threshold_symmetric: bool, default True
         Option to apply threshold symmetrically to positive and negative voxel
         values.
-    parallel: bool, default True
-        Option to run in parallel.
-    nproc: int, default None
+    nproc: int, default 1
         Number of processors to use in parallel.
 
     Returns
@@ -476,21 +487,25 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
 
     if gene_space == 'homologous-genes':
 
+        # In case of homologous gene space, return a list of length 1
+        # containing a tuple with the expression files
         expr = list(expr)
-        expr_files = (
-            'HumanExpressionMatrix_samples_pipeline_abagen_homologs_scaled.csv'
-            'MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv',
+        expr_files = dict(
+            human = 'HumanExpressionMatrix_samples_pipeline_abagen_homologs_scaled.csv',
+            mouse = 'MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed_homologs_scaled.csv'
         )
         for i, path in enumerate(expr):
-            expr[i] = os.path.join(path, 'input_space', expr_files[i])
+            expr[i] = os.path.join(path, 'input_space', expr_files[species[i]])
         expr = [tuple(expr)]
 
     elif gene_space == 'latent-space':
 
+        expr = [os.path.join(path, 'latent_space') for path in expr]
         expr = get_latent_spaces(expr = expr, ids = [latent_space_id])
 
     elif gene_space == 'average-latent-space':
 
+        expr = [os.path.join(path, 'latent_space') for path in expr]
         expr = get_latent_spaces(expr = expr,
                                  ids = range(1, n_latent_spaces + 1))
 
@@ -499,7 +514,8 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
                          "{'homologous-genes', " 
                          "'latent-space', " 
                          "'average-latent-space'}")
-        
+
+    # Expand all combinations of images and expression spaces
     inputs = list(product(imgs, expr))
     
     tempfunc_partial = partial(tempfunc,
@@ -511,10 +527,7 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
                                threshold_value = threshold_value,
                                threshold_symmetric = threshold_symmetric)
 
-    if parallel:
-        if nproc is None:
-            raise ValueError("Set the nproc argument to specify the "
-                             "number of processors to use in parallel.")
+    if nproc > 1:
         pool = mp.Pool(nproc)
         sim = []
         for s in tqdm(pool.imap(tempfunc_partial, inputs), total = len(inputs)):
@@ -525,12 +538,16 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
         sim = list(map(tempfunc_partial, tqdm(inputs)))
 
     out = pd.DataFrame(
-        dict(human_img = [x[0][0] for x in inputs],
-             mouse_img = [x[0][1] for x in inputs],
+        dict(img1 = [x[0][0] for x in inputs],
+             img2 = [x[0][1] for x in inputs],
              similarity = sim)
     )
 
     if gene_space == 'average-latent-space':
-        out = out.groupby(by = ['human_img','mouse_img'], as_index = False).mean().copy()
+        out = (out
+               .groupby(by = ['img1','img2'],
+                        as_index = False)
+               .mean()
+               .copy())
 
     return out
