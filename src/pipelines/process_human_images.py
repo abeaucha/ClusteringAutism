@@ -312,7 +312,7 @@ def initialize(**kwargs):
         es_batch = (None if kwargs['es_batch'] is None
                     else '-'.join(kwargs['es_batch'])),
         es_ncontrols = kwargs['es_ncontrols'],
-        cluster_resolution = f'{kwargs['cluster_resolution']:.1f}',
+        cluster_resolution = f'{kwargs["cluster_resolution"]:.1f}',
         cluster_nk_max = kwargs['cluster_nk_max'],
         cluster_metric = kwargs['cluster_metric'],
         cluster_K = kwargs['cluster_K'],
