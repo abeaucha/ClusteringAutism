@@ -312,7 +312,7 @@ def initialize(**kwargs):
         es_batch = (None if kwargs['es_batch'] is None
                     else '-'.join(kwargs['es_batch'])),
         es_ncontrols = kwargs['es_ncontrols'],
-        cluster_resolution = f'{kwargs["cluster_resolution"]:.1f}',
+        cluster_resolution = f'{kwargs['cluster_resolution']:.1f}',
         cluster_nk_max = kwargs['cluster_nk_max'],
         cluster_metric = kwargs['cluster_metric'],
         cluster_K = kwargs['cluster_K'],
@@ -490,9 +490,9 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
         if registry_name is not None:
-            registry_name_es = registry_name + "_es_" + j
+            registry_name_es = registry_name + '_es_' + j
             kwargs['registry-name'] = registry_name_es
-        kwargs['registry-cleanup'] = "true" if registry_cleanup else "false"
+        kwargs['registry-cleanup'] = 'true' if registry_cleanup else 'false'
         utils.execute_local(script = script, kwargs = kwargs)
 
         # Create the effect size matrix
@@ -558,7 +558,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
                                               mask = mask_f,
                                               file_col = True,
                                               sort = True,
-                                              version = "v1",
+                                              version = 'v1',
                                               parallel = True,
                                               nproc = nproc)
         df_es['file'] = [os.path.basename(file) for file in df_es['file']]
@@ -677,9 +677,9 @@ def centroids(clusters, imgdir, outdir, mask,
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
         if registry_name is not None:
-            registry_name_es = registry_name + "_centroids_" + j
+            registry_name_es = registry_name + '_centroids_' + j
             kwargs['registry-name'] = registry_name_es
-        kwargs['registry-cleanup'] = "true" if registry_cleanup else "false"
+        kwargs['registry-cleanup'] = 'true' if registry_cleanup else 'false'
         utils.execute_local(script = script, kwargs = kwargs)
         out[j] = os.path.join(outdir, j, '')
 
