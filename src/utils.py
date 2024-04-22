@@ -23,30 +23,37 @@ def timing(f):
     return wrap
 
 
-def slurm_build(script, args, resources):
-    """
+def slurm_registry(name):
+    registry = dict(
+        jobs = os.path.join(name, 'jobs'),
+        logs = os.path.join(name, 'logs')
+    )
+    for val in registry.values():
+        if not os.path.exists(val):
+            os.makedirs(val)
+    return registry
 
-    Parameters
-    ----------
-    script: str
-        Name of the script to execute.
-    args: dict
-        Command line arguments for the script.
-    resources: dict
-        Arguments for the slurm scheduler.
 
-    Returns
-    -------
-    jobfile: str
-        Path to the slurm job file.
-    """
+def slurm_jobfile(registry, script, kwargs, resources):
 
-    # Create a temp file
+    # Remove null arguments
+    kwargs = {key:val for key, val in kwargs.items() if val is not None}
+
+    # Create empty temp file
     file = tf.NamedTemporaryFile(mode = 'w',
-                                 dir = './',
+                                 dir = registry['jobs'],
                                  suffix = '.sh',
                                  delete = False,
                                  newline = '\n')
+
+    # Job name
+    resources['job_name'] = os.path.basename(file.name).replace('.sh', '')
+
+    # Job log file
+    logfile = os.path.basename(file.name)
+    logfile = logfile.replace('.sh', '.out')
+    logfile = os.path.join(registry['logs'], logfile)
+    resources['output'] = logfile
 
     # Open file for editing
     with file as f:
@@ -54,36 +61,26 @@ def slurm_build(script, args, resources):
         # Initial shebang
         f.write('#!/bin/bash\n')
 
-        # Write out slurm arguments
+        # SBATCH arguments
         for key, val in resources.items():
             line = '#SBATCH --{}={}\n'.format(key.replace('_', '-'), val)
             f.write(line)
 
         # Activate project virtual environment
-        f.write('source activate_venv.sh\n')
+        f.write('source activate_venv_hpc.sh\n')
 
-        # Execute script using python or R
-        script_ext = os.path.splitext(script)[-1]
-        if script_ext == '.py':
-            script_cmd = 'python3 {} '.format(script)
-        elif script_ext == '.R':
-            script_cmd = 'Rscript {}'.format(script)
-        else:
-            raise Exception
-
-        # script_cmd = '{} \\\n'.format(script_cmd)
-        f.write(script_cmd)
-        for key, val in args.items():
+        # Script and arguments
+        f.write(script + ' ')
+        for key, val in kwargs.items():
             if type(val) is tuple:
                 val = ' '.join(val)
-            # line = '--{} {} \\\n'.format(key.replace('_', '-'), val)
             line = '--{} {} '.format(key.replace('_', '-'), val)
             f.write(line)
 
-        jobfile = f.name
         f.close()
 
-    return jobfile
+        return file.name
+
 
 
 def slurm_submit(script, args, resources):
@@ -126,7 +123,12 @@ def execute_local(script, kwargs = None):
     """
 
     kwargs = {key:val for key, val in kwargs.items() if val is not None}
-    kwargs = [['--' + str(key), str(val)] for key, val in kwargs.items()]
+    for key, val in kwargs.items():
+        if type(val) is tuple or type(val) is list:
+            kwargs[key] = [str(x) for x in val]
+        else:
+            kwargs[key] = [str(val)]
+    kwargs = [sum([['--'+str(key)], val],[]) for key, val in kwargs.items()]
     kwargs = sum(kwargs, [])
     cmd = [script] + kwargs
     subprocess.run(cmd)

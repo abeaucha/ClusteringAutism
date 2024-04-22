@@ -27,6 +27,7 @@ import utils
 import numpy as np
 import pandas as pd
 from itertools import product
+import tempfile as tf
 
 
 # Command line arguments -----------------------------------------------------
@@ -331,7 +332,7 @@ def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
 
         # Expand centroid combinations for current Jacobians
         cluster_pairs_j = [list(pair) for pair in
-                            list(product(centroids_j[0], centroids_j[1]))]
+                           list(product(centroids_j[0], centroids_j[1]))]
 
         # Concatenate Jacobian image pairs
         if j == 0:
@@ -344,7 +345,7 @@ def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
 
 @utils.timing
 def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
-         microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study_v3.csv',
+         microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
          gene_space = 'average-latent-space',
          n_latent_spaces = 100, latent_space_id = 1,
          metric = 'correlation', signed = True,
@@ -370,6 +371,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         threshold_value = None
         threshold_symmetric = None
 
+    # Get local kwargs
     kwargs = locals().copy()
 
     # Initialize pipeline directory tree
@@ -379,23 +381,64 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     # Generate pairs of centroid images
     print("Generating centroid image pairs...")
     cluster_pairs = generate_cluster_pairs(centroid_dirs = paths['centroids'],
-                                             jacobians = jacobians)
+                                           jacobians = jacobians)
+    cluster_pairs = pd.DataFrame(cluster_pairs)
 
-    outfile = os.path.join(paths['pipeline'], 'centroid_pairs.csv')
-    pd.DataFrame(cluster_pairs).to_csv(outfile, index = False)
+    # Driver script
+    script = 'transcriptomic_similarity.py'
 
+    # Update kwargs for driver
+    kwargs['expr'] = kwargs.pop('expr_dirs')
+    kwargs['signed'] = 'true' if signed else 'false'
+    kwargs['threshold_symmetric'] = 'true' if threshold_symmetric else 'false'
+    del kwargs['pipeline_dir']
+    del kwargs['input_dirs']
+    del kwargs['param_ids']
+    del kwargs['jacobians']
+    del kwargs['execution']
+    del kwargs['registry_name']
+    del kwargs['registry_cleanup']
+    del kwargs['slurm_njobs']
+    del kwargs['slurm_mem']
+    del kwargs['slurm_time']
+
+    # Execution mode
     if execution == 'local':
+
         # Export cluster pairs
-        utils.execute_local(...)
+        outfile = os.path.join(paths['pipeline'], 'centroid_pairs.csv')
+        cluster_pairs.to_csv(outfile, index = False)
+
+        # Update kwargs for driver
+        kwargs['input-file'] = outfile
+        kwargs['output-file'] = os.path.join(paths['pipeline'], 'similarity.csv')
+        kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
+
+        # Execute driver
+        utils.execute_local(script = script, kwargs = kwargs)
+
     elif execution == 'slurm':
+
+        resources = dict(
+            nodes = 1,
+            mem = slurm_mem,
+            time = slurm_time
+        )
+
+        # Build registry
+        registry = utils.slurm_registry(name = registry_name)
+
+        # This is one job file. Need to batch the input and create a bunch
+        jobfile = utils.slurm_jobfile(registry = registry,
+                                      script = script,
+                                      kwargs = kwargs,
+                                      resources = resources)
+
         pass
     else:
         raise ValueError
 
-    tmp = pd.read_csv('data/test/cross_species/v3/metadata.csv')
-
     sys.exit()
-
 
     # Next steps
     # - Split centroid pairs into batches. Export the pairs in each batch to
