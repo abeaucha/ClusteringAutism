@@ -1,3 +1,4 @@
+import math
 import os
 import subprocess
 import sys
@@ -24,15 +25,42 @@ def timing(f):
 
 
 def slurm_registry(name):
+
+    i = 1; iterate = True
+    while iterate:
+        id = f'{i:03d}'
+        name_test = '{}_{}'.format(name, id)
+        if os.path.exists(name_test):
+            i += 1
+        else:
+            name = name_test
+            iterate = False
+
     registry = dict(
+        name = name,
         jobs = os.path.join(name, 'jobs'),
-        logs = os.path.join(name, 'logs')
+        logs = os.path.join(name, 'logs'),
+        batches = os.path.join(name, 'batches'),
+        outputs = os.path.join(name, 'outputs')
+
     )
     for val in registry.values():
         if not os.path.exists(val):
             os.makedirs(val)
     return registry
 
+
+def slurm_batch_df(registry, x, nbatches = 2, prefix = 'batch'):
+
+    batch_files = ['{}_{}.csv'.format(prefix, i) for i in range(nbatches)]
+    batch_files = [os.path.join(registry['batches'], file) for file in batch_files]
+    batch_size = math.ceil(len(x) / nbatches)
+    batch_start_ind = range(0, len(x), batch_size)
+    for i in range(nbatches):
+        batch_start = batch_start_ind[i]
+        batch = x[batch_start:batch_start + batch_size]
+        batch.to_csv(batch_files[i], index = False)
+    return batch_files
 
 def slurm_jobfile(registry, script, kwargs, resources):
 

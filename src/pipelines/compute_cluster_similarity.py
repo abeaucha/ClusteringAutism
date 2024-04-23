@@ -22,6 +22,7 @@ Parameters governing the evaluation of the similarity computations are mappable.
 
 import argparse
 import os
+import shutil
 import sys
 import utils
 import numpy as np
@@ -353,8 +354,9 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
          threshold_symmetric = True,
          jacobians = ('absolute', 'relative'),
          execution = 'local', nproc = 1,
-         registry_name = None, registry_cleanup = True,
-         slurm_njobs = None, slurm_mem = None, slurm_time = None):
+         registry_name = 'compute_cluster_similarity_registry',
+         registry_cleanup = True, slurm_njobs = None, slurm_mem = None,
+         slurm_time = None):
     # Adapt gene space parameters to selected gene space
     if gene_space == 'average-latent-space':
         latent_space_id = None
@@ -419,20 +421,37 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 
     elif execution == 'slurm':
 
+        # Slurm job resources
         resources = dict(
             nodes = 1,
             mem = slurm_mem,
             time = slurm_time
         )
+        slurm_njobs = 2
 
-        # Build registry
+        # Create registry
         registry = utils.slurm_registry(name = registry_name)
 
-        # This is one job file. Need to batch the input and create a bunch
-        jobfile = utils.slurm_jobfile(registry = registry,
-                                      script = script,
-                                      kwargs = kwargs,
-                                      resources = resources)
+        # Batch the input files
+        registry_batches = utils.slurm_batch_df(registry = registry,
+                                                x = cluster_pairs,
+                                                nbatches = slurm_njobs,
+                                                prefix = 'centroid_pairs_batch')
+
+        for i in range(slurm_njobs):
+            kwargs_i = kwargs.copy()
+            kwargs_i['input-file'] = registry_batches[i]
+            kwargs_i['output-file'] = os.path.join(registry['outputs'], 'similarity_batch_{}.csv'.format(i))
+            jobfile_i = utils.slurm_jobfile(registry = registry,
+                                            script = script,
+                                            kwargs = kwargs_i,
+                                            resources = resources)
+
+        jobs = os.listdir(registry['jobs'])
+        jobs = [os.path.splitext(job)[0] for job in jobs]
+
+        if registry_cleanup:
+            shutil.rmtree(registry['name'])
 
         pass
     else:
@@ -465,4 +484,6 @@ if __name__ == '__main__':
                          else args['threshold'])
     args['threshold_symmetric'] = (True if args['threshold_symmetric'] == 'true'
                                    else False)
+    args['registry_cleanup'] = (True if args['registry_cleanup'] == 'true'
+                                else False)
     main(**args)
