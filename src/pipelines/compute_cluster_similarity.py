@@ -213,8 +213,8 @@ def parse_args():
 
     parser.add_argument(
         '--slurm-time',
-        type = int,
-        help = "Walltime in minutes for Slurm jobs."
+        type = str,
+        help = "Walltime in hh:mm:ss format for Slurm jobs."
     )
 
     return vars(parser.parse_args())
@@ -430,28 +430,19 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         slurm_njobs = 2
 
         # Create registry
-        registry = utils.slurm_registry(name = registry_name)
+        registry = utils.Registry(resources = resources)
 
-        # Batch the input files
-        registry_batches = utils.slurm_batch_df(registry = registry,
-                                                x = cluster_pairs,
-                                                nbatches = slurm_njobs,
-                                                prefix = 'centroid_pairs_batch')
+        # Create data batches
+        registry.create_batches(x = cluster_pairs,
+                                nbatches = slurm_njobs,
+                                prefix = 'centroid_pairs_batch')
 
-        for i in range(slurm_njobs):
-            kwargs_i = kwargs.copy()
-            kwargs_i['input-file'] = registry_batches[i]
-            kwargs_i['output-file'] = os.path.join(registry['outputs'], 'similarity_batch_{}.csv'.format(i))
-            jobfile_i = utils.slurm_jobfile(registry = registry,
-                                            script = script,
-                                            kwargs = kwargs_i,
-                                            resources = resources)
+        # Create jobs for batches
+        registry.create_jobs(script = script,
+                             kwargs = kwargs)
 
-        jobs = os.listdir(registry['jobs'])
-        jobs = [os.path.splitext(job)[0] for job in jobs]
-
-        if registry_cleanup:
-            shutil.rmtree(registry['name'])
+        # Submit slurm jobs
+        registry.submit_jobs()
 
         pass
     else:

@@ -1,10 +1,11 @@
 import math
 import os
+import shutil
 import subprocess
 import sys
 import multiprocessing as mp
 import pandas as pd
-import tempfile as tf
+import tempfile
 from functools import partial
 from functools import wraps
 from random import randint
@@ -13,102 +14,133 @@ from tqdm import tqdm
 from time import time
 
 
+class Registry:
+    def __init__(self, resources = None, name = 'registry'):
+
+        if resources is None:
+            raise ValueError("Argument 'resources' must be specified.")
+
+        i = 1;
+        iterate = True
+        while iterate:
+            id = f'{i:03d}'
+            name_test = '{}_{}'.format(name, id)
+            if os.path.exists(name_test):
+                i += 1
+            else:
+                name = name_test
+                iterate = False
+
+        self.name = name
+        self.resources = resources
+        self.paths = dict(
+            jobs = os.path.join(name, 'jobs'),
+            logs = os.path.join(name, 'logs'),
+            batches = os.path.join(name, 'batches'),
+            outputs = os.path.join(name, 'outputs')
+        )
+        self.batches = []
+        self.jobs = []
+        self.outputs = []
+
+        for path in self.paths.values():
+            if not os.path.exists(path):
+                os.makedirs(path)
+
+    def create_batches(self, x, nbatches = 2, prefix = 'batch'):
+
+        self.nbatches = nbatches
+
+        if type(x) is pd.core.frame.DataFrame:
+
+            self.batches = ['{}_{}.csv'.format(prefix, i)
+                            for i in range(nbatches)]
+            self.batches = [os.path.join(self.paths['batches'], file)
+                            for file in self.batches]
+            batch_size = math.ceil(len(x) / nbatches)
+            batch_start_ind = range(0, len(x), batch_size)
+            for i in range(nbatches):
+                batch_start = batch_start_ind[i]
+                batch = x[batch_start:batch_start + batch_size]
+                batch.to_csv(self.batches[i], index = False)
+        else:
+            raise ValueError("No method for type {}".format(type(x)))
+
+    def _create_job(self, script, kwargs):
+
+        # Remove null arguments
+        kwargs = {key:val for key, val in kwargs.items() if val is not None}
+
+        # Create empty temp file
+        file = tempfile.NamedTemporaryFile(mode = 'w',
+                                           dir = self.paths['jobs'],
+                                           suffix = '.sh',
+                                           delete = False,
+                                           newline = '\n')
+
+        # Job name
+        job_resources = self.resources.copy()
+        job_resources['job_name'] = os.path.basename(file.name).replace('.sh', '')
+
+        # Job log file
+        logfile = os.path.basename(file.name)
+        logfile = logfile.replace('.sh', '.out')
+        logfile = os.path.join(self.paths['logs'], logfile)
+        job_resources['output'] = logfile
+
+        # Open file for editing
+        with file as f:
+
+            # Initial shebang
+            f.write('#!/bin/bash\n')
+
+            # SBATCH arguments
+            for key, val in job_resources.items():
+                line = '#SBATCH --{}={}\n'.format(key.replace('_', '-'), val)
+                f.write(line)
+
+            # Activate project virtual environment
+            f.write('source activate_venv_hpc.sh\n')
+
+            # Script and arguments
+            f.write(script + ' ')
+            for key, val in kwargs.items():
+                if type(val) is tuple:
+                    val = ' '.join(val)
+                line = '--{} {} '.format(key.replace('_', '-'), val)
+                f.write(line)
+
+            f.close()
+
+        return file.name
+
+    def create_jobs(self, script, kwargs):
+        for i in range(self.nbatches):
+            kwargs_i = kwargs.copy()
+            kwargs_i['input-file'] = self.batches[i]
+            kwargs_i['output-file'] = os.path.join(self.paths['outputs'], 'batch_{}.csv'.format(i))
+            jobfile_i = self._create_job(script = script,
+                                         kwargs = kwargs_i)
+            self.jobs.append(jobfile_i)
+
+    def submit_jobs(self):
+        for job in self.jobs:
+            subprocess.run('sbatch {}'.format(job))
+
+    def cleanup(self):
+        shutil.rmtree(self.name)
+
+
 def timing(f):
     @wraps(f)
     def wrap(*args, **kw):
         ti = time()
         result = f(*args, **kw)
         tf = time()
-        print('%r: %2.4f minutes' % (f.__name__, (tf-ti)/60))
+        print('%r: %2.4f minutes' % (f.__name__, (tf - ti) / 60))
         return result
+
     return wrap
-
-
-def slurm_registry(name):
-
-    i = 1; iterate = True
-    while iterate:
-        id = f'{i:03d}'
-        name_test = '{}_{}'.format(name, id)
-        if os.path.exists(name_test):
-            i += 1
-        else:
-            name = name_test
-            iterate = False
-
-    registry = dict(
-        name = name,
-        jobs = os.path.join(name, 'jobs'),
-        logs = os.path.join(name, 'logs'),
-        batches = os.path.join(name, 'batches'),
-        outputs = os.path.join(name, 'outputs')
-
-    )
-    for val in registry.values():
-        if not os.path.exists(val):
-            os.makedirs(val)
-    return registry
-
-
-def slurm_batch_df(registry, x, nbatches = 2, prefix = 'batch'):
-
-    batch_files = ['{}_{}.csv'.format(prefix, i) for i in range(nbatches)]
-    batch_files = [os.path.join(registry['batches'], file) for file in batch_files]
-    batch_size = math.ceil(len(x) / nbatches)
-    batch_start_ind = range(0, len(x), batch_size)
-    for i in range(nbatches):
-        batch_start = batch_start_ind[i]
-        batch = x[batch_start:batch_start + batch_size]
-        batch.to_csv(batch_files[i], index = False)
-    return batch_files
-
-def slurm_jobfile(registry, script, kwargs, resources):
-
-    # Remove null arguments
-    kwargs = {key:val for key, val in kwargs.items() if val is not None}
-
-    # Create empty temp file
-    file = tf.NamedTemporaryFile(mode = 'w',
-                                 dir = registry['jobs'],
-                                 suffix = '.sh',
-                                 delete = False,
-                                 newline = '\n')
-
-    # Job name
-    resources['job_name'] = os.path.basename(file.name).replace('.sh', '')
-
-    # Job log file
-    logfile = os.path.basename(file.name)
-    logfile = logfile.replace('.sh', '.out')
-    logfile = os.path.join(registry['logs'], logfile)
-    resources['output'] = logfile
-
-    # Open file for editing
-    with file as f:
-
-        # Initial shebang
-        f.write('#!/bin/bash\n')
-
-        # SBATCH arguments
-        for key, val in resources.items():
-            line = '#SBATCH --{}={}\n'.format(key.replace('_', '-'), val)
-            f.write(line)
-
-        # Activate project virtual environment
-        f.write('source activate_venv_hpc.sh\n')
-
-        # Script and arguments
-        f.write(script + ' ')
-        for key, val in kwargs.items():
-            if type(val) is tuple:
-                val = ' '.join(val)
-            line = '--{} {} '.format(key.replace('_', '-'), val)
-            f.write(line)
-
-        f.close()
-
-        return file.name
-
 
 
 def slurm_submit(script, args, resources):
@@ -156,7 +188,7 @@ def execute_local(script, kwargs = None):
             kwargs[key] = [str(x) for x in val]
         else:
             kwargs[key] = [str(val)]
-    kwargs = [sum([['--'+str(key)], val],[]) for key, val in kwargs.items()]
+    kwargs = [sum([['--' + str(key)], val], []) for key, val in kwargs.items()]
     kwargs = sum(kwargs, [])
     cmd = [script] + kwargs
     subprocess.run(cmd)
@@ -812,7 +844,7 @@ def transform_coordinates(infile, outfile, transforms, orientation = 'RAS'):
     transforms = list(reversed(transforms))
     transforms = [['-t', i] for i in transforms]
     transforms = sum(transforms, [])
-    
+
     # ANTs transform command
     cmd = ['antsApplyTransformsToPoints',
            '-d', str(3),
