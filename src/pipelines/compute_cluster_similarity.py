@@ -9,26 +9,18 @@ Pipeline to evaluate pairwise cluster similarity.
 
 Description
 -----------
-This pipeline evaluates the pairwise gene expression similarity of mouse and
-human clusters on the basis of the cluster centroid images. The centroid images
-are obtained by specifying the mouse and human processing pipeline directories
-as well as parameter set IDs in the command line arguments. Additional paths
-must be specified to the mouse and human gene expression data directories.
 
-Parameters governing the evaluation of the similarity computations are mappable.
 """
 
 # Packages -------------------------------------------------------------------
 
 import argparse
 import os
-import shutil
 import sys
 import utils
-import numpy as np
 import pandas as pd
 from itertools import product
-import tempfile as tf
+
 
 
 # Command line arguments -----------------------------------------------------
@@ -441,7 +433,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         registry.create_jobs(script = script,
                              kwargs = kwargs)
 
-        # Submit slurm jobs
+        # Submit jobs
         registry.submit_jobs()
 
         pass
