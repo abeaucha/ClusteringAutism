@@ -11,12 +11,12 @@ from functools import partial
 from functools import wraps
 from random import randint
 from re import sub
-from tqdm import tqdm
 from time import time, perf_counter
+from tqdm import tqdm
 
 
 class Registry:
-    def __init__(self, resources = None, name = 'registry'):
+    def __init__(self, resources = None, name = 'registry', verbose = True):
 
         if resources is None:
             raise ValueError("Argument 'resources' must be specified.")
@@ -32,6 +32,9 @@ class Registry:
                 name = name_test
                 iterate = False
 
+        if verbose:
+            print("Creating registry: {}".format(name))
+
         self.name = name
         self.resources = resources
         self.paths = dict(
@@ -43,12 +46,16 @@ class Registry:
         self.batches = []
         self.jobs = []
         self.outputs = []
+        self._verbose = verbose
 
         for path in self.paths.values():
             if not os.path.exists(path):
                 os.makedirs(path)
 
     def create_batches(self, x, nbatches = 2, prefix = 'batch'):
+
+        if self._verbose:
+            print("Batching data...")
 
         self.nbatches = nbatches
 
@@ -67,10 +74,11 @@ class Registry:
         else:
             raise ValueError("No method for type {}".format(type(x)))
 
-    def _create_job(self, script, kwargs):
+    def _create_job(self, script, kwargs = None):
 
         # Remove null arguments
-        kwargs = {key:val for key, val in kwargs.items() if val is not None}
+        if kwargs is not None:
+            kwargs = {key:val for key, val in kwargs.items() if val is not None}
 
         # Create empty temp file
         file = tempfile.NamedTemporaryFile(mode = 'w',
@@ -101,34 +109,42 @@ class Registry:
                 f.write(line)
 
             # Activate project virtual environment
-            f.write('source activate_venv_hpc.sh\n')
+            # f.write('source activate_venv_hpc.sh\n')
 
             # Script and arguments
             f.write(script + ' ')
-            for key, val in kwargs.items():
-                if type(val) is tuple:
-                    val = ' '.join(val)
-                line = '--{} {} '.format(key.replace('_', '-'), val)
-                f.write(line)
+            if kwargs is not None:
+                for key, val in kwargs.items():
+                    if type(val) is tuple:
+                        val = ' '.join(val)
+                    line = '--{} {} '.format(key.replace('_', '-'), val)
+                    f.write(line)
 
             f.close()
 
         return file.name
 
-    def create_jobs(self, script, kwargs):
+    def create_jobs(self, script, kwargs = None):
         for i in range(self.nbatches):
-            kwargs_i = kwargs.copy()
-            kwargs_i['input-file'] = self.batches[i]
-            kwargs_i['output-file'] = os.path.join(self.paths['outputs'], 'batch_{}.csv'.format(i))
+            if kwargs is not None:
+                kwargs_i = kwargs.copy()
+                kwargs_i['input-file'] = self.batches[i]
+                kwargs_i['output-file'] = os.path.join(self.paths['outputs'], 'batch_{}.csv'.format(i))
+            else:
+                kwargs_i = kwargs
             jobfile_i = self._create_job(script = script,
                                          kwargs = kwargs_i)
             self.jobs.append(jobfile_i)
 
     def submit_jobs(self):
+        if self._verbose:
+            print("Submitting jobs...")
+        self._jobnames = []
+        self.jobids = []
         for job in self.jobs:
-            # cmd = ['sbatch', job]
-            # print(cmd)
-            subprocess.run(['sbatch', job])
+            # self._jobnames.append(os.path.splitext(os.path.basename(job))[0])
+            output = subprocess.run(['sbatch', job], capture_output=True)
+            # self.jobids.append(output)
 
     def cleanup(self):
         shutil.rmtree(self.name)
@@ -151,29 +167,6 @@ def timing(f):
         return result
 
     return wrap
-
-
-def slurm_submit(script, args, resources):
-    """
-
-    Parameters
-    ----------
-    script: str
-        Name of the script to execute.
-    args: dict
-        Command line arguments for the script.
-    resources: dict
-        Arguments for the slurm scheduler.
-
-    Returns
-    -------
-
-    """
-
-    jobfile = slurm_build(**locals())
-    sbatch_cmd = 'sbatch {}'.format(jobfile)
-    subprocess.run(sbatch_cmd)
-    return
 
 
 def execute_local(script, kwargs = None):
@@ -206,11 +199,6 @@ def execute_local(script, kwargs = None):
     # if output.stderr != b'':
     #     raise Exception("Subprocess failed:\n{}"
     #                     .format(output.stderr.decode("UTF-8")))
-    return
-
-
-def execute_slurm(script, kwargs, slurm_kwargs):
-    # TODO: Write this module
     return
 
 
