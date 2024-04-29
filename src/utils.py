@@ -6,12 +6,13 @@ import sys
 import multiprocessing as mp
 import pandas as pd
 import tempfile
+from contextlib import contextmanager
 from functools import partial
 from functools import wraps
 from random import randint
 from re import sub
 from tqdm import tqdm
-from time import time
+from time import time, perf_counter
 
 
 class Registry:
@@ -125,10 +126,19 @@ class Registry:
 
     def submit_jobs(self):
         for job in self.jobs:
-            subprocess.run('sbatch {}'.format(job))
+            # cmd = ['sbatch', job]
+            # print(cmd)
+            subprocess.run(['sbatch', job])
 
     def cleanup(self):
         shutil.rmtree(self.name)
+
+
+@contextmanager
+def catchtime() -> float:
+    t1 = t2 = perf_counter() 
+    yield lambda: t2 - t1
+    t2 = perf_counter() 
 
 
 def timing(f):
