@@ -1,4 +1,5 @@
 .config/
+.vscode
 .idea/
 .ipynb_checkpoints/
 .venv/
