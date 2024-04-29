@@ -214,7 +214,7 @@ def parse_args():
 
 # Modules --------------------------------------------------------------------
 
-@utils.timing
+
 def initialize(**kwargs):
     """
     Initialize the image processing pipeline.
@@ -289,7 +289,6 @@ def initialize(**kwargs):
     return paths
 
 
-@utils.timing
 def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
     """
     Generate pairs of cluster centroid images
@@ -419,7 +418,6 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
             mem = slurm_mem,
             time = slurm_time
         )
-        slurm_njobs = 2
 
         # Create registry
         registry = utils.Registry(resources = resources)
@@ -430,6 +428,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
                                 prefix = 'centroid_pairs_batch')
 
         # Create jobs for batches
+        kwargs['nproc'] = 1
         registry.create_jobs(script = script,
                              kwargs = kwargs)
 
