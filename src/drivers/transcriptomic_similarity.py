@@ -15,6 +15,8 @@ Description
 
 import argparse
 import pandas as pd
+import sys
+import utils
 from transcriptomic import transcriptomic_similarity
 
 # Command line arguments -----------------------------------------------------
@@ -167,8 +169,7 @@ if __name__ == '__main__':
     del kwargs['input_file']
     del kwargs['output_file']
     # kwargs['imgs'] = imgs
-    #TODO remove this when working
-    kwargs['imgs'] = imgs[:10]
+    kwargs['imgs'] = imgs[:5]
 
     # Compute pairwise similarity between cluster centroids
     out = transcriptomic_similarity(**kwargs)
