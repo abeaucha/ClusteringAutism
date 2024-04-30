@@ -168,11 +168,14 @@ if __name__ == '__main__':
     kwargs = args.copy()
     del kwargs['input_file']
     del kwargs['output_file']
-    # kwargs['imgs'] = imgs
-    kwargs['imgs'] = imgs[:5]
+    kwargs['imgs'] = imgs
+    # kwargs['imgs'] = imgs[:5]
 
     # Compute pairwise similarity between cluster centroids
-    out = transcriptomic_similarity(**kwargs)
+    with utils.catchtime() as t:
+        out = transcriptomic_similarity(**kwargs)
 
-    # Export similarity data frame
-    out.to_csv(args['output_file'], index = False)
+        # Export similarity data frame
+        out.to_csv(args['output_file'], index = False)
+
+    print(f'Time: {t():.3f} seconds')
