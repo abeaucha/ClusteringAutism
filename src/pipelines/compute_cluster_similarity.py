@@ -420,7 +420,8 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         )
 
         # Create registry
-        registry = utils.Registry(resources = resources)
+        registry = utils.Registry(resources = resources,
+                                  name = registry_name)
 
         # Create data batches
         registry.create_batches(x = cluster_pairs,
@@ -437,7 +438,8 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 
         pass
     else:
-        raise ValueError
+        raise ValueError("Argument `execution` must be one of "
+                         "{'local', 'slurm'}")
 
     sys.exit()
 
