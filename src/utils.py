@@ -60,20 +60,18 @@ class Registry:
         if self._verbose:
             print("Batching data...")
 
-        self.nbatches = nbatches
-
         if type(x) is pd.core.frame.DataFrame:
-
-            self.batches = ['{}_{}.csv'.format(prefix, i)
-                            for i in range(nbatches)]
-            self.batches = [os.path.join(self.paths['batches'], file)
-                            for file in self.batches]
             batch_size = math.ceil(len(x) / nbatches)
             batch_start_ind = range(0, len(x), batch_size)
-            for i in range(nbatches):
+            self.nbatches = len(batch_start_ind)
+            self.batches = []
+            for i in range(self.nbatches):
+                batch_file = '{}_{}.csv'.format(prefix, i)
+                batch_file = os.path.join(self.paths['batches'], batch_file)
                 batch_start = batch_start_ind[i]
                 batch = x[batch_start:batch_start + batch_size]
-                batch.to_csv(self.batches[i], index = False)
+                batch.to_csv(batch_file, index = False)
+                self.batches.append(batch_file)
         else:
             raise ValueError("No method for type {}".format(type(x)))
 
