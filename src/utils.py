@@ -15,6 +15,9 @@ from time import time, perf_counter
 from tqdm import tqdm
 
 
+# Classes ---------------------------------------------------------------------
+
+
 class Registry:
     def __init__(self, resources = None, name = 'registry', verbose = True):
 
@@ -168,6 +171,9 @@ def timing(f):
 
     return wrap
 
+
+
+# Modules ---------------------------------------------------------------------
 
 def execute_local(script, kwargs = None):
     """
