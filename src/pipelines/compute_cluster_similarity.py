@@ -80,7 +80,7 @@ def parse_args():
     parser.add_argument(
         '--microarray-coords',
         type = str,
-        default = 'data/human/expression/AHBA_microarray_coordinates_study_v3.csv',
+        default = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
                 "the AHBA microarray samples.")
     )
@@ -335,7 +335,6 @@ def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
     return cluster_pairs
 
 
-@utils.timing
 def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
          microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
          gene_space = 'average-latent-space',
