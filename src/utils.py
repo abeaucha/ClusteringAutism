@@ -11,8 +11,9 @@ from functools import partial
 from functools import wraps
 from random import randint
 from re import sub
-from time import time, perf_counter
+from time import time, perf_counter, sleep
 from tqdm import tqdm
+from warnings import warn
 
 
 # Classes ---------------------------------------------------------------------
@@ -48,6 +49,7 @@ class Registry:
         )
         self.batches = []
         self.jobs = []
+        self.jobnames = []
         self.outputs = []
         self._verbose = verbose
 
@@ -136,16 +138,38 @@ class Registry:
             jobfile_i = self._create_job(script = script,
                                          kwargs = kwargs_i)
             self.jobs.append(jobfile_i)
+            self.jobnames.append(os.path.basename(jobfile_i))
+        self.jobnames = [os.path.splitext(job)[0] for job in self.jobnames]
+        
+    def _fetch_job_ids(self):
+        ids = []
+        for job in self.jobnames:
+            cmd = 'squeue --me --name={} --format=%i --noheader'.format(job) 
+            id = subprocess.run(cmd.split(' '), capture_output = True)
+            id = id.stdout.decode('UTF-8').replace('\n', '')
+            if not id:
+                warn('No job named: {}'.format(job), UserWarning)
+            ids.append(id) # This line is being printed in the warning? Don't know why
+        return ids
+
+    def _fetch_job_statuses(self):
+        sts = []
+        for job in self.jobnames:
+            cmd = 'squeue --me --name={} --format=%t --noheader'.format(job) 
+            st = subprocess.run(cmd.split(' '), capture_output = True)
+            st = st.stdout.decode('UTF-8').replace('\n', '')
+            # if not stat:
+                # warn('No job named: {}'.format(job), UserWarning)
+            sts.append(st) # This line is being printed in the warning? Don't know why
+        return sts
 
     def submit_jobs(self):
         if self._verbose:
             print("Submitting jobs...")
-        self._jobnames = []
-        self.jobids = []
         for job in self.jobs:
-            # self._jobnames.append(os.path.splitext(os.path.basename(job))[0])
-            output = subprocess.run(['sbatch', job], capture_output=True)
-            # self.jobids.append(output)
+            _ = subprocess.run(['sbatch', job], capture_output=True)
+        self.jobids = self._fetch_job_ids()
+        self.jobsts = self._fetch_job_statuses()
 
     def cleanup(self):
         shutil.rmtree(self.name)
