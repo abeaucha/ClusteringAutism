@@ -57,6 +57,7 @@ class Registry:
             if not os.path.exists(path):
                 os.makedirs(path)
 
+
     def create_batches(self, x, nbatches = 2, prefix = 'batch'):
 
         if self._verbose:
@@ -77,7 +78,8 @@ class Registry:
         else:
             raise ValueError("No method for type {}".format(type(x)))
 
-    def _create_job(self, script, kwargs = None):
+
+    def _create_job(self, script, kwargs = None, prefix = None):
 
         # Remove null arguments
         if kwargs is not None:
@@ -86,6 +88,7 @@ class Registry:
         # Create empty temp file
         file = tempfile.NamedTemporaryFile(mode = 'w',
                                            dir = self.paths['jobs'],
+                                           prefix = prefix,
                                            suffix = '.sh',
                                            delete = False,
                                            newline = '\n')
@@ -135,12 +138,16 @@ class Registry:
                 kwargs_i['output-file'] = os.path.join(self.paths['outputs'], 'batch_{}.csv'.format(i))
             else:
                 kwargs_i = kwargs
+            prefix = os.path.splitext(os.path.basename(self.batches[i]))[0]
+            prefix = '_'.join([self.name, prefix, '_']) 
             jobfile_i = self._create_job(script = script,
-                                         kwargs = kwargs_i)
+                                         kwargs = kwargs_i,
+                                         prefix = prefix)
             self.jobs.append(jobfile_i)
             self.jobnames.append(os.path.basename(jobfile_i))
         self.jobnames = [os.path.splitext(job)[0] for job in self.jobnames]
         
+
     def _fetch_job_ids(self):
         ids = []
         for job in self.jobnames:
@@ -152,24 +159,45 @@ class Registry:
             ids.append(id) # This line is being printed in the warning? Don't know why
         return ids
 
-    def _fetch_job_statuses(self):
-        sts = []
-        for job in self.jobnames:
-            cmd = 'squeue --me --name={} --format=%t --noheader'.format(job) 
-            st = subprocess.run(cmd.split(' '), capture_output = True)
-            st = st.stdout.decode('UTF-8').replace('\n', '')
-            # if not stat:
-                # warn('No job named: {}'.format(job), UserWarning)
-            sts.append(st) # This line is being printed in the warning? Don't know why
-        return sts
 
-    def submit_jobs(self):
+    def _fetch_status(self):
+        cmd = ('sacct --jobs={} --name={} --format=JobID%8,JobName%{},STATE'
+               .format(','.join(self.jobids), ','.join(self.jobnames), 
+                       len(self.jobnames[0])))
+        
+        output = (subprocess.run(cmd.split(' '), capture_output = True)
+                  .stdout.decode('UTF-8').splitlines())
+        output = [out.split() for out in output]
+        keys = output[0]
+        rows = [r for r in output[2:] 
+                if r[0] in self.jobids and r[1] in self.jobnames]
+        status = {x[1]:[r[x[0]] for r in rows] for x in enumerate(keys)}
+        return status
+
+
+    def _check_completion(self):
+        status = self._fetch_status()
+        codes_active = ['RUNNING', 'PENDING']
+        n_active = 0
+        for code in codes_active:
+            n_active += status['State'].count(code)
+        completed = True if n_active == 0 else False
+        return completed
+    
+
+    def submit_jobs(self, wait = True):
         if self._verbose:
             print("Submitting jobs...")
         for job in self.jobs:
-            _ = subprocess.run(['sbatch', job], capture_output=True)
+            _ = subprocess.run(['sbatch', job], capture_output = True)
         self.jobids = self._fetch_job_ids()
-        self.jobsts = self._fetch_job_statuses()
+
+        if wait: 
+            print("Waiting for results...")
+        while wait:
+            sleep(10)
+            wait = not self._check_completion()
+            
 
     def cleanup(self):
         shutil.rmtree(self.name)
