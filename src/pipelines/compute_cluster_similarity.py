@@ -367,11 +367,11 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     kwargs = locals().copy()
 
     # Initialize pipeline directory tree
-    print("Initializing pipeline...")
+    print("Initializing pipeline...", flush = True)
     paths = initialize(**kwargs)
 
     # Generate pairs of centroid images
-    print("Generating centroid image pairs...")
+    print("Generating centroid image pairs...", flush = True)
     cluster_pairs = generate_cluster_pairs(centroid_dirs = paths['centroids'],
                                            jacobians = jacobians)
     cluster_pairs = pd.DataFrame(cluster_pairs)
@@ -395,7 +395,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     del kwargs['slurm_time']
 
     # Execution mode
-    print("Evaluating cluster similarity...")
+    print("Evaluating cluster similarity...", flush = True)
     if execution == 'local':
 
         # Export cluster pairs
@@ -438,7 +438,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         out = registry.submit_jobs(wait = True, cleanup = registry_cleanup)
 
         # Export results
-        print("Exporting results...")
+        print("Exporting results...", flush = True)
         output_file = os.path.join(paths['pipeline'], 'similarity.csv')
         out.to_csv(output_file, index = False)
 

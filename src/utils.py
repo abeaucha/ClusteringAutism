@@ -38,7 +38,7 @@ class Registry:
                 iterate = False
 
         if self._verbose:
-            print("Creating registry: {}".format(self.name))
+            print("Creating registry: {}".format(self.name), flush = True)
 
         self.paths = dict(
             jobs = os.path.join(self.name, 'jobs'),
@@ -64,7 +64,7 @@ class Registry:
             raise OSError("Registry not found: {}".format(self.name))
 
         if self._verbose:
-            print("Attaching registry: {}".format(self.name))
+            print("Attaching registry: {}".format(self.name), flush = True)
 
         self.paths = dict(
             jobs = os.path.join(self.name, 'jobs'),
@@ -99,7 +99,7 @@ class Registry:
     def create_batches(self, x, nbatches = 2, prefix = 'batch'):
 
         if self._verbose:
-            print("Batching data...")
+            print("Batching data...", flush = True)
 
         if type(x) is pd.core.frame.DataFrame:
             batch_size = math.ceil(len(x) / nbatches)
@@ -224,10 +224,9 @@ class Registry:
 
     def _reduce(self):
         if self._verbose:
-            print("Reducing results...")
+            print("Reducing results...", flush = True)
         result = pd.concat([pd.read_csv(x) for x in self.outputs])
         return result
-
 
     def _kill_jobs(self):
         for id in self.jobids:
@@ -237,7 +236,8 @@ class Registry:
 
     def cleanup(self):
         if self._verbose:
-            print("Recursively removing directory: {}".format(self.name))
+            print("Recursively removing directory: {}".format(self.name), 
+                  flush = True)
         shutil.rmtree(self.name)
         return
 
@@ -246,20 +246,20 @@ class Registry:
 
         try:
             if self._verbose:
-                print("Submitting jobs...")
+                print("Submitting jobs...", flush = True)
             for job in self.jobs:
                 _ = subprocess.run(['sbatch', job], capture_output = True)
             self.jobids = self._fetch_job_ids()
 
             if wait: 
-                print("Waiting for results...")
+                print("Waiting for results...", flush = True)
             while wait:
                 sleep(10)
                 wait = not self._check_completion()
 
         except KeyboardInterrupt:
             if self._verbose:
-                print("Terminating jobs...")
+                print("Terminating jobs...", flush = True)
             self._kill_jobs()
 
         else:
