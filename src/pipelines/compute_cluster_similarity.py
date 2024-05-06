@@ -395,6 +395,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     del kwargs['slurm_time']
 
     # Execution mode
+    print("Evaluating cluster similarity...")
     if execution == 'local':
 
         # Export cluster pairs
@@ -408,6 +409,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 
         # Execute driver
         utils.execute_local(script = script, kwargs = kwargs)
+
 
     elif execution == 'slurm':
 
@@ -433,22 +435,16 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
                              kwargs = kwargs)
 
         # Submit jobs
-        registry.submit_jobs()
+        out = registry.submit_jobs(wait = True, cleanup = registry_cleanup)
 
-        pass
+        # Export results
+        print("Exporting results...")
+        output_file = os.path.join(paths['pipeline'], 'similarity.csv')
+        out.to_csv(output_file, index = False)
+
     else:
         raise ValueError("Argument `execution` must be one of "
                          "{'local', 'slurm'}")
-
-    sys.exit()
-
-    # Next steps
-    # - Split centroid pairs into batches. Export the pairs in each batch to
-    #   a csv.
-    # - Execute locally or on slurm? If executing on slurm, create a job script
-    #   for each batch. If executed locally, maybe there's no point in batching?
-    #   Just export a csv with all the pairs, and run the driver script using
-    #   that file.
 
     return
 

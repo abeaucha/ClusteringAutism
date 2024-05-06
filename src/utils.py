@@ -20,42 +20,80 @@ from warnings import warn
 
 
 class Registry:
-    def __init__(self, resources = None, name = 'registry', verbose = True):
 
-        if resources is None:
-            raise ValueError("Argument 'resources' must be specified.")
+    def _create_registry(self):
 
-        i = 1;
-        iterate = True
+        if self.resources is None:
+            raise ValueError("Argument 'resources' must be specified "
+                             "when creating a registry.")        
+        
+        i = 1; iterate = True
         while iterate:
             id = f'{i:03d}'
-            name_test = '{}_{}'.format(name, id)
+            name_test = '{}_{}'.format(self.name, id)
             if os.path.exists(name_test):
                 i += 1
             else:
-                name = name_test
+                self.name = name_test
                 iterate = False
 
-        if verbose:
-            print("Creating registry: {}".format(name))
+        if self._verbose:
+            print("Creating registry: {}".format(self.name))
 
-        self.name = name
-        self.resources = resources
         self.paths = dict(
-            jobs = os.path.join(name, 'jobs'),
-            logs = os.path.join(name, 'logs'),
-            batches = os.path.join(name, 'batches'),
-            outputs = os.path.join(name, 'outputs')
+            jobs = os.path.join(self.name, 'jobs'),
+            logs = os.path.join(self.name, 'logs'),
+            batches = os.path.join(self.name, 'batches'),
+            outputs = os.path.join(self.name, 'outputs')
         )
         self.batches = []
         self.jobs = []
         self.jobnames = []
         self.outputs = []
-        self._verbose = verbose
 
         for path in self.paths.values():
             if not os.path.exists(path):
                 os.makedirs(path)
+
+        return
+
+    
+    def _attach_registry(self):
+
+        if not os.path.exists(self.name):
+            raise OSError("Registry not found: {}".format(self.name))
+
+        if self._verbose:
+            print("Attaching registry: {}".format(self.name))
+
+        self.paths = dict(
+            jobs = os.path.join(self.name, 'jobs'),
+            logs = os.path.join(self.name, 'logs'),
+            batches = os.path.join(self.name, 'batches'),
+            outputs = os.path.join(self.name, 'outputs')
+        )
+        self.batches = [os.path.join(self.paths['batches'], batch) 
+                        for batch in os.listdir(self.paths['batches'])]
+        self.jobs = [os.path.join(self.paths['jobs'], job) 
+                        for job in os.listdir(self.paths['jobs'])]
+        self.jobnames = [os.path.splitext(os.path.basename(job))[0] 
+                         for job in self.jobs]
+        self.outputs = [os.path.join(self.paths['outputs'], out) 
+                        for out in os.listdir(self.paths['outputs'])]
+        
+        return
+
+
+    def __init__(self, attach = False, resources = None, name = 'registry', verbose = True):
+
+        self.name = name
+        self._verbose = verbose
+        self.resources = resources
+        if attach:
+            self._attach_registry()
+        else:
+            self._create_registry()
+        return
 
 
     def create_batches(self, x, nbatches = 2, prefix = 'batch'):
@@ -183,24 +221,57 @@ class Registry:
             n_active += status['State'].count(code)
         completed = True if n_active == 0 else False
         return completed
-    
 
-    def submit_jobs(self, wait = True):
+    def _reduce(self):
         if self._verbose:
-            print("Submitting jobs...")
-        for job in self.jobs:
-            _ = subprocess.run(['sbatch', job], capture_output = True)
-        self.jobids = self._fetch_job_ids()
+            print("Reducing results...")
+        result = pd.concat([pd.read_csv(x) for x in self.outputs])
+        return result
 
-        if wait: 
-            print("Waiting for results...")
-        while wait:
-            sleep(10)
-            wait = not self._check_completion()
-            
+
+    def _kill_jobs(self):
+        for id in self.jobids:
+            _ = subprocess.run(['scancel', id])
+        return
+
 
     def cleanup(self):
+        if self._verbose:
+            print("Recursively removing directory: {}".format(self.name))
         shutil.rmtree(self.name)
+        return
+
+
+    def submit_jobs(self, wait = True, cleanup = True):
+
+        try:
+            if self._verbose:
+                print("Submitting jobs...")
+            for job in self.jobs:
+                _ = subprocess.run(['sbatch', job], capture_output = True)
+            self.jobids = self._fetch_job_ids()
+
+            if wait: 
+                print("Waiting for results...")
+            while wait:
+                sleep(10)
+                wait = not self._check_completion()
+
+        except KeyboardInterrupt:
+            if self._verbose:
+                print("Terminating jobs...")
+            self._kill_jobs()
+
+        else:
+            self.outputs = [os.path.join(self.paths['outputs'], out) 
+                            for out in os.listdir(self.paths['outputs'])]
+            return self._reduce()
+
+        finally:
+            if cleanup:
+                self.cleanup()
+                
+
 
 
 @contextmanager
