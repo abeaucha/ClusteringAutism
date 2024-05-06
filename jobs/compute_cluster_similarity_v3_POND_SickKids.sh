@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=32G
-#SBATCH --time=00:30:00
+#SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/compute_cluster_similarity_v3_POND_SK_%j.out
 
@@ -28,6 +28,6 @@ compute_cluster_similarity.py \
 --execution slurm \
 --registry-name $REGISTRY \
 --registry-cleanup false \
---slurm-njobs 300 \
+--slurm-njobs 1000 \
 --slurm-mem 16G \
 --slurm-time 6:00:00
