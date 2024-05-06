@@ -28,6 +28,6 @@ compute_cluster_similarity.py \
 --execution slurm \
 --registry-name $REGISTRY \
 --registry-cleanup false \
---slurm-njobs 1000 \
+--slurm-njobs 400 \
 --slurm-mem 16G \
 --slurm-time 6:00:00
