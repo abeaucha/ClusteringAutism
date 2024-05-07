@@ -201,7 +201,9 @@ class Registry:
     def _fetch_status(self):
         cmd = ('sacct --jobs={} --name={} --format=JobID%20,JobName%{},STATE%20'
                .format(','.join(self.jobids), ','.join(self.jobnames), 
-                       len(self.jobnames[0])))
+                       len(self.jobnames[0]))) # This jobnames thing is breaking when double digit batches
+        # Fix maybe max([len(job) for job in self.jobnames])
+        
         
         output = (subprocess.run(cmd.split(' '), capture_output = True)
                   .stdout.decode('UTF-8').splitlines())

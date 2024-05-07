@@ -14,6 +14,7 @@ source activate_venv_hpc.sh
 REGISTRY="compute_cluster_similarity_registry_${SLURM_JOB_ID}"
 
 # Execute pipeline
+# Maximum of 400 jobs allowed on HPF
 compute_cluster_similarity.py \
 --pipeline-dir data/test/cross_species/v3/ \
 --species human mouse \
