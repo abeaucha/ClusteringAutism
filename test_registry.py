@@ -13,14 +13,14 @@ resources = dict(
     time = "00:10:00"
 )
 
-registry = utils.Registry(resources = resources, name = name)
+registry = utils.Registry(resources = resources)
 
 registry.create_batches(x = pd.DataFrame([range(100), range(100)]),
                         nbatches = 2)
 
-registry.create_jobs(script = 'sleep 10s')
+registry.create_jobs(script = 'sleep 60m')
 
-registry.submit_jobs(wait = True, cleanup = False)
+registry.submit_jobs(wait = False, cleanup = False)
 
 
 batches = [os.path.join(registry.paths['batches'], batch) for batch in os.listdir(registry.paths['batches'])]

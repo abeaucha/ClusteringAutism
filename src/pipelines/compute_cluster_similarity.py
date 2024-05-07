@@ -376,6 +376,8 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
                                            jacobians = jacobians)
     cluster_pairs = pd.DataFrame(cluster_pairs)
 
+    print(len(cluster_pairs), flush = True)
+
     # Driver script
     script = 'transcriptomic_similarity.py'
 

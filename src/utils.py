@@ -199,7 +199,7 @@ class Registry:
 
 
     def _fetch_status(self):
-        cmd = ('sacct --jobs={} --name={} --format=JobID%8,JobName%{},STATE'
+        cmd = ('sacct --jobs={} --name={} --format=JobID%20,JobName%{},STATE%20'
                .format(','.join(self.jobids), ','.join(self.jobnames), 
                        len(self.jobnames[0])))
         
@@ -210,6 +210,8 @@ class Registry:
         rows = [r for r in output[2:] 
                 if r[0] in self.jobids and r[1] in self.jobnames]
         status = {x[1]:[r[x[0]] for r in rows] for x in enumerate(keys)}
+        pd.DataFrame(status).to_csv(os.path.join(self.name, 'status.csv'),
+                                    index = False)
         return status
 
 
@@ -253,19 +255,23 @@ class Registry:
 
             if wait: 
                 print("Waiting for results...", flush = True)
-            while wait:
-                sleep(10)
-                wait = not self._check_completion()
+                while wait:
+                    sleep(10)
+                    wait = not self._check_completion()
+                self.outputs = [os.path.join(self.paths['outputs'], out) 
+                                for out in os.listdir(self.paths['outputs'])]
+                return self._reduce()
 
         except KeyboardInterrupt:
             if self._verbose:
                 print("Terminating jobs...", flush = True)
             self._kill_jobs()
+            self._fetch_status()
 
-        else:
-            self.outputs = [os.path.join(self.paths['outputs'], out) 
-                            for out in os.listdir(self.paths['outputs'])]
-            return self._reduce()
+        # else:
+        #     self.outputs = [os.path.join(self.paths['outputs'], out) 
+        #                     for out in os.listdir(self.paths['outputs'])]
+        #     return self._reduce()
 
         finally:
             if cleanup:
