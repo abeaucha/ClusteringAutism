@@ -13,10 +13,13 @@ Description
 # Packages -------------------------------------------------------------------
 
 import argparse
+import random
 import os
 import sys
 import utils
-
+import numpy as np
+import pandas as pd
+from process_human_images import centroids
 
 # Command line arguments -----------------------------------------------------
 
@@ -144,6 +147,7 @@ def initialize(**kwargs):
     input_dirs = [os.path.join(path, '') for path in kwargs['input_dirs']]
     expr_dirs = [os.path.join(path, '') for path in kwargs['expr_dirs']]
 
+    # Fetch similarity pipeline parameters
     param_id = kwargs['param_id']
     metadata = os.path.join(pipeline_dir, 'metadata.csv')
     if not os.path.exists(metadata):
@@ -151,13 +155,51 @@ def initialize(**kwargs):
                       .format(metadata))
     params = utils.fetch_params_metadata(metadata = metadata,
                                          id = param_id)
+    params = {key:val[0] for key, val in params.to_dict(orient = 'list').items()}
+
+    # Build paths to input directories
+    input_ids = (params['input_1_id'], params['input_2_id'])
+
+    inputs = dict(effect_sizes = [], clusters = [], centroids = [])
+    for i, x in enumerate(zip(input_dirs, input_ids)):
+        metadata_i = os.path.join(x[0], 'metadata.csv')
+        params_i = utils.fetch_params_metadata(metadata_i, id = x[1])
+
+        res_i = params_i['resolution'][0]
+        cluster_res_i = params_i['cluster_resolution'][0]
+
+        res_i_str = 'resolution_{}'.format(res_i)
+        cluster_res_i_str = 'resolution_{}'.format(cluster_res_i)
+
+        input_dir_i = os.path.join(x[0], x[1], '')
+        es_dir_i = os.path.join(input_dir_i, 'effect_sizes', res_i_str)
+        cluster_dir_i = os.path.join(input_dir_i, 'clusters', cluster_res_i_str)
+        centroid_dir_i = os.path.join(input_dir_i, 'centroids', res_i_str)
+
+        inputs['effect_sizes'].append(es_dir_i)
+        inputs['clusters'].append(cluster_dir_i)
+        inputs['centroids'].append(centroid_dir_i)
+
+    inputs = {key:tuple(val) for key, val in inputs.items()}
 
     # Pipeline directory
     pipeline_dir = os.path.join(pipeline_dir, param_id, 'permutations', '')
     if not os.path.exists(pipeline_dir):
         os.makedirs(pipeline_dir)
 
-    return
+    # Define pipeline sub-directories
+    paths = dict(
+        clusters = os.path.join(pipeline_dir, 'clusters', ''),
+        centroids = os.path.join(pipeline_dir, 'centroids', ''),
+        similarity = os.path.join(pipeline_dir, 'similarity', '')
+    )
+
+    # Create pipeline sub-directories
+    for path in paths.values():
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+    return inputs, paths
 
 
 def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
@@ -172,7 +214,7 @@ def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
     min_per_k = 0 if min_per_k is None else min_per_k
 
     outfiles = []
-    for p in range(start, start + npermutations):
+    for p in range(start, start + n):
 
         df_permute = df_clusters.copy()
         for col in cols:
@@ -203,75 +245,44 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
          permutations_n = 100, permutations_start = 1, keep_centroids = False):
     # Get local kwargs
     kwargs = locals().copy()
-    # initialize(**kwargs)
 
-    # Ensure proper paths
-    pipeline_dir = os.path.join(kwargs['pipeline_dir'], '')
-    input_dirs = [os.path.join(path, '') for path in kwargs['input_dirs']]
-    expr_dirs = [os.path.join(path, '') for path in kwargs['expr_dirs']]
+    # Initialize pipeline
+    print("Initializing pipeline...", flush = True)
+    inputs, paths = initialize(**kwargs)
 
-    param_id = kwargs['param_id']
-    metadata = os.path.join(pipeline_dir, 'metadata.csv')
-    if not os.path.exists(metadata):
-        raise OSError("Input pipeline metadata file not found: {}"
-                      .format(metadata))
-    params = utils.fetch_params_metadata(metadata = metadata,
-                                         id = param_id)
+    # Create cluster permutations
+    print("Generating cluster permutations...", flush = True)
+    clusters = os.path.join(inputs['clusters'][0], 'clusters.csv')
+    permutations = permute_cluster_labels(clusters = clusters,
+                                          outdir = paths['clusters'],  # Path to pipeline cluster dir
+                                          n = permutations_n,
+                                          start = permutations_start)
 
-    # params = params.to_dict(orient = 'list')
-    params = {key:val[0] for key,val in params.to_dict(orient = 'list').items()}
+    permutations_end = permutations_start + permutations_n
+    permutations_range = range(permutations_start, permutations_end)
+    for p, f in zip(permutations_range, permutations):
+        print("Permutation {} of {}".format(p, permutations_end-1))
 
-    input_ids = (params['input_1_id'], params['input_2_id'])
-    input_dirs = [os.path.join(x[0], x[1], '')
-                  for x in zip(input_dirs, input_ids)]
-
-    input_res = (params['input_1_resolution'],
-                         params['input_2_resolution'])
-
-    input_cluster_res = (params['input_1_cluster_resolution'],
-                         params['input_2_cluster_resolution'])
-
-    [os.path.join(x[0], 'effect_sizes', 'resolution_{}'.format(x[1])) for x in zip(input_dirs, input_res)]
-
-    # Pipeline directory
-    pipeline_dir = os.path.join(pipeline_dir, param_id, 'permutations', '')
-    if not os.path.exists(pipeline_dir):
-        os.makedirs(pipeline_dir)
-
-    # Define pipeline sub-directories
-    paths = dict(
-        clusters = os.path.join(pipeline_dir, 'clusters', ''),
-        centroids = os.path.join(pipeline_dir, 'centroids', ''),
-        similarity = os.path.join(pipeline_dir, 'similarity', '')
-    )
-
-    dict(
-        inputs = dict(
-            effect_sizes = ...,
-            clusters = ...,
-            centroids = ...
-        ),
-        outputs = dict(
-            clusters = ...,
-            centroids = ...,
-            similarity = ...
+        centroid_kwargs = dict(
+            clusters = f,
+            imgdir = inputs['effect_sizes'][0],
+            outdir = paths['centroids'],
+            mask = masks[0],
+            method = ...,
+            execution = ...,
+            nproc = ...,
+            registry_name = ...,
+            registry_cleanup = ...,
+            slurm_mem = ...,
+            slurm_time = ...
         )
-    )
+        centroid_outputs = centroids(**centroid_kwargs)
 
-    # Create pipeline sub-directories
-    for path in paths.values():
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-
-    # Path to input 1 cluster file
-    clusters = ...
-    permute_cluster_labels(clusters = clusters,
-                           outdir = ..., # Path to pipeline cluster dir
-                           n = permutations_n,
-                           start = permutations_start)
-
-
+    # Iterate over permutations
+    # For each permutation:
+    ## 1. Regenerate centroids
+    ## 2. Put together list of cluster pairs on diagonal +/- n off diagonal
+    ## 3. Compute cluster pair similarity
 
     return
 
