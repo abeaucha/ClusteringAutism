@@ -225,7 +225,13 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     input_dirs = [os.path.join(x[0], x[1], '')
                   for x in zip(input_dirs, input_ids)]
 
+    input_res = (params['input_1_resolution'],
+                         params['input_2_resolution'])
 
+    input_cluster_res = (params['input_1_cluster_resolution'],
+                         params['input_2_cluster_resolution'])
+
+    [os.path.join(x[0], 'effect_sizes', 'resolution_{}'.format(x[1])) for x in zip(input_dirs, input_res)]
 
     # Pipeline directory
     pipeline_dir = os.path.join(pipeline_dir, param_id, 'permutations', '')
@@ -261,7 +267,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     # Path to input 1 cluster file
     clusters = ...
     permute_cluster_labels(clusters = clusters,
-                           outdir = ..., # Path to pipelien cluster dir
+                           outdir = ..., # Path to pipeline cluster dir
                            n = permutations_n,
                            start = permutations_start)
 
