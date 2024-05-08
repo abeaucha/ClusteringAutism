@@ -31,4 +31,4 @@ compute_cluster_similarity.py \
 --registry-cleanup false \
 --slurm-njobs 400 \
 --slurm-mem 16G \
---slurm-time 6:00:00
+--slurm-time 8:00:00
