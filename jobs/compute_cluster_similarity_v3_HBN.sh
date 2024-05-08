@@ -5,7 +5,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
-#SBATCH --output=logs/compute_cluster_similarity_v3_POND_SK_%j.out
+#SBATCH --output=logs/compute_cluster_similarity_v3_HBN_%j.out
 
 # Activate virtual environment
 source activate_venv_hpc.sh
@@ -19,7 +19,7 @@ compute_cluster_similarity.py \
 --pipeline-dir data/cross_species/v3/ \
 --species human mouse \
 --input-dirs data/human/derivatives/v3/ data/mouse/derivatives/v3/ \
---param-ids 700 107 \
+--param-ids 013 107 \
 --expr-dirs data/human/expression data/mouse/expression \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
