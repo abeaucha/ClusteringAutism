@@ -245,6 +245,7 @@ def initialize(**kwargs):
                           .format(metadata[i]))
         params_i = utils.fetch_params_metadata(metadata[i],
                                                id = param_ids[i])
+        params_i = params_i[['id', 'dataset', 'resolution']]
         params_i = params_i.to_dict(orient = 'list')
         params_i['species'] = [kwargs['species'][i]]
         params_i = {'_'.join(['input', str(i + 1), key]):val[0]
@@ -375,8 +376,6 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     cluster_pairs = generate_cluster_pairs(centroid_dirs = paths['centroids'],
                                            jacobians = jacobians)
     cluster_pairs = pd.DataFrame(cluster_pairs)
-
-    print(len(cluster_pairs), flush = True)
 
     # Driver script
     script = 'transcriptomic_similarity.py'
