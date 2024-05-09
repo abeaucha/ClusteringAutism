@@ -29,61 +29,48 @@ source("../../src/tree_tools.R")
 output_dir <- "outputs/cluster_similarity/"
 
 # Similarity pipeline
-version <- "v2"
+version <- "v3"
 pipeline_dir <- "../../data/cross_species/"
 pipeline_dir <- file.path(pipeline_dir, version)
 
-# Human parameters
-human_resolution <- 0.8
-human_es_method <- "normative-growth"
-human_es_df <- 3
-human_cluster_map_method <- "mean"
-
-# Mouse parameters
-mouse_resolution <- 0.2
-mouse_cluster_map_method <- human_cluster_map_method
-
-# Similarity parameters
-metric <- "correlation"
-
 # Identify matching parameter sets
 metadata <- file.path(pipeline_dir, "metadata.csv")
-params <- fetch_params_metadata(metadata = metadata,
-                                human_resolution = human_resolution,
-                                human_es_method = human_es_method,
-                                human_es_df = human_es_df,
-                                human_cluster_map_method = human_cluster_map_method,
-                                metric = metric)
+params <- fetch_params_metadata(metadata = metadata)
 params
 ```
 
 ```{r directories}
 # Parameter set ID
-params_id <- 405
+# params_id <- 394
+params_id <- 984
+
+metric <- params %>% 
+  filter(id == params_id) %>% 
+  pull(metric)
 
 # Jacobians
-jacobians <- c("absolute", "relative")
+# jacobians <- c("absolute", "relative")
 
-# Human parameter set ID
-human_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_id)
-
-# Mouse parameter set ID
-mouse_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(mouse_id)
+# # Human parameter set ID
+# human_params_id <- params %>% 
+#   filter(id == params_id) %>% 
+#   pull(human_id)
+# 
+# # Mouse parameter set ID
+# mouse_params_id <- params %>% 
+#   filter(id == params_id) %>% 
+#   pull(mouse_id)
 
 # Pipeline directory
 pipeline_dir <- file.path(pipeline_dir, params_id, "similarity")
 
-# Human pipeline directory
-human_pipeline_dir <- "../../data/human/derivatives/"
-human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
-
-# Mouse pipeline directory
-mouse_pipeline_dir <- "../../data/mouse/derivatives/"
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
+# # Human pipeline directory
+# human_pipeline_dir <- "../../data/human/derivatives/"
+# human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
+# 
+# # Mouse pipeline directory
+# mouse_pipeline_dir <- "../../data/mouse/derivatives/"
+# mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
 
 # Output directory
 output_dir <- file.path(output_dir, version, params_id)
@@ -91,22 +78,131 @@ if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
 ```{r import}
+# # Import absolute and relative similarity data
+# similarity_files <- list.files(pipeline_dir, full.names = TRUE)
+# similarity <- vector(mode = "list", length = length(jacobians))
+# names(similarity) <- jacobians
+# for (i in 1:length(similarity)) {
+#   similarity[[i]] <- read_csv(similarity_files[i], show_col_types = FALSE) %>% 
+#     mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+#            human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+#            mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
+#            mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
+#     unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
+#     unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE)
+# }
+```
+
+```{r import}
 # Import absolute and relative similarity data
-similarity_files <- list.files(pipeline_dir, full.names = TRUE)
-similarity <- vector(mode = "list", length = length(jacobians))
-names(similarity) <- jacobians
-for (i in 1:length(similarity)) {
-  similarity[[i]] <- read_csv(similarity_files[i], show_col_types = FALSE) %>% 
-    mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-           human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-           mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-           mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
-    unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
-    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE)
+similarity_file <- list.files(pipeline_dir, full.names = TRUE)
+similarity <- read_csv(similarity_file, show_col_types = FALSE)
+for (i in 1:2) {
+  
+  files_i <- similarity[[paste0("img", i)]]
+  
+  similarity[[paste("img", i, "jacobians", sep = "_")]] <- files_i %>% str_extract("absolute|relative")
+  
+  similarity[[paste("img", i, "nk", sep = "_")]] <- files_i %>% 
+    basename() %>% 
+    str_extract("_nk_[0-9]+") %>% 
+    str_extract("[0-9]+") %>% 
+    as.numeric()
+  
+  similarity[[paste("img", i, "k", sep = "_")]] <- files_i %>% 
+    basename() %>% 
+    str_extract("_k_[0-9]+") %>% 
+    str_extract("[0-9]+") %>% 
+    as.numeric()
+  
+  similarity[[paste("img", i, "cluster_id", sep = "_")]] <- str_c(similarity[[paste("img", i, "nk", sep = "_")]],
+                                                                  similarity[[paste("img", i, "k", sep = "_")]], 
+                                                                  sep = "-")
+  
 }
 ```
 
 # Mouse-human cluster similarity
+
+
+```{r}
+nk_max <- max(c(max(similarity[["img_1_nk"]]), max(similarity[["img_2_nk"]])))
+
+# Generate heatmap colour palette
+heatmap_colours <- rev(brewer.pal(n = 7, name = "RdYlBu"))
+palette_length <- 255
+heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
+
+# for (nk1 in 2:nk_max) {
+#   if (nk1 == 2) {
+#     nk2_range <- seq(nk1, nk1+1)
+#   } else if (nk1 == nk_max) {
+#     nk2_range <- seq(nk1-1, nk1)
+#   }
+#   else {
+#     nk2_range <- seq(nk1-1, nk1+1)
+#   }
+#   for (nk2 in nk2_range) {
+
+nk1 <- 2
+nk2 <- 2
+
+df_sim <- similarity %>% 
+  filter(img_1_nk == nk1,
+         img_2_nk == nk2) %>% 
+  group_by(img_1_cluster_id, img_2_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop") %>% 
+  mutate(img_1_cluster_id = factor(img_1_cluster_id, levels = sort(unique(img_1_cluster_id))),
+         img_2_cluster_id = factor(img_2_cluster_id, levels = sort(unique(img_2_cluster_id))))
+
+# Plot combined similarity matrix
+p_sim <- ggplot(df_sim, 
+                aes(x = img_1_cluster_id, 
+                    y = fct_rev(img_2_cluster_id), 
+                    fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  labs(x = "Dataset 1 clusters",
+       y = "Dataset 2 clusters",
+       fill = metric,
+       title = "Similarity matrices") + 
+  scale_fill_gradientn(colors = heatmap_palette) +
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() + 
+  theme(axis.ticks = element_blank())
+# }
+# }
+
+p_sim
+```
+
+
+```{r}
+# Combine absolute and relative similarity values
+df_sim_combined <- bind_rows(similarity_nk[["absolute"]] %>% 
+                               mutate(jacobians = "absolute"),
+                             similarity_nk[["relative"]] %>% 
+                               mutate(jacobians = "relative")) %>% 
+  group_by(human_cluster_id, mouse_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+# Plot combined similarity matrix
+p_sim_combined <- ggplot(df_sim_combined, 
+                         aes(x = human_cluster_id, 
+                             y = fct_rev(mouse_cluster_id), 
+                             fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  labs(x = "Human clusters",
+       y = "Mouse clusters",
+       fill = metric,
+       title = "Combined similarity matrices") + 
+  scale_fill_gradientn(colors = heatmap_palette) +
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() + 
+  theme(axis.ticks = element_blank())
+```
+
 
 ```{r similarity-matrices}
 # Maximum number of clusters
