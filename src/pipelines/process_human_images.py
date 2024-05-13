@@ -325,7 +325,7 @@ def initialize(**kwargs):
     input_dir = kwargs['input_dir']
 
     # Create pipeline directory based on the pipeline parameters
-    print("Creating pipeline directories...")
+    print("Creating pipeline directories...", flush = True)
     params_id = utils.random_id(3)
     metadata = os.path.join(pipeline_dir, 'metadata.csv')
     pipeline_dir = utils.mkdir_from_params(params = params,
@@ -377,7 +377,7 @@ def initialize(**kwargs):
     df_demographics.to_csv(demographics, index = False)
 
     # Create symlinks to Jacobian images
-    print("Creating symlinks to Jacobian images...")
+    print("Creating symlinks to Jacobian images...", flush = True)
     jacobians = ['absolute', 'relative']
     for j, jac in enumerate(jacobians):
 
@@ -486,7 +486,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
     # Iterate over Jacobians
     for j in out.keys():
 
-        print("Computing {} effect size images...".format(j))
+        print("Computing {} effect size images...".format(j), flush = True)
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
         if registry_name is not None:
@@ -496,7 +496,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
         utils.execute_local(script = script, kwargs = kwargs)
 
         # Create the effect size matrix
-        print("Building {} effect size matrix...".format(j))
+        print("Building {} effect size matrix...".format(j), flush = True)
 
         # Path to effect size images
         imgfiles = os.listdir(os.path.join(outdir, j, ''))
@@ -524,7 +524,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
             if (matrix_resolution != resolution):
 
                 print("Resampling effect size images to {}mm..."
-                      .format(matrix_resolution))
+                      .format(matrix_resolution), flush = True)
 
                 # Directory for resampled images
                 outdir_f = outdir.replace(
@@ -673,7 +673,7 @@ def centroids(clusters, imgdir, outdir, mask,
 
     # Iterate over Jacobians
     for j in out.keys():
-        print("Computing {} cluster centroid images...".format(j))
+        print("Computing {} cluster centroid images...".format(j), flush = True)
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
         if registry_name is not None:
@@ -681,6 +681,7 @@ def centroids(clusters, imgdir, outdir, mask,
             kwargs['registry-name'] = registry_name_es
         kwargs['registry-cleanup'] = 'true' if registry_cleanup else 'false'
         utils.execute_local(script = script, kwargs = kwargs)
+        sys.exit()
         out[j] = os.path.join(outdir, j, '')
 
     return out
@@ -802,12 +803,12 @@ def main(pipeline_dir, input_dir, demographics, mask,
               for stage in stages_opt}
 
     # Initialize pipeline directory tree
-    print("Initializing pipeline...")
+    print("Initializing pipeline...", flush = True)
     paths = initialize(**kwargs)
     
     # Compute effect size images
     if stages['effect-sizes']:
-        print("Computing effect sizes...")
+        print("Computing effect sizes...", flush = True)
         es_kwargs = {key.replace('es_', ''):val
                      for key, val in kwargs.items() if 'es_' in key}
         es_kwargs.update(
@@ -824,7 +825,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
 
     # Generate clusters
     if stages['clusters']:
-        print("Generating clusters...")
+        print("Generating clusters...", flush = True)
         cluster_kwargs = dict(
             infiles = [es_outputs[key]['matrix'] for key in es_outputs.keys()],
             nk_max = cluster_nk_max, metric = cluster_metric, K = cluster_K,
@@ -836,7 +837,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
 
     # Compute cluster centroid images
     if stages['centroids']:
-        print("Generating cluster centroids...")
+        print("Generating cluster centroids...", flush = True)
         centroid_kwargs = dict(
             clusters = clusters, imgdir = paths['effect_sizes'],
             outdir = paths['centroids'], mask = mask,
@@ -849,7 +850,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
         )
         centroid_outputs = centroids(**centroid_kwargs)
 
-    print("Pipeline complete.")
+    print("Pipeline complete.", flush = True)
 
     return
 
