@@ -20,6 +20,8 @@ import utils
 import numpy as np
 import pandas as pd
 from process_human_images import centroids
+from compute_cluster_similarity import generate_cluster_pairs
+
 
 # Command line arguments -----------------------------------------------------
 
@@ -102,33 +104,33 @@ def parse_args():
     #     default = 1,
     #     help = "Number of processors to use."
     # )
-    #
+    
     # parser.add_argument(
     #     '--registry-name',
     #     type = str,
     #     default = "compute_cluster_similarity_registry",
     #     help = "Name of the registry directory for batched jobs."
     # )
-    #
+    
     # parser.add_argument(
     #     '--registry-cleanup',
     #     type = str,
     #     default = "true",
     #     help = "Option to clean up registry after completion of batched jobs."
     # )
-    #
+    
     # parser.add_argument(
     #     '--slurm-njobs',
     #     type = int,
     #     help = "Number of jobs to deploy on Slurm."
     # )
-    #
+    
     # parser.add_argument(
     #     '--slurm-mem',
     #     type = str,
     #     help = "Memory per CPU."
     # )
-    #
+    
     # parser.add_argument(
     #     '--slurm-time',
     #     type = str,
@@ -167,6 +169,7 @@ def initialize(**kwargs):
 
         res_i = params_i['resolution'][0]
         cluster_res_i = params_i['cluster_resolution'][0]
+        params['input_{}_centroid_method'.format(i+1)] = params_i['centroid_method'][0]
 
         res_i_str = 'resolution_{}'.format(res_i)
         cluster_res_i_str = 'resolution_{}'.format(cluster_res_i)
@@ -199,7 +202,7 @@ def initialize(**kwargs):
         if not os.path.exists(path):
             os.makedirs(path)
 
-    return inputs, paths
+    return inputs, paths, params
 
 
 def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
@@ -248,7 +251,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
 
     # Initialize pipeline
     print("Initializing pipeline...", flush = True)
-    inputs, paths = initialize(**kwargs)
+    inputs, paths, params = initialize(**kwargs)
 
     # Create cluster permutations
     print("Generating cluster permutations...", flush = True)
@@ -261,22 +264,34 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     permutations_end = permutations_start + permutations_n
     permutations_range = range(permutations_start, permutations_end)
     for p, f in zip(permutations_range, permutations):
-        print("Permutation {} of {}".format(p, permutations_end-1))
+        print("Permutation {} of {}".format(p, permutations_end-1),
+              flush = True)
 
         centroid_kwargs = dict(
             clusters = f,
             imgdir = inputs['effect_sizes'][0],
             outdir = paths['centroids'],
             mask = masks[0],
-            method = ...,
-            execution = ...,
-            nproc = ...,
-            registry_name = ...,
-            registry_cleanup = ...,
-            slurm_mem = ...,
-            slurm_time = ...
+            method = params['input_1_centroid_method'],
+            execution = 'slurm',
+            nproc = 8,
+            registry_cleanup = False,
+            slurm_mem = '16G',
+            slurm_time = 60
         )
-        centroid_outputs = centroids(**centroid_kwargs)
+        # centroid_outputs = centroids(**centroid_kwargs)
+
+        # Generate pairs of centroid images
+        print("Generating centroid image pairs...", flush = True)
+        # TODO UNCOMMENT WHEN READY
+        # centroid_dirs = [paths['centroids'], inputs['centroids'][1]]
+        centroid_dirs = [inputs['centroids'][0], inputs['centroids'][1]]
+        centroid_pairs = generate_cluster_pairs(centroid_dirs = centroid_dirs)
+
+        print(centroid_pairs)
+        
+        sys.exit()
+
 
     # Iterate over permutations
     # For each permutation:
