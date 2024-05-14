@@ -29,7 +29,7 @@ source("../../src/processing.R")
 output_dir <- "outputs/human_cluster_characteristics/"
 
 #Human directories
-version <- "v2"
+version <- "v3"
 
 registration_dir <- "../../data/human/registration/"
 registration_dir <- file.path(registration_dir, version)
@@ -47,8 +47,7 @@ metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
                                 resolution = resolution,
                                 es_method = es_method,
-                                es_df = es_df,
-                                cluster_map_method = cluster_map_method)
+                                es_df = es_df)
 params
 ```
 
@@ -257,10 +256,13 @@ No identified variant for the FXS patient.
 # POND clinical scores
 
 ```{r}
-pond_clinical <- "../../data/human/registration/v2/subject_info/POND_clinical_scores_20230915.csv"
+# Import POND clinical information
+# pond_clinical <- "../../data/human/registration/v2/subject_info/POND_clinical_scores_20230915.csv"
+pond_clinical <- "../../data/human/registration/v3/subject_info/POND/POND_clinical_scores_20230915.csv"
 pond_clinical <- read_csv(pond_clinical, show_col_types = FALSE)
 pond_clinical <- pond_clinical[,-1]
 
+# Remove columns that aren't directly related to clinical scales
 pond_clinical <- pond_clinical %>% 
   select(-contains("NSI"), 
          -contains("ETHNCTY"),
@@ -268,8 +270,7 @@ pond_clinical <- pond_clinical %>%
          -HSHLD_INCOME_STD,
          -PRMY_CGVR_STD)
 
-# View(pond_clinical)
-
+# Examine remaining columns
 colnames(pond_clinical)
 ```
 
@@ -330,22 +331,24 @@ What are these scales?
 
 
 ```{r}
+# Remove additional columns
+# DX will be joined in later
 pond_clinical <- pond_clinical %>% 
   select(-site, -SUB_ID, -DOB, 
          -PRIMARY_DIAGNOSIS, -RESEARCH_CONFIRM_DIAG,
          -SWANPDOC, -TPOCSPDOC) %>% 
   rename(Subject_ID = subject)
 
+# Extract the set of clinical scales
 clinical_scales <- pond_clinical %>% 
   select(-Subject_ID) %>% 
   colnames()
-```
 
-```{r}
-clusters_clinical <- clusters %>% 
+# Join demographics and clinical data to clusters data
+clusters_clinical <- clusters %>%
   rename(file = ID) %>% 
   left_join(demographics, by = "file") %>% 
-  mutate(Subject_ID = str_remove(Subject_ID, "POND_")) %>% 
+  mutate(Subject_ID = str_remove(Subject_ID, "sub-")) %>% 
   filter(Dataset == "POND") %>% 
   mutate(Subject_ID = as.numeric(Subject_ID)) %>% 
   left_join(pond_clinical, by = "Subject_ID")
@@ -367,86 +370,80 @@ cluster_counts <- clusters_long %>%
 ```
 
 ```{r}
+# Number of patients with clinical data
 npatients <- nrow(clusters_clinical)
 
+# Calculate the completion rate for each of the scales
 scales_completed <- clusters_clinical %>% 
   select(Subject_ID, all_of(clinical_scales)) %>% 
-  pivot_longer(cols = -Subject_ID, names_to = "scale", values_to = "score") %>% 
+  pivot_longer(cols = -Subject_ID, 
+               names_to = "scale",
+               values_to = "score") %>% 
   mutate(missing = is.na(score)) %>% 
   group_by(scale) %>% 
   summarise(ncompleted = sum(!missing),
             pcompleted = ncompleted/npatients,
             .groups = "drop") 
 
-tmp <- scales_completed %>% 
+# Proportions plot for scale completion rate.
+p_scale_completion <- scales_completed %>% 
   select(-ncompleted) %>% 
   mutate(scale = factor(scale, levels = clinical_scales),
          pmissing = 1 - pcompleted) %>% 
   rename(completed = pcompleted,
          missing = pmissing) %>% 
   pivot_longer(cols = -scale, names_to = "status", values_to = "percent") %>% 
-  mutate(status = factor(status, levels = c("missing", "completed")))
-
-ggplot(tmp, aes(x = percent, y = fct_rev(scale),
+  mutate(status = factor(status, levels = c("missing", "completed"))) %>% 
+  ggplot(aes(x = percent, y = fct_rev(scale),
                 fill = status)) + 
   geom_col(width = 1,
            col = "grey50") + 
-  scale_fill_manual(values = c("grey90", "green3")) +
+  geom_vline(xintercept = seq(0.2, 1.0, by = 0.2),
+             linetype = "dashed",
+             col = "red") + 
+  scale_fill_manual(values = c("grey90", "green3"),
+                    labels = c("Missing", "Completed")) +
   labs(x = "Percentage", y = "Scale", fill = NULL) +
-  scale_x_continuous(expand = expansion()) + 
-  theme_bw()
+  scale_x_continuous(breaks = seq(0, 1.0, by = 0.2),
+                     expand = expansion(),
+                     sec.axis = sec_axis(~.*npatients,
+                                         name = "Number of patients",
+                                         breaks = round(seq(0, 1.0, by = 0.2)*npatients))) + 
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 7))
+
+# Export plot
+outfile <- "clinical_scale_completion.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "inch"),
+    height = unit(8, "inch"))
+print(p_scale_completion)
+dev.off()
 ```
 
 ```{r}
-completion_threshold <- 20
+# Get the scales with the minimum completion rate
+completion_threshold <- 120
 clinical_scales_thresh <- scales_completed %>% 
   filter(ncompleted > completion_threshold) %>% 
   pull(scale)
 
+# Subset the data set for those scales with suitable completion
 clusters_clinical_thresh <- clusters_clinical %>% 
   select(Subject_ID, contains("nk"), all_of(clinical_scales_thresh))
-```
 
-```{r}
-# for (s in 1:length(clinical_scales_thresh)) {
-#   p_scale_dist <- clusters_clinical_thresh %>% 
-#     select(x = clinical_scales_thresh[s]) %>% 
-#     filter(!is.na(x)) %>% 
-#     ggplot(aes(x = x)) + 
-#     geom_histogram() +
-#     labs(x = "Score",
-#          y = "Count",
-#          title = clinical_scales_thresh[s]) + 
-#     theme_bw()
-#   
-#   outfile <- paste0("clinical_scores_dist_", clinical_scales_thresh[s], ".pdf")
-#   outfile <- file.path(output_dir, outfile)
-#   pdf(file = outfile,
-#       width = unit(8, "inch"),
-#       height = unit(4, "inch"))
-#   print(p_scale_dist)
-#   dev.off()
-# }
-```
-
-AB21GCCS: 999
-OWL2OESS: 999
-OWL2OLCSS: 999
-RBSALLT: 999
-SSP_LOW_ENRGY_WEAK_RS: 0
-
-Don't want to remove these categorically. Only at time of analysis. Maybe just set the 999 values to NA?
-
-```{r}
+# Some scales have values of 999. Set these to NA.
 for (s in clinical_scales_thresh) {
   scores <- clusters_clinical_thresh[[s]]
   scores[scores == 999] <- NA
   clusters_clinical_thresh[[s]] <- scores
 }
-```
 
-```{r}
+# Histograms of clinical scales
 for (s in 1:length(clinical_scales_thresh)) {
+  
+  # Generate histogram for given scale
   p_scale_dist <- clusters_clinical_thresh %>% 
     select(x = clinical_scales_thresh[s]) %>% 
     filter(!is.na(x)) %>% 
@@ -457,6 +454,7 @@ for (s in 1:length(clinical_scales_thresh)) {
          title = clinical_scales_thresh[s]) + 
     theme_bw()
   
+  # Export plot
   outfile <- paste0("clinical_scores_dist_", clinical_scales_thresh[s], ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile,
@@ -467,23 +465,26 @@ for (s in 1:length(clinical_scales_thresh)) {
 }
 ```
 
-
 ```{r}
+# Examine 2-cluster distributions for all selected scales
 nk <- 2
 for (s in 1:length(clinical_scales_thresh)) {
   
+  # Filter data for 2-cluster assignments and current scale
   df_plot <- clusters_clinical_thresh %>% 
     select(k = all_of(paste0("nk", nk)),
            scores = all_of(clinical_scales_thresh[s])) %>% 
     filter(!is.na(scores)) %>% 
     mutate(k = factor(k))
   
+  # Compute scale score distribution summaries
   df_plot_summary <- df_plot %>% 
     group_by(k) %>% 
     summarise(scores_med = median(scores),
               scores_lwr = quantile(scores, probs = 0.25),
               scores_upr = quantile(scores, probs = 0.75))
   
+  # Beeswarm plot with crossbars
   p_nk2_scales <- ggplot(df_plot, 
          aes(x = k, y = scores)) + 
     geom_beeswarm(col = "grey50") + 
@@ -497,6 +498,7 @@ for (s in 1:length(clinical_scales_thresh)) {
            title = clinical_scales_thresh[s]) + 
       theme_bw()
     
+    # Export plot
     outfile <- paste0("clinical_scores_nk_2_", clinical_scales_thresh[s], ".pdf")
     outfile <- file.path(output_dir, outfile)
     pdf(file = outfile,
@@ -509,21 +511,33 @@ for (s in 1:length(clinical_scales_thresh)) {
 ```
 
 ```{r}
+# Compute Wilcoxon rank sum tests for all select scales 
+# across 2-cluster solutions
+
+# Initialize results data frame
 df_wilcoxon <- tibble(nk = 2, 
                       scale = clinical_scales_thresh) %>% 
   mutate(uval = 0, pval = 0, npatients = 0)
+
+# Iterate over scales
 for (i in 1:nrow(df_wilcoxon)) {
  
+    # Pull nk and scale acronym
     nk <- df_wilcoxon[[i, "nk"]]
     s <- df_wilcoxon[[i, "scale"]]
   
+    # Get cluster labels and scale scores
     labels <- clusters_clinical_thresh[[paste0("nk", nk)]]
     scores <- clusters_clinical_thresh[[s]]
     
+    # Remove patients with missing scores
     missing <- is.na(scores)
     labels <- labels[!missing]
     scores <- scores[!missing]
     
+    # Check that completed entries are not all in 
+    # a single cluster. If they are, set NA. 
+    # Otherwise, run Wilcoxon test.
     labels_count <- table(labels)
     test_ngroups <- length(labels_count) > 1
     if (test_ngroups) {
@@ -537,24 +551,41 @@ for (i in 1:nrow(df_wilcoxon)) {
     df_wilcoxon[[i, "npatients"]] <- length(labels)
 }
 
-```
-```{r}
+# Significance bins
+sig_bins <- c("p >= 0.1",
+              "0.05 <= p < 0.1",
+              "0.01 <= p < 0.05",
+              "p < 0.01")
+
+# Convert p-values to log scale and create significance bins
 df_wilcoxon_p <- df_wilcoxon %>% 
   mutate(pval_log = -log10(pval),
-         scale = factor(scale, levels = clinical_scales_thresh))
+         scale = factor(scale, levels = clinical_scales_thresh),
+         significance = case_when(pval >= 0.1 ~ sig_bins[1],
+                                  pval >= 0.05 & pval < 0.1 ~ sig_bins[2],
+                                  pval >= 0.01 & pval < 0.05 ~ sig_bins[3],
+                                  pval < 0.01 ~ sig_bins[3]),
+         significance = factor(significance, levels = sig_bins))
 
+# p-value thresholds
 pval_thresh <- c(0.1, 0.05, 0.01)
 pval_thresh_log <- -log10(pval_thresh)
 
+# Point and segment plot for significance
 p_nk2_pvals <- ggplot(df_wilcoxon_p, 
-       aes(x = pval_log, y = scale)) + 
+       aes(x = pval_log, y = scale, col = significance)) + 
+  geom_segment(aes(xend = 0, yend = scale)) + 
   geom_point() +
   geom_vline(xintercept = pval_thresh_log,
              linetype = "dashed") +
+  scale_color_manual(values = c("grey40", "red")) + 
   labs(x = "-log10(p)",
-       y = "Clinical scale") + 
+       y = "Clinical scale",
+       color = "Significance",
+       title = "2-cluster Wilcoxon rank sum tests") + 
   theme_bw()
 
+# Export plot
 outfile <- paste0("clinical_scores_nk_2_wilcoxon_pvals.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -566,39 +597,50 @@ dev.off()
 
 
 ```{r}
+# Compute Kruskal-Wallis tests for all select scales 
+# across all cluster solutions
+
+# Maximum number of cluster solutions
 nk_max <- max(cluster_counts["nk"])
 
+# Initialize results data frame
 df_kw <- expand_grid(nk = 2:nk_max,
                      scale = clinical_scales_thresh) %>% 
-  mutate(chi2 = 0, pval = 0, npatients = 0)
+  mutate(hval = 0, pval = 0, npatients = 0)
+
+# Iterate over scales
 for (i in 1:nrow(df_kw)) {
   
+  # Pull nk and scale acronym
   nk <- df_kw[[i, "nk"]]
   s <- df_kw[[i, "scale"]]
   
+  # Get cluster labels and scale scores
   labels <- clusters_clinical_thresh[[paste0("nk", nk)]]
   scores <- clusters_clinical_thresh[[s]]
   
+  # Remove patients with missing scores
   missing <- is.na(scores)
   labels <- labels[!missing]
   scores <- scores[!missing]
   
+  # Check that completed entries are not all in 
+  # a single cluster. If they are, set NA. 
+  # Otherwise, run KW test.
   labels_count <- table(labels)
   test_ngroups <- length(labels_count) > 1
   if (test_ngroups) {
     kw <- kruskal.test(x = scores, g = factor(labels))
-    df_kw[[i, "chi2"]] <- kw[["statistic"]]
+    df_kw[[i, "hval"]] <- kw[["statistic"]]
     df_kw[[i, "pval"]] <- kw[["p.value"]]
   } else {
-    df_kw[[i, "chi2"]] <- NA
+    df_kw[[i, "hval"]] <- NA
     df_kw[[i, "pval"]] <- NA
   }
   df_kw[[i, "npatients"]] <- length(labels)
-  
 }
-```
 
-```{r}
+# Convert p-values to log scale and create significance indicator
 df_kw_p <- df_kw %>% 
   mutate(nk = factor(nk),
          scale = factor(scale, levels = clinical_scales_thresh),
@@ -609,11 +651,16 @@ p_kw_pvals <- ggplot(df_kw_p,
        aes(x = nk, y = scale, fill = pval_log)) + 
   geom_tile(col = "black") +
   geom_text(mapping = aes(label = significant)) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
   scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds")) +
   labs(x = "nk",
        y = "Clinical scale",
-       fill = "-log10(p)")
+       fill = "-log10(p)",
+       title = "Kruskal-Wallis tests") +
+  theme_bw()
 
+# Export plot
 outfile <- paste0("clinical_scores_kruskalwallis_pvals.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -622,27 +669,11 @@ pdf(file = outfile,
 print(p_kw_pvals)
 dev.off()
 ```
-```{r}
-df_kw_p_sig <- df_kw_p %>% 
-  filter(pval < 0.05)
-
-for (i in 1:nrow(df_kw_p_sig)) {
-  
-  i <- 1
-  
-  nk <- df_kw[[i, "nk"]]
-  s <- df_kw[[i, "scale"]]
-}
-```
 
 
 ```{r}
-clusters_clinical_thresh
-```
+# ANOVA code. Later replaced with KW above.
 
-
-
-```{r}
 # for (i in 1:nrow(df_anova)) {
 #   
 #   nk <- df_anova[[i, "nk"]]
@@ -695,349 +726,3 @@ clusters_clinical_thresh
 #   
 # }
 ```
-
-
-```{r}
-df_anova_p <- df_anova %>% 
-  mutate(nk = factor(nk), 
-         scale = factor(scale, levels = clinical_scales),
-         pval_log = -log10(pval),
-         significant = ifelse(pval < 0.05, "*", NA))
-
-df_anova_large_p <- df_anova_large %>% 
-  mutate(nk = factor(nk), 
-         scale = factor(scale, levels = clinical_scales),
-         pval_log = -log10(pval),
-         significant = ifelse(pval < 0.05, "*", NA))
-  
-library(RColorBrewer)
-
-ggplot(df_anova_p,
-       aes(x = nk, y = scale, fill = pval_log)) + 
-  geom_tile(col = "black") +
-  geom_text(mapping = aes(label = significant)) + 
-  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds")) +
-  labs(x = "nk",
-       y = "Clinical scale",
-       fill = "-log10(p)")
-```
-
-```{r}
-ggplot(df_anova_large_p,
-       aes(x = nk, y = scale, fill = pval_log)) + 
-  geom_tile(col = "black") +
-  geom_text(mapping = aes(label = significant)) + 
-  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds")) +
-  labs(x = "nk",
-       y = "Clinical scale",
-       fill = "-log10(p)")
-```
-
-
-```{r}
-npatients_tot <- nrow(clusters_clinical)
-
-df_scale_completion <- df_anova_p %>% 
-  select(scale, completed = npatients) %>% 
-  distinct() %>% 
-  mutate(missing = npatients_tot - completed) %>% 
-  pivot_longer(cols = -scale, names_to = "classification", values_to = "n") %>% 
-  mutate(completed = ifelse(classification == "completed", TRUE, FALSE))
-
-ggplot(df_scale_completion,
-       aes(x = n, y = scale, fill = completed)) + 
-  geom_col(col = "black") +
-  scale_fill_manual(values = c("grey70", brewer.pal(n = 9, name = "Reds")[8])) +
-  scale_x_continuous(expand = expansion(),
-                     breaks = seq(0, 600, by = 50)) +
-  scale_y_discrete(expand = expansion()) +
-  labs(x = "Number of patients",
-       y = "Clinical scale",
-       fill = "Completed")
-```
-```{r}
-library(ggbeeswarm)
-```
-
-
-```{r}
-clusters_clinical %>% 
-  select(k = nk2, y = SCQTOT_C) %>% 
-  ggplot(aes(x = factor(k), y = y)) + 
-  geom_beeswarm(col = "grey50") + 
-  geom_boxplot(outlier.shape = NA,
-               alpha = 0.3) +
-  theme_bw()
-```
-
-```{r}
-clusters_clinical %>% 
-  select(k = nk6, y = SCQTOT_C) %>% 
-  ggplot(aes(x = factor(k), y = y)) + 
-  geom_beeswarm(col = "grey50") + 
-  geom_boxplot(outlier.shape = NA,
-               alpha = 0.3) +
-  theme_bw()
-```
-
-
-```{r}
-clusters_clinical %>% 
-  select(k = nk2, y = PREFORM_IQ_SUMMARY) %>% 
-  ggplot(aes(x = factor(k), y = y)) + 
-  geom_beeswarm(col = "grey50") + 
-  geom_boxplot(outlier.shape = NA,
-               alpha = 0.3) +
-  theme_bw()
-```
-
-```{r}
-clusters_clinical %>% 
-  select(k = nk2, y = VERBAL_IQ_SUMMARY) %>% 
-  ggplot(aes(x = factor(k), y = y)) + 
-  geom_beeswarm(col = "grey50") + 
-  geom_boxplot(outlier.shape = NA,
-               alpha = 0.3) +
-  theme_bw()
-```
-
-```{r}
-clusters_clinical %>% 
-  select(k = nk2, y = FULL_IQ_SUMMARY) %>% 
-  ggplot(aes(x = factor(k), y = y)) + 
-  geom_beeswarm(col = "grey50") + 
-  geom_boxplot(outlier.shape = NA,
-               alpha = 0.3) +
-  theme_bw()
-```
-
-
-
-```{r}
-tmp1 <- clusters_clinical %>% 
-  select(Subject_ID,
-         CB68IPPER,
-         CB68EPPER,
-         CB68TPPER,
-         FULL_IQ_SUMMARY,
-         SBFULLIQ,
-         WISC_IV_FSIQ_PERCENT,
-         WISC_V_FSIQ_PERCENT,
-         WPPSI_IV47_FSIQ_PR,
-         SCQTOT,
-         SCQTOT_C,
-         ADHD_I_SUB,
-         ADHD_HI_SUB,
-         TPOCS_TOT)
-
-scales <-  c("FULL_IQ_SUMMARY","SBFULLIQ", "WISC_IV_FSIQ_PERCENT", "WISC_V_FSIQ_PERCENT", "WPPSI_IV47_FSIQ_PR",
-             "CB68IPPER", "CB68EPPER", "CB68TPPER",
-             "SCQTOT", "SCQTOT_C",
-             "ADHD_I_SUB",
-             "ADHD_HI_SUB",
-             "TPOCS_TOT")
-
-tmp1 <- tmp1 %>% 
-  pivot_longer(cols = -Subject_ID, names_to = "Scale", values_to = "Score") %>% 
-  mutate(Exists = ifelse(is.na(Score), 0, 1),
-         Subject_ID = factor(Subject_ID),
-         Scale = factor(Scale, levels = scales),
-         Exists = factor(Exists))
-```
-
-
-```{r fig.width = 20, fig.height = 4}
-ggplot(tmp1, aes(x = Subject_ID, y = fct_rev(Scale), fill = Exists)) + 
-  geom_tile(show.legend = FALSE, col = "grey30") +
-  labs(x = "Participants",
-       y = "Clinical Assessments",
-       title = "POND participant clinical assessment completion") + 
-  scale_fill_manual(values = c("white", "red")) + 
-  scale_x_discrete(expand = expansion()) + 
-  scale_y_discrete(expand = expansion()) + 
-  theme_bw() + 
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())
-```
-
-
-
-```{r}
-tmp2 <- clusters_clinical %>% 
-  select(nk2, nk5, nk9,         
-         CB68IPPER,
-         CB68EPPER,
-         CB68TPPER,
-         SCQTOT,
-         SCQTOT_C,
-         ADHD_I_SUB,
-         ADHD_HI_SUB,
-         TPOCS_TOT,
-         FULL_IQ_SUMMARY,
-         SBFULLIQ,
-         WISC_IV_FSIQ_PERCENT,
-         WISC_V_FSIQ_PERCENT)
-```
-
-
-```{r}
-tmp2_long <- tmp2 %>% 
-  pivot_longer(cols = c(nk2, nk5, nk9), names_to = "nk", values_to = "k") %>% 
-  mutate(nk = str_remove(nk, "nk"),
-         k = factor(k, levels = 1:9))
-```
-
-```{r}
-cols <- colnames(tmp2_long)[!(colnames(tmp2_long) %in% c("nk", "k"))]
-
-outfile <- "cluster_clinical_scores.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(8, "in"),
-    height = unit(8, "in"))
-
-for (col in cols) {
-  
-  p <- tmp2_long %>% 
-    mutate(k = fct_rev(k)) %>% 
-    ggplot(aes_string(x = col, y = "k")) + 
-    geom_jitter(width = 0.3, col = "grey70") + 
-    geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-    facet_wrap(~nk, ncol = 3) + 
-    labs(x = "Score",
-         y = "k",
-         title = col) + 
-    theme_bw()
-  
-  print(p)
-}
-
-dev.off()
-```
-
-
-```{r}
-p1 <- tmp2_long %>% 
-  ggplot(aes(x = CB68TPPER, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  coord_cartesian(xlim = c(0, 100)) +
-  labs(x = "Percentile rank",
-       y = "k",
-       title = "CB68 Total Problems") + 
-  theme_bw()
-
-outfile <- "test.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(8, "in"),
-    height = unit(8, "in"))
-print(p1)
-print(p2)
-dev.off()
-```
-
-```{r}
-p2 <- tmp2_long %>% 
-  ggplot(aes(x = CB68TPPER, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  coord_cartesian(xlim = c(0, 100)) +
-  labs(x = "Percentile rank",
-       y = "k",
-       title = "CB68 Total Problems") + 
-  theme_bw()
-```
-
-
-```{r}
-tmp2_long %>% 
-  ggplot(aes(x = CB68IPPER, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  coord_cartesian(xlim = c(0, 100)) +
-  labs(x = "Percentile rank",
-       y = "k",
-       title = "CB68 Internalizing Problems") + 
-  theme_bw()
-```
-
-
-```{r}
-tmp2_long %>% 
-  ggplot(aes(x = CB68EPPER, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  coord_cartesian(xlim = c(0, 100)) +
-  labs(x = "Percentile rank",
-       y = "k",
-       title = "CB68 Externalizing Problems") + 
-  theme_bw()
-```
-
-```{r}
-tmp2_long %>% 
-  ggplot(aes(x = FULL_IQ_SUMMARY, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  labs(x = "Score",
-       y = "k",
-       title = "Full IQ summary") + 
-  theme_bw()
-```
-
-```{r}
-tmp2_long %>% 
-  ggplot(aes(x = SCQTOT, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  labs(x = "Score",
-       y = "k",
-       title = "SCQ total score") + 
-  theme_bw()
-```
-
-```{r}
-tmp2_long %>% 
-  ggplot(aes(x = ADHD_I_SUB, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  labs(x = "Score",
-       y = "k",
-       title = "SWAN 'ADHD_I") + 
-  theme_bw()
-```
-
-
-```{r}
-tmp2_long %>% 
-  ggplot(aes(x = ADHD_HI_SUB, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  labs(x = "Score",
-       y = "k",
-       title = "SWAN 'ADHD_HI") + 
-  theme_bw()
-```
-
-```{r}
-tmp2_long %>% 
-  ggplot(aes(x = TPOCS_TOT, y = fct_rev(k))) + 
-  geom_jitter(width = 0.3, col = "grey70") + 
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) + 
-  facet_wrap(~nk, ncol = 3) + 
-  labs(x = "Score",
-       y = "k",
-       title = "TOCS total score") + 
-  theme_bw()
-```
-
-
