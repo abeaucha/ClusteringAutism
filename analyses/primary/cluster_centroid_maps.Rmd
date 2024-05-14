@@ -30,13 +30,13 @@ version <- "v3"
 # version <- "v3_HBN_anxiety"
 # version <- "v3_HBN_anxietydepression"
 # version <- "v3_HBN_depression"
-version <- "v3_HBN_learning"
+# version <- "v3_HBN_learning"
 # version <- "v2"
 # pipeline_dir <- "../../data/cross_species/"
 # pipeline_dir <- file.path(pipeline_dir, version)
 # 
 # #Human parameters
-human_resolution <- "3.0"
+human_resolution <- "0.8"
 # human_es_method <- "normative-growth"
 # human_es_df <- 3
 # human_cluster_map_method <- "mean"
@@ -77,7 +77,8 @@ jacobians <- c("absolute", "relative")
 # human_params_id <- "593"
 # human_params_id <- "095"
 # human_params_id <- "875"
-human_params_id <- "442"
+# human_params_id <- "700"
+human_params_id <- "013"
 
 #Mouse parameter set ID
 # mouse_params_id <- params %>% 
@@ -97,10 +98,10 @@ names(human_centroid_dirs) <- jacobians
 
 #Mouse pipeline directory
 mouse_pipeline_dir <- "../../data/mouse/derivatives/"
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v3", mouse_params_id)
 
 #Mouse cluster map directories
-mouse_centroid_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_centroid_dirs <- file.path(mouse_pipeline_dir, "centroids")
 mouse_centroid_dirs <- file.path(mouse_centroid_dirs, str_c("resolution_", mouse_resolution))
 mouse_centroid_dirs <- file.path(mouse_centroid_dirs, jacobians)
 names(mouse_centroid_dirs) <- jacobians 
@@ -120,21 +121,22 @@ mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
 
 #Human anatomy
-human_anat_file <- "../../data/human/registration/v3/reference_files/model_3.0mm.mnc"
-# human_anat_file <- "../../data/human/registration/v2/reference_files/model_0.8mm.mnc"
+# human_anat_file <- "../../data/human/registration/v3/reference_files/model_3.0mm.mnc"
+human_anat_file <- "../../data/human/registration/v3/reference_files/model_0.8mm.mnc"
 human_anat <- mincGetVolume(human_anat_file)
 human_anat_vol <- mincArray(human_anat)
 
 #Cropped human images along sagittal and transverse planes
-# human_slices_dim_1 <- 25:200
-# human_slices_dim_3 <- 25:220
-human_slices_dim_1 <- 1:66
-human_slices_dim_3 <- 1:63
+human_slices_dim_1 <- 25:230
+human_slices_dim_3 <- 25:220
+# human_slices_dim_1 <- 1:66
+# human_slices_dim_3 <- 1:63
 human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
+human_anat_vol_cropped <- human_anat_vol
 
 #Human mask
-# human_mask <- "../../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
-human_mask <- "../../data/human/registration/v3/reference_files/mask_3.0mm.mnc"
+human_mask <- "../../data/human/registration/v3/reference_files/mask_0.8mm.mnc"
+# human_mask <- "../../data/human/registration/v3/reference_files/mask_3.0mm.mnc"
 
 #Mouse mask
 mouse_mask <- "../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
@@ -161,7 +163,7 @@ threshold_symmetric <- TRUE
 # nk_max <- params %>% 
 #   filter(id == params_id) %>% 
 #   pull(human_cluster_nk_max)
-nk_max <- 10
+nk_max <- 2
 ```
 
 ```{r human-centroids}
@@ -194,12 +196,13 @@ for (nk in 2:nk_max) {
       
       #Crop image
       img <- mincArray(img)
-      img <- img[human_slices_dim_1,,human_slices_dim_3]
+      # img <- img[human_slices_dim_1,,human_slices_dim_3]
+      
       list_human_centroids[[j]] <- img
     }
     
     #Slice series for absolute and relative centroid
-    ss <- sliceSeries(nrow = 6, ncol = 2, begin = 15, end = 60) %>% 
+    ss <- sliceSeries(nrow = 6, ncol = 2, begin = 50, end = 250) %>% 
       anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
       overlay(list_human_centroids[["absolute"]], 
               low = list_human_overlay[["absolute"]][1],
@@ -217,8 +220,8 @@ for (nk in 2:nk_max) {
     outfile <- paste0("human_cluster_centroid_", nk, "-", k, ".pdf")
     outfile <- file.path(output_dir, outfile)
     pdf(file = outfile,
-        width = unit(6, "in"),
-        height = unit(6, "in"))
+        width = unit(10, "in"),
+        height = unit(10, "in"))
     draw(ss)
     dev.off()
     
