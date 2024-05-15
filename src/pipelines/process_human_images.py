@@ -761,11 +761,11 @@ def main(pipeline_dir, input_dir, demographics, mask,
     stages: tuple of str
         Strings indicating which pipeline stages to execute. Must be a
         combination of 'effect-sizes', 'clusters', and 'centroids'.
+    nproc: int, default 1
+        Number of processors to use in parallel.
     execution: {'local', 'slurm'}
         Flag indicating whether the pipeline should be executed or
         using the Slurm scheduler on an HPC cluster.
-    nproc: int, default 1
-        Number of processors to use in parallel.
     registry_name: str, default None
         Name of the registry directory to use in batched jobs.
     registry_cleanup: bool, default True
