@@ -50,6 +50,7 @@ def parse_args():
         '--input-dirs',
         nargs = 2,
         type = str,
+        default = ['data/human/derivatives/v3/', 'data/mouse/derivatives/v3/'],
         help = ("Paths to the processing pipeline directories containing "
                 "images to compare.")
     )
@@ -58,6 +59,7 @@ def parse_args():
         '--expr-dirs',
         nargs = 2,
         type = str,
+        default = ['data/human/expression', 'data/mouse/expression'],
         help = ("Paths to gene expression directories for the species "
                 "being compared.")
     )
@@ -66,6 +68,8 @@ def parse_args():
         '--masks',
         nargs = 2,
         type = str,
+        default = ['data/human/registration/v3/reference_files/mask_0.8mm.mnc',
+                   'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc'],
         help = "Paths to the mask image files (.mnc)."
     )
 
@@ -92,10 +96,26 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--off-diagonal',
+        type = int,
+        default = 1,
+        help = "Number of off diagonal elements to evaluate similarity"
+    )
+
+    parser.add_argument(
         '--keep-centroids',
         type = str,
         default = 'false',
         help = "Option to keep permuted centroids."
+    )
+
+    parser.add_argument(
+        '--execution',
+        type = str,
+        default = 'local',
+        choices = ['local', 'slurm'],
+        help = ("Flag indicating whether the pipeline should be executed "
+                "or using the Slurm scheduler on a HPC cluster.")
     )
 
     # parser.add_argument(
@@ -104,38 +124,38 @@ def parse_args():
     #     default = 1,
     #     help = "Number of processors to use."
     # )
-    
-    # parser.add_argument(
-    #     '--registry-name',
-    #     type = str,
-    #     default = "compute_cluster_similarity_registry",
-    #     help = "Name of the registry directory for batched jobs."
-    # )
-    
-    # parser.add_argument(
-    #     '--registry-cleanup',
-    #     type = str,
-    #     default = "true",
-    #     help = "Option to clean up registry after completion of batched jobs."
-    # )
-    
-    # parser.add_argument(
-    #     '--slurm-njobs',
-    #     type = int,
-    #     help = "Number of jobs to deploy on Slurm."
-    # )
-    
-    # parser.add_argument(
-    #     '--slurm-mem',
-    #     type = str,
-    #     help = "Memory per CPU."
-    # )
-    
-    # parser.add_argument(
-    #     '--slurm-time',
-    #     type = str,
-    #     help = "Walltime in hh:mm:ss format for Slurm jobs."
-    # )
+
+    parser.add_argument(
+        '--registry-name',
+        type = str,
+        default = "permute_cluster_similarity_registry",
+        help = "Name of the registry directory for batched jobs."
+    )
+
+    parser.add_argument(
+        '--registry-cleanup',
+        type = str,
+        default = "true",
+        help = "Option to clean up registry after completion of batched jobs."
+    )
+
+    parser.add_argument(
+        '--slurm-njobs',
+        type = int,
+        help = "Number of jobs to deploy on Slurm."
+    )
+
+    parser.add_argument(
+        '--slurm-mem',
+        type = str,
+        help = "Memory per CPU."
+    )
+
+    parser.add_argument(
+        '--slurm-time',
+        type = str,
+        help = "Walltime in hh:mm:ss format for Slurm jobs."
+    )
 
     return vars(parser.parse_args())
 
@@ -158,6 +178,8 @@ def initialize(**kwargs):
     params = utils.fetch_params_metadata(metadata = metadata,
                                          id = param_id)
     params = {key:val[0] for key, val in params.to_dict(orient = 'list').items()}
+    params['latent_space_id'] = (str(1) if params['latent_space_id'] is np.nan
+                                 else params['latent_space_id'])
 
     # Build paths to input directories
     input_ids = (params['input_1_id'], params['input_2_id'])
@@ -169,7 +191,7 @@ def initialize(**kwargs):
 
         res_i = params_i['resolution'][0]
         cluster_res_i = params_i['cluster_resolution'][0]
-        params['input_{}_centroid_method'.format(i+1)] = params_i['centroid_method'][0]
+        params['input_{}_centroid_method'.format(i + 1)] = params_i['centroid_method'][0]
 
         res_i_str = 'resolution_{}'.format(res_i)
         cluster_res_i_str = 'resolution_{}'.format(cluster_res_i)
@@ -243,9 +265,27 @@ def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
     return outfiles
 
 
+def subset_cluster_pairs(centroid_pairs, off_diagonal = 1):
+    centroid_pairs_subset = []
+    for pair in centroid_pairs:
+        nk = [os.path.basename(x) for x in pair]
+        nk = [os.path.splitext(x)[0] for x in nk]
+        nk = [x.split('_') for x in nk]
+        nk = [int(x[-3]) for x in nk]
+        nk_diff = abs(nk[0] - nk[1])
+        if nk_diff < off_diagonal + 1:
+            centroid_pairs_subset.append(pair)
+    return centroid_pairs_subset
+
+
 def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
          microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
-         permutations_n = 100, permutations_start = 1, keep_centroids = False):
+         permutations_n = 100, permutations_start = 1,
+         off_diagonal = 1, keep_centroids = False,
+         execution = 'local',
+         registry_name = 'permute_cluster_similarity_registry',
+         registry_cleanup = True, slurm_njobs = None, slurm_mem = None,
+         slurm_time = None):
     # Get local kwargs
     kwargs = locals().copy()
 
@@ -261,16 +301,30 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
                                           n = permutations_n,
                                           start = permutations_start)
 
+    # Driver script and kwargs
+    driver = 'transcriptomic_similarity.py'
+    driver_kwargs = {key:val for key, val in params.items()
+                     if 'input' not in key}
+    driver_kwargs.update(dict(
+        species = (params['input_1_species'], params['input_2_species']),
+        expr = kwargs['expr_dirs'],
+        masks = kwargs['masks'],
+        microarray_coords = kwargs['microarray_coords']
+    ))
+    del driver_kwargs['id']
+
+    # Iterate over permutations
     permutations_end = permutations_start + permutations_n
     permutations_range = range(permutations_start, permutations_end)
     for p, f in zip(permutations_range, permutations):
-        print("Permutation {} of {}".format(p, permutations_end-1),
+        print("Permutation {} of {}".format(p, permutations_end - 1),
               flush = True)
 
+        outdir = os.path.join(paths['centroids'], 'permutation_{}'.format(p), '')
         centroid_kwargs = dict(
             clusters = f,
             imgdir = inputs['effect_sizes'][0],
-            outdir = paths['centroids'],
+            outdir = outdir,
             mask = masks[0],
             method = params['input_1_centroid_method'],
             execution = 'slurm',
@@ -280,24 +334,79 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
             slurm_time = 60
         )
         # centroid_outputs = centroids(**centroid_kwargs)
+        centroid_outputs = dict(
+            absolute = os.path.join(outdir, 'absolute', ''),
+            relative = os.path.join(outdir, 'relative', '')
+        )
 
-        # Generate pairs of centroid images
+        # Generate all pairs of centroid images
         print("Generating centroid image pairs...", flush = True)
-        # TODO UNCOMMENT WHEN READY
-        # centroid_dirs = [paths['centroids'], inputs['centroids'][1]]
-        centroid_dirs = [inputs['centroids'][0], inputs['centroids'][1]]
+        centroid_dirs = [outdir, inputs['centroids'][1]]
         centroid_pairs = generate_cluster_pairs(centroid_dirs = centroid_dirs)
 
-        print(centroid_pairs)
-        
-        sys.exit()
+        # Identify subset of centroid pairs on and off the nk diagonal
+        centroid_pairs = subset_cluster_pairs(centroid_pairs = centroid_pairs,
+                                              off_diagonal = off_diagonal)
+        centroid_pairs = pd.DataFrame(centroid_pairs)
 
+        # Execution mode
+        print("Evaluating cluster similarity...", flush = True)
+        if execution == 'local':
 
-    # Iterate over permutations
-    # For each permutation:
-    ## 1. Regenerate centroids
-    ## 2. Put together list of cluster pairs on diagonal +/- n off diagonal
-    ## 3. Compute cluster pair similarity
+            # Export cluster pairs
+            outfile = 'centroid_pairs_permutation_{}.csv'.format(p)
+            outfile = os.path.join(paths['similarity'], outfile)
+            centroid_pairs.to_csv(outfile, index = False)
+            input_file = outfile
+
+            # Output file for permuted similarity
+            output_file = 'similarity_permutation_{}.csv'.format(p)
+            output_file = os.path.join(paths['similarity'], output_file)
+
+            # Update driver kwargs
+            driver_kwargs['input-file'] = input_file
+            driver_kwargs['output-file'] = output_file
+            driver_kwargs = {key.replace('_', '-'):val
+                             for key, val in driver_kwargs.items()}
+
+            # Execute driver
+            utils.execute_local(script = driver, kwargs = driver_kwargs)
+
+        elif execution == 'slurm':
+
+            # Slurm job resources
+            resources = dict(
+                nodes = 1,
+                mem = slurm_mem,
+                time = slurm_time
+            )
+
+            # Create registry
+            registry = utils.Registry(resources = resources,
+                                      name = '{}_{}'.format(registry_name, p))
+
+            # Create data batches
+            registry.create_batches(x = centroid_pairs,
+                                    nbatches = slurm_njobs,
+                                    prefix = 'centroid_pairs_batch')
+
+            # Create jobs for batches
+            kwargs['nproc'] = 1
+            registry.create_jobs(script = driver,
+                                 kwargs = driver_kwargs)
+
+            # Submit jobs
+            out = registry.submit_jobs(wait = True, cleanup = registry_cleanup)
+
+            # Export results
+            print("Exporting results...", flush = True)
+            output_file = 'similarity_permutation_{}.csv'.format(p)
+            output_file = os.path.join(paths['similarity'], output_file)
+            out.to_csv(output_file, index = False)
+
+        else:
+            raise ValueError("Argument `execution` must be one of "
+                             "{'local', 'slurm'}")
 
     return
 
@@ -310,4 +419,6 @@ if __name__ == '__main__':
     args['masks'] = tuple(args['masks'])
     args['keep_centroids'] = (True if args['keep_centroids'] == 'true'
                               else False)
+    args['registry_cleanup'] = (True if args['registry_cleanup'] == 'true'
+                                else False)
     main(**args)
