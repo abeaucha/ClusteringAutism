@@ -252,47 +252,68 @@ def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
     """
     Permute cluster assignment labels.
 
-
     Parameters
     ----------
     clusters: str
+        Path to the file (.csv) containing cluster assignments.
     outdir: str
+        Path to the output directory.
     n: int
+        Number of permutations to generate.
     start: int
-    min_per_k: None or
+        Starting permutation seed.
+    min_per_k: None or int
+        Minimum number of patients per cluster to include in
+        permutation. Clusters below threshold are ignored.
 
     Returns
     -------
-
+    outfiles: list of str
+        Paths to the permuted cluster assignment files (.csv).
     """
+
+    # Create output directory if needed
     outdir = os.path.join(outdir, '')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
+    # Import cluster assignments
     df_clusters = pd.read_csv(clusters)
+
+    # Fetch cluster assignment columns
     cols = df_clusters.drop('ID', axis = 1).columns
 
+    # Set minimum assigned min cluster to 0 if not specified
     min_per_k = 0 if min_per_k is None else min_per_k
 
+    # Iterate over permutations
     outfiles = []
     for p in range(start, start + n):
 
+        # Iterate over clusters
         df_permute = df_clusters.copy()
         for col in cols:
+
+            # Fetch cluster labels
             k = df_clusters[col].to_numpy()
+
+            # Identify clusters with fewer patients than the minimum specified
             k_vals, k_freq = np.unique(k, return_counts = True)
             k_lt_min = k_vals[k_freq < min_per_k]
             lt_min = np.isin(k, k_lt_min)
 
+            # Shuffle cluster assignments
             random.seed(p)
             np.random.seed(p)
             k[~lt_min] = np.random.choice(k[~lt_min],
                                           size = len(k[~lt_min]),
                                           replace = False)
 
+            # Assign new cluster labels to data frame
             k[lt_min] = -1
             df_permute[col] = k
 
+        # Export permuted cluster labels
         outfile = 'clusters_permutation_{}.csv'.format(p)
         outfile = os.path.join(outdir, outfile)
         df_permute.to_csv(outfile, index = False)
@@ -302,6 +323,18 @@ def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
 
 
 def subset_cluster_pairs(centroid_pairs, off_diagonal = 1):
+    """
+    Subset cluster pairs for diagonal and off-diagonal.
+
+    Parameters
+    ----------
+    centroid_pairs:
+    off_diagonal
+
+    Returns
+    -------
+
+    """
     centroid_pairs_subset = []
     for pair in centroid_pairs:
         nk = [os.path.basename(x) for x in pair]
@@ -322,6 +355,54 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
          registry_name = 'permute_cluster_similarity_registry',
          registry_cleanup = True, slurm_njobs = None, slurm_mem = None,
          slurm_time = None):
+    """
+    Execute the similarity permutation pipeline.
+
+    Parameters
+    ----------
+    pipeline_dir: str
+        Path to the directory in which to store pipeline outputs.
+    param_id: str
+        Parameter set ID for the similarity pipeline to permute.
+    input_dirs: tuple of str
+        Paths to the processing pipeline directories containing
+        images to compare.
+    expr_dirs: tuple of str
+        Paths to the gene expression directories for the species
+        being compared.
+    masks: tuple of str
+        Paths to the mask image files (.mnc).
+    microarray_coords: str
+        Path to the file (.csv) containing the world coordinates of
+        the AHBA microarray samples.
+    permutations_n: int, default 100
+        Number of cluster permutations to generate.
+    permutations_start: int, default 1
+        Starting permutation seed.
+    off_diagonal: int, default 1
+        Number of off diagonal elements to evaluate similarity.
+    keep_centroids: bool, default False
+        Options to keep permuted centroid images.
+    execution: {'local', 'slurm'}
+        Flag indicating whether the pipeline should be executed or
+        using the Slurm scheduler on an HPC cluster.
+        Number of processors to use in parallel.
+    registry_name: str, default 'permute_cluster_similarity_registry'
+        Name of the registry directory to use in batched jobs.
+    registry_cleanup: bool, default True
+        Option to clean up registry after completion of batched jobs.
+    slurm_njobs: int, default None
+        Number of jobs to deploy on Slurm
+    slurm_mem: str, default None
+        Memory per CPU for Slurm jobs.
+    slurm_time: str, default = None
+        Walltime for Slurm jobs in hh:mm:ss.
+
+    Returns
+    -------
+    None
+    """
+
     # Get local kwargs
     kwargs = locals().copy()
 
@@ -329,7 +410,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     print("Initializing pipeline...", flush = True)
     inputs, paths, params = initialize(**kwargs)
 
-    # Create cluster permutations
+    # Generate cluster permutations
     print("Generating cluster permutations...", flush = True)
     clusters = os.path.join(inputs['clusters'][0], 'clusters.csv')
     permutations = permute_cluster_labels(clusters = clusters,
@@ -355,9 +436,12 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     for p, f in zip(permutations_range, permutations):
         print("Permutation {} of {}".format(p, permutations_end - 1),
               flush = True)
-        
+
+        # Update registry name for current permutation
         registry_name_p = '{}_{}'.format(registry_name, p)
 
+        # Compute permuted cluster centroid images
+        print("Generating permuted centroids...", flush = True)
         outdir = os.path.join(paths['centroids'], 'permutation_{}'.format(p), '')
         centroid_kwargs = dict(
             clusters = f,
@@ -388,7 +472,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
                                               off_diagonal = off_diagonal)
         centroid_pairs = pd.DataFrame(centroid_pairs)
 
-        # Execution mode
+        # Evaluate the cluster similarity using specified execution
         print("Evaluating cluster similarity...", flush = True)
         if execution == 'local':
 
