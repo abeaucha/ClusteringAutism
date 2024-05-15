@@ -749,6 +749,8 @@ compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean"
                                       execution = "local", nproc = 1,
                                       njobs = NULL, resources = list()){
 
+  ti <- Sys.time()
+
   labels <- clusters[,i]
   files <- rownames(clusters)
 
@@ -787,6 +789,9 @@ compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean"
     centroids[[k]] <- outfile
 
   }
+
+  tf <- Sys.time()
+  print(tf-ti)
 
   return(centroids)
 
