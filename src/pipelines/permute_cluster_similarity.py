@@ -333,11 +333,11 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
             slurm_mem = '16G',
             slurm_time = 60
         )
-        # centroid_outputs = centroids(**centroid_kwargs)
-        centroid_outputs = dict(
-            absolute = os.path.join(outdir, 'absolute', ''),
-            relative = os.path.join(outdir, 'relative', '')
-        )
+        centroid_outputs = centroids(**centroid_kwargs)
+        # centroid_outputs = dict(
+        #     absolute = os.path.join(outdir, 'absolute', ''),
+        #     relative = os.path.join(outdir, 'relative', '')
+        # )
 
         # Generate all pairs of centroid images
         print("Generating centroid image pairs...", flush = True)
