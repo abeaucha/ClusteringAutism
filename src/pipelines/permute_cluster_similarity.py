@@ -118,13 +118,6 @@ def parse_args():
                 "or using the Slurm scheduler on a HPC cluster.")
     )
 
-    # parser.add_argument(
-    #     '--nproc',
-    #     type = int,
-    #     default = 1,
-    #     help = "Number of processors to use."
-    # )
-
     parser.add_argument(
         '--registry-name',
         type = str,
@@ -164,6 +157,25 @@ def parse_args():
 
 
 def initialize(**kwargs):
+    """
+    Initialize the similarity permutation pipeline.
+
+    Parameters
+    ----------
+    kwargs: dict
+        All arguments passed to the main() function.
+
+    Returns
+    -------
+    inputs: dict of tuple
+        Dictionary with keys 'effect_sizes', 'clusters', and 'centroids'
+        containing tuples of paths to the respective input directories.
+    paths: dict of str
+        Dictionary with keys 'clusters', 'centroids', and 'similarity'
+        containing paths to the pipeline output directories.
+    params: dict
+        Dictionary containing pipeline parameters.
+    """
     # Ensure proper paths
     pipeline_dir = os.path.join(kwargs['pipeline_dir'], '')
     input_dirs = [os.path.join(path, '') for path in kwargs['input_dirs']]
@@ -178,36 +190,44 @@ def initialize(**kwargs):
     params = utils.fetch_params_metadata(metadata = metadata,
                                          id = param_id)
     params = {key:val[0] for key, val in params.to_dict(orient = 'list').items()}
+
+    # If latent_space_id is NaN, set to 1 (subsequently unused)
     params['latent_space_id'] = (str(1) if params['latent_space_id'] is np.nan
                                  else params['latent_space_id'])
 
     # Build paths to input directories
     input_ids = (params['input_1_id'], params['input_2_id'])
-
     inputs = dict(effect_sizes = [], clusters = [], centroids = [])
     for i, x in enumerate(zip(input_dirs, input_ids)):
+
+        # Import input params
         metadata_i = os.path.join(x[0], 'metadata.csv')
         params_i = utils.fetch_params_metadata(metadata_i, id = x[1])
 
+        # Extract resolutions and centroid method
         res_i = params_i['resolution'][0]
         cluster_res_i = params_i['cluster_resolution'][0]
         params['input_{}_centroid_method'.format(i + 1)] = params_i['centroid_method'][0]
 
+        # Resolution strings for paths
         res_i_str = 'resolution_{}'.format(res_i)
         cluster_res_i_str = 'resolution_{}'.format(cluster_res_i)
 
+        # Input paths
         input_dir_i = os.path.join(x[0], x[1], '')
         es_dir_i = os.path.join(input_dir_i, 'effect_sizes', res_i_str)
         cluster_dir_i = os.path.join(input_dir_i, 'clusters', cluster_res_i_str)
         centroid_dir_i = os.path.join(input_dir_i, 'centroids', res_i_str)
 
+        # Append input paths to lists in dictionary
         inputs['effect_sizes'].append(es_dir_i)
         inputs['clusters'].append(cluster_dir_i)
         inputs['centroids'].append(centroid_dir_i)
 
+    # Convert lists to tuple
     inputs = {key:tuple(val) for key, val in inputs.items()}
 
-    # Pipeline directory
+    # Create pipeline directory
     pipeline_dir = os.path.join(pipeline_dir, param_id, 'permutations', '')
     if not os.path.exists(pipeline_dir):
         os.makedirs(pipeline_dir)
@@ -229,6 +249,22 @@ def initialize(**kwargs):
 
 def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
                            min_per_k = None):
+    """
+    Permute cluster assignment labels.
+
+
+    Parameters
+    ----------
+    clusters: str
+    outdir: str
+    n: int
+    start: int
+    min_per_k: None or
+
+    Returns
+    -------
+
+    """
     outdir = os.path.join(outdir, '')
     if not os.path.exists(outdir):
         os.makedirs(outdir)

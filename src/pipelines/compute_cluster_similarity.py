@@ -217,7 +217,7 @@ def parse_args():
 
 def initialize(**kwargs):
     """
-    Initialize the image processing pipeline.
+    Initialize the similarity pipeline.
 
     Parameters
     ----------
