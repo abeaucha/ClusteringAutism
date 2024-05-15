@@ -355,6 +355,8 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     for p, f in zip(permutations_range, permutations):
         print("Permutation {} of {}".format(p, permutations_end - 1),
               flush = True)
+        
+        registry_name_p = '{}_{}'.format(registry_name, p)
 
         outdir = os.path.join(paths['centroids'], 'permutation_{}'.format(p), '')
         centroid_kwargs = dict(
@@ -366,8 +368,9 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
             execution = 'slurm',
             nproc = 8,
             registry_cleanup = False,
+            registry_name = registry_name_p,
             slurm_mem = '16G',
-            slurm_time = 60
+            slurm_time = 20
         )
         centroid_outputs = centroids(**centroid_kwargs)
         # centroid_outputs = dict(
@@ -419,7 +422,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
 
             # Create registry
             registry = utils.Registry(resources = resources,
-                                      name = '{}_{}'.format(registry_name, p))
+                                      name = registry_name_p)
 
             # Create data batches
             registry.create_batches(x = centroid_pairs,
