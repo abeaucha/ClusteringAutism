@@ -235,6 +235,11 @@ def initialize(**kwargs):
     input_dirs = [os.path.join(path, '') for path in kwargs['input_dirs']]
     expr_dirs = [os.path.join(path, '') for path in kwargs['expr_dirs']]
 
+    # Convert bool to str for multi-language consistency
+    for key, val in kwargs.items():
+        if type(val) is bool:
+            kwargs[key] = 'true' if val else 'false'
+
     # Fetch pipeline parameters
     params = dict()
     param_ids = kwargs['param_ids']
