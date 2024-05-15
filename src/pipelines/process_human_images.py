@@ -656,8 +656,9 @@ def centroids(clusters, imgdir, outdir, mask,
 
     Returns
     -------
-    out: str
-        The directory containing the centroid image files.
+    out: dict
+        Dictionary with keys 'absolute' and 'relative' containing the
+        paths to the centroid images.
     """
 
     # Script args
@@ -668,10 +669,8 @@ def centroids(clusters, imgdir, outdir, mask,
     # Driver script
     script = 'compute_cluster_centroids.R'
 
-    # Dictionary to store outputs
-    out = dict(absolute = '', relative = '')
-
     # Iterate over Jacobians
+    out = dict(absolute = '', relative = '')
     for j in out.keys():
         print("Computing {} cluster centroid images...".format(j), flush = True)
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
@@ -681,7 +680,6 @@ def centroids(clusters, imgdir, outdir, mask,
             kwargs['registry-name'] = registry_name_es
         kwargs['registry-cleanup'] = 'true' if registry_cleanup else 'false'
         utils.execute_local(script = script, kwargs = kwargs)
-        sys.exit()
         out[j] = os.path.join(outdir, j, '')
 
     return out
