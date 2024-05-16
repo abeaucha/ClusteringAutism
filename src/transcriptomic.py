@@ -283,7 +283,8 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                                       metric = 'correlation', signed = True,
                                       threshold = 'top_n',
                                       threshold_value = 0.2,
-                                      threshold_symmetric = True):
+                                      threshold_symmetric = True,
+                                      return_signed = False):
     """
     Compute the similarity between a human image and a mouse image.
 
@@ -345,7 +346,7 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
                             threshold_value = threshold_value,
                             threshold_symmetric = threshold_symmetric)
 
-    #Evaluate the similarity of the expression signatures
+    # Evaluate the similarity of the expression signatures
     if signed:
         sim = []
         for signatures in zip(human, mouse):
@@ -356,9 +357,10 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
         is_nan = np.isnan(sim)
         if all(is_nan):
             raise Exception("No surviving voxels.")
-        sim = np.array(sim)
-        sim = sim[~is_nan]
-        sim = np.mean(sim)
+        if not return_signed:
+            sim = np.array(sim)
+            sim = sim[~is_nan]
+            sim = np.mean(sim)
 
     else:
         sim = similarity(x = human,
@@ -413,7 +415,8 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
                               n_latent_spaces = 100, latent_space_id = 1,
                               metric = 'correlation', signed = True,
                               threshold = 'top_n', threshold_value = 0.2,
-                              threshold_symmetric = True, nproc = 1):
+                              threshold_symmetric = True, return_signed = False,
+                              nproc = 1, verbose = True):
 
     """
     Compute the transcriptomic similarity for a set of mouse and human images.
@@ -525,7 +528,8 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
                                metric = metric,
                                threshold = threshold,
                                threshold_value = threshold_value,
-                               threshold_symmetric = threshold_symmetric)
+                               threshold_symmetric = threshold_symmetric,
+                               return_signed = return_signed)
 
     if nproc > 1:
         pool = mp.Pool(nproc)
@@ -535,19 +539,33 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
         pool.close()
         pool.join()
     else:
-        sim = list(map(tempfunc_partial, tqdm(inputs)))
+        if verbose:
+            sim = list(map(tempfunc_partial, tqdm(inputs)))
+        else:
+            sim = list(map(tempfunc_partial, inputs))
 
-    out = pd.DataFrame(
-        dict(img1 = [x[0][0] for x in inputs],
-             img2 = [x[0][1] for x in inputs],
-             similarity = sim)
-    )
+    if return_signed:
+        out = pd.DataFrame(
+            dict(img1 = [x[0][0] for x in inputs],
+                 img2 = [x[0][1] for x in inputs],
+                 similarity_pos = [x[0] for x in sim],
+                 similarity_neg = [x[1] for x in sim])
+        )
+    else:
+        out = pd.DataFrame(
+            dict(img1 = [x[0][0] for x in inputs],
+                 img2 = [x[0][1] for x in inputs],
+                 similarity = sim)
+        )
 
     if gene_space == 'average-latent-space':
-        out = (out
-               .groupby(by = ['img1','img2'],
-                        as_index = False)
-               .mean()
-               .copy())
+        if return_signed:
+            raise Exception
+        else:
+            out = (out
+                   .groupby(by = ['img1','img2'],
+                            as_index = False)
+                   .mean()
+                   .copy())
 
     return out
