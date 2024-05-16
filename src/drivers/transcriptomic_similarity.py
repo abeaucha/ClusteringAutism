@@ -168,8 +168,11 @@ if __name__ == '__main__':
     kwargs = args.copy()
     del kwargs['input_file']
     del kwargs['output_file']
-    kwargs['imgs'] = imgs
+    # TODO REMOVE WHEN DONE
+    # kwargs['imgs'] = imgs
     # kwargs['imgs'] = imgs[:5]
+    kwargs['imgs'] = [x for x in imgs if 'nk_2_k_1' in x[0] and 'nk_2_k_1' in x[1]]
+    kwargs['return_signed'] = True
 
     # Compute pairwise similarity between cluster centroids
     with utils.catchtime() as t:
