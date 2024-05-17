@@ -19,8 +19,9 @@ import sys
 import utils
 import numpy as np
 import pandas as pd
-from process_human_images import centroids
 from compute_cluster_similarity import generate_cluster_pairs
+from process_human_images import centroids
+from shutil import rmtree
 
 
 # Command line arguments -----------------------------------------------------
@@ -457,6 +458,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
             slurm_time = 20
         )
         centroid_outputs = centroids(**centroid_kwargs)
+        # TODO REMOVE WHEN DONE
         # centroid_outputs = dict(
         #     absolute = os.path.join(outdir, 'absolute', ''),
         #     relative = os.path.join(outdir, 'relative', '')
@@ -530,6 +532,9 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
         else:
             raise ValueError("Argument `execution` must be one of "
                              "{'local', 'slurm'}")
+
+        # Remove permuted centroids if specified
+        if not keep_centroids: rmtree(centroid_dirs[0])
 
     return
 
