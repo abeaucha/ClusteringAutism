@@ -154,31 +154,31 @@ def parse_args():
 if __name__ == '__main__':
 
     # Parse command line args
-    args = parse_args()
-    args['signed'] = True if args['signed'] == 'true' else False
-    args['threshold_symmetric'] = (True if args['threshold_symmetric'] == 'true'
+    kwargs = parse_args()
+    kwargs['signed'] = True if kwargs['signed'] == 'true' else False
+    kwargs['threshold_symmetric'] = (True if kwargs['threshold_symmetric'] == 'true'
                                    else False)
 
     # Import image pairs
-    df_imgs = pd.read_csv(args['input_file'])
+    df_imgs = pd.read_csv(kwargs['input_file'])
     imgs = df_imgs.values.tolist()
     imgs = [tuple(x) for x in imgs]
+    del kwargs['input_file']
+
+    # Output file
+    output_file = kwargs['output_file']
+    del kwargs['output_file']
 
     # Extract kwargs for module
-    kwargs = args.copy()
-    del kwargs['input_file']
-    del kwargs['output_file']
     # TODO REMOVE WHEN DONE
     # kwargs['imgs'] = imgs
     # kwargs['imgs'] = imgs[:5]
     kwargs['imgs'] = [x for x in imgs if 'nk_2_k_1' in x[0] and 'nk_2_k_1' in x[1]]
-    kwargs['return_signed'] = True
+    # kwargs['return_signed'] = True
 
     # Compute pairwise similarity between cluster centroids
     with utils.catchtime() as t:
-        out = transcriptomic_similarity(**kwargs)
-
-        # Export similarity data frame
-        out.to_csv(args['output_file'], index = False)
+        results = transcriptomic_similarity(**kwargs)
+        results.to_csv(output_file, index = False)
 
     print(f'Time: {t():.3f} seconds')

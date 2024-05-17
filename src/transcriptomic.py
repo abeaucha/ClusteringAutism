@@ -107,7 +107,7 @@ def prepare_microarray_coordinates(metadata, transforms,
         (pd.read_csv(defs)
          .loc[annotations['keep']]
          .to_csv(defs, index = False))
-        
+
     # Transform MNI coordinates to study space
     coords_study = coords_mni.replace('mni', 'study')
     coords = utils.transform_coordinates(infile = coords_mni,
@@ -116,6 +116,39 @@ def prepare_microarray_coordinates(metadata, transforms,
                                          orientation = 'RAS')
 
     return coords
+
+
+def get_latent_spaces(expr, ids = None):
+    """
+    Fetch gene expression latent space files
+
+    Parameters
+    ----------
+    expr: list of str
+        Path to the directory containing the latent space files (.csv).
+    ids: list of int
+        List containing latent space IDs to return.
+
+    Returns
+    -------
+    latent_spaces: list of tuple of str
+        Paths to the files (.csv) containing the latent space data.
+    """
+    latent_spaces = []
+    for e in expr:
+        files = os.listdir(e)
+        ids_all = [int(i.split('_')[-1]) for i in
+                   [os.path.splitext(file)[0] for file in files]]
+        ids_files_all = sorted(zip(ids_all, files))
+        if ids is not None:
+            ls = [os.path.join(e, file) for i, file in ids_files_all if
+                  i in ids]
+        else:
+            ls = [os.path.join(e, file) for i, file in ids_files_all]
+        latent_spaces.append(ls)
+    latent_spaces = list(zip(latent_spaces[0], latent_spaces[1]))
+
+    return latent_spaces
 
 
 def mouse_signature(img: str, expr: str, mask: str, signed: bool = True,
@@ -279,7 +312,8 @@ def similarity(x, y, metric = 'correlation'):
     return d
 
 
-def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
+def compute_transcriptomic_similarity(imgs, species, expr, masks,
+                                      microarray_coords = None,
                                       metric = 'correlation', signed = True,
                                       threshold = 'top_n',
                                       threshold_value = 0.2,
@@ -327,31 +361,32 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
     expr_human, expr_mouse = expr
     mask_human, mask_mouse = masks
 
-    # Evaluate the human expression signature
-    human = human_signature(img = img_human,
-                            expr = expr_human,
-                            mask = mask_human,
-                            coords = microarray_coords,
-                            signed = signed,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-
-    # Evaluate the mouse expression signature
-    mouse = mouse_signature(img = img_mouse,
-                            expr = expr_mouse,
-                            mask = mask_mouse,
-                            signed = signed,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
+    # Evaluate the expression signatures
+    signatures = []
+    for inputs in zip(species, imgs, expr, masks):
+        kwargs = dict(
+            img = inputs[1],
+            expr = inputs[2],
+            mask = inputs[3],
+            signed = signed,
+            threshold = threshold,
+            threshold_value = threshold_value,
+            threshold_symmetric = threshold_symmetric
+        )
+        if inputs[0] == 'human':
+            signature = human_signature
+            kwargs['coords'] = microarray_coords
+        elif inputs[0] == 'mouse':
+            signature = mouse_signature
+        else:
+            raise ValueError
+        signatures.append(signature(**kwargs))
 
     # Evaluate the similarity of the expression signatures
     if signed:
         sim = []
-        for signatures in zip(human, mouse):
-            sim.append(similarity(x = signatures[0],
-                                  y = signatures[1],
+        for sig in zip(signatures[0], signatures[1]):
+            sim.append(similarity(x = sig[0], y = sig[1],
                                   metric = metric))
 
         is_nan = np.isnan(sim)
@@ -363,78 +398,46 @@ def compute_transcriptomic_similarity(imgs, expr, masks, microarray_coords,
             sim = np.mean(sim)
 
     else:
-        sim = similarity(x = human,
-                         y = mouse,
+        sim = similarity(x = signatures[0],
+                         y = signatures[1],
                          metric = metric)
 
     return sim
 
 
-def get_latent_spaces(expr, ids = None):
-    """
-    Fetch gene expression latent space files
-
-    Parameters
-    ----------
-    expr: list of str
-        Path to the directory containing the latent space files (.csv).
-    ids: list of int
-        List containing latent space IDs to return.
-
-    Returns
-    -------
-    latent_spaces: list of tuple of str
-        Paths to the files (.csv) containing the latent space data.
-    """
-    latent_spaces = []
-    for e in expr:
-        files = os.listdir(e)
-        ids_all = [int(i.split('_')[-1]) for i in
-                   [os.path.splitext(file)[0] for file in files]]
-        ids_files_all = sorted(zip(ids_all, files))
-        if ids is not None:
-            ls = [os.path.join(e, file) for i, file in ids_files_all if
-                  i in ids]
-        else:
-            ls = [os.path.join(e, file) for i, file in ids_files_all]
-        latent_spaces.append(ls)
-    latent_spaces = list(zip(latent_spaces[0], latent_spaces[1]))
-
-    return latent_spaces
-
-
-def tempfunc(inputs, **kwargs):
-    #TODO: Name this function
+def _compute_transcriptomic_similarity(inputs, **kwargs):
     return compute_transcriptomic_similarity(imgs = inputs[0],
                                              expr = inputs[1],
                                              **kwargs)
 
 
-def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
+def transcriptomic_similarity(imgs, species, expr, masks,
+                              microarray_coords = None,
                               gene_space = 'average-latent-space',
                               n_latent_spaces = 100, latent_space_id = 1,
                               metric = 'correlation', signed = True,
                               threshold = 'top_n', threshold_value = 0.2,
                               threshold_symmetric = True, return_signed = False,
                               nproc = 1, verbose = True):
-
     """
     Compute the transcriptomic similarity for a set of mouse and human images.
 
     Parameters
     ----------
     imgs: tuple of str or list of tuple of str
-        A tuple of length 2 containing the paths to the human and mouse images
-        (.mnc) to compare. Multiple pairs of human and mouse images can be
-        passed as a list of tuples.
+        A tuple of length 2 containing the paths to the images (.mnc)
+        to compare. Multiple pairs of images can be passed as a list
+        of tuples.
+    species: tuple of str
+        A tuple of length 2 indicating which species are being compared.
     expr: tuple of str
-        A tuple of length 2 containing the paths to the human and mouse
-        expression directories.
+        A tuple of length 2 containing the paths to the expression
+        directories.
     masks: tuple of str
-        A tuple of length 2 containing the paths to the human and mouse mask
-        images (.mnc).
-    microarray_coords: str
+        A tuple of length 2 containing the paths to the images (.mnc).
+    microarray_coords: str, default None
         The path to the human microarray sample coordinates file (.csv).
+        Ignored if only mouse images are compared.
     gene_space: {'average-latent-space', 'latent-space', 'homologous-genes'}
         The gene expression common space to use for comparison.
     n_latent_spaces: int, default 100
@@ -444,14 +447,13 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
         The ID of the latent space to use when 'gene_space' = 'latent-space'.
         Ignored otherwise.
     metric: str, default 'correlation'
-        The metric used to compute the similarity of mouse and human images.
+        The metric used to compute the similarity of the images.
     signed: bool, default True
         Option to evaluate similarity based on positive and negative image
         values before combining into a single similarity value. If False,
         similarity is calculated based on absolute voxel values.
     threshold: {'top_n', 'intensity', None}
-        Method used to threshold mouse and human images before evaluating
-        similarity.
+        Method used to threshold the images before evaluating similarity.
     threshold_value: float, default 0.2
         Threshold value to use with threshold method.
     threshold_symmetric: bool, default True
@@ -462,7 +464,7 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
 
     Returns
     -------
-    out: pandas.DataFrame
+    results: pandas.DataFrame
         A data frame containing the similarity values for all input images.
     """
 
@@ -470,7 +472,9 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
     if species is None: raise ValueError
     if expr is None: raise ValueError
     if masks is None: raise ValueError
-    if microarray_coords is None: raise ValueError
+    if 'human' in species:
+        if microarray_coords is None:
+            raise ValueError
 
     # If imgs is tuple, convert to list of tuple
     if type(imgs) is tuple:
@@ -514,45 +518,46 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
 
     else:
         raise ValueError("`gene_space` must be one of "
-                         "{'homologous-genes', " 
-                         "'latent-space', " 
+                         "{'homologous-genes', "
+                         "'latent-space', "
                          "'average-latent-space'}")
 
     # Expand all combinations of images and expression spaces
     inputs = list(product(imgs, expr))
-    
-    tempfunc_partial = partial(tempfunc,
-                               masks = masks,
-                               microarray_coords = microarray_coords,
-                               signed = signed,
-                               metric = metric,
-                               threshold = threshold,
-                               threshold_value = threshold_value,
-                               threshold_symmetric = threshold_symmetric,
-                               return_signed = return_signed)
+
+    iterator = partial(_compute_transcriptomic_similarity,
+                       species = species,
+                       masks = masks,
+                       microarray_coords = microarray_coords,
+                       signed = signed,
+                       metric = metric,
+                       threshold = threshold,
+                       threshold_value = threshold_value,
+                       threshold_symmetric = threshold_symmetric,
+                       return_signed = return_signed)
 
     if nproc > 1:
         pool = mp.Pool(nproc)
         sim = []
-        for s in tqdm(pool.imap(tempfunc_partial, inputs), total = len(inputs)):
+        for s in tqdm(pool.imap(iterator, inputs), total = len(inputs)):
             sim.append(s)
         pool.close()
         pool.join()
     else:
         if verbose:
-            sim = list(map(tempfunc_partial, tqdm(inputs)))
+            sim = list(map(iterator, tqdm(inputs)))
         else:
-            sim = list(map(tempfunc_partial, inputs))
+            sim = list(map(iterator, inputs))
 
     if return_signed:
-        out = pd.DataFrame(
+        results = pd.DataFrame(
             dict(img1 = [x[0][0] for x in inputs],
                  img2 = [x[0][1] for x in inputs],
                  similarity_pos = [x[0] for x in sim],
                  similarity_neg = [x[1] for x in sim])
         )
     else:
-        out = pd.DataFrame(
+        results = pd.DataFrame(
             dict(img1 = [x[0][0] for x in inputs],
                  img2 = [x[0][1] for x in inputs],
                  similarity = sim)
@@ -562,10 +567,10 @@ def transcriptomic_similarity(imgs, species, expr, masks, microarray_coords,
         if return_signed:
             raise Exception
         else:
-            out = (out
-                   .groupby(by = ['img1','img2'],
-                            as_index = False)
-                   .mean()
-                   .copy())
+            results = (results
+                       .groupby(by = ['img1', 'img2'],
+                                as_index = False)
+                       .mean()
+                       .copy())
 
-    return out
+    return results
