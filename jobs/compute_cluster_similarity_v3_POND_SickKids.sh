@@ -24,7 +24,7 @@ compute_cluster_similarity.py \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
 --gene-space average-latent-space \
---n-latent-spaces 100 \
+--n-latent-spaces 50 \
 --jacobians absolute relative \
 --execution slurm \
 --registry-name $REGISTRY \
