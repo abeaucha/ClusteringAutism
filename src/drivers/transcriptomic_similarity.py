@@ -19,6 +19,7 @@ import sys
 import utils
 from transcriptomic import transcriptomic_similarity
 
+
 # Command line arguments -----------------------------------------------------
 
 def parse_args():
@@ -157,7 +158,7 @@ if __name__ == '__main__':
     kwargs = parse_args()
     kwargs['signed'] = True if kwargs['signed'] == 'true' else False
     kwargs['threshold_symmetric'] = (True if kwargs['threshold_symmetric'] == 'true'
-                                   else False)
+                                     else False)
 
     # Import image pairs
     df_imgs = pd.read_csv(kwargs['input_file'])
@@ -171,14 +172,13 @@ if __name__ == '__main__':
 
     # Extract kwargs for module
     # TODO REMOVE WHEN DONE
-    # kwargs['imgs'] = imgs
+    kwargs['imgs'] = imgs
     # kwargs['imgs'] = imgs[:5]
-    kwargs['imgs'] = [x for x in imgs if 'nk_2_k_1' in x[0] and 'nk_2_k_1' in x[1]]
+    # kwargs['imgs'] = [x for x in imgs if 'nk_2_k_1' in x[0] and 'nk_2_k_1' in x[1]]
     # kwargs['return_signed'] = True
 
     # Compute pairwise similarity between cluster centroids
     with utils.catchtime() as t:
         results = transcriptomic_similarity(**kwargs)
         results.to_csv(output_file, index = False)
-
     print(f'Time: {t():.3f} seconds')
