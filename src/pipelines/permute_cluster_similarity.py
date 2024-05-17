@@ -452,7 +452,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
             method = params['input_1_centroid_method'],
             execution = 'slurm',
             nproc = 8,
-            registry_cleanup = False,
+            registry_cleanup = True,
             registry_name = registry_name_p,
             slurm_mem = '16G',
             slurm_time = 20
