@@ -383,7 +383,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     cluster_pairs = pd.DataFrame(cluster_pairs)
 
     # Driver script
-    script = 'transcriptomic_similarity.py'
+    driver = 'transcriptomic_similarity.py'
 
     # Update kwargs for driver
     kwargs['expr'] = kwargs.pop('expr_dirs')
@@ -414,7 +414,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
 
         # Execute driver
-        utils.execute_local(script = script, kwargs = kwargs)
+        utils.execute_local(script = driver, kwargs = kwargs)
 
 
     elif execution == 'slurm':
@@ -437,7 +437,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 
         # Create jobs for batches
         kwargs['nproc'] = 1
-        registry.create_jobs(script = script,
+        registry.create_jobs(script = driver,
                              kwargs = kwargs)
 
         # Submit jobs
