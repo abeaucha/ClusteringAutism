@@ -6,6 +6,7 @@
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/compute_cluster_similarity_v3_POND_SK_%j.out
+#SBATCH --dependency=afterok:10239744
 
 # Activate virtual environment
 source activate_venv_hpc.sh
@@ -24,7 +25,7 @@ compute_cluster_similarity.py \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
 --gene-space average-latent-space \
---n-latent-spaces 50 \
+--n-latent-spaces 40 \
 --jacobians absolute relative \
 --execution slurm \
 --registry-name $REGISTRY \
