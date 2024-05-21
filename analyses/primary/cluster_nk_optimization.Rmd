@@ -20,7 +20,9 @@ suppressPackageStartupMessages(library(RColorBrewer))
 ```
 
 ```{r functions}
-source("../../src/utils.R")
+SRCPATH <- Sys.getenv("SRCPATH")
+
+source(file.path(SRCPATH, "utils.R"))
 
 # Function to estimate cluster metrics over a range of solutions
 estimate_cluster_metrics <- function (W, NUMC = 2:5){
@@ -79,27 +81,27 @@ human_pipeline_dir <- "../../data/human/derivatives/"
 human_pipeline_dir <- file.path(human_pipeline_dir, human_version)
 
 # Mouse pipeline
-mouse_version <- "v2"
+mouse_version <- "v3"
 mouse_pipeline_dir <- "../../data/mouse/derivatives/"
 mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_version)
 ```
 
 ```{r mouse-params}
 mouse_resolution <- 0.2
-mouse_cluster_map_method <- "mean"
+mouse_centroid_method <- "mean"
 
 # Identify mouse parameter set ID
 mouse_metadata <- file.path(mouse_pipeline_dir, "metadata.csv")
 mouse_params <- fetch_params_metadata(mouse_metadata, 
                                       resolution = mouse_resolution,
-                                      cluster_map_method = mouse_cluster_map_method)
+                                      centroid_method = mouse_centroid_method)
 mouse_params
 ```
 
 ```{r human-params}
-# dataset <- "POND-SickKids"
-dataset <- "HBN"
-human_resolution <- 3.0
+dataset <- "POND-SickKids"
+# dataset <- "HBN"
+human_resolution <- 0.8
 human_es_method <- "normative-growth"
 human_es_group <- "patients"
 human_es_df <- 3
@@ -124,29 +126,36 @@ human_params
 ```
 
 ```{r params}
-#Parameter set IDs
+# Mouse parameter set ID
 mouse_params_id <- 107
+
+# Human parameter set ID
+human_params_id <- "700"
 # human_params_id <- 256
-# human_params_id <- 700
 # human_params_id <- "547"
 # human_params_id <- "664"
 
-#Mouse clustering directory
-mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters")
-human_cluster_dir <- file.path(human_pipeline_dir, human_params_id, "clusters")
-
-#Human clustering directory
-human_params <- fetch_params_metadata(metadata = human_metadata,
-                                      id = human_params_id)
-human_cluster_resolution <- human_params[["cluster_resolution"]]
+# Human cluster resolution
+human_cluster_resolution <- human_params %>% 
+  filter(id == human_params_id) %>% 
+  pull(cluster_resolution)
 human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
-human_cluster_dir <- file.path(human_cluster_dir, str_c("resolution_", human_cluster_resolution))
 
-#Human effect size directory
+# Mouse cluster resolution
+mouse_cluster_resolution <- mouse_params %>% 
+  filter(id == mouse_params_id) %>% 
+  pull(cluster_resolution)
+mouse_cluster_resolution <- sprintf("%.1f", mouse_cluster_resolution)
+
+# Cluster directories
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters", str_c("resolution_", mouse_cluster_resolution))
+human_cluster_dir <- file.path(human_pipeline_dir, human_params_id, "clusters", str_c("resolution_", human_cluster_resolution))
+
+# Human effect size directory
 human_es_dir <- file.path(human_pipeline_dir, human_params_id, "effect_sizes")
 human_es_dir <- file.path(human_es_dir, str_c("resolution_", human_cluster_resolution))
 
-#Output directory
+# Output directory
 params_id <- str_c(str_c("H", human_params_id), 
                    str_c("M", mouse_params_id), 
                    sep = "-")
@@ -155,22 +164,22 @@ if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
 ```{r import}
-#Human cluster assignments
+# Human clusters
 human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
 df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
 
-#Mouse cluster assignments
+# Mouse clusters
 mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
 df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
 colnames(df_mouse_clusters) <- c("ID", str_c("nk", 2:10))
 
-#Human affinity matrix
+# Human affinity matrix
 human_affinity_file <- file.path(human_cluster_dir, "affinity.csv")
 df_human_affinity <- read_csv(human_affinity_file, show_col_types = FALSE)
 mat_human_affinity <- as.matrix(df_human_affinity)
 rownames(mat_human_affinity) <- colnames(mat_human_affinity)
 
-#Mouse affinity matrix
+# Mouse affinity matrix
 mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
 load(mouse_affinity_file)
 mat_mouse_affinity <- W
@@ -180,17 +189,17 @@ df_mouse_affinity <- as_tibble(mat_mouse_affinity)
 # Mouse and human affinity distributions
 
 ```{r affinity-distributions, fig.width = 10, fig.height = 3}
-#Human affinity df long form
+# Human affinity df long form
 df_human_affinity_long <- df_human_affinity %>% 
   mutate(patient_1 = colnames(df_human_affinity)) %>% 
   pivot_longer(cols = -patient_1, names_to = "patient_2", values_to = "affinity")
 
-#Mouse affinity df long form
+# Mouse affinity df long form
 df_mouse_affinity_long <- df_mouse_affinity %>% 
   mutate(model_1 = colnames(df_mouse_affinity)) %>% 
   pivot_longer(cols = -model_1, names_to = "model_2", values_to = "affinity")
 
-#Combine mouse and human affinity
+# Combine mouse and human affinity
 df_affinity_compare <- bind_rows(df_human_affinity_long %>% 
                                    select(affinity) %>% 
                                    mutate(species = "human"),
@@ -198,7 +207,7 @@ df_affinity_compare <- bind_rows(df_human_affinity_long %>%
                                    select(affinity) %>% 
                                    mutate(species = "mouse"))
 
-#Plot distributions of affinity values
+# Plot distributions of affinity values
 p_affinity_dist <- ggplot(df_affinity_compare, 
                           aes(x = affinity, fill = species, y = ..density..)) + 
   geom_histogram(binwidth = 0.0001, position = "dodge") + 
@@ -210,7 +219,7 @@ p_affinity_dist <- ggplot(df_affinity_compare,
        caption = "Note: Maximal affinity is 0.5") + 
   theme_bw()
 
-#Export plot
+# Export plot
 outfile <- "affinity_distributions.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile, 
@@ -227,7 +236,7 @@ p_affinity_dist
 ## Human cluster dispersion
 
 ```{r human-sankey}
-#Convert cluster information to long format
+# Convert cluster information to long format
 df_human_clusters_long <- df_human_clusters %>% 
   pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
   mutate(nk = str_remove(nk_name, "nk"),
@@ -235,7 +244,7 @@ df_human_clusters_long <- df_human_clusters %>%
          nk = factor(nk),
          k = factor(k))
 
-#Human cluster Sankey plot
+# Human cluster Sankey plot
 p_human_alluvial <- ggplot(df_human_clusters_long,
                            aes(x = nk,
                                stratum = k,
@@ -250,7 +259,7 @@ p_human_alluvial <- ggplot(df_human_clusters_long,
   theme_bw() + 
   theme(panel.grid.major.x = element_blank())
 
-#Export plot
+# Export plot
 outfile <- "human_sankey.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile, 
@@ -261,13 +270,13 @@ dev.off()
 ```
 
 ```{r human-cluster-n}
-#Human cluster counts
+# Human cluster counts
 df_human_clusters_n <- df_human_clusters_long %>% 
   group_by(nk, k) %>% 
   count() %>% 
   ungroup()
 
-#Plot of human cluster counts
+# Plot of human cluster counts
 p_human_counts <- ggplot(df_human_clusters_n, 
                          aes(x = nk, y = fct_rev(k), fill = n)) + 
   geom_tile(col = "black") +
@@ -280,7 +289,7 @@ p_human_counts <- ggplot(df_human_clusters_n,
        title = "Human clusters numbers") + 
   theme_bw()
 
-#Export plot
+# Export plot
 outfile <- "human_cluster_counts.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile, 
@@ -293,40 +302,40 @@ p_human_counts
 ```
 
 ```{r human-umap, eval = FALSE}
-#UMAP random seed
+# UMAP random seed
 umap_seed <- 2
 
-#Jacobians
+# Jacobians
 jacobians <- c("absolute", "relative")
 
-#Create UMAP plots for absolute and relative Jacobians
+# Create UMAP plots for absolute and relative Jacobians
 list_human_umap <- vector(mode = "list", length = length(jacobians))
 names(list_human_umap) <- jacobians
 for (j in jacobians) {
   
-  #Import effect size matrix
+  # Import effect size matrix
   human_es_file <- file.path(human_es_dir, j, "effect_sizes.csv")
   df_human_es <- as_tibble(data.table::fread(human_es_file, header = TRUE))
   
-  #Extract labels and data from matrix 
+  # Extract labels and data from matrix 
   df_human_es_data <- df_human_es[,colnames(df_human_es) != "file"]
   df_human_es_labels <- df_human_es[,colnames(df_human_es) == "file"]
   
-  #Create the UMAP projection
+  # Create the UMAP projection
   human_umap <- umap(df_human_es_data, n_components = 2, 
                      random_state = umap_seed)
   
-  #Create data frame from UMAP data
+  # Create data frame from UMAP data
   df_human_umap <- human_umap[["layout"]]
   colnames(df_human_umap) <- c("x1", "x2")
   df_human_umap <- as_tibble(df_human_umap)
   df_human_umap[["ID"]] <- df_human_es_labels[["file"]]
   
-  #Add cluster assignment information
+  # Add cluster assignment information
   df_human_umap <- df_human_umap %>% 
     inner_join(df_human_clusters, by = "ID")
   
-  #Convert data frame to long format
+  # Convert data frame to long format
   df_human_umap_long <- df_human_umap %>% 
     column_to_rownames("ID") %>% 
     pivot_longer(cols = c(-x1, -x2), 
@@ -337,7 +346,7 @@ for (j in jacobians) {
            nk = factor(nk),
            k = factor(k))
   
-  #Plot of UMAP projection
+  # Plot of UMAP projection
   p_human_umap <- ggplot(df_human_umap_long,
                          aes(x = x1, y = x2, col = k)) +
     geom_point() + 
@@ -345,7 +354,7 @@ for (j in jacobians) {
     labs(title = paste("Human", j, "effect size UMAP projection")) + 
     theme_bw()
   
-  #Export plot
+  # Export plot
   outfile <- paste0("human_umap_", umap_seed, "_", j, ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile, 
@@ -361,21 +370,21 @@ for (j in jacobians) {
 ## Optimal number of human clusters
 
 ```{r human-cluster-optimal}
-#Max nk to examine
+# Max nk to examine
 nk_max <- 100
 
-#Human optimal nk
+# Human optimal nk
 estimateNumberOfClustersGivenGraph(W = mat_human_affinity, NUMC = 2:nk_max)
 ```
 
 ```{r human-cluster-metrics, fig.width = 10, fig.height = 5}
-#Get human cluster metrics
+# Get human cluster metrics
 df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:nk_max)
 
-#Plot x-axis breaks
+# Plot x-axis breaks
 xbreaks <- seq(0, nk_max, by = 4)
 
-#Plot of eigengap distribution
+# Plot of eigengap distribution
 p_human_eigengap <- ggplot(df_human_cluster_metrics,
                            aes(x = nk, y = eigengap)) + 
   geom_hline(yintercept = 0,
@@ -387,7 +396,7 @@ p_human_eigengap <- ggplot(df_human_cluster_metrics,
   labs(y = "Eigengap") +
   theme_bw()
 
-#Plot of rotation cost distribution
+# Plot of rotation cost distribution
 p_human_rotation <- ggplot(df_human_cluster_metrics,
                            aes(x = nk, y = rotation)) + 
   geom_line() +
@@ -396,11 +405,11 @@ p_human_rotation <- ggplot(df_human_cluster_metrics,
   labs(y = "Rotation best") +
   theme_bw()
 
-#Combined metric plot
+# Combined metric plot
 p_human_metrics <- (p_human_eigengap / p_human_rotation) +
   plot_annotation(title = "Human cluster metric distribution")
 
-#Export plot
+# Export plot
 outfile <- "human_cluster_metrics.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile, 
@@ -412,29 +421,31 @@ dev.off()
 
 ```{r human-affinity-mat, fig.width = 6, fig.height = 5}
 #Get max number of clusters identified
-human_nk_max <- human_params[["cluster_nk_max"]]
+human_nk_max <- human_params %>% 
+  filter(id == human_params_id) %>% 
+  pull(cluster_nk_max)
 
-#Iterate over all cluster solutions
+# Iterate over all cluster solutions
 for (nk in 2:human_nk_max) {
   
-  #Get human cluster labels for given nk
+  # Get human cluster labels for given nk
   df_human_labels_nk <- tibble(patient = colnames(df_human_affinity),
                                k = spectralClustering(affinity = mat_human_affinity,
                                                       K = nk))
   
-  #Arrange patients by cluster assignment
+  # Arrange patients by cluster assignment
   patient_lvls <- df_human_labels_nk %>% 
     arrange(k) %>% 
     pull(patient)
   
-  #Clamp affinity values
+  # Clamp affinity values
   threshold <- 0.005
   df_human_affinity_long_clamped <- df_human_affinity_long %>% 
     mutate(affinity = ifelse(affinity >= threshold, threshold, affinity),
            patient_1 = factor(patient_1, levels = patient_lvls),
            patient_2 = factor(patient_2, levels = patient_lvls))
   
-  #Plot human affinity matrix at nk
+  # Plot human affinity matrix at nk
   p_human_affinity_matrix <- ggplot(df_human_affinity_long_clamped, 
                                     aes(x = patient_1,
                                         y = fct_rev(patient_2),
@@ -452,7 +463,7 @@ for (nk in 2:human_nk_max) {
     theme(axis.text = element_blank(),
           axis.ticks = element_blank())
   
-  #Export plot
+  # Export plot
   outfile <- paste0("human_affinity_matrix_nk_", nk, ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile, 
@@ -462,6 +473,78 @@ for (nk in 2:human_nk_max) {
   dev.off()
   
 }
+```
+
+```{r}
+mat_human_adjacency <- mat_human_affinity
+mat_human_adjacency[mat_human_affinity >= threshold] <- 1
+mat_human_adjacency[mat_human_affinity < threshold] <- 0
+```
+
+
+```{r, fig.width = 10, fig.height = 10}
+library(igraph)
+
+# n <- 50
+n <- nrow(mat_human_affinity)
+threshold <- 0.01
+mat_human_adjacency <- mat_human_affinity
+mat_human_adjacency[mat_human_affinity >= threshold] <- 1
+mat_human_adjacency[mat_human_affinity < threshold] <- 0
+colnames(mat_human_adjacency) <- NULL
+rownames(mat_human_adjacency) <- NULL
+mat_human_adjacency <- mat_human_adjacency[1:n, 1:n]
+set.seed(1)
+g <- graph_from_adjacency_matrix(mat_human_adjacency, mode = "undirected")
+```
+
+```{r, fig.width = 5, fig.height = 4}
+degree(g) %>% 
+  table() %>% 
+  enframe() %>% 
+  mutate(name = factor(as.numeric(name)), 
+         value = as.numeric(value)) %>% 
+  ggplot(aes(x = name, y = value)) + 
+  geom_col()
+```
+
+
+```{r, fig.width = 10, fig.height = 10}
+V(g)$k <- df_human_clusters$nk2
+g <- simplify(g)
+g <- delete.vertices(g, degree(g) < 6)
+# layout <- layout_with_drl(g)
+layout <- layout_nicely(g)
+plot(g, layout = layout, vertex.size = 3, vertex.label = NA, vertex.color = ifelse(V(g)$k == 1, "yellow", "red"))
+```
+
+```{r fig.width = 8, fig.height = 8}
+
+# n <- 100
+n <- nrow(mat_human_affinity)
+mat_human_adjacency <- mat_human_affinity
+colnames(mat_human_adjacency) <- NULL
+rownames(mat_human_adjacency) <- NULL
+mat_human_adjacency <- mat_human_adjacency[1:n, 1:n]
+g <- graph_from_adjacency_matrix(mat_human_adjacency, mode = "undirected", weighted = TRUE)
+V(g)$k <- df_human_clusters$nk2[1:n]
+g <- simplify(g)
+# g <- delete.vertices(g, degree(g) < 6)
+# layout <- layout_with_drl(g)
+layout <- layout_nicely(g)
+plot(g, layout = layout, vertex.size = 3, vertex.label = NA, vertex.color = ifelse(V(g)$k == 1, "yellow", "red"), edge.width = 3*edge.betweenness(g)/max(edge.betweenness(g)))
+
+```
+
+```{r}
+length(E(g))
+```
+
+
+
+```{r}
+g <- graph_from_adjacency_matrix(mat_human_affinity_test[1:10, 1:10], mode = "upper", diag = FALSE)
+plot(g)
 ```
 
 ## Human silhouette analysis
