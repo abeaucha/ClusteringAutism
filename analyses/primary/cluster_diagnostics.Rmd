@@ -106,7 +106,7 @@ human_es_method <- "normative-growth"
 human_es_group <- "patients"
 human_es_df <- 3
 human_es_ncontrols <- NA
-human_cluster_map_method <- mouse_cluster_map_method
+human_centroid_method <- mouse_centroid_method
 
 # human_es_method <- "propensity-matching"
 # human_es_df <- NA
@@ -115,22 +115,22 @@ human_cluster_map_method <- mouse_cluster_map_method
 #Identify human parameter set ID
 human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
 human_params <- fetch_params_metadata(metadata = human_metadata,
-                                      dataset = dataset,
                                       resolution = human_resolution,
                                       es_method = human_es_method,
                                       es_group = human_es_group,
                                       es_df = human_es_df,
                                       es_ncontrols = human_es_ncontrols,
-                                      centroid_method = human_cluster_map_method)
+                                      centroid_method = human_centroid_method)
 human_params
 ```
 
-```{r params}
+```{r directories-2}
 # Mouse parameter set ID
 mouse_params_id <- 107
 
 # Human parameter set ID
-human_params_id <- "700"
+# human_params_id <- "700"
+human_params_id <- "013"
 # human_params_id <- 256
 # human_params_id <- "547"
 # human_params_id <- "664"
@@ -475,6 +475,298 @@ for (nk in 2:human_nk_max) {
 }
 ```
 
+
+## Human silhouette analysis
+
+```{r}
+# Convert affinity matrix to distance matrix
+mat_human_distance <- 2/(mat_human_affinity) - 2/max(mat_human_affinity)
+# mat_human_distance <- 1/(mat_human_affinity) - 1/max(mat_human_affinity)
+# mat_human_distance <- -1*log10(mat_human_affinity/max(mat_human_affinity))
+
+nk_max <- 10
+list_human_silhouette <- vector(mode = "list", length = nk_max - 1)
+for (nk in 2:nk_max) {
+  
+  nk_col <- paste0("nk", nk)
+  
+  # Calculate silhouette coefficients
+  silhouette_out <- silhouette(x = df_human_clusters[[nk_col]], 
+                               dmatrix = mat_human_distance)
+  
+  list_human_silhouette[[nk-1]] <- df_human_clusters %>% 
+    select(ID, k = all_of(nk_col)) %>% 
+    mutate(nk = nk,
+           neighbour = silhouette_out[,2],
+           coeff = silhouette_out[,3]) 
+  
+}
+
+df_human_silhouette <- reduce(.x = list_human_silhouette,
+                              .f = bind_rows)
+
+df_human_silhouette_cluster_avg <- df_human_silhouette %>% 
+  group_by(nk, k) %>% 
+  summarise(coeff = mean(coeff),
+            .groups = "drop")
+
+df_human_silhouette_total_avg <- df_human_silhouette %>% 
+  group_by(nk) %>% 
+  summarise(coeff = mean(coeff),
+            .groups = "drop")
+
+p_human_silhouette <- ggplot(df_human_silhouette,
+                             aes(x = factor(nk), y = coeff)) + 
+  geom_jitter(width = 0.25, height = 0,
+              shape = 21, fill = "grey50",
+              alpha = 0.3, size = 0.5) +
+  geom_point(data = df_human_silhouette_total_avg,
+             size = 2,
+             col = "red") + 
+  geom_line(data = df_human_silhouette_total_avg,
+            mapping = aes(group = 1),
+            col = "red",
+            size = 0.75) + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed") + 
+  coord_cartesian(ylim = c(-1,1)) +
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.2)) + 
+  labs(x = "Number of clusters",
+       y = "Silhouette coefficient",
+       title = "Silhouette analysis for human clusters") + 
+  theme_bw()
+
+# Export plot
+outfile <- paste0("human_silhouette.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_human_silhouette)
+dev.off()
+```
+
+
+
+# Mouse clusters
+
+## Mouse cluster dispersion
+
+```{r mouse-sankey}
+# Convert cluster information to long format
+df_mouse_clusters_long <- df_mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+# Mouse cluster Sankey plot
+p_mouse_alluvial <- ggplot(df_mouse_clusters_long,
+                           aes(x = nk,
+                               stratum = k,
+                               alluvium = ID,
+                               fill = k, 
+                               label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 0.5) + 
+  labs(x = 'Number of clusters',
+       y = 'Number of models',
+       title = "Mouse cluster dispersion") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+
+# Export plot
+outfile <- "mouse_sankey.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_mouse_alluvial)
+dev.off()
+```
+
+## Optimal number of mouse clusters
+
+```{r mouse-cluster-optimal}
+# Max nk to examine
+nk_max <- 100
+
+# Mouse optimal nk
+estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
+```
+
+
+```{r mouse-cluster-metrics, fig.width = 10, fig.height = 5}
+# Get cluster metric distributions
+df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:nk_max)
+
+# Plot x-axis breaks
+xbreaks <- seq(0, nk_max, by = 4)
+
+# Plot eigengap distribution
+p_mouse_eigengap <- ggplot(df_mouse_cluster_metrics,
+                           aes(x = nk, y = eigengap)) + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed",
+             col = "grey50") + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = xbreaks) + 
+  labs(y = "Eigengap") +
+  theme_bw()
+
+# Plot rotation cost distribution
+p_mouse_rotation <- ggplot(df_mouse_cluster_metrics,
+                           aes(x = nk, y = rotation)) + 
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = xbreaks) + 
+  labs(y = "Rotation best") +
+  theme_bw()
+
+# Combine metric plots
+p_mouse_metrics <- (p_mouse_eigengap / p_mouse_rotation) +
+  plot_annotation(title = "Mouse cluster metric distribution")
+
+# Export plot
+outfile <- "mouse_cluster_metrics.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_mouse_metrics)
+dev.off()
+```
+
+```{r mouse-affinity-mat, fig.width = 6, fig.height = 5}
+# Specify max nk
+mouse_nk_max <- human_nk_max
+
+# Iterate over cluster solution
+for (nk in 2:mouse_nk_max) {
+  
+  # Get mouse cluster labels for given nk
+  df_mouse_labels_nk <- tibble(model = colnames(df_mouse_affinity),
+                               k = spectralClustering(affinity = mat_mouse_affinity,
+                                                      K = nk))
+  
+  # Arrange models by cluster assignment
+  model_lvls <- df_mouse_labels_nk %>% 
+    arrange(k) %>% 
+    pull(model)
+  
+  # Clamp affinity values
+  threshold <- 0.01
+  df_mouse_affinity_long_clamped <- df_mouse_affinity_long %>% 
+    mutate(affinity = ifelse(affinity >= threshold, threshold, affinity),
+           model_1 = factor(model_1, levels = model_lvls),
+           model_2 = factor(model_2, levels = model_lvls))
+  
+  # Plot mouse affinity matrix
+  p_mouse_affinity_matrix <- ggplot(df_mouse_affinity_long_clamped, 
+                                    aes(x = model_1,
+                                        y = fct_rev(model_2),
+                                        fill = affinity)) + 
+    geom_tile() + 
+    scale_x_discrete(expand = expansion()) +
+    scale_y_discrete(expand = expansion()) +
+    scale_fill_gradientn(colours = c("white", brewer.pal(n = 9, name = "Reds")), na.value = "white") + 
+    labs(fill = "Affinity",
+         x = "Model",
+         y = "Model",
+         title = paste("Mouse model affinity matrix for nk =", nk),
+         caption = paste("Affinity values clamped at", threshold)) + 
+    theme_bw() + 
+    theme(axis.text = element_blank(),
+          axis.ticks = element_blank())
+  
+  # Export plot
+  outfile <- paste0("mouse_affinity_matrix_nk_", nk, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile, 
+      width = 10,
+      height = 8)
+  print(p_mouse_affinity_matrix)
+  dev.off()
+}
+```
+
+## Mouse silhouette analysis
+
+```{r}
+# Convert affinity matrix to distance matrix
+mat_mouse_distance <- 2/(mat_mouse_affinity) - 2/max(mat_mouse_affinity)
+# mat_mouse_distance <- -1*log10(mat_mouse_affinity/max(mat_mouse_affinity))
+
+nk_max <- 10
+list_mouse_silhouette <- vector(mode = "list", length = nk_max - 1)
+for (nk in 2:nk_max) {
+  
+  nk_col <- paste0("nk", nk)
+  
+  # Calculate silhouette coefficients
+  silhouette_out <- silhouette(x = df_mouse_clusters[[nk_col]], 
+                               dmatrix = mat_mouse_distance)
+  
+  list_mouse_silhouette[[nk-1]] <- df_mouse_clusters %>% 
+    select(ID, k = all_of(nk_col)) %>% 
+    mutate(nk = nk,
+           neighbour = silhouette_out[,2],
+           coeff = silhouette_out[,3]) 
+  
+}
+
+df_mouse_silhouette <- reduce(.x = list_mouse_silhouette,
+                              .f = bind_rows)
+
+df_mouse_silhouette_cluster_avg <- df_mouse_silhouette %>% 
+  group_by(nk, k) %>% 
+  summarise(coeff = mean(coeff),
+            .groups = "drop")
+
+df_mouse_silhouette_total_avg <- df_mouse_silhouette %>% 
+  group_by(nk) %>% 
+  summarise(coeff = mean(coeff),
+            .groups = "drop")
+
+p_mouse_silhouette <- ggplot(df_mouse_silhouette,
+                             aes(x = factor(nk), y = coeff)) + 
+  geom_jitter(width = 0.25, height = 0,
+              shape = 21, fill = "grey50",
+              alpha = 0.3, size = 0.5) +
+  geom_point(data = df_mouse_silhouette_total_avg,
+             size = 2,
+             col = "red") + 
+  geom_line(data = df_mouse_silhouette_total_avg,
+            mapping = aes(group = 1),
+            col = "red",
+            size = 0.75) + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed") + 
+  coord_cartesian(ylim = c(-1,1)) +
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.2)) + 
+  labs(x = "Number of clusters",
+       y = "Silhouette coefficient",
+       title = "Silhouette analysis for mouse clusters") + 
+  theme_bw()
+
+# Export plot
+outfile <- paste0("mouse_silhouette.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_mouse_silhouette)
+dev.off()
+```
+
+
+# In development
+
+## Network analysis
+
+
 ```{r}
 mat_human_adjacency <- mat_human_affinity
 mat_human_adjacency[mat_human_affinity >= threshold] <- 1
@@ -546,291 +838,4 @@ length(E(g))
 g <- graph_from_adjacency_matrix(mat_human_affinity_test[1:10, 1:10], mode = "upper", diag = FALSE)
 plot(g)
 ```
-
-## Human silhouette analysis
-
-```{r}
-# Convert affinity matrix to distance matrix
-mat_human_distance <- 2/(mat_human_affinity) - 2/max(mat_human_affinity)
-# mat_human_distance <- 1/(mat_human_affinity) - 1/max(mat_human_affinity)
-# mat_human_distance <- -1*log10(mat_human_affinity/max(mat_human_affinity))
-
-nk_max <- 10
-list_human_silhouette <- vector(mode = "list", length = nk_max - 1)
-for (nk in 2:nk_max) {
-  
-  nk_col <- paste0("nk", nk)
-  
-  # Calculate silhouette coefficients
-  silhouette_out <- silhouette(x = df_human_clusters[[nk_col]], 
-                               dmatrix = mat_human_distance)
-  
-  list_human_silhouette[[nk-1]] <- df_human_clusters %>% 
-    select(ID, k = all_of(nk_col)) %>% 
-    mutate(nk = nk,
-           neighbour = silhouette_out[,2],
-           coeff = silhouette_out[,3]) 
-  
-}
-
-df_human_silhouette <- reduce(.x = list_human_silhouette,
-                              .f = bind_rows)
-
-df_human_silhouette_cluster_avg <- df_human_silhouette %>% 
-  group_by(nk, k) %>% 
-  summarise(coeff = mean(coeff),
-            .groups = "drop")
-
-df_human_silhouette_total_avg <- df_human_silhouette %>% 
-  group_by(nk) %>% 
-  summarise(coeff = mean(coeff),
-            .groups = "drop")
-
-p_human_silhouette <- ggplot(df_human_silhouette,
-                             aes(x = factor(nk), y = coeff)) + 
-  geom_jitter(width = 0.25, height = 0,
-              shape = 21, fill = "grey50",
-              alpha = 0.3, size = 0.5) +
-  geom_point(data = df_human_silhouette_total_avg,
-             size = 2,
-             col = "red") + 
-  geom_line(data = df_human_silhouette_total_avg,
-            mapping = aes(group = 1),
-            col = "red",
-            size = 0.75) + 
-  geom_hline(yintercept = 0,
-             linetype = "dashed") + 
-  coord_cartesian(ylim = c(-1,1)) +
-  scale_y_continuous(breaks = seq(-1, 1, by = 0.2)) + 
-  labs(x = "Number of clusters",
-       y = "Silhouette coefficient",
-       title = "Silhouette analysis for human clusters") + 
-  theme_bw()
-
-#Export plot
-outfile <- paste0("human_silhouette.pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile, 
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(p_human_silhouette)
-dev.off()
-```
-
-
-
-# Mouse clusters
-
-## Mouse cluster dispersion
-
-```{r mouse-sankey}
-#Convert cluster information to long format
-df_mouse_clusters_long <- df_mouse_clusters %>% 
-  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = str_remove(nk_name, "nk"),
-         nk = as.numeric(nk),
-         nk = factor(nk),
-         k = factor(k))
-
-#Mouse cluster Sankey plot
-p_mouse_alluvial <- ggplot(df_mouse_clusters_long,
-                           aes(x = nk,
-                               stratum = k,
-                               alluvium = ID,
-                               fill = k, 
-                               label = k)) + 
-  geom_flow(stat = "alluvium", aes.flow = "forward") + 
-  geom_stratum(alpha = 0.5) + 
-  labs(x = 'Number of clusters',
-       y = 'Number of models',
-       title = "Mouse cluster dispersion") + 
-  theme_bw() + 
-  theme(panel.grid.major.x = element_blank())
-
-#Export plot
-outfile <- "mouse_sankey.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile, 
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(p_mouse_alluvial)
-dev.off()
-```
-
-
-## Optimal number of mouse clusters
-
-```{r mouse-cluster-optimal}
-#Max nk to examine
-nk_max <- 100
-
-#Mouse optimal nk
-estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
-```
-
-
-```{r mouse-cluster-metrics, fig.width = 10, fig.height = 5}
-#Get cluster metric distributions
-df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:nk_max)
-
-#Plot x-axis breaks
-xbreaks <- seq(0, nk_max, by = 4)
-
-#Plot eigengap distribution
-p_mouse_eigengap <- ggplot(df_mouse_cluster_metrics,
-                           aes(x = nk, y = eigengap)) + 
-  geom_hline(yintercept = 0,
-             linetype = "dashed",
-             col = "grey50") + 
-  geom_line() + 
-  geom_point() +
-  scale_x_continuous(breaks = xbreaks) + 
-  labs(y = "Eigengap") +
-  theme_bw()
-
-#Plot rotation cost distribution
-p_mouse_rotation <- ggplot(df_mouse_cluster_metrics,
-                           aes(x = nk, y = rotation)) + 
-  geom_line() +
-  geom_point() +
-  scale_x_continuous(breaks = xbreaks) + 
-  labs(y = "Rotation best") +
-  theme_bw()
-
-#Combine metric plots
-p_mouse_metrics <- (p_mouse_eigengap / p_mouse_rotation) +
-  plot_annotation(title = "Mouse cluster metric distribution")
-
-#Export plot
-outfile <- "mouse_cluster_metrics.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile, 
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(p_mouse_metrics)
-dev.off()
-```
-
-```{r mouse-affinity-mat, fig.width = 6, fig.height = 5}
-#Specify max nk
-mouse_nk_max <- human_nk_max
-
-#Iterate over cluster solution
-for (nk in 2:mouse_nk_max) {
-  
-  #Get mouse cluster labels for given nk
-  df_mouse_labels_nk <- tibble(model = colnames(df_mouse_affinity),
-                               k = spectralClustering(affinity = mat_mouse_affinity,
-                                                      K = nk))
-  
-  #Arrange models by cluster assignment
-  model_lvls <- df_mouse_labels_nk %>% 
-    arrange(k) %>% 
-    pull(model)
-  
-  #Clamp affinity values
-  threshold <- 0.01
-  df_mouse_affinity_long_clamped <- df_mouse_affinity_long %>% 
-    mutate(affinity = ifelse(affinity >= threshold, threshold, affinity),
-           model_1 = factor(model_1, levels = model_lvls),
-           model_2 = factor(model_2, levels = model_lvls))
-  
-  #Plot mouse affinity matrix
-  p_mouse_affinity_matrix <- ggplot(df_mouse_affinity_long_clamped, 
-                                    aes(x = model_1,
-                                        y = fct_rev(model_2),
-                                        fill = affinity)) + 
-    geom_tile() + 
-    scale_x_discrete(expand = expansion()) +
-    scale_y_discrete(expand = expansion()) +
-    scale_fill_gradientn(colours = c("white", brewer.pal(n = 9, name = "Reds")), na.value = "white") + 
-    labs(fill = "Affinity",
-         x = "Model",
-         y = "Model",
-         title = paste("Mouse model affinity matrix for nk =", nk),
-         caption = paste("Affinity values clamped at", threshold)) + 
-    theme_bw() + 
-    theme(axis.text = element_blank(),
-          axis.ticks = element_blank())
-  
-  #Export plot
-  outfile <- paste0("mouse_affinity_matrix_nk_", nk, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  pdf(file = outfile, 
-      width = 10,
-      height = 8)
-  print(p_mouse_affinity_matrix)
-  dev.off()
-}
-```
-
-## Mouse silhouette analysis
-
-```{r}
-# Convert affinity matrix to distance matrix
-mat_mouse_distance <- 2/(mat_mouse_affinity) - 2/max(mat_mouse_affinity)
-# mat_mouse_distance <- -1*log10(mat_mouse_affinity/max(mat_mouse_affinity))
-
-nk_max <- 10
-list_mouse_silhouette <- vector(mode = "list", length = nk_max - 1)
-for (nk in 2:nk_max) {
-  
-  nk_col <- paste0("nk", nk)
-  
-  # Calculate silhouette coefficients
-  silhouette_out <- silhouette(x = df_mouse_clusters[[nk_col]], 
-                               dmatrix = mat_mouse_distance)
-  
-  list_mouse_silhouette[[nk-1]] <- df_mouse_clusters %>% 
-    select(ID, k = all_of(nk_col)) %>% 
-    mutate(nk = nk,
-           neighbour = silhouette_out[,2],
-           coeff = silhouette_out[,3]) 
-  
-}
-
-df_mouse_silhouette <- reduce(.x = list_mouse_silhouette,
-                              .f = bind_rows)
-
-df_mouse_silhouette_cluster_avg <- df_mouse_silhouette %>% 
-  group_by(nk, k) %>% 
-  summarise(coeff = mean(coeff),
-            .groups = "drop")
-
-df_mouse_silhouette_total_avg <- df_mouse_silhouette %>% 
-  group_by(nk) %>% 
-  summarise(coeff = mean(coeff),
-            .groups = "drop")
-
-p_mouse_silhouette <- ggplot(df_mouse_silhouette,
-                             aes(x = factor(nk), y = coeff)) + 
-  geom_jitter(width = 0.25, height = 0,
-              shape = 21, fill = "grey50",
-              alpha = 0.3, size = 0.5) +
-  geom_point(data = df_mouse_silhouette_total_avg,
-             size = 2,
-             col = "red") + 
-  geom_line(data = df_mouse_silhouette_total_avg,
-            mapping = aes(group = 1),
-            col = "red",
-            size = 0.75) + 
-  geom_hline(yintercept = 0,
-             linetype = "dashed") + 
-  coord_cartesian(ylim = c(-1,1)) +
-  scale_y_continuous(breaks = seq(-1, 1, by = 0.2)) + 
-  labs(x = "Number of clusters",
-       y = "Silhouette coefficient",
-       title = "Silhouette analysis for mouse clusters") + 
-  theme_bw()
-
-#Export plot
-outfile <- paste0("mouse_silhouette.pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile, 
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(p_mouse_silhouette)
-dev.off()
-```
-
 
