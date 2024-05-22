@@ -73,7 +73,7 @@ estimate_cluster_metrics <- function (W, NUMC = 2:5){
 
 ```{r directories}
 # Output directory
-output_dir <- "outputs/cluster_nk_optimization/"
+output_dir <- "outputs/cluster_diagnostics/"
 
 # Human pipeline
 human_version <- "v3"

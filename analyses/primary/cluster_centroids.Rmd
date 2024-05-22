@@ -25,7 +25,7 @@ source(file.path(SRCPATH, "analysis.R"))
 
 ```{r directories}
 # Output directory
-output_dir <- "outputs/cluster_centroid_maps/"
+output_dir <- "outputs/cluster_centroids/"
 
 # Human pipeline
 human_version <- "v3"
@@ -75,8 +75,6 @@ human_params <- fetch_params_metadata(metadata = human_metadata,
                                       centroid_method = human_centroid_method)
 human_params
 ```
-
-
 
 ```{r directories-2}
 # Mouse parameter set ID
@@ -161,13 +159,9 @@ human_mask <- file.path(human_registration_dir, "reference_files", human_mask)
 # Mouse mask
 mouse_mask <- "../../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
 
-# Threshold method
+# Image thresholding options
 threshold <- "top_n"
-
-# Threshold value
 threshold_value <- 0.2
-
-# Threshold symmetric option
 threshold_symmetric <- TRUE
 ```
 
