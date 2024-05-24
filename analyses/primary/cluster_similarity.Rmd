@@ -19,6 +19,7 @@ suppressPackageStartupMessages(library(RColorBrewer))
 
 ```{r functions}
 SRCPATH <- Sys.getenv("SRCPATH")
+Sys.setenv(SRCPATH="../../src/")
 
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
@@ -44,10 +45,9 @@ params
 ```{r directories}
 # Parameter set ID
 # params_id <- 984 #PONDSK-MICe
-# params_id <- 394 #HBN-MICe
+params_id <- 394 #HBN-MICe
 # params_id <- 278 #PONDSK-HBN
-params_id <- 375 #PONDSK-MICe 50 latent spaces
-
+# params_id <- 375 #PONDSK-MICe 50 latent spaces
 
 # Extract parameter set
 params_subset <- params %>% 
@@ -74,9 +74,6 @@ for (i in 1:2) {
 
 # Pipeline directory
 pipeline_dir <- file.path(pipeline_dir, params_id, "similarity")
-
-# Input pipeline directories
-input_pipeline_dirs <- file.path("../../data/", species, "derivatives")
 
 # Output directory
 output_dir <- file.path(output_dir, version, params_id)
@@ -216,12 +213,231 @@ for (nk1 in 2:nk_max) {
     pdf(file = outfile, 
         width = unit(10, "in"),
         height = unit(8, "in"))
-    print(p_sim_j)
+    print(p_sim)
     dev.off()
     
   }
 }
 ```
+
+# Where do the similarity values come from?
+
+
+```{r}
+# Input pipeline directories
+input_pipeline_dirs <- file.path("../../data/", species)
+
+# Expression directories
+expr_dirs <- file.path(input_pipeline_dirs, "expression")
+
+# Import files for both pipeline inputs
+masks <- character(2)
+anats <- vector(mode = "list", length = 2)
+labels <- vector(mode = "list", length = 2)
+defs <- vector(mode = "list", length = 2)
+trees <- vector(mode = "list", length = 2)
+for (i in 1:2) {
+  if (species[i] == "human") {
+    
+    # Human imaging directory
+    imgdir <- file.path(input_pipeline_dirs[i], "registration", version, "reference_files")  
+    
+    # Human mask file
+    masks[i] <- file.path(imgdir, paste0("mask_", resolutions[i], "mm.mnc"))
+    
+    # Human anatomy template
+    anat <- file.path(imgdir, paste0("model_", resolutions[i], "mm.mnc"))
+    anats[[i]] <- mincGetVolume(anat)
+    
+    # Human microarray labels
+    label <- str_c("AHBA_microarray_labels_study_", resolutions[i], "mm.mnc")
+    label <- file.path(expr_dirs[i], version, label)
+    labels[[i]] <- round(mincGetVolume(label))
+    
+    # Human microarray label definitions
+    def <- file.path(expr_dirs[i], "AHBA_microarray_coordinates_mni_defs.csv")
+    defs[[i]] <- read_csv(def, show_col_types = FALSE)
+    
+    # Human expression tree
+    load(file.path(expr_dirs[i], "HumanExpressionTree.RData"))
+    trees[[i]] <- Clone(treeHumanExpr)
+    rm(treeHumanExpr)
+    
+    
+  } else if (species[i] == "mouse") {
+    
+    # Mouse atlas directory
+    imgdir <- file.path(input_pipeline_dirs[i], "atlas")
+    
+    # Mouse mask file
+    masks[i] <- file.path(imgdir, "coronal_200um_coverage_bin0.8.mnc")
+    
+    # Mouse anatomy template
+    anat <- file.path(imgdir, "DSURQE_CCFv3_average_200um.mnc")
+    anats[[i]] <- mincGetVolume(anat)
+    
+    # Mouse atlas labels
+    label <- file.path(imgdir, "DSURQE_CCFv3_labels_200um.mnc")
+    labels[[i]] <- mincGetVolume(label)
+    
+    # Mouse atlas label definitions
+    def <- file.path(imgdir, "DSURQE_40micron_R_mapping_long.csv")
+    defs[[i]] <- read_csv(def, show_col_types = FALSE) %>% 
+      select(name = Structure, label = Label)
+    
+    # Mouse expression tree
+    load(file.path(expr_dirs[i], "MouseExpressionTree_DSURQE.RData"))
+    trees[[i]] <- Clone(treeMouseExpr)
+    rm(treeMouseExpr)
+    
+  }
+}
+
+# Update pipeline directories with parameter IDs
+input_pipeline_dirs <- file.path(input_pipeline_dirs, "derivatives", version, param_ids)
+
+# Centroid directories
+centroid_dirs <- vector(mode = "list", length = 2)
+names(centroid_dirs) <- jacobians
+for (j in jacobians) {
+  centroid_dirs[[j]] <- file.path(input_pipeline_dirs, "centroids", paste0("resolution_", resolutions), j)
+}
+
+# Import mapping for mouse-human neuroanatomical homologues
+neuro_file <- "../../data/cross_species/MouseHumanMatches_H10M09.csv"
+df_neuro <- read_csv(neuro_file, show_col_types = FALSE)
+colnames(df_neuro) <- str_to_lower(colnames(df_neuro))
+df_neuro <- df_neuro %>% 
+  filter(!(name %in% c("White matter", "Ventricles")))
+
+# Get image thresholding parameters
+# Threshold method
+threshold <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold)
+
+# Threshold value
+threshold_value <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_value)
+
+# Threshold symmetric option
+threshold_symmetric <- params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_symmetric)
+```
+
+
+```{r}
+run <- TRUE
+nproc <- 8
+if (run) {
+  
+  df_iter <- tibble()
+  for (nk1 in 2:nk_max) {
+    if (nk1 == 2) {
+      nk2_range <- seq(nk1, nk1+n_off_diag)
+    } else if (nk1 == nk_max) {
+      nk2_range <- seq(nk1-n_off_diag, nk1)
+    } else {
+      nk2_range <- seq(nk1-n_off_diag, nk1+n_off_diag)
+    } 
+    for (nk2 in nk2_range) {
+      df_iter <- df_iter %>%
+        bind_rows(expand_grid(k1 = 1:nk1,
+                              k2 = 1:nk2) %>% 
+                    mutate(nk1 = nk1, nk2 = nk2))
+    }
+  }
+  
+  pb <- txtProgressBar(max = nrow(df_iter), style = 3)
+  progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
+  cl <- makeSOCKcluster(nproc)
+  registerDoSNOW(cl)
+  opts <- list(progress=progress)
+  results <- foreach(i = 1:nrow(df_iter), 
+                     .combine = "c",
+                     .packages = c("tidyverse" ,"RMINC", "data.tree"), 
+                     .options.snow = opts) %dopar% {
+                       
+                       nk <- c(df_iter[[i, "nk1"]], df_iter[[i, "nk2"]])
+                       k <- c(df_iter[[i, "k1"]], df_iter[[i, "k2"]])
+                       
+                       centroid_anat <- vector(mode = "list", length = length(jacobians))
+                       names(centroid_anat) <- jacobians
+                       for (j in jacobians) {
+                         centroid_anat[[j]] <- compare_centroid_anatomy(centroid_dirs = centroid_dirs[[j]],
+                                                                        species = species,
+                                                                        nk = nk, k = k,
+                                                                        nodes = df_neuro,
+                                                                        masks = masks, trees = trees, labels = labels,
+                                                                        defs = defs, threshold = threshold, 
+                                                                        threshold_value = threshold_value,
+                                                                        threshold_symmetric = threshold_symmetric)
+                         names(centroid_anat[[j]]) <- datasets
+                         centroid_anat[[j]] <- bind_rows(centroid_anat[[j]], .id = "dataset")
+                         
+                       }
+                       
+                       centroid_anat <- bind_rows(centroid_anat, .id = "jacobians")
+                       
+                       cluster_ids <- str_c(nk, k, sep = "-")
+                       outfile <- paste0("centroid_anatomy_", str_flatten(str_c(datasets, cluster_ids, sep = "_"), collapse = "_"))
+                       outfile <- paste0(outfile, ".csv")
+                       outfile <- file.path(output_dir, outfile)
+                       write_csv(x = centroid_anat, file = outfile)
+                       
+                       outfile
+                     }
+  close(pb)
+  stopCluster(cl)
+  
+} 
+```
+
+
+```{r}
+centroid_anat <- vector(mode = "list", length = length(jacobians))
+names(centroid_anat) <- jacobians
+for (j in jacobians) {
+  centroid_anat[[j]] <- compare_centroid_anatomy(centroid_dirs = centroid_dirs[[j]],
+                                                 species = species,
+                                                 nk = c(2,2), k = c(1,1),
+                                                 nodes = df_neuro,
+                                                 masks = masks, trees = trees, labels = labels,
+                                                 defs = defs, threshold = threshold, 
+                                                 threshold_value = threshold_value,
+                                                 threshold_symmetric = threshold_symmetric)
+  names(centroid_anat[[j]]) <- datasets
+  centroid_anat[[j]] <- bind_rows(centroid_anat[[j]], .id = "dataset")
+}
+centroid_anat <- bind_rows(centroid_anat, .id = "jacobians")
+```
+
+
+```{r}
+neuro_acronyms <- c("Cx", "CxN", "IB", "MB", "P", "M", "CbCx", "CbN")
+df_neuro_acronyms <- df_neuro %>% 
+  select(name) %>% 
+  mutate(name = factor(name, levels = name),
+         acronym = factor(neuro_acronyms, levels = neuro_acronyms))
+
+centroid_anat_plot <- centroid_anat %>% 
+  left_join(df_neuro_acronyms, by = "name") %>% 
+  mutate(sign = str_to_title(sign), 
+         sign = factor(sign, levels = c("Positive", "Negative")),
+         jacobians = str_to_title(jacobians))
+
+ggplot(centroid_anat_plot, 
+       aes(x = acronym, y = f_per_label, fill = dataset, col = dataset, group = dataset)) + 
+  geom_col(position = "dodge") +
+  facet_grid(sign~jacobians) + 
+  labs(x = "Brain region",
+       y = "Fraction of expressing voxels",
+       col = "Dataset", fill = "Dataset") +
+  theme_bw()
+```
+
 
 
 # Mouse-human neuroanatomical radar plots

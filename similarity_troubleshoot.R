@@ -160,3 +160,31 @@ mouse_tree_file <- "../../data/mouse/expression/MouseExpressionTree_DSURQE.RData
 load(mouse_tree_file)
 mouse_tree <- Clone(treeMouseExpr)
 rm(treeMouseExpr)
+
+
+
+centroid_dirs_abs <- c("human" = human_centroid_dirs[[1]], 
+                       "mouse" = mouse_centroid_dirs[[1]])
+
+centroid_dirs_rel <- c("human" = human_centroid_dirs[[2]], 
+                       "mouse" = mouse_centroid_dirs[[2]])
+
+# Combine cluster map directories
+centroid_dirs <- list(centroid_dirs_abs, centroid_dirs_rel)
+names(centroid_dirs) <- jacobians
+
+# Human and mouse trees
+trees <- list("human" = human_tree,
+              "mouse" = mouse_tree)
+
+# Human and mouse labels
+labels <- list("human" = human_labels,
+               "mouse" = mouse_labels)
+
+# Human and mouse definitions
+defs <- list("human" = human_defs,
+             "mouse" = mouse_defs)
+
+# Human and mouse masks
+masks <- list("human" = human_mask,
+              "mouse" = mouse_mask)

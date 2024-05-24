@@ -9,6 +9,54 @@ SRCPATH <- Sys.getenv("SRCPATH")
 source(file.path(SRCPATH, "processing.R"))
 
 
+compare_centroid_anatomy <- function(centroid_dirs, species, nk, k, nodes, trees, 
+                                     labels, defs, masks, threshold, threshold_value,
+                                     threshold_symmetric, threshold_comparison = NULL) {
+  
+  freq <- vector(mode = "list", length = 2)
+  for (i in 1:2) {
+    
+    if (species[i] == "human") {
+      reduce_atlas <- reduce_human_atlas
+    } else {
+      reduce_atlas <- reduce_mouse_atlas
+    }
+    
+    atlas <- reduce_atlas(tree = trees[[i]],
+                          labels = labels[[i]],
+                          defs = defs[[i]],
+                          nodes = nodes[[species[i]]],
+                          remove = TRUE)
+    
+    freq_signed <- vector(mode = "list", length = 2)
+    names(freq_signed) <- c("positive", "negative")
+    for (s in names(freq_signed)) {
+      freq_signed[[s]] <- compute_cluster_fractions(cluster_dir = centroid_dirs[[i]],
+                                                    nk = nk[[i]],
+                                                    k = k[[i]],
+                                                    labels = atlas[["labels"]],
+                                                    defs = atlas[["defs"]],
+                                                    mask = masks[[i]],
+                                                    sign = s,
+                                                    threshold = threshold,
+                                                    threshold_value = threshold_value,
+                                                    threshold_symmetric = threshold_symmetric,
+                                                    threshold_comparison = threshold_comparison)
+    }
+    
+    freq[[i]] <- bind_rows(freq_signed, .id = "sign")
+    
+  }
+  
+  freq <- intersect_neuro_homologues(x = freq, 
+                                     species = species,
+                                     homologues = nodes)
+  
+  return(freq)
+  
+}
+
+
 #' Compute the fraction of voxels
 #'
 #' @param cluster_dir (character scalar) Path to the directory 
@@ -157,25 +205,36 @@ import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, thres
 
 #' Intersect data with neuroanatomical homologues
 #'
-#' @param x (list) A list with named elements "mouse" and "human" 
-#' containing data to intersect. 
+#' @param x (list) A list containing the data to intersect. 
+#' @param species (character vector) 
 #' @param homologues (data.frame) A data frame containing the set
 #' of mouse and human neuroanatomical homologues.
 #'
-#' @return (list) A list with named elements "mouse" and "human" 
-#' containing the intersected data.
-intersect_neuro_homologues <- function(x, homologues) {
+#' @return (list) A list containing the intersected data.
+intersect_neuro_homologues <- function(x, species, homologues) {
   for (i in 1:length(x)) {
-    species <- names(x)[[i]]
     cols_init <- colnames(x[[i]])
-    colnames(x[[i]])[cols_init == "name"] <- species
-    x[[i]] <- inner_join(x[[i]], homologues, by = species)
+    colnames(x[[i]])[cols_init == "name"] <- species[i]
+    x[[i]] <- inner_join(x[[i]], homologues, by = species[i])
     x[[i]][["name"]] <- factor(x[[i]][["name"]], levels = homologues[["name"]])
-    x[[i]][["species"]] <- species
+    x[[i]][["species"]] <- species[i]
     x[[i]] <- x[[i]][,match(cols_init, colnames(x[[i]]))]
   }
   return(x)
 }
+
+# intersect_neuro_homologues_old <- function(x, homologues) {
+#   for (i in 1:length(x)) {
+#     species <- names(x)[[i]]
+#     cols_init <- colnames(x[[i]])
+#     colnames(x[[i]])[cols_init == "name"] <- species
+#     x[[i]] <- inner_join(x[[i]], homologues, by = species)
+#     x[[i]][["name"]] <- factor(x[[i]][["name"]], levels = homologues[["name"]])
+#     x[[i]][["species"]] <- species
+#     x[[i]] <- x[[i]][,match(cols_init, colnames(x[[i]]))]
+#   }
+#   return(x)
+# }
 
 
 prepare_radar_chart <- function(cluster_dirs, nk, k, spokes, trees, labels, 
