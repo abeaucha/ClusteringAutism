@@ -5,7 +5,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=72:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
-#SBATCH --output=logs/permute_cluster_similarity_v3_POND_SK_%j.out
+#SBATCH --output=logs/permute_cluster_similarity_v3_PONDSK_MICe_%j.out
 #SBATCH --qos=abeauchamp_q
 ##SBATCH --dependency=afterok:
 
