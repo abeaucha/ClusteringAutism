@@ -6,6 +6,8 @@
 #SBATCH --time=1:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_images_v3_3.0mm_POND_SK_%j.out
+#SBATCH --qos=abeauchamp_q
+##SBATCH --dependency=afterok:
 
 # This pipeline ran in 30 minutes with --time=2:00:00.
 # Should be able to run it with a shorter walltime.
@@ -25,14 +27,14 @@ process_human_images.py \
 --datasets POND SickKids \
 --es-method normative-growth \
 --es-batch Site Scanner \
---es-group patients \
+--es-group all \
 --es-df 3 \
 --cluster-resolution 3.0 \
 --execution slurm \
 --nproc 8 \
 --registry-name $REGISTRY \
 --registry-cleanup true \
---slurm-njobs 50 \
+--slurm-njobs 300 \
 --slurm-time 30 \
 --slurm-mem 8G
 
