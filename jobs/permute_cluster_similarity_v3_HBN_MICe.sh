@@ -6,8 +6,8 @@
 #SBATCH --time=72:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/permute_cluster_similarity_v3_HBN_MICe_%j.out
-#SBATCH --qos=abeauchamp_q
-#SBATCH --dependency=afterok:10339770
+##SBATCH --qos=abeauchamp_q
+##SBATCH --dependency=afterok:
 
 # Activate virtual environment
 source activate_venv_hpc.sh
