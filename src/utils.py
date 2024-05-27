@@ -154,7 +154,7 @@ class Registry:
 
             # Additional flag for temporary high resource queue
             # TODO: REMOVE WHEN DONE
-            f.write('#SBATCH --qos=abeauchamp_q')
+            f.write('#SBATCH --qos=abeauchamp_q\n')
 
             # Activate project virtual environment
             # f.write('source activate_venv_hpc.sh\n')
