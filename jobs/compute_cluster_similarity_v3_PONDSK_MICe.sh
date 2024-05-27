@@ -5,7 +5,8 @@
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
-#SBATCH --output=logs/compute_cluster_similarity_v3_POND_HBN_%j.out
+#SBATCH --output=logs/compute_cluster_similarity_v3_POND_SK_%j.out
+#SBATCH --dependency=afterok:
 
 # Activate virtual environment
 source activate_venv_hpc.sh
@@ -17,14 +18,14 @@ REGISTRY="compute_cluster_similarity_registry_${SLURM_JOB_ID}"
 # Maximum of 300 jobs allowed on HPF (??)
 compute_cluster_similarity.py \
 --pipeline-dir data/cross_species/v3/ \
---species human human \
---input-dirs data/human/derivatives/v3/ data/human/derivatives/v3/ \
---param-ids 700 013 \
---expr-dirs data/human/expression data/human/expression \
---masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/human/registration/v3/reference_files/mask_0.8mm.mnc \
+--species human mouse \
+--input-dirs data/human/derivatives/v3/ data/mouse/derivatives/v3/ \
+--param-ids 700 107 \
+--expr-dirs data/human/expression data/mouse/expression \
+--masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
 --gene-space average-latent-space \
---n-latent-spaces 100 \
+--n-latent-spaces 50 \
 --jacobians absolute relative \
 --execution slurm \
 --registry-name $REGISTRY \
