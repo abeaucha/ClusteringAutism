@@ -5,6 +5,10 @@ date: '`r Sys.Date()`'
 output: pdf_document
 ---
 
+# Description
+
+# Initialization
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 ```
@@ -19,7 +23,10 @@ suppressPackageStartupMessages(library(RColorBrewer))
 
 ```{r functions}
 SRCPATH <- Sys.getenv("SRCPATH")
-Sys.setenv(SRCPATH="../../src/")
+if (SRCPATH == "") {
+  SRCPATH <- "../../src/"
+  Sys.setenv(SRCPATH=SRCPATH)
+}
 
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
@@ -45,9 +52,8 @@ params
 ```{r directories}
 # Parameter set ID
 # params_id <- 984 #PONDSK-MICe
-params_id <- 394 #HBN-MICe
-# params_id <- 278 #PONDSK-HBN
-# params_id <- 375 #PONDSK-MICe 50 latent spaces
+# params_id <- 394 #HBN-MICe
+params_id <- 278 #PONDSK-HBN
 
 # Extract parameter set
 params_subset <- params %>% 
@@ -120,7 +126,7 @@ for (i in 1:2) {
 ```{r similarity-matrices}
 # Highest number of clusters
 nk_max <- max(c(max(similarity[["img_1_nk"]]), max(similarity[["img_2_nk"]])))
-n_off_diag <- 1
+n_off_diag <- 2
 
 # Generate heatmap colour palette
 heatmap_colours <- rev(brewer.pal(n = 7, name = "RdYlBu"))
@@ -131,14 +137,8 @@ heatmap_palette <- colorRampPalette(heatmap_colours)(palette_length)
 for (nk1 in 2:nk_max) {
   
   # Iterate over off-diagonal terms
-  if (nk1 == 2) {
-    nk2_range <- seq(nk1, nk1+n_off_diag)
-  } else if (nk1 == nk_max) {
-    nk2_range <- seq(nk1-n_off_diag, nk1)
-  }
-  else {
-    nk2_range <- seq(nk1-n_off_diag, nk1+n_off_diag)
-  }
+  nk2_range <- seq(nk1-n_off_diag, nk1+n_off_diag)
+  nk2_range <- nk2_range[nk2_range >= 2 & nk2_range <= nk_max]
   for (nk2 in nk2_range) {
     
     # Filter similarity for given cluster solutions
@@ -223,7 +223,7 @@ for (nk1 in 2:nk_max) {
 # Where do the similarity values come from?
 
 
-```{r}
+```{r, eval = FALSE}
 # Input pipeline directories
 input_pipeline_dirs <- file.path("../../data/", species)
 
@@ -328,8 +328,8 @@ threshold_symmetric <- params %>%
 ```
 
 
-```{r}
-run <- TRUE
+```{r, eval = FALSE}
+run <- FALSE
 nproc <- 8
 if (run) {
   
@@ -396,7 +396,7 @@ if (run) {
 ```
 
 
-```{r}
+```{r, eval = FALSE}
 centroid_anat <- vector(mode = "list", length = length(jacobians))
 names(centroid_anat) <- jacobians
 for (j in jacobians) {
@@ -415,7 +415,7 @@ centroid_anat <- bind_rows(centroid_anat, .id = "jacobians")
 ```
 
 
-```{r}
+```{r, eval = FALSE}
 neuro_acronyms <- c("Cx", "CxN", "IB", "MB", "P", "M", "CbCx", "CbN")
 df_neuro_acronyms <- df_neuro %>% 
   select(name) %>% 
