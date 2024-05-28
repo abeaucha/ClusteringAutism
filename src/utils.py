@@ -261,7 +261,7 @@ class Registry:
             if wait: 
                 print("Waiting for results...", flush = True)
                 while wait:
-                    sleep(10)
+                    sleep(30)
                     wait = not self._check_completion()
                 self.outputs = [os.path.join(self.paths['outputs'], out) 
                                 for out in os.listdir(self.paths['outputs'])]
