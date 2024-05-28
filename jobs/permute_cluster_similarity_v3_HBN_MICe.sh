@@ -25,7 +25,7 @@ permute_cluster_similarity.py \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
 --permutations-n 100 \
---permutations-start 1 \
+--permutations-start 5 \
 --off-diagonal 2 \
 --execution slurm \
 --registry-name $REGISTRY \
