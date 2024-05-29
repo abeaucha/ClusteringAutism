@@ -5,13 +5,11 @@
 .venv/
 .venv_hpc/
 __pycache__/
-data/
-logs/
-templates/
 analyses/auxiliary/
 analyses/primary/outputs
 analyses/troubleshooting/
-src/legacy/
+data/
+logs/
 figures/old/
 figures/v2/figure1/
 figures/v2/figure2/
@@ -27,5 +25,9 @@ figures/v3/figure4/
 figures/v3/figure_supp_mouse/
 figures/v3/figure_supp_human/
 figures/v3/figure_supplementary/
+src/legacy/
+templates/
 .Rhistory
 .Rprofile
+permutations_registry_*
+pMincMask*
