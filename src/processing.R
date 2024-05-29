@@ -796,3 +796,37 @@ compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean"
   return(centroids)
 
 }
+
+
+scaler <- function(data, scale = TRUE, axis = "columns"){
+
+  if (axis == "columns"){
+
+    colMeansMat <- matrix(colMeans(data), nrow = nrow(data), ncol = ncol(data), byrow = T)
+    out <- data - colMeansMat
+
+    if (scale == TRUE){
+
+      sigma <- sqrt(colSums(out^2)/(nrow(data)-1))
+      sigmaMat <- matrix(sigma, nrow = nrow(data), ncol = ncol(data), byrow = T)
+      out <- out/sigmaMat
+
+    }
+
+  } else if (axis == "rows") {
+
+    rowMeansMat <- matrix(rowMeans(data), nrow = nrow(data), ncol = ncol(data), byrow = F)
+    out <- data - rowMeansMat
+
+    if (scale == TRUE){
+
+      sigma <- sqrt(rowSums(out^2)/(ncol(data)-1))
+      sigmaMat <- matrix(sigma, nrow = nrow(data), ncol = ncol(data), byrow = F)
+      out <- out/sigmaMat
+
+    }
+  }
+
+  return(out)
+
+}
