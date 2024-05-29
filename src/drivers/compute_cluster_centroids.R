@@ -149,7 +149,6 @@ if (execution == "local") {
 
 # Create centroid images for all clusters
 if (verbose) { message("Creating centroid images...") }
-ti <- Sys.time()
 reg <- makeRegistry(file.dir = ifelse(is.null(registry_name),
                                       "registry_centroid",
                                       registry_name),

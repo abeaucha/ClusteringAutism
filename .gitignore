@@ -31,3 +31,4 @@ templates/
 .Rprofile
 permutations_registry_*
 pMincMask*
+count_rows.R
