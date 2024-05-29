@@ -97,6 +97,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--permutations-ids',
+        type = int,
+        nargs = '*',
+        help = ""
+    )
+
+    parser.add_argument(
         '--off-diagonal',
         type = int,
         default = 1,
@@ -248,7 +255,7 @@ def initialize(**kwargs):
     return inputs, paths, params
 
 
-def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
+def permute_cluster_labels(clusters, outdir, n = 100, start = 1, ids = None,
                            min_per_k = None):
     """
     Permute cluster assignment labels.
@@ -263,6 +270,7 @@ def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
         Number of permutations to generate.
     start: int
         Starting permutation seed.
+    ids: None or list of int
     min_per_k: None or int
         Minimum number of patients per cluster to include in
         permutation. Clusters below threshold are ignored.
@@ -289,7 +297,9 @@ def permute_cluster_labels(clusters, outdir, n = 100, start = 1,
 
     # Iterate over permutations
     outfiles = []
-    for p in range(start, start + n):
+    if ids is None:
+        ids = list(range(start, start + n))
+    for p in ids:
 
         # Iterate over clusters
         df_permute = df_clusters.copy()
@@ -350,7 +360,7 @@ def subset_cluster_pairs(centroid_pairs, off_diagonal = 1):
 
 def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
          microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
-         permutations_n = 100, permutations_start = 1,
+         permutations_n = 100, permutations_start = 1, permutations_ids = None,
          off_diagonal = 1, keep_centroids = False,
          execution = 'local',
          registry_name = 'permute_cluster_similarity_registry',
@@ -380,6 +390,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
         Number of cluster permutations to generate.
     permutations_start: int, default 1
         Starting permutation seed.
+    permutations_ids: list of int or None
     off_diagonal: int, default 1
         Number of off diagonal elements to evaluate similarity.
     keep_centroids: bool, default False
@@ -417,7 +428,8 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     permutations = permute_cluster_labels(clusters = clusters,
                                           outdir = paths['clusters'],  # Path to pipeline cluster dir
                                           n = permutations_n,
-                                          start = permutations_start)
+                                          start = permutations_start,
+                                          ids = permutations_ids)
 
     # Driver script and kwargs
     driver = 'transcriptomic_similarity.py'
@@ -432,11 +444,13 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     del driver_kwargs['id']
 
     # Iterate over permutations
-    permutations_end = permutations_start + permutations_n
-    permutations_range = range(permutations_start, permutations_end)
-    for p, f in zip(permutations_range, permutations):
-        print("Permutation {} of {}".format(p, permutations_end - 1),
-              flush = True)
+    # If permutation IDs given, use those. Otherwise, iterate in sequence.
+    if permutations_ids is None:
+        permutations_end = permutations_start + permutations_n
+        permutations_range = range(permutations_start, permutations_end)
+        permutations_ids = list(permutations_range)
+    for p, f in zip(permutations_ids, permutations):
+        print("Permutation {}".format(p), flush = True)
 
         # Update registry name for current permutation
         registry_name_p = '{}_{}'.format(registry_name, p)
