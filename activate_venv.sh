@@ -41,6 +41,10 @@ SRCPATH="$PWD/src"
 PYTHONPATH="$SRCPATH:$PYTHONPATH"
 PATH="$SRCPATH:$SRCPATH/drivers:$SRCPATH/pipelines:$PATH"
 
+# Set project path
+PROJECTPATH=/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main
+
 export SRCPATH
 export PYTHONPATH
 export PATH
+export PROJECTPATH
