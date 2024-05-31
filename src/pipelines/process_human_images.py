@@ -10,10 +10,10 @@ Execute the human image processing pipeline.
 Description
 -----------
 The human image processing pipeline consists of three stages:
-1. Compute effect size images for patients based on absolute and relative
-   Jacobian images.
-2. Generate clusters of patients based on absolute and relative Jacobian
-   effect size images.
+1. Compute effect size images for the desired participant group based
+   on absolute and relative Jacobian images.
+2. Generate clusters of participants based on absolute and relative
+   Jacobian effect size images.
 3. Generate cluster centroid images for all cluster solutions.
 
 The pipeline can be deployed locally or on an HPC cluster that uses Slurm.
@@ -45,25 +45,26 @@ def parse_args():
         '--pipeline-dir',
         type = str,
         default = 'data/human/derivatives/v3/',
-        help = ("Path to the directory in which to store pipeline outputs. "
-                "A sub-directory will be created based on the parameters "
-                "used to run the pipeline.")
+        help = ("Path to the directory in which to export pipeline "
+                "outputs. A uniquely identified sub-directory will be "
+                "created using the specified set of pipeline parameters.")
     )
 
     parser.add_argument(
         '--input-dir',
         type = str,
         default = 'data/human/registration/v3/jacobians_resampled/resolution_0.8/',
-        help = ("Path to the directory containing Jacobian images. "
-                "This directory must contain sub-directories named 'absolute' "
-                "and 'relative' containing the Jacobian images.")
+        help = ("Path to the directory containing the input Jacobian "
+                "MINC images. Expects sub-directories 'absolute' and "
+                "'relative' containing the images.")
     )
 
     parser.add_argument(
         '--demographics',
         type = str,
         default = 'data/human/registration/v3/subject_info/demographics.csv',
-        help = "Path to the file (.csv) containing demographics information."
+        help = ("Path to the file (.csv) containing participant "
+                "demographics information.")
     )
 
     parser.add_argument(
@@ -88,7 +89,7 @@ def parse_args():
         type = str,
         default = 'normative-growth',
         choices = ['normative-growth', 'propensity-matching'],
-        help = "Method to use to compute the effect size images."
+        help = "The method to use to compute the effect size images."
     )
 
     parser.add_argument(
@@ -96,7 +97,8 @@ def parse_args():
         type = str,
         default = 'patients',
         choices = ['patients', 'controls', 'all'],
-        help = "Group of participants for which to compute effect sizes."
+        help = ("The group of participants for which to compute effect "
+                "sizes.")
     )
 
     parser.add_argument(
@@ -229,7 +231,7 @@ def parse_args():
         '--nproc',
         type = int,
         default = 1,
-        help = "Number of processors to use."
+        help = "Number of processors to use when executing locally."
     )
 
     parser.add_argument(
@@ -281,8 +283,8 @@ def initialize(**kwargs):
 
     Returns
     -------
-    paths: list of str
-        List of paths to the pipeline sub-directories
+    paths: dict
+        Dictionary containing the paths to the pipeline sub-directories.
     """
     # Effect size calculation method parameters
     if kwargs['es_method'] == 'normative-growth':
@@ -293,7 +295,7 @@ def initialize(**kwargs):
     else:
         raise ValueError
 
-    # Image resolution
+    # Fetch the image resolution
     vol = volumeFromFile(kwargs['mask'])
     resolution = vol.getSeparations()
     if len(set(resolution)) == 1:
@@ -321,6 +323,7 @@ def initialize(**kwargs):
         centroid_method = kwargs['centroid_method']
     )
 
+    # Extract the pipeline and input directories
     pipeline_dir = kwargs['pipeline_dir']
     input_dir = kwargs['input_dir']
 

@@ -5,10 +5,14 @@
 # Created: February 22nd, 2023
 
 """
-Preprocess human data files.
+Preprocess human Jacobian image files.
 
 Description
 -----------
+This pipeline executes the following steps to prepare the human absolute
+and relative Jacobian images for processing:
+1. Unzip the zipped NIFTY images.
+2. Convert the NIFTY images to MINC format.
 """
 
 
@@ -31,7 +35,7 @@ def parse_args():
     parser.add_argument(
         '--imgdir',
         type = str,
-        help = ("Path to base directory containing Jacobians files. "
+        help = ("Path to base directory containing Jacobian image files. "
                 "Expects sub-directories 'absolute' and 'relative', "
                 "each containing a sub-directory named 'smooth', "
                 "which holds the images.")
@@ -66,7 +70,7 @@ def main(imgdir, nproc = 1, verbose = True):
     Parameters
     ----------
     imgdir: str
-        Path to base directory containing Jacobians files.
+        Path to base directory containing Jacobian image files.
         Expects sub-directories 'absolute' and 'relative',
         each containing a subdirectory named 'smooth',
         which holds the images.
@@ -89,7 +93,7 @@ def main(imgdir, nproc = 1, verbose = True):
             OSError("Image directory not found: {}".format(imgdir))
 
     # Iterate over jacobians
-    jacobians = ['absolute', 'relative']
+    jacobians = ('absolute', 'relative')
     for jac in jacobians:
 
         if verbose:
@@ -131,4 +135,5 @@ def main(imgdir, nproc = 1, verbose = True):
 # Execution -------------------------------------------------------------------
 if __name__ == '__main__':
     args = parse_args()
+    args['verbose'] = True if args['verbose'] == 'true' else False
     main(**args)

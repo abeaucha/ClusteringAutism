@@ -5,7 +5,7 @@
 # Created: February 22nd, 2022
 
 """
-Resample a set of images using the autocrop command line tool.
+Resample a set of MINC images using the autocrop command line tool.
 """
 
 # Packages -------------------------------------------------------------------
@@ -27,26 +27,30 @@ def parse_args():
     parser.add_argument(
         '--imgdir',
         type = str,
-        help = "Path to directory containing images to resample."
+        help = ("Path to the directory containing the images (.mnc) to "
+                "resample.")
     )
 
     parser.add_argument(
         '--outdir',
         type = str,
-        help = "Path to directory in which to save resampled images."
+        help = ("Path to the directory in which to export the resampled "
+                "images.")
     )
 
     parser.add_argument(
         '--isostep',
         type = str,
-        help = "Resolution of voxels in resampled images (mm)."
+        help = ("Desired isotropic resolution of the resampled "
+                "images (mm).")
     )
 
     parser.add_argument(
         '--nproc',
         type = int,
         default = 1,
-        help = "Number of processors to use. Executed in parallel when > 1."
+        help = ("Number of processors to use. "
+                "Executed in parallel when > 1.")
     )
 
     return vars(parser.parse_args())
@@ -63,6 +67,7 @@ if __name__ == '__main__':
     isostep = args['isostep']
     nproc = args['nproc']
 
+    # Check isostep
     if isostep is None:
         raise Exception("Argument --isostep must be specified")
 
@@ -80,9 +85,7 @@ if __name__ == '__main__':
                 if '.mnc' in file]
 
     # Resample images
-    outfiles = utils.timing(
-        utils.resample_images(infiles = imgfiles,
-                              isostep = isostep,
-                              outdir = outdir,
-                              nproc = nproc)
-    )
+    outfiles = utils.resample_images(infiles = imgfiles,
+                                     isostep = isostep,
+                                     outdir = outdir,
+                                     nproc = nproc)
