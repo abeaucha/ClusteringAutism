@@ -229,8 +229,9 @@ def initialize(**kwargs):
 
     Returns
     -------
-    paths: list of str
-        List of paths to the pipeline sub-directories
+    paths: dict
+        Dictionary containing the pipeline path and the paths to the
+        input centroid directories.
     """
 
     # Ensure proper paths
@@ -238,12 +239,12 @@ def initialize(**kwargs):
     input_dirs = [os.path.join(path, '') for path in kwargs['input_dirs']]
     expr_dirs = [os.path.join(path, '') for path in kwargs['expr_dirs']]
 
-    # Convert bool to str for multi-language consistency
+    # Convert bool to str for multilingual consistency
     for key, val in kwargs.items():
         if type(val) is bool:
             kwargs[key] = 'true' if val else 'false'
 
-    # Fetch pipeline parameters
+    # Fetch the input pipeline parameters
     params = dict()
     param_ids = kwargs['param_ids']
     metadata = [os.path.join(path, 'metadata.csv') for path in input_dirs]
@@ -260,7 +261,7 @@ def initialize(**kwargs):
                     for key, val in params_i.items()}
         params.update(params_i)
 
-    # Update parameter sets with pipeline parameters
+    # Update the parameter sets with the current pipeline parameters
     params.update(
         dict(gene_space = kwargs['gene_space'],
              n_latent_spaces = kwargs['n_latent_spaces'],
@@ -272,24 +273,24 @@ def initialize(**kwargs):
              threshold_symmetric = kwargs['threshold_symmetric'])
     )
 
-    # Create pipeline directory for parameter set
+    # Create the pipeline directory
     pipeline_dir = utils.mkdir_from_params(params = params,
                                            outdir = pipeline_dir)
     pipeline_dir = os.path.join(pipeline_dir, 'similarity', '')
     if not os.path.exists(pipeline_dir):
         os.makedirs(pipeline_dir)
 
-    # Image resolutions
+    # Extract the input pipeline image resolutions
     resolutions = list([params['input_1_resolution'],
                         params['input_2_resolution']])
 
-    # Centroid directories
+    # Extract the input pipeline centroid directories
     centroid_dirs = [os.path.join(input_dirs[i], param_ids[i],
                                   'centroids',
                                   'resolution_{}'.format(resolutions[i]), '')
                      for i in range(len(input_dirs))]
 
-    # Dictionary containing pipeline paths
+    # Dictionary containing the pipeline paths
     paths = dict(
         pipeline = pipeline_dir,
         centroids = centroid_dirs
@@ -300,7 +301,7 @@ def initialize(**kwargs):
 
 def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
     """
-    Generate pairs of cluster centroid images
+    Generate pairs of cluster centroid images.
 
     Parameters
     ----------
@@ -356,7 +357,81 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
          registry_name = 'compute_cluster_similarity_registry',
          registry_cleanup = True, slurm_njobs = None, slurm_mem = None,
          slurm_time = None):
-    # Adapt gene space parameters to selected gene space
+
+    """
+    Execute the cluster similarity pipeline.
+
+    Parameters
+    ----------
+    pipeline_dir: str
+        Path to the directory in which to export pipeline outputs.
+        A uniquely identified subdirectory will be created using the
+        specified set of pipeline parameters.
+    species: tuple of str
+        Strings indicating which species are being compared.
+    input_dirs: tuple of str
+        Paths to the processing pipeline directories containing the
+        centroid images to compare. Expects a subdirectory 'centroids'.
+    param_ids: tuple of str
+        List of integer IDs specifying the processing pipeline
+        parameter sets to use.
+    expr_dirs: tuple of str
+        Paths to the gene expression directories for the species
+        being compared.
+    masks: tuple of str
+        Paths to the mask image files (.mnc).
+    microarray_coords: str
+        Path to file (.csv) containing the world coordinates of the
+        AHBA microarray samples in the human imaging study space.
+    gene_space: {'average-latent-space', 'latent-space', 'homologous-genes'}
+        The gene expression space to use to evaluate the similarity
+        between cluster centroid images.
+    n_latent_spaces: int, default 100
+        The number of latent spaces to include when
+        gene_space = 'average-latent-space'. Ignored otherwise.
+    latent_space_id: int, default 1
+        The ID of the latent space to use when
+        gene_space = 'latent_space'. Ignored otherwise.
+    metric: str, default 'correlation'
+        The metric used to evaluate the similarity between cluster
+        centroid gene expression signature.
+    signed: bool, default True
+        Option to compute positive and negative similarity separately
+        before averaging for a final value.
+    threshold: {'top_n', 'intensity', None}
+        The method used to threshold the cluster centroid images prior
+        to constructing the gene expression signatures.
+    threshold_value: float, default 0.2
+        The value used to threshold the centroid images. Ignored if
+        threshold = None.
+    threshold_symmetric: bool, default True
+        Option to apply the threshold symmetrically to positive and
+        negative image values.
+    jacobians: str or tuple of str, default ('absolute', 'relative')
+        The class of Jacobian images to use.
+    execution: {'local', 'slurm'}
+        Flag indicating whether the pipeline should be executed or using
+        the Slurm scheduler on a HPC cluster.
+    nproc: int, default 1
+        Number of processors to use.
+    registry_name: str, default 'compute_cluster_similarity_registry'
+        Name of the registry directory for batched jobs.
+    registry_cleanup: bool, default True
+        Option to clean up registry after completion of batched jobs.
+    slurm_njobs: int, default None
+        Number of jobs to deploy on Slurm. Ignored when execution = 'local'.
+    slurm_mem: str, default None
+        Memory per CPU on Slurm. Ignored when execution = 'local'.
+    slurm_time: str, default None
+        Walltime in hh:mm:ss format for Slurm jobs.
+        Ignored when execution = 'local'.
+
+    Returns
+    -------
+    None
+    """
+
+    # Adapt gene space parameters to the selected gene space
     if gene_space == 'average-latent-space':
         latent_space_id = None
     elif gene_space == 'latent-space':
