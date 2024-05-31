@@ -478,33 +478,32 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     del kwargs['slurm_mem']
     del kwargs['slurm_time']
 
-    # Execution mode
+    # Execute the driver
     print("Evaluating cluster similarity...", flush = True)
     if execution == 'local':
 
-        # Export cluster pairs
+        # Export the cluster pairs
         outfile = os.path.join(paths['pipeline'], 'centroid_pairs.csv')
         cluster_pairs.to_csv(outfile, index = False)
 
-        # Update kwargs for driver
+        # Update the kwargs for driver
         kwargs['input-file'] = outfile
         kwargs['output-file'] = os.path.join(paths['pipeline'], 'similarity.csv')
         kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
 
-        # Execute driver
+        # Execute the driver
         utils.execute_local(script = driver, kwargs = kwargs)
-
 
     elif execution == 'slurm':
 
-        # Slurm job resources
+        # Specify the Slurm job resources
         resources = dict(
             nodes = 1,
             mem = slurm_mem,
             time = slurm_time
         )
 
-        # Create registry
+        # Create the registry
         registry = utils.Registry(resources = resources,
                                   name = registry_name)
 
@@ -518,10 +517,10 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         registry.create_jobs(script = driver,
                              kwargs = kwargs)
 
-        # Submit jobs
+        # Submit the jobs
         out = registry.submit_jobs(wait = True, cleanup = registry_cleanup)
 
-        # Export results
+        # Export the results
         print("Exporting results...", flush = True)
         output_file = os.path.join(paths['pipeline'], 'similarity.csv')
         out.to_csv(output_file, index = False)
