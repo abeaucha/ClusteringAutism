@@ -46,13 +46,16 @@ def parse_args():
         '--species',
         nargs = 2,
         type = str,
-        help = "List of strings indicating which species are being compared."
+        default = ['human', 'mouse'],
+        help = ("List of strings indicating which species are being compared. "
+                "Entries must be 'human' or 'mouse'.")
     )
 
     parser.add_argument(
         '--input-dirs',
         nargs = 2,
         type = str,
+        default = ['data/human/derivatives/v3/', 'data/mouse/derivatives/v3/'],
         help = ("Paths to the processing pipeline directories containing "
                 "the centroid images to compare. Expects a sub-directory "
                 "'centroids'.")
@@ -70,6 +73,7 @@ def parse_args():
         '--expr-dirs',
         nargs = 2,
         type = str,
+        default = ['data/human/expression', 'data/mouse/expression'],
         help = ("Paths to the gene expression directories for the species "
                 "being compared.")
     )
@@ -78,6 +82,8 @@ def parse_args():
         '--masks',
         nargs = 2,
         type = str,
+        default = ['data/human/registration/v3/reference_files/mask_0.8mm.mnc',
+                   'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc'],
         help = "Paths to the mask image files (.mnc)."
     )
 
@@ -411,7 +417,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
         The class of Jacobian images to use.
     execution: {'local', 'slurm'}
         Flag indicating whether the pipeline should be executed or using
-        the Slurm scheduler on a HPC cluster.
+        the Slurm scheduler on an HPC cluster.
     nproc: int, default 1
         Number of processors to use.
     registry_name: str, default 'compute_cluster_similarity_registry'

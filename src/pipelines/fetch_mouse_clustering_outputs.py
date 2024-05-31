@@ -1,6 +1,6 @@
 #!.venv/bin/python3
 # ----------------------------------------------------------------------------
-# get_mouse_clustering_data.py 
+# fetch_mouse_clustering_outputs.py
 # Author: Antoine Beauchamp
 # Created: March 7th, 2023
 

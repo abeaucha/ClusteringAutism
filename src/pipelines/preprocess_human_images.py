@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -----------------------------------------------------------------------------
-# preprocess_human_data.py 
+# preprocess_human_images.py
 # Author: Antoine Beauchamp
 # Created: February 22nd, 2023
 

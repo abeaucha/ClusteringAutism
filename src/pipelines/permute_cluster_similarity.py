@@ -37,13 +37,15 @@ def parse_args():
         '--pipeline-dir',
         type = str,
         default = 'data/cross_species/v3/',
-        help = "Path to the pipeline output directory."
+        help = ("Path to the directory in which to export pipeline "
+                "outputs. A uniquely identified sub-directory will be "
+                "created using the specified set of pipeline parameters.")
     )
 
     parser.add_argument(
         '--param-id',
         type = str,
-        help = ("IDs specifying the similarity pipeline parameter set "
+        help = ("ID specifying the similarity pipeline parameter set "
                 "to use.")
     )
 
@@ -53,7 +55,8 @@ def parse_args():
         type = str,
         default = ['data/human/derivatives/v3/', 'data/mouse/derivatives/v3/'],
         help = ("Paths to the processing pipeline directories containing "
-                "images to compare.")
+                "the images used to build the permutations. Expects "
+                "subdirectories 'effect_sizes', 'clusters', and 'centroids'.")
     )
 
     parser.add_argument(
@@ -61,7 +64,7 @@ def parse_args():
         nargs = 2,
         type = str,
         default = ['data/human/expression', 'data/mouse/expression'],
-        help = ("Paths to gene expression directories for the species "
+        help = ("Paths to the gene expression directories for the species "
                 "being compared.")
     )
 
@@ -79,42 +82,46 @@ def parse_args():
         type = str,
         default = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
-                "the AHBA microarray samples.")
+                "the AHBA microarray samples in the human imaging study space.")
     )
 
     parser.add_argument(
         '--permutations-n',
         type = int,
         default = 100,
-        help = "Number of permutations to run."
+        help = "Number of permutations to evaluate."
     )
 
     parser.add_argument(
         '--permutations-start',
         type = int,
         default = 1,
-        help = "Permutation to start on."
+        help = "Starting permutation ID."
     )
 
     parser.add_argument(
         '--permutations-ids',
         type = int,
         nargs = '*',
-        help = ""
+        help = ("Optional list of specific permutation IDs to evaluate. "
+                "If passed, this overrides --permutations-n and "
+                "--permutations-start.")
     )
 
     parser.add_argument(
         '--off-diagonal',
         type = int,
         default = 1,
-        help = "Number of off diagonal elements to evaluate similarity"
+        help = ("Number of off-diagonal cluster solution combinations for "
+                "which to evaluate the similarity permutations.")
     )
 
     parser.add_argument(
         '--keep-centroids',
         type = str,
         default = 'false',
-        help = "Option to keep permuted centroids."
+        choices = ['true', 'false'],
+        help = "Option to keep the permuted centroid images."
     )
 
     parser.add_argument(
@@ -163,7 +170,6 @@ def parse_args():
 
 # Modules --------------------------------------------------------------------
 
-
 def initialize(**kwargs):
     """
     Initialize the similarity permutation pipeline.
@@ -184,12 +190,13 @@ def initialize(**kwargs):
     params: dict
         Dictionary containing pipeline parameters.
     """
+
     # Ensure proper paths
     pipeline_dir = os.path.join(kwargs['pipeline_dir'], '')
     input_dirs = [os.path.join(path, '') for path in kwargs['input_dirs']]
     expr_dirs = [os.path.join(path, '') for path in kwargs['expr_dirs']]
 
-    # Fetch similarity pipeline parameters
+    # Fetch the similarity pipeline parameters
     param_id = kwargs['param_id']
     metadata = os.path.join(pipeline_dir, 'metadata.csv')
     if not os.path.exists(metadata):
@@ -203,12 +210,12 @@ def initialize(**kwargs):
     params['latent_space_id'] = (str(1) if params['latent_space_id'] is np.nan
                                  else params['latent_space_id'])
 
-    # Build paths to input directories
+    # Build paths to the input directories
     input_ids = (params['input_1_id'], params['input_2_id'])
     inputs = dict(effect_sizes = [], clusters = [], centroids = [])
     for i, x in enumerate(zip(input_dirs, input_ids)):
 
-        # Import input params
+        # Import input i params
         metadata_i = os.path.join(x[0], 'metadata.csv')
         params_i = utils.fetch_params_metadata(metadata_i, id = x[1])
 
@@ -258,7 +265,7 @@ def initialize(**kwargs):
 def permute_cluster_labels(clusters, outdir, n = 100, start = 1, ids = None,
                            min_per_k = None):
     """
-    Permute cluster assignment labels.
+    Permute the cluster assignment labels.
 
     Parameters
     ----------
@@ -266,11 +273,13 @@ def permute_cluster_labels(clusters, outdir, n = 100, start = 1, ids = None,
         Path to the file (.csv) containing cluster assignments.
     outdir: str
         Path to the output directory.
-    n: int
+    n: int, default 100
         Number of permutations to generate.
-    start: int
+    start: int, default 1
         Starting permutation seed.
     ids: None or list of int
+        Optional list of specific permutation IDs to evaluate.
+        If passed, this overrides arguments `n` and `start`.
     min_per_k: None or int
         Minimum number of patients per cluster to include in
         permutation. Clusters below threshold are ignored.
@@ -335,17 +344,22 @@ def permute_cluster_labels(clusters, outdir, n = 100, start = 1, ids = None,
 
 def subset_cluster_pairs(centroid_pairs, off_diagonal = 1):
     """
-    Subset cluster pairs for diagonal and off-diagonal.
+    Subset cluster pairs for diagonal and off-diagonal cluster solutions.
 
     Parameters
     ----------
-    centroid_pairs:
-    off_diagonal
+    centroid_pairs: list of list of str
+        List containing paths to the centroid image pairs.
+    off_diagonal: int, default 1
+        Number of off-diagonal cluster solution combinations for which
+        to evaluate the similarity permutations.
 
     Returns
     -------
-
+    centroid_pairs_subset: list of list of str
+        List containing paths to the subsetted centroid image pairs.
     """
+
     centroid_pairs_subset = []
     for pair in centroid_pairs:
         nk = [os.path.basename(x) for x in pair]
@@ -372,27 +386,33 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     Parameters
     ----------
     pipeline_dir: str
-        Path to the directory in which to store pipeline outputs.
+        Path to the directory in which to export pipeline outputs.
+        A uniquely identified subdirectory will be created using the
+        specified set of pipeline parameters.
     param_id: str
         Parameter set ID for the similarity pipeline to permute.
     input_dirs: tuple of str
         Paths to the processing pipeline directories containing
-        images to compare.
+        the images used to build the permutations. Expects
+        subdirectories 'effect_sizes', 'clusters', and 'centroids'.
     expr_dirs: tuple of str
         Paths to the gene expression directories for the species
         being compared.
     masks: tuple of str
         Paths to the mask image files (.mnc).
     microarray_coords: str
-        Path to the file (.csv) containing the world coordinates of
-        the AHBA microarray samples.
+        Path to file (.csv) containing the world coordinates of the
+        AHBA microarray samples in the human imaging study space.
     permutations_n: int, default 100
         Number of cluster permutations to generate.
     permutations_start: int, default 1
-        Starting permutation seed.
+        Starting permutation ID.
     permutations_ids: list of int or None
+        Optional list of specific permutation IDs to evaluate.
+        If passed, this overrides arguments `n` and `start`.
     off_diagonal: int, default 1
-        Number of off diagonal elements to evaluate similarity.
+        Number of off-diagonal cluster solution combinations for which
+        to evaluate the similarity permutations.
     keep_centroids: bool, default False
         Options to keep permuted centroid images.
     execution: {'local', 'slurm'}
@@ -404,11 +424,12 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     registry_cleanup: bool, default True
         Option to clean up registry after completion of batched jobs.
     slurm_njobs: int, default None
-        Number of jobs to deploy on Slurm
+        Number of jobs to deploy on Slurm. Ignored when execution = 'local'.
     slurm_mem: str, default None
-        Memory per CPU for Slurm jobs.
+        Memory per CPU on Slurm. Ignored when execution = 'local'.
     slurm_time: str, default = None
-        Walltime for Slurm jobs in hh:mm:ss.
+        Walltime in hh:mm:ss format for Slurm jobs.
+        Ignored when execution = 'local'.
 
     Returns
     -------
@@ -418,7 +439,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     # Get local kwargs
     kwargs = locals().copy()
 
-    # Initialize pipeline
+    # Initialize the pipeline
     print("Initializing pipeline...", flush = True)
     inputs, paths, params = initialize(**kwargs)
 
@@ -426,7 +447,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
     print("Generating cluster permutations...", flush = True)
     clusters = os.path.join(inputs['clusters'][0], 'clusters.csv')
     permutations = permute_cluster_labels(clusters = clusters,
-                                          outdir = paths['clusters'],  # Path to pipeline cluster dir
+                                          outdir = paths['clusters'],
                                           n = permutations_n,
                                           start = permutations_start,
                                           ids = permutations_ids)
