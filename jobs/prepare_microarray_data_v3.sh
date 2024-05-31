@@ -1,17 +1,14 @@
 #!/bin/bash
-#SBATCH --job-name=preprocess_human_images_v3
+#SBATCH --job-name=prepare_microarray_data
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=64G
-#SBATCH --time=5:00:00
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=6:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
-#SBATCH --output=logs/preprocess_human_images_v3_%j.out
-
-# This pipeline ran in about 200 minutes with --time=12:00:00
-# Should be able to run it with a shorter walltime.
+#SBATCH --output=logs/prepare_microarray_data_v3_%j.out
 
 # Activate virtual environment
-source activate_venv.sh
+source activate_venv_hpc.sh
 
 # Execute pipeline
 prepare_microarray_data.py \

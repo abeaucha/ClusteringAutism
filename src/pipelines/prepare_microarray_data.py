@@ -107,8 +107,9 @@ def main(
     None
     """
 
-    # Fetch microarray coordinates and transform to study space
-    print("Fetching microarray coordinates...")
+    # Fetch the AHBA microarray coordinates and transform them
+    # to the imaging space
+    print("Fetching microarray coordinates...", flush = True)
     coords = transcriptomic.prepare_microarray_coordinates(
         outdir = pipeline_dir,
         metadata = metadata,
@@ -116,7 +117,7 @@ def main(
         transforms = transforms
     )
 
-    # Get template resolution
+    # Fetch the image resolution
     vol = volumeFromFile(template)
     resolution = vol.getSeparations()
     if len(set(resolution)) == 1:
@@ -125,8 +126,8 @@ def main(
         raise Exception
     vol.closeVolume()
 
-    # Create label image from microarray samples
-    print("Creating label image...")
+    # Create a label image from microarray samples
+    print("Creating label image...", flush = True)
     labels = 'AHBA_microarray_labels_study_{}mm.mnc'.format(resolution)
     labels = os.path.join(pipeline_dir, labels)
     labels = utils.coordinates_to_minc(coordinates = coords,
@@ -134,8 +135,8 @@ def main(
                                        outfile = labels,
                                        type = 'labels')
 
-    # Create mask image from microarray samples
-    print("Creating mask image...")
+    # Create a mask image from microarray samples
+    print("Creating mask image...", flush = True)
     mask = 'AHBA_microarray_mask_study_{}mm.mnc'.format(resolution)
     mask = os.path.join(pipeline_dir, mask)
     mask = utils.coordinates_to_minc(coordinates = coords,

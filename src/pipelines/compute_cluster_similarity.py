@@ -5,12 +5,14 @@
 # Created: March 27th, 2024
 
 """
-Pipeline to evaluate pairwise cluster similarity.
+Evaluate the similarity between pairs of clusters.
 
 Description
 -----------
-
+This pipeline evaluates the similarity between pairs of imaging clusters
+based on the transcriptomic similarity of their centroid images.
 """
+
 
 # Packages -------------------------------------------------------------------
 
@@ -20,7 +22,6 @@ import sys
 import utils
 import pandas as pd
 from itertools import product
-
 
 
 # Command line arguments -----------------------------------------------------
@@ -36,14 +37,16 @@ def parse_args():
         '--pipeline-dir',
         type = str,
         default = 'data/cross_species/v3/',
-        help = "Path to the pipeline output directory."
+        help = ("Path to the directory in which to export pipeline "
+                "outputs. A uniquely identified sub-directory will be "
+                "created using the specified set of pipeline parameters.")
     )
 
     parser.add_argument(
         '--species',
         nargs = 2,
         type = str,
-        help = "Strings indicating which species are being compared."
+        help = "List of strings indicating which species are being compared."
     )
 
     parser.add_argument(
@@ -51,22 +54,23 @@ def parse_args():
         nargs = 2,
         type = str,
         help = ("Paths to the processing pipeline directories containing "
-                "images to compare.")
+                "the centroid images to compare. Expects a sub-directory "
+                "'centroids'.")
     )
 
     parser.add_argument(
         '--param-ids',
         nargs = 2,
         type = str,
-        help = ("IDs specifying the processing pipeline parameter sets "
-                "to use.")
+        help = ("List of integer IDs specifying the processing pipeline "
+                "parameter sets to use.")
     )
 
     parser.add_argument(
         '--expr-dirs',
         nargs = 2,
         type = str,
-        help = ("Paths to gene expression directories for the species "
+        help = ("Paths to the gene expression directories for the species "
                 "being compared.")
     )
 
@@ -82,7 +86,7 @@ def parse_args():
         type = str,
         default = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
-                "the AHBA microarray samples.")
+                "the AHBA microarray samples in the human imaging study space.")
     )
 
     parser.add_argument(
@@ -91,14 +95,14 @@ def parse_args():
         default = 'average-latent-space',
         choices = ['average-latent-space', 'latent-space', 'homologous-genes'],
         help = ("The gene expression space to use to evaluate the similarity "
-                "between clusters.")
+                "between cluster centroid images.")
     )
 
     parser.add_argument(
         '--n-latent-spaces',
         type = int,
         default = 100,
-        help = ("Number of latent spaces to include when --gene-space is "
+        help = ("The number of latent spaces to include when --gene-space is "
                 "'average-latent-space'. Ignored otherwise.")
     )
 
@@ -106,8 +110,8 @@ def parse_args():
         '--latent-space-id',
         type = int,
         default = 1,
-        help = ("Latent space to use when --gene-space is 'latent-space'. "
-                "Ignored otherwise.")
+        help = ("The ID of the latent space to use when --gene-space is "
+                "'latent-space'. Ignored otherwise.")
     )
 
     parser.add_argument(
@@ -115,7 +119,7 @@ def parse_args():
         type = str,
         default = 'correlation',
         help = ("The metric used to evaluate the similarity between cluster "
-                "gene expression signature.")
+                "centroid gene expression signature.")
     )
 
     parser.add_argument(
@@ -132,15 +136,15 @@ def parse_args():
         type = str,
         default = 'top_n',
         choices = ['top_n', 'intensity', 'none'],
-        help = ("Method used to threshold mouse and human cluster centroid "
-                "images prior to constructing gene expression signatures.")
+        help = ("The method used to threshold the cluster centroid images "
+                "prior to constructing the gene expression signatures.")
     )
 
     parser.add_argument(
         '--threshold-value',
         type = float,
         default = 0.2,
-        help = ("Value used to threshold mouse and human images. Ignored if "
+        help = ("The value used to threshold the centroid images. Ignored if "
                 "--threshold is 'none'")
     )
 
@@ -158,7 +162,7 @@ def parse_args():
         nargs = '*',
         type = str,
         default = ['absolute', 'relative'],
-        help = "Jacobians to use."
+        help = "The class of Jacobian images to use."
     )
 
     parser.add_argument(
@@ -213,7 +217,6 @@ def parse_args():
 
 
 # Modules --------------------------------------------------------------------
-
 
 def initialize(**kwargs):
     """
