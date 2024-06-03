@@ -6,7 +6,7 @@
 #SBATCH --time=72:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/permute_cluster_similarity_v3_PONDSK_HBN_%j.out
-#SBATCH --dependency=afterok:10434802
+##SBATCH --dependency=afterok:
 ##SBATCH --qos=abeauchamp_q
 
 # Activate virtual environment
@@ -20,16 +20,16 @@ REGISTRY="permutations_registry_${SLURM_JOB_ID}"
 permute_cluster_similarity.py \
 --pipeline-dir data/cross_species/v3/ \
 --param-id 779 \
---input-dirs data/human/derivatives/v3/ data/mouse/derivatives/v3/ \
---expr-dirs data/human/expression data/mouse/expression \
---masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+--input-dirs data/human/derivatives/v3/ data/human/derivatives/v3/ \
+--expr-dirs data/human/expression data/human/expression \
+--masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/human/registration/v3/reference_files/mask_0.8mm.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
 --permutations-n 50 \
 --permutations-start 1 \
 --off-diagonal 2 \
 --execution slurm \
 --registry-name $REGISTRY \
---registry-cleanup false \
+--registry-cleanup true \
 --slurm-njobs 600 \
 --slurm-mem 16G \
 --slurm-time 8:00:00
