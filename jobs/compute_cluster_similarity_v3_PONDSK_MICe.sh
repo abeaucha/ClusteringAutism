@@ -6,8 +6,8 @@
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/compute_cluster_similarity_v3_POND_SK_%j.out
-#SBATCH --qos=abeauchamp_q
-#SBATCH --dependency=afterok:
+#SBATCH --dependency=afterok:10500837
+##SBATCH --qos=abeauchamp_q
 
 # Activate virtual environment
 source activate_venv_hpc.sh
@@ -30,7 +30,7 @@ compute_cluster_similarity.py \
 --jacobians absolute relative \
 --execution slurm \
 --registry-name $REGISTRY \
---registry-cleanup false \
---slurm-njobs 300 \
+--registry-cleanup true \
+--slurm-njobs 600 \
 --slurm-mem 16G \
 --slurm-time 8:00:00

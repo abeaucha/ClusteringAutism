@@ -6,6 +6,7 @@
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_images_v3_0.8mm_POND_SK_%j.out
+#SBATCH --dependency=afterok:10500788
 
 # This pipeline ran in ___ minutes with --time=12:00:00.
 # Should be able to run it with a shorter walltime.
