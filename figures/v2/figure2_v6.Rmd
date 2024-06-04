@@ -27,9 +27,9 @@ suppressPackageStartupMessages(library(pROC))
 ```
 
 ```{r fig2-functions}
-source("../src/utils.R")
-source("../src/processing.R")
-source("../src/analysis.R")
+source("../../src/utils.R")
+source("../../src/processing.R")
+source("../../src/analysis.R")
 ```
 
 ```{r fig2-pipeline-params}
@@ -44,7 +44,7 @@ output_plot_prefix <- "figure2"
 
 # Similarity pipeline
 version <- "v2"
-pipeline_dir <- "../data/cross_species/"
+pipeline_dir <- "../../data/cross_species/"
 pipeline_dir <- file.path(pipeline_dir, version)
 
 # Human parameters
@@ -97,7 +97,7 @@ nk_max <- params %>%
   pull(human_cluster_nk_max)
 
 # Human pipeline directory
-human_pipeline_dir <- "../data/human/derivatives/"
+human_pipeline_dir <- "../../data/human/derivatives/"
 human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
 
 # Human cluster map directories
@@ -107,7 +107,7 @@ human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
 names(human_cluster_map_dirs) <- jacobians
 
 # Mouse pipeline directory
-mouse_pipeline_dir <- "../data/mouse/derivatives/"
+mouse_pipeline_dir <- "../../data/mouse/derivatives/"
 mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
 
 # Mouse cluster map directories
@@ -156,12 +156,12 @@ fig2_height_pt <- 481
 
 ```{r fig2-ss-files}
 # Mouse anatomy
-mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
+mouse_anat_file <- "../../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
 mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
 
 # Human anatomy
-human_anat_file <- "../data/human/registration/v2/reference_files/model_0.8mm.mnc"
+human_anat_file <- "../../data/human/registration/v2/reference_files/model_0.8mm.mnc"
 human_anat <- mincGetVolume(human_anat_file)
 human_anat_vol <- mincArray(human_anat)
 
@@ -171,11 +171,11 @@ human_slices_dim_3 <- 25:220
 human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
 
 # Human mask
-human_mask_file <- "../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
+human_mask_file <- "../../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
 human_mask <- mincGetVolume(human_mask_file)
 
 # Mouse mask
-mouse_mask_file <- "../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
+mouse_mask_file <- "../../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
 mouse_mask <- mincGetVolume(mouse_mask_file)
 
 # Image threshold method
@@ -803,7 +803,7 @@ df_similarity_nk %>%
 
 ```{r fig2-dx-import}
 # Human registration directory
-human_registration_dir <- "../data/human/registration/"
+human_registration_dir <- "../../data/human/registration/"
 human_registration_dir <- file.path(human_registration_dir, version)
 
 # Import human demographics data
@@ -941,7 +941,7 @@ bader_version <- "2023"
 stringdb_score <- 950
 
 # Base directory for pathway data files
-mouse_pathways_dir <- "../data/mouse/enrichment/"
+mouse_pathways_dir <- "../../data/mouse/enrichment/"
 mouse_pathways_dir <- file.path(mouse_pathways_dir, 
                                 paste("StringDB", stringdb_version, 
                                       "Bader", bader_version, 

@@ -2,7 +2,7 @@
 title: "Figure 2"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-11-27"
+date: "2024-06-03"
 output: html_document
 ---
 
@@ -26,10 +26,15 @@ suppressPackageStartupMessages(library(rcartocolor))
 suppressPackageStartupMessages(library(pROC))
 ```
 
+```{r fig2-environment}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+```
+
 ```{r fig2-functions}
-source("../src/utils.R")
-source("../src/processing.R")
-source("../src/analysis.R")
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r fig2-pipeline-params}
@@ -43,11 +48,12 @@ if (!dir.exists(output_dir)) {
 output_plot_prefix <- "figure2"
 
 # Similarity pipeline
-version <- "v2"
-pipeline_dir <- "../data/cross_species/"
+version <- "v3"
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species")
 pipeline_dir <- file.path(pipeline_dir, version)
 
 # Human parameters
+human_dataset <- "POND-SickKids"
 human_resolution <- 0.8
 human_es_method <- "normative-growth"
 human_es_df <- 3
@@ -63,17 +69,18 @@ metric <- "correlation"
 # Fetch parameter set
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
-                                human_resolution = human_resolution,
-                                human_es_method = human_es_method,
-                                human_es_df = human_es_df,
-                                human_cluster_map_method = human_cluster_map_method,
+                                input_1_species = "human",
+                                input_1_id = "700",
+                                input_2_species = "mouse",
+                                input_2_id = "107",
+                                n_latent_spaces = 50,
                                 metric = metric)
 params
 ```
 
 ```{r fig2-paths}
 # Parameter set ID
-params_id <- 405
+params_id <- 375
 
 # Update pipeline directory with parameter set ID
 pipeline_dir <- file.path(pipeline_dir, params_id)
@@ -81,46 +88,54 @@ pipeline_dir <- file.path(pipeline_dir, params_id)
 # Jacobians
 jacobians <- c("absolute", "relative")
 
+# Extract parameter set
+params_subset <- params %>% 
+  filter(id == params_id)
+
 # Human parameter set ID
-human_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_id)
-
-# Mouse parameter set ID
-mouse_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(mouse_id)
-
-# Max number of clusters
-nk_max <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_cluster_nk_max)
+human_params_id <- params_subset[["input_1_id"]] 
+mouse_params_id <- params_subset[["input_2_id"]] 
 
 # Human pipeline directory
-human_pipeline_dir <- "../data/human/derivatives/"
-human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/", version)
+human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
+human_params <- fetch_params_metadata(metadata = human_metadata, 
+                                      id = human_params_id)
+human_pipeline_dir <- file.path(human_pipeline_dir, human_params_id)
+
+# Human image resolution
+human_resolution <- human_params[["resolution"]]
 
 # Human cluster map directories
-human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
-human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
-human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
-names(human_cluster_map_dirs) <- jacobians
+human_centroid_dirs <- file.path(human_pipeline_dir, "centroids")
+human_centroid_dirs <- file.path(human_centroid_dirs, str_c("resolution_", human_resolution))
+human_centroid_dirs <- file.path(human_centroid_dirs, jacobians)
+names(human_centroid_dirs) <- jacobians
 
 # Mouse pipeline directory
-mouse_pipeline_dir <- "../data/mouse/derivatives/"
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
+mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/", version)
+mouse_metadata <- file.path(mouse_pipeline_dir, "metadata.csv")
+mouse_params <- fetch_params_metadata(metadata = mouse_metadata,
+                                      id = as.numeric(mouse_params_id))
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_params_id)
 
-# Mouse cluster map directories
-mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
-mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
-mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
-names(mouse_cluster_map_dirs) <- jacobians
+# Mouse image resolution 
+mouse_resolution <- mouse_params[["resolution"]]
+
+# Mouse centroid directories
+mouse_centroid_dirs <- file.path(mouse_pipeline_dir, "centroids")
+mouse_centroid_dirs <- file.path(mouse_centroid_dirs, str_c("resolution_", mouse_resolution))
+mouse_centroid_dirs <- file.path(mouse_centroid_dirs, jacobians)
+names(mouse_centroid_dirs) <- jacobians
 
 # Mouse cluster map directories at 50um
-mouse_cluster_map_dirs_50um <- file.path(mouse_pipeline_dir, "cluster_maps")
-mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, "resolution_0.05")
-mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, jacobians)
-names(mouse_cluster_map_dirs_50um) <- jacobians
+mouse_centroid_dirs_50um <- file.path(mouse_pipeline_dir, "centroids")
+mouse_centroid_dirs_50um <- file.path(mouse_centroid_dirs_50um, "resolution_0.05")
+mouse_centroid_dirs_50um <- file.path(mouse_centroid_dirs_50um, jacobians)
+names(mouse_centroid_dirs_50um) <- jacobians
+
+# Max number of clusters
+nk_max <- human_params[["cluster_nk_max"]]
 ```
 
 ```{r fig2-graphical-params}
@@ -156,27 +171,28 @@ fig2_height_pt <- 481
 
 ```{r fig2-ss-files}
 # Mouse anatomy
-mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
+mouse_anat_file <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc")
 mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
 
+# Mouse mask
+mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc")
+mouse_mask <- mincGetVolume(mouse_mask_file)
+
+# Human mask
+human_mask_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/mask_0.8mm.mnc")
+human_mask <- mincGetVolume(human_mask_file)
+
 # Human anatomy
-human_anat_file <- "../data/human/registration/v2/reference_files/model_0.8mm.mnc"
+human_anat_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/model_0.8mm.mnc")
 human_anat <- mincGetVolume(human_anat_file)
+human_anat[human_mask < 0.5] <- 0
 human_anat_vol <- mincArray(human_anat)
 
 # Cropped human images along sagittal and transverse planes
-human_slices_dim_1 <- 25:200
-human_slices_dim_3 <- 25:220
+human_slices_dim_1 <- 27:220
+human_slices_dim_3 <- 10:220
 human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
-
-# Human mask
-human_mask_file <- "../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
-human_mask <- mincGetVolume(human_mask_file)
-
-# Mouse mask
-mouse_mask_file <- "../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
-mouse_mask <- mincGetVolume(mouse_mask_file)
 
 # Image threshold method
 threshold <- params %>% 
@@ -204,8 +220,8 @@ run <- FALSE
 if (run) {
   for (j in jacobians) {
     
-    indir <- mouse_cluster_map_dirs[[j]]
-    outdir <- mouse_cluster_map_dirs_50um[[j]]
+    indir <- mouse_centroid_dirs[[j]]
+    outdir <- mouse_centroid_dirs_50um[[j]]
     
     for (k in 1:nk_mouse) {
       
@@ -237,7 +253,7 @@ for (j in jacobians) {
   for (k in 1:nk_mouse) {
     
     # Import centroid image for specific cluster using threshold
-    img_mouse <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[[j]],
+    img_mouse <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[[j]],
                                     mask = mouse_mask_file,
                                     nk = nk_mouse, k = k,
                                     threshold = threshold,
@@ -262,7 +278,7 @@ for (j in jacobians) {
   for (k in 1:nk_human) {
     
     # Import centroid image for specific cluster using threshold
-    img_human <- import_cluster_map(imgdir = human_cluster_map_dirs[[j]],
+    img_human <- import_cluster_map(imgdir = human_centroid_dirs[[j]],
                                     mask = human_mask_file,
                                     nk = nk_human, k = k,
                                     threshold = threshold,
@@ -334,16 +350,15 @@ print(c(global_min, global_max))
 ss_nslices <- 5
 
 # Human slices
-# human_slices <- c(61, 105, 127, 152, 214)
-human_slices <- floor(seq(60, 220, length.out = ss_nslices))
+human_slices <- floor(seq(60, 230, length.out = ss_nslices))
 
 # Mouse slices
 # mouse_slices <- c(18, 41, 85, 174, 196)
 mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
 
 # Human anatomy thresholds
-human_anat_low <- 3
-human_anat_high <- 10
+human_anat_low <- 40
+human_anat_high <- 110
 
 # Mouse anatomy thresholds
 mouse_anat_low <- 800
@@ -590,18 +605,73 @@ export_pdf(x = fig2_ss_grob,
 ```{r fig2-sim-import}
 # Path to mouse-human similarity directory
 similarity_dir <- file.path(pipeline_dir, "similarity")
+similarity_file <- file.path(similarity_dir, "similarity.csv")
 
-# Iterate over jacobians
-list_similarity <- vector(mode = "list", length = length(jacobians))
-names(list_similarity) <- jacobians
-for (j in jacobians) {
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  rename(human_img = img1,
+         mouse_img = img2) %>% 
+  mutate(human_nk = human_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_k = human_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_jacobians = human_img %>% 
+           str_extract("absolute|relative"),
+         mouse_nk = mouse_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_k = mouse_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_jacobians = mouse_img %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "human_cluster_id", human_nk, human_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity_nk <- similarity %>% 
+  filter(human_nk == nk_human,
+         mouse_nk == nk_mouse) %>% 
+  group_by(human_cluster_id, mouse_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+```
+
+```{r fig2-sim-perm-import}
+# Path to permutations directory
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
   
-  # Build the path to the similarity file
-  similarity_file <- paste0("similarity_", j, ".csv")
-  similarity_file <- file.path(similarity_dir, similarity_file)
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
   
-  # Import the similarity data and extract cluster information
-  list_similarity[[j]] <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    rename(human_img = img1,
+           mouse_img = img2) %>% 
     mutate(human_nk = human_img %>% 
              basename() %>% 
              str_extract("_nk_[0-9]+") %>% 
@@ -625,104 +695,17 @@ for (j in jacobians) {
     unite(col = "human_cluster_id", human_nk, human_k, 
           sep = "-", remove = FALSE) %>% 
     unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
-          sep = "-", remove = FALSE)
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
   
 }
-
-# Filter similarity data for desired cluster numbers
-list_similarity_nk <- vector(mode = "list", length = length(jacobians))
-names(list_similarity_nk) <- jacobians
-for (j in jacobians) {
-  list_similarity_nk[[j]] <- list_similarity[[j]] %>% 
-    filter(human_nk == nk_human,
-           mouse_nk == nk_mouse) %>% 
-    mutate(jacobians = j)
-}
-
-# Combine absolute and relative jacobian similarities
-df_similarity_nk <- list_similarity_nk %>% 
-  reduce(.f = bind_rows) %>% 
-  group_by(human_cluster_id, mouse_cluster_id) %>% 
-  summarise(similarity = mean(similarity),
-            .groups = "drop")
-```
-
-```{r fig2-sim-perm-import}
-# Path to permutations directory
-# permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
-permutation_dir <- file.path(pipeline_dir, "permutations", "similarity_H2M4")
-
-# Permutation file names
-permutation_files <- list.files(permutation_dir)
-
-# Number of permutations
-np <- 99
-
-# Iterate over jacobians
-list_permutations <- vector(mode = "list", length = length(jacobians))
-names(list_permutations) <- jacobians
-for (j in jacobians) {
-  
-  # For each jacobian type, iterate over permutations
-  list_permutations[[j]] <- vector(mode = "list", length = np)
-  for (p in 1:np) {
-    
-    # Permutation data to import
-    permutation_file <- permutation_files %>% 
-      str_subset(j) %>% 
-      str_subset(str_c("_", p, "_"))
-    permutation_file <- file.path(permutation_dir, permutation_file)
-    
-    # Import permutation data
-    list_permutations[[j]][[p]] <- read_csv(permutation_file, 
-                                            show_col_types = FALSE) %>% 
-      mutate(human_nk = human_img %>% 
-               basename() %>% 
-               str_extract("_nk_[0-9]+") %>% 
-               str_extract("[0-9]+") %>% 
-               as.numeric(),
-             human_k = human_img %>% 
-               basename() %>% 
-               str_extract("_k_[0-9]+") %>% 
-               str_extract("[0-9]+") %>% 
-               as.numeric(),
-             mouse_nk = mouse_img %>% 
-               basename() %>% 
-               str_extract("_nk_[0-9]+") %>% 
-               str_extract("[0-9]+") %>% 
-               as.numeric(),
-             mouse_k = mouse_img %>% 
-               basename() %>% 
-               str_extract("_k_[0-9]+") %>% 
-               str_extract("[0-9]+") %>% 
-               as.numeric()) %>% 
-      unite(col = "human_cluster_id", human_nk, human_k, 
-            sep = "-", remove = FALSE) %>% 
-      unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
-            sep = "-", remove = FALSE) %>% 
-      mutate(jacobians = j,
-             permutation = p)
-    
-  }
-  
-  # Combine permutations into one data frame
-  list_permutations[[j]] <- reduce(.x = list_permutations[[j]],
-                                   .f = bind_rows)
-  
-}
-
+ 
 # Filter permutations data for desired cluster numbers
-list_permutations_nk <- vector(mode = "list", length = length(list_permutations))
-names(list_permutations_nk) <- names(list_permutations)
-for (j in jacobians) {
-  list_permutations_nk[[j]] <- list_permutations[[j]] %>% 
-    filter(human_nk %in% nk_human,
-           mouse_nk %in% nk_mouse) 
-}
-
-# Combine absolute and relative jacobian similarity into one
-df_permutations_nk <- list_permutations_nk %>% 
-  reduce(.f = bind_rows) %>% 
+# and combine Jacobians
+df_permutations_nk <- list_permutations %>% 
+  bind_rows() %>% 
+  filter(human_nk == nk_human,
+         mouse_nk == nk_mouse) %>% 
   group_by(permutation, human_nk, mouse_nk, human_cluster_id, mouse_cluster_id) %>% 
   summarise(similarity = mean(similarity), .groups = "drop")
 ```
@@ -803,7 +786,7 @@ df_similarity_nk %>%
 
 ```{r fig2-dx-import}
 # Human registration directory
-human_registration_dir <- "../data/human/registration/"
+human_registration_dir <- file.path(PROJECTPATH, "data/human/registration/")
 human_registration_dir <- file.path(human_registration_dir, version)
 
 # Import human demographics data
@@ -819,9 +802,7 @@ demographics <- demographics %>%
          !is.na(Scanner))
 
 # Resolution used for clustering
-human_cluster_resolution <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_cluster_resolution)
+human_cluster_resolution <- human_params[["cluster_resolution"]]
 human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
 
 # Human clustering directory
@@ -934,14 +915,12 @@ chisq.test(df_dx_chi2$k,
 
 ```{r fig2-pathways-mouse-import}
 # Enrichment database versions
-# stringdb_version <- "11.5"
 stringdb_version <- "12.0"
-# bader_version <- "2020"
 bader_version <- "2023"
 stringdb_score <- 950
 
 # Base directory for pathway data files
-mouse_pathways_dir <- "../data/mouse/enrichment/"
+mouse_pathways_dir <- file.path(PROJECTPATH, "data/mouse/enrichment/")
 mouse_pathways_dir <- file.path(mouse_pathways_dir, 
                                 paste("StringDB", stringdb_version, 
                                       "Bader", bader_version, 
