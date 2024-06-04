@@ -6,7 +6,7 @@
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/process_human_images_v3_0.8mm_POND_SK_%j.out
-#SBATCH --dependency=afterok:10500788
+##SBATCH --dependency=afterok:10500788
 
 # This pipeline ran in ___ minutes with --time=12:00:00.
 # Should be able to run it with a shorter walltime.
@@ -36,7 +36,7 @@ process_human_images.py \
 --registry-name $REGISTRY \
 --registry-cleanup false \
 --slurm-njobs 300 \
---slurm-time 60 \
+--slurm-time 120 \
 --slurm-mem 16G
 
 deactivate
