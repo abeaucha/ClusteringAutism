@@ -5,6 +5,8 @@ date: '`r Sys.Date()`'
 output: pdf_document
 ---
 
+# Initialization
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -17,135 +19,78 @@ suppressPackageStartupMessages(library(RColorBrewer))
 suppressPackageStartupMessages(library(ggbeeswarm))
 ```
 
-```{r functions}
-source("../../src/utils.R")
-source("../../src/processing.R")
-# source("../../src/analysis.R")
+```{r environment}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
 ```
 
+```{r functions}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+```
 
 ```{r parameters}
-#Output directory
+# Output directory
 output_dir <- "outputs/human_cluster_characteristics/"
 
-#Human directories
+# Human registration version
 version <- "v3"
 
-registration_dir <- "../../data/human/registration/"
+# Registration directory
+registration_dir <- file.path(PROJECTPATH, "data/human/registration/")
 registration_dir <- file.path(registration_dir, version)
 
-pipeline_dir <- "../../data/human/derivatives/"
+# Pipeline directory
+pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
 pipeline_dir <- file.path(pipeline_dir, version)
 
 #Human parameters
+dataset <- "POND-SickKids"
 resolution <- 0.8
 es_method <- "normative-growth"
 es_df <- 3
-cluster_map_method <- "mean"
+centroid_method <- "mean"
 
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
+                                dataset = dataset,
                                 resolution = resolution,
                                 es_method = es_method,
                                 es_df = es_df)
 params
 ```
 
+```{r paths}
+# Parameter set ID
+params_id <- "700"
 
-
-```{r}
-#Parameter set ID
-params_id <- 700
-
-#Pipeline directory
+# Pipeline directory
 pipeline_dir <- file.path(pipeline_dir, params_id)
 
-#Cluster resolution
+# Cluster resolution
 cluster_resolution <- params %>% 
   filter(id == params_id) %>% 
   pull(cluster_resolution)
 cluster_resolution <- sprintf("%.1f", cluster_resolution)
 
-#Cluster directory
+# Max number of clusters
+nk_max <- params %>% 
+  filter(id == params_id) %>% 
+  pull(cluster_nk_max)
+
+# Cluster directory
 cluster_dir <- file.path(pipeline_dir, "clusters", paste0("resolution_", cluster_resolution))
 
-#Output directory
+# Output directory
 output_dir <- file.path(output_dir, version, params_id)
 if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
-```{r}
+```{r import}
+# Demogrpahics information
 demographics <- file.path(registration_dir, "subject_info", "demographics.csv")
 demographics <- read_csv(demographics, show_col_types = FALSE)
-```
 
-```{r}
-clusters <- file.path(cluster_dir, "clusters.csv")
-clusters <- read_csv(clusters, show_col_types = FALSE)
-```
-
-# 2-cluster total volume
-
-
-```{r}
-clusters_vol <- clusters %>% 
-  mutate(absolute = 0,
-         relative = 0)
-```
-
-```{r eval = FALSE}
-# res <- params[["resolution"]]
-res <- 3.0
-
-# mask <- file.path(registration_dir, "reference_files", "mask_0.8mm.mnc")
-mask <- file.path(registration_dir, "reference_files", "mask_3.0mm.mnc")
-
-jacobians <- c("absolute", "relative")
-jacobians_dir <- file.path(registration_dir, "jacobians_resampled", "resolution_3.0", jacobians)
-names(jacobians_dir) <- jacobians
-
-for (j in jacobians) {
-  
-  imgfiles <- clusters_vol[["ID"]]
-  imgfiles <- file.path(jacobians_dir[[j]], imgfiles)
-  voxels <- import_images(imgfiles, mask = mask, output_format = "matrix", 
-                          inparallel = TRUE, nproc = 4)
-  voxels <- (res^3)*exp(voxels)
-  volumes <- rowSums(voxels)
-  clusters_vol[[j]] <- volumes*(0.1^3)
-}
-```
-
-```{r eval = FALSE}
-p_cluster_vol <- ggplot(clusters_vol, aes(x = factor(nk2), y = absolute)) + 
-  geom_jitter(col = "grey70") + 
-  geom_boxplot(alpha = 0.5) + 
-  labs(x = "Cluster ID", 
-       y = "Total absolute volume (cm^3)",
-       title = "Total brain volume comparison for human 2-cluster solution") + 
-  theme_bw()
-
-outfile <- "cluster_volumes_nk2.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(10, "in"),
-    height = unit(10, "in"))
-print(p_cluster_vol)
-dev.off()
-```
-
-```{r eval = FALSE}
-df_model <- clusters_vol %>% 
-  select(cluster = nk2, volume = absolute) %>% 
-  mutate(cluster = factor(cluster))
-
-summary(lm(volume ~ cluster, data = df_model))
-```
-
-# Cluster diagnoses
-
-
-```{r}
 demographics <- demographics %>% 
   filter(!is.na(DX),
          !is.na(Age),
@@ -153,34 +98,125 @@ demographics <- demographics %>%
          !is.na(Site),
          !is.na(Scanner))
 
-cluster_demographics <- clusters %>% 
-  left_join(demographics, by = c("ID" = "file"))
-
-df_diagnoses <- tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD", "Anxiety", "Sub-threshold ADHD", "Intellectual Disability only", "Tourette Syndrome", "Other", "Fragile X"),
-                       DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", "ADHD", "Other", "Other", "Other", "Other"))
-
-cluster_demographics <- cluster_demographics %>% 
-  left_join(df_diagnoses, by = "DX")
+# Clusters information
+clusters <- file.path(cluster_dir, "clusters.csv")
+clusters <- read_csv(clusters, show_col_types = FALSE)
 ```
 
 
+# Total brain volume
+
 ```{r}
+# Image resolution to use
+res <- 3.0
+
+# Add columns for Jacobian volumes
+clusters_vol <- clusters %>% 
+  mutate(volumes = 0)
+
+# Mask file
+mask <- file.path(registration_dir, "reference_files", "mask_3.0mm.mnc")
+
+# Paths to Jacobians
+jacobians <- c("absolute", "relative")
+jacobians_dir <- file.path(registration_dir, "jacobians_resampled", "resolution_3.0", "absolute")
+
+# Get Jacobian image files
+imgfiles <- clusters_vol[["ID"]]
+imgfiles <- file.path(jacobians_dir, imgfiles)
+
+# Import absolute Jacobians
+voxels <- import_images(imgfiles, mask = mask,
+                        output_format = "matrix" , nproc = 8)
+
+# Native values are on log scale. 
+# Convert to linear scale and multiple by the voxel resolution
+voxels <- (res^3)*exp(voxels)
+
+# Sum voxel volumes to get TBV 
+volumes <- rowSums(voxels)
+
+# Convert to cm^3
+clusters_vol[["volumes"]] <- volumes*(0.1^3)
+```
+
+```{r}
+df_vol_kw <- tibble(nk = 2:nk_max, 
+                    h = 0, p = 0)
+for (i in 1:nrow(df_vol_kw)) {
+  
+  # Pull nk
+  nk <- df_vol_kw[[i, "nk"]]
+  
+  # Get cluster labels and volumes
+  labels <- factor(clusters_vol[[paste0("nk", nk)]])
+  vols <- clusters_vol[["volumes"]]
+  
+  # Run KW test
+  kw <- kruskal.test(x = vols, g = labels)
+  df_vol_kw[[i, "h"]] <- kw[["statistic"]]
+  df_vol_kw[[i, "p"]] <- kw[["p.value"]]
+  
+  p_tbv_i <- tibble(x = labels, y = vols) %>% 
+    ggplot(aes(x = x, y = y)) + 
+    geom_beeswarm(shape = 21, col = "grey50", fill = "grey80") + 
+    geom_boxplot(alpha = 0.5, col = "black", outlier.shape = NA) +
+    labs(x = "k",
+         y = "Total brain volume (cm^3)",
+         title = paste0("Total brain volume for ", nk, "-cluster solution"),
+         subtitle = paste0("Kruskal-Wallis: p = ", formatC(kw[["p.value"]], format = "e", digits = 2))) +
+    theme_bw() 
+  
+  outfile <- paste0("tbv_nk_", nk, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(10, "inch"),
+      height = unit(5, "inch"))
+  print(p_tbv_i)
+  dev.off()
+  
+}
+```
+
+
+# Diagnoses
+
+```{r}
+# Join demographics information to clusters
+cluster_demographics <- clusters %>% 
+  left_join(demographics, by = c("ID" = "file"))
+
+# Create new coarse label DX
+df_diagnoses <- tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD", "Anxiety", "Sub-threshold ADHD", "Intellectual Disability only", "Tourette Syndrome", "Other", "Fragile X"),
+                       DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", "ADHD", "Other", "Other", "Other", "Other"))
+
+# Join new DX categories to clusters
+cluster_demographics <- cluster_demographics %>% 
+  left_join(df_diagnoses, by = "DX")
+
+# DX levels
 dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
 
-nk_max <- 10
-chi2_pvals <- numeric(nk_max-1)
-for (nk in 2:nk_max) {
+df_dx_chi2 <- tibble(nk = 2:nk_max,
+                     chi2 = 0, p = 0)
+for (i in 1:nrow(df_dx_chi2)) {
   
-  df_tmp <- cluster_demographics %>% 
-    select(k = paste0("nk", nk), DX_new) %>% 
-    mutate(k = factor(k),
-           DX_new = factor(DX_new, levels = dx_lvls))
+  # Pull nk
+  nk <- df_dx_chi2[[i, "nk"]]
   
-  chi2 <- chisq.test(x = df_tmp$k, y = df_tmp$DX_new, simulate.p.value = TRUE, B = 1e5)
+  # Get cluster labels and volumes
+  labels <- factor(cluster_demographics[[paste0("nk", nk)]])
+  diagnoses <- factor(cluster_demographics[["DX_new"]], levels = dx_lvls)
+  
+  set.seed(1)
+  chi2_dx <- chisq.test(x = labels, y = diagnoses,
+                        simulate.p.value = TRUE, B = 1e5)  
+  
+  df_dx_chi2[[i, "chi2"]] <- chi2_dx[["statistic"]]
+  df_dx_chi2[[i, "p"]] <- chi2_dx[["p.value"]]
   
   diagnoses_grid <- expand_grid(DX_new = df_diagnoses$DX_new,
                                 k = 1:nk)
-  
   
   df_prop_nk <- cluster_demographics %>% 
     select(k = paste0("nk", nk), DX_new) %>% 
@@ -202,17 +238,17 @@ for (nk in 2:nk_max) {
     labs(x = "k",
          y = "Proportion per cluster",
          fill = "Diagnosis",
-         caption = paste("Chi-squared test p-value:", round(chi2$p.value, 4))) + 
+         title = paste0("Diagnostic proportions for ", nk, "-cluster solution"),
+         subtitle = paste0("Chi-squared: p = ", round(chi2_dx$p.value, 4))) + 
     theme_bw() 
   
-  outfile <- paste0("dx_proportions_nk_", nk, ".pdf")
+  outfile <- paste0("dx_nk_", nk, ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile,
       width = unit(10, "inch"),
       height = unit(5, "inch"))
-  print(p_dx_nk)
+  print(p_dx_nk) 
   dev.off()
-  
   
 }
 ```
@@ -220,14 +256,14 @@ for (nk in 2:nk_max) {
 
 ## Fragile X
 
-```{r}
+```{r eval = FALSE}
 df_fxs <- cluster_demographics %>% 
   filter(DX == "Fragile X")
 
 df_fxs
 ```
 
-```{r}
+```{r eval = FALSE}
 mouse_clusters <- "../../data/mouse/derivatives/v2/107/clusters/clusters.csv"
 mouse_clusters <- read_csv(mouse_clusters, show_col_types = FALSE)
 colnames(mouse_clusters) <- c("ID", str_c("nk", 2:10))
@@ -253,7 +289,206 @@ Human FXS patient and mouse models are in matching clusters in nk = 2, 3, 4, 5. 
 No identified variant for the FXS patient.
 
 
-# POND clinical scores
+# Sex 
+
+```{r}
+df_sex_chi2 <- tibble(nk = 2:nk_max,
+                      chi2 = 0, p = 0)
+for (i in 1:nrow(df_sex_chi2)) {
+  
+  
+  # Pull nk
+  nk <- df_sex_chi2[[i, "nk"]]
+  
+  # Get cluster labels and volumes
+  labels <- factor(cluster_demographics[[paste0("nk", nk)]])
+  sex <- factor(cluster_demographics[["Sex"]])
+  
+  set.seed(1)
+  chi2_sex <- chisq.test(x = labels, y = sex,
+                         simulate.p.value = TRUE, B = 1e5)  
+  
+  df_sex_chi2[[i, "chi2"]] <- chi2_sex[["statistic"]]
+  df_sex_chi2[[i, "p"]] <- chi2_sex[["p.value"]]
+  
+  sex_grid <- expand_grid(Sex = c("Female", "Male"),
+                          k = 1:nk)
+  
+  df_prop_nk <- cluster_demographics %>% 
+    select(k = paste0("nk", nk), Sex) %>% 
+    group_by(k) %>% 
+    mutate(n_per_k = n()) %>% 
+    group_by(k, Sex) %>% 
+    mutate(n_per_k_per_sex = n(),
+           prop_per_k_per_sex = n_per_k_per_sex/n_per_k) %>% 
+    ungroup() %>% 
+    distinct() %>% 
+    right_join(sex_grid, by = c("k", "Sex")) %>% 
+    mutate(prop_per_k_per_sex = ifelse(is.na(prop_per_k_per_sex), 0, prop_per_k_per_sex),
+           k = factor(k),
+           Sex = factor(Sex))
+  
+  p_sex_nk <- ggplot(df_prop_nk, 
+                     aes(x = k, y = prop_per_k_per_sex, fill = Sex)) +
+    geom_col(position = "dodge") +
+    labs(x = "k",
+         y = "Proportion per cluster",
+         fill = "Sex",
+         title = paste0("Sex proportions for ", nk, "-cluster solution"),
+         subtitle = paste0("Chi-squared: p = ", round(chi2_sex$p.value, 4))) + 
+    theme_bw() 
+  
+  outfile <- paste0("sex_nk_", nk, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile, 
+      width = unit(10, "inch"),
+      height = unit(5, "inch"))
+  print(p_sex_nk) 
+  dev.off()
+  
+}
+```
+
+# Age
+
+```{r}
+df_age_kw <- tibble(nk = 2:nk_max, 
+                    h = 0, p = 0)
+for (i in 1:nrow(df_age_kw)) {
+  
+  # Pull nk
+  nk <- df_age_kw[[i, "nk"]]
+  
+  # Get cluster labels and volumes
+  labels <- factor(cluster_demographics[[paste0("nk", nk)]])
+  age <- cluster_demographics[["Age"]]
+  
+  # Run KW test
+  kw <- kruskal.test(x = age, g = labels)
+  df_age_kw[[i, "h"]] <- kw[["statistic"]]
+  df_age_kw[[i, "p"]] <- kw[["p.value"]]
+  
+  p_age_i <- tibble(x = labels, y = age) %>% 
+    ggplot(aes(x = x, y = y)) + 
+    geom_beeswarm(shape = 21, col = "grey50", fill = "grey80") + 
+    geom_boxplot(alpha = 0.5, col = "black", outlier.shape = NA) +
+    labs(x = "k",
+         y = "Age",
+         title = paste0("Age for ", nk, "-cluster solution"),
+         subtitle = paste0("Kruskal-Wallis: p = ", round(kw[["p.value"]], 4))) +
+    theme_bw() 
+  
+  outfile <- paste0("age_nk_", nk, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(10, "inch"),
+      height = unit(5, "inch"))
+  print(p_age_i)
+  dev.off() 
+  
+}
+```
+
+# Datasets
+
+```{r}
+df_dataset_chi2 <- tibble(nk = 2:nk_max,
+                          chi2 = 0, p = 0)
+for (i in 1:nrow(df_dataset_chi2)) {
+  
+  # Pull nk
+  nk <- df_dataset_chi2[[i, "nk"]]
+  
+  # Get cluster labels and volumes
+  labels <- factor(cluster_demographics[[paste0("nk", nk)]])
+  dataset <- factor(cluster_demographics[["Dataset"]])
+  
+  set.seed(1)
+  chi2_dataset <- chisq.test(x = labels, y = dataset,
+                             simulate.p.value = TRUE, B = 1e5)  
+  
+  df_dataset_chi2[[i, "chi2"]] <- chi2_dataset[["statistic"]]
+  df_dataset_chi2[[i, "p"]] <- chi2_dataset[["p.value"]]
+  
+  dataset_grid <- expand_grid(Dataset = c("POND", "SickKids"),
+                              k = 1:nk)
+  
+  df_prop_nk <- cluster_demographics %>% 
+    select(k = paste0("nk", nk), Dataset) %>% 
+    group_by(k) %>% 
+    mutate(n_per_k = n()) %>% 
+    group_by(k, Dataset) %>% 
+    mutate(n_per_k_per_dataset = n(),
+           prop_per_k_per_dataset = n_per_k_per_dataset/n_per_k) %>% 
+    ungroup() %>% 
+    distinct() %>% 
+    right_join(dataset_grid, by = c("k", "Dataset")) %>% 
+    mutate(prop_per_k_per_dataset = ifelse(is.na(prop_per_k_per_dataset), 0, prop_per_k_per_dataset),
+           k = factor(k),
+           Dataset = factor(Dataset))
+  
+  p_dataset_nk <- ggplot(df_prop_nk, 
+                         aes(x = k, y = prop_per_k_per_dataset, fill = Dataset)) +
+    geom_col(position = "dodge") +
+    labs(x = "k",
+         y = "Proportion per cluster",
+         fill = "Dataset",
+         title = paste0("Dataset proportions for ", nk, "-cluster solution"),
+         subtitle = paste0("Chi-squared: p = ", round(chi2_dataset$p.value, 4))) + 
+    theme_bw() 
+  
+  outfile <- paste0("dataset_nk_", nk, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile, 
+      width = unit(10, "inch"),
+      height = unit(5, "inch")) 
+  print(p_dataset_nk) 
+  dev.off()
+  
+}
+```
+
+```{r}
+df_demo_tests <- list(TBV = df_vol_kw, 
+                      Diagnosis = df_dx_chi2,
+                      Sex = df_sex_chi2,
+                      Age = df_age_kw,
+                      Dataset = df_dataset_chi2) %>% 
+  map(.f = function(x){select(x,nk,p)}) %>% 
+  bind_rows(.id = "variable") %>% 
+  mutate(nk = factor(nk),
+         variable = factor(variable),
+         plog = -log10(p),
+         plog = ifelse(plog > 5, 5, plog),
+         significant = ifelse(p < 0.05, "*", ""))
+
+p_demo_tests_pvals <- ggplot(df_demo_tests,
+       aes(x = nk, y = variable, fill = plog)) + 
+  geom_tile(col = "black") +
+  geom_text(mapping = aes(label = significant)) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds")) +
+  labs(x = "nk",
+       y = NULL,
+       fill = "-log10(p)",
+       title = "Cluster demographics tests",
+       caption = "Log p-values clamped to 5") +
+  theme_bw() +
+  theme(axis.title.y = element_blank())
+
+# Export plot
+outfile <- paste0("demographics_tests_pvals.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "inch"),
+    height = unit(4, "inch"))
+print(p_demo_tests_pvals)
+dev.off()
+```
+
+
+# Clinical scores for POND participants
 
 ```{r}
 # Import POND clinical information
@@ -395,7 +630,7 @@ p_scale_completion <- scales_completed %>%
   pivot_longer(cols = -scale, names_to = "status", values_to = "percent") %>% 
   mutate(status = factor(status, levels = c("missing", "completed"))) %>% 
   ggplot(aes(x = percent, y = fct_rev(scale),
-                fill = status)) + 
+             fill = status)) + 
   geom_col(width = 1,
            col = "grey50") + 
   geom_vline(xintercept = seq(0.2, 1.0, by = 0.2),
@@ -486,7 +721,7 @@ for (s in 1:length(clinical_scales_thresh)) {
   
   # Beeswarm plot with crossbars
   p_nk2_scales <- ggplot(df_plot, 
-         aes(x = k, y = scores)) + 
+                         aes(x = k, y = scores)) + 
     geom_beeswarm(col = "grey50") + 
     geom_crossbar(data = df_plot_summary,
                   mapping = aes(y = scores_med, 
@@ -494,18 +729,18 @@ for (s in 1:length(clinical_scales_thresh)) {
                                 ymax = scores_upr),
                   fill = "grey70",
                   alpha = 0.3) +
-      labs(y = "Scores",
-           title = clinical_scales_thresh[s]) + 
-      theme_bw()
-    
-    # Export plot
-    outfile <- paste0("clinical_scores_nk_2_", clinical_scales_thresh[s], ".pdf")
-    outfile <- file.path(output_dir, outfile)
-    pdf(file = outfile,
-        width = unit(8, "inch"),
-        height = unit(6, "inch"))
-    print(p_nk2_scales)
-    dev.off()
+    labs(y = "Scores",
+         title = clinical_scales_thresh[s]) + 
+    theme_bw()
+  
+  # Export plot
+  outfile <- paste0("clinical_scores_nk_2_", clinical_scales_thresh[s], ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(8, "inch"),
+      height = unit(6, "inch"))
+  print(p_nk2_scales)
+  dev.off()
   
 }
 ```
@@ -521,34 +756,34 @@ df_wilcoxon <- tibble(nk = 2,
 
 # Iterate over scales
 for (i in 1:nrow(df_wilcoxon)) {
- 
-    # Pull nk and scale acronym
-    nk <- df_wilcoxon[[i, "nk"]]
-    s <- df_wilcoxon[[i, "scale"]]
   
-    # Get cluster labels and scale scores
-    labels <- clusters_clinical_thresh[[paste0("nk", nk)]]
-    scores <- clusters_clinical_thresh[[s]]
-    
-    # Remove patients with missing scores
-    missing <- is.na(scores)
-    labels <- labels[!missing]
-    scores <- scores[!missing]
-    
-    # Check that completed entries are not all in 
-    # a single cluster. If they are, set NA. 
-    # Otherwise, run Wilcoxon test.
-    labels_count <- table(labels)
-    test_ngroups <- length(labels_count) > 1
-    if (test_ngroups) {
-      wilcoxon <- wilcox.test(scores ~ factor(labels))
-      df_wilcoxon[[i, "uval"]] <- wilcoxon[["statistic"]]
-      df_wilcoxon[[i, "pval"]] <- wilcoxon[["p.value"]]
-    } else {
-      df_wilcoxon[[i, "uval"]] <- NA
-      df_wilcoxon[[i, "pval"]] <- NA
-    }
-    df_wilcoxon[[i, "npatients"]] <- length(labels)
+  # Pull nk and scale acronym
+  nk <- df_wilcoxon[[i, "nk"]]
+  s <- df_wilcoxon[[i, "scale"]]
+  
+  # Get cluster labels and scale scores
+  labels <- clusters_clinical_thresh[[paste0("nk", nk)]]
+  scores <- clusters_clinical_thresh[[s]]
+  
+  # Remove patients with missing scores
+  missing <- is.na(scores)
+  labels <- labels[!missing]
+  scores <- scores[!missing]
+  
+  # Check that completed entries are not all in 
+  # a single cluster. If they are, set NA. 
+  # Otherwise, run Wilcoxon test.
+  labels_count <- table(labels)
+  test_ngroups <- length(labels_count) > 1
+  if (test_ngroups) {
+    wilcoxon <- wilcox.test(scores ~ factor(labels))
+    df_wilcoxon[[i, "uval"]] <- wilcoxon[["statistic"]]
+    df_wilcoxon[[i, "pval"]] <- wilcoxon[["p.value"]]
+  } else {
+    df_wilcoxon[[i, "uval"]] <- NA
+    df_wilcoxon[[i, "pval"]] <- NA
+  }
+  df_wilcoxon[[i, "npatients"]] <- length(labels)
 }
 
 # Significance bins
@@ -573,7 +808,7 @@ pval_thresh_log <- -log10(pval_thresh)
 
 # Point and segment plot for significance
 p_nk2_pvals <- ggplot(df_wilcoxon_p, 
-       aes(x = pval_log, y = scale, col = significance)) + 
+                      aes(x = pval_log, y = scale, col = significance)) + 
   geom_segment(aes(xend = 0, yend = scale)) + 
   geom_point() +
   geom_vline(xintercept = pval_thresh_log,
@@ -648,7 +883,7 @@ df_kw_p <- df_kw %>%
          significant = ifelse(pval < 0.05, "*", ""))
 
 p_kw_pvals <- ggplot(df_kw_p,
-       aes(x = nk, y = scale, fill = pval_log)) + 
+                     aes(x = nk, y = scale, fill = pval_log)) + 
   geom_tile(col = "black") +
   geom_text(mapping = aes(label = significant)) + 
   scale_x_discrete(expand = expansion()) + 
