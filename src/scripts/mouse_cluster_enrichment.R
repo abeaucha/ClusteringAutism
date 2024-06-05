@@ -167,7 +167,6 @@ get_homologs <- function(genes, species, ordered=T) {
 }
 
 
-
 GetNeighbourhoodEnrichment<-function(GeneScore="900",
                                      total_clusters="10",
                                      Bader_List="Data/Raw/Human_Reactome_March_01_2020_symbol.gmt",
@@ -243,11 +242,13 @@ GetNeighbourhoodEnrichment<-function(GeneScore="900",
 
 # Main -----------------------------------------------------------------------
 
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+
 # Directory containing mouse cluster files
 cluster_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/Clusters_Paper/"
 
 # Enrichment output directory
-enrichment_dir <- "data/mouse/enrichment/"
+enrichment_dir <- file.path(PROJECTPATH, "data/mouse/enrichment/")
 if (!dir.exists(enrichment_dir)) {
   dir.create(enrichment_dir, showWarnings = FALSE, recursive = TRUE)
 }
