@@ -490,7 +490,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
             registry_cleanup = True,
             registry_name = registry_name_p,
             slurm_mem = '16G',
-            slurm_time = 60
+            slurm_time = 120
         )
         centroid_outputs = centroids(**centroid_kwargs)
         # TODO REMOVE WHEN DONE
