@@ -371,7 +371,7 @@ for (j in jacobians) {
 
 ```{r human-cluster-optimal}
 # Max nk to examine
-nk_max <- 10
+nk_max <- 100
 
 # Human optimal nk
 estimateNumberOfClustersGivenGraph(W = mat_human_affinity, NUMC = 2:nk_max)
@@ -382,8 +382,8 @@ estimateNumberOfClustersGivenGraph(W = mat_human_affinity, NUMC = 2:nk_max)
 df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:nk_max)
 
 # Plot x-axis breaks
-# xbreaks <- seq(0, nk_max, by = 4)
-xbreaks <- seq(0, nk_max, by = 1)
+xbreaks <- seq(0, nk_max, by = 4)
+# xbreaks <- seq(0, nk_max, by = 1)
 
 # Plot of eigengap distribution
 p_human_eigengap <- ggplot(df_human_cluster_metrics,
@@ -410,21 +410,12 @@ p_human_rotation <- ggplot(df_human_cluster_metrics,
 p_human_metrics <- (p_human_eigengap / p_human_rotation) +
   plot_annotation(title = "Human cluster metric distribution")
 
-# # Export plot
-# outfile <- "human_cluster_metrics.pdf"
-# outfile <- file.path(output_dir, outfile)
-# pdf(file = outfile, 
-#     width = unit(10, "in"),
-#     height = unit(5, "in"))
-# print(p_human_metrics)
-# dev.off()
-
 # Export plot
 outfile <- "human_cluster_metrics.pdf"
 outfile <- file.path(output_dir, outfile)
-pdf(file = outfile, 
-    width = unit(660/72, "inch"),
-    height = unit(841/72, "inch"))
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
 print(p_human_metrics)
 dev.off()
 ```
@@ -600,7 +591,7 @@ dev.off()
 
 ```{r mouse-cluster-optimal}
 # Max nk to examine
-nk_max <- 10
+nk_max <- 100
 
 # Mouse optimal nk
 estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
@@ -612,8 +603,8 @@ estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
 df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:nk_max)
 
 # Plot x-axis breaks
-# xbreaks <- seq(0, nk_max, by = 4)
-xbreaks <- seq(0, nk_max, by = 1)
+xbreaks <- seq(0, nk_max, by = 4)
+# xbreaks <- seq(0, nk_max, by = 1)
 
 # Plot eigengap distribution
 p_mouse_eigengap <- ggplot(df_mouse_cluster_metrics,
@@ -641,19 +632,11 @@ p_mouse_metrics <- (p_mouse_eigengap / p_mouse_rotation) +
   plot_annotation(title = "Mouse cluster metric distribution")
 
 # Export plot
-# outfile <- "mouse_cluster_metrics.pdf"
-# outfile <- file.path(output_dir, outfile)
-# pdf(file = outfile, 
-#     width = unit(10, "in"),
-#     height = unit(5, "in"))
-# print(p_mouse_metrics)
-# dev.off()
-
 outfile <- "mouse_cluster_metrics.pdf"
 outfile <- file.path(output_dir, outfile)
-pdf(file = outfile, 
-    width = unit(660/72, "inch"),
-    height = unit(841/72, "inch"))
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
 print(p_mouse_metrics)
 dev.off()
 ```
