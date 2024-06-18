@@ -17,6 +17,7 @@ suppressPackageStartupMessages(library(MRIcrotome))
 
 ```{r env}
 SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
 # SRCPATH <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main/src"
 ```
 
@@ -71,20 +72,20 @@ plot_normative_splines <- function(voxels, nv = 1000, seed = 123,
 
 ```{r directories-1}
 # Output directory
-output_dir <- "outputs/human_normative_models/"
+output_dir <- file.path(PROJECTPATH, "analyses", "primary", "outputs", "human_normative_models/")
 
 # Pipeline directory
 version <- "v3"
-pipeline_dir <- "../../data/human/derivatives/"
+pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
 pipeline_dir <- file.path(pipeline_dir, version)
 
 # Registration directory
-registration_dir <- "../../data/human/registration/v3/"
+registration_dir <- file.path(PROJECTPATH, "data/human/registration/v3/")
 ```
 
 ```{r params}
-# params_id <- "547"
-params_id <- "664"
+params_id <- "547"
+# params_id <- "664"
 
 # Identify parameter set ID
 metadata <- file.path(pipeline_dir, "metadata.csv")
@@ -95,8 +96,8 @@ params
 
 ```{r directories-2}
 # Parameter set ID
-# params_id <- "547"
-params_id <- "664"
+params_id <- "547"
+# params_id <- "664"
 
 # Update output directory
 output_dir <- file.path(output_dir, params_id)
@@ -108,9 +109,9 @@ resolution <- params %>%
 resolution <- sprintf("%.1f", resolution)
 
 # Mask
-mask <- paste0("mask_", resolution, "mm.mnc")
-mask <- file.path(registration_dir, "reference_files", mask)
-mask <- mincGetVolume(mask)
+maskfile <- paste0("mask_", resolution, "mm.mnc")
+maskfile <- file.path(registration_dir, "reference_files", maskfile)
+mask <- mincGetVolume(maskfile)
 
 # Template
 template <- paste0("model_", resolution, "mm.mnc")
@@ -120,6 +121,86 @@ template <- mincGetVolume(template)
 # List of input files
 input_files <- list.files(output_dir, full.names = TRUE)
 ```
+
+```{r}
+jacobians_dir <- file.path(registration_dir, "jacobians_resampled", paste("resolution", resolution, sep = "_"))
+
+demographics <- file.path(pipeline_dir, params_id, "demographics.csv")
+demographics <- read_csv(demographics, show_col_types = FALSE) %>% 
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex))
+```
+
+
+```{r}
+jacobians <- c("absolute", "relative")
+sex <- c("Male", "Female")
+
+j <- 1; s <- 1
+
+# Image files
+imgdir <- file.path(jacobians_dir, jacobians[j])
+imgfiles <- list.files(imgdir, full.names = TRUE)
+
+imgs_in_demographics <- basename(imgfiles) %in% demographics[["file"]]
+imgfiles <- imgfiles[imgs_in_demographics]
+row_match <- match(basename(imgfiles), demographics[["file"]])
+demographics <- demographics[row_match,]
+
+voxels <- import_images(imgfiles = imgfiles, mask = maskfile, output_format = "matrix", nproc = 4)
+```
+
+
+```{r}
+v <- sample(1:ncol(voxels), size = 1)
+
+y <- voxels[,v]
+
+batch <- demographics %>% 
+  select(Site, Scanner) %>% 
+  unite(col = batch) %>% 
+  pull(batch)
+
+y <- residuals(lm(y ~ batch))
+ 
+df_voxel <- demographics %>% 
+  select(Age, Sex, DX) %>% 
+  mutate(y = y,
+         IsControl = ifelse(DX == "Control", TRUE, FALSE))
+
+ggplot(df_voxel, aes(x = Age, y = y)) + 
+  geom_point() + 
+  facet_grid(IsControl~.)
+```
+
+```{r}
+df_fit <- df_voxel %>% 
+  filter(IsControl)
+
+model_fit <- lm(y ~ Sex + ns(Age, df = 3), data = df_fit)
+
+newdata <- tibble(Age = seq(5, 60, by = 1),
+                      Sex = sex[s])
+
+df_model  <- predict(model_fit, 
+                             newdata = newdata,                         
+                             interval = "prediction",
+                             level = pnorm(q = 1) - pnorm(q = -1))
+df_model <- as_tibble(df_model)
+df_model <- bind_cols(newdata, df_model)
+
+ggplot(df_fit, aes(x = Age, y = y)) + 
+  geom_point() + 
+  geom_ribbon(data = df_model,
+            mapping = aes(y = fit, ymin = lwr, ymax = upr),
+            alpha = 0.3) + 
+  geom_line(data = df_model,
+            mapping = aes(y = fit),
+            col = "red") 
+```
+
+
 
 ```{r directories-2}
 nsample <- 10000
