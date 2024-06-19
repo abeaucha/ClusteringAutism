@@ -1,6 +1,8 @@
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(umap))
 suppressPackageStartupMessages(library(SNFtool))
+suppressPackageStartupMessages(library(parallel))
+suppressPackageStartupMessages(library(doSNOW))
 
 SRCPATH <- Sys.getenv("SRCPATH")
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
@@ -92,6 +94,89 @@ estimate_cluster_metrics <- function (W, NUMC = 2:5){
 
 
 
+simulate_clusters <- function(i, grid, nobs, outdir = "./", run_umap = FALSE) {
+  
+  # print(paste("i:", i, "of", length(results)))
+  # 
+  nvars <- grid[[i, "nvars"]]
+  delta <- grid[[i, "delta"]]
+  seed <- grid[[i, "seed"]]
+  
+  # Generate normal distributions
+  set.seed(seed)
+  
+  x1 <- matrix(rnorm(nobs[1]*nvars), nrow = nobs[1], ncol = nvars)
+  x2_1 <- matrix(rnorm(nobs[2]*(nvars-1)), nrow = nobs[2], ncol = nvars-1)
+  x2_2 <- rnorm(nobs[2], mean = delta)
+  x2 <- cbind(x2_1, x2_2)
+  x <- rbind(x1, x2)
+  rownames(x) <- paste0("p", 1:sum(nobs))
+  
+  # x1 <- rmvnorm(n = nobs_nk2[1], mean = rep(0, nvars), sigma = diag(nvars))
+  # x2 <- rmvnorm(n = nobs_nk2[2], mean = c(delta, rep(0, nvars-1)), sigma = diag(nvars))
+  # x <- rbind(x1, x2)
+  
+  # UMAP projection  
+  if (run_umap) {
+    umap_out <- umap(x, n_components = 2, 
+                     random_state = seed)
+  }
+  
+  # Distance matrix
+  d <- 1 - cor(t(x))
+  
+  # Free up memory
+  rm(list = c("x1", "x2", "x")); gc()
+  
+  # Affinity matrix
+  W <- affinityMatrix(d, K = 10, sigma = 0.5)
+  
+  # Run SNF because it seems to apply some normalization?
+  W <- SNF(list(W, W), K = 10, t = 20)
+  
+  # Estimate clustering metrics
+  metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
+  
+  
+  if (run_umap) {
+    clusters <- create_clusters(W = W, nk = 2)
+    
+    umap_x <- umap_out$layout
+    colnames(umap_x) <- paste0("x", 1:2)
+    p_umap <- umap_x %>% 
+      as_tibble() %>% 
+      bind_cols(clusters) %>% 
+      ggplot(aes(x = x1, y = x2, col = factor(nk2))) + 
+      geom_point() + 
+      coord_equal() +
+      labs(color = "Cluster",
+           title = paste0("Number of variables: ", nvars, "; Delta: ", delta, "; Seed: ", seed)) + 
+      theme_bw()
+    
+    outfile_umap <- paste("umap_nvars", nvars, "delta", delta, "seed", seed, sep = "_")
+    outfile_umap <- paste0(outfile_umap, ".pdf")
+    outfile_umap <- file.path(outdir, outfile_umap)
+    pdf(file = outfile_umap,
+        width = unit(8, "inch"),
+        height = unit(8, "inch"))
+    print(p_umap)
+    dev.off()
+    
+  }
+  
+  results <- metrics %>% 
+    mutate(nvars = nvars, delta = delta, seed = seed)
+  
+  outfile_metrics <- paste("metrics_nvars", nvars, "delta", delta, "seed", seed, sep = "_")
+  outfile_metrics <- paste0(outfile_metrics, ".csv")
+  outfile_metrics <- file.path(outdir, outfile_metrics)
+  write_csv(x = results, file = outfile_metrics)
+  
+  return(1)
+  
+}
+
+
 output_dir <- file.path(PROJECTPATH, "analyses", "auxiliary", "outputs", "cluster_simulations")
 if (!file.exists(output_dir)) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
@@ -119,94 +204,41 @@ df_human_clusters_nk <- df_human_clusters %>%
   select(ID, k = nk2)
 
 # Number of observations per cluster
-nobs_nk2 <- df_human_clusters_nk %>% 
+nobs <- df_human_clusters_nk %>% 
   group_by(k) %>% 
   count() %>% 
   pull(n)
 
-# Total number of observations
-nobs <- sum(nobs_nk2)
-
 # Number of variables
 # nvars <- nvoxels
 
-niter <- 10
-df_grid <- expand_grid(nvars = 10, 
-                       delta = seq(0, 10, by = 0.5),
+niter <- 50
+df_grid <- expand_grid(nvars = nvoxels, 
+                       delta = seq(0, 20, by = 1),
                        seed = 1:niter)
-results <- vector(mode = "list", length = nrow(df_grid))
+# results <- vector(mode = "list", length = nrow(df_grid))
 
 
-simulate_clusters <- function(i, grid, nobs, outdir = "./") {
-  
-  # print(paste("i:", i, "of", length(results)))
-  # 
-  nvars <- grid[[i, "nvars"]]
-  delta <- grid[[i, "delta"]]
-  seed <- grid[[i, "seed"]]
-  
-  # Generate normal distributions
-  set.seed(seed)
-  
-  x1 <- matrix(rnorm(nobs[1]*nvars), nrow = nobs[1], ncol = nvars)
-  x2_1 <- matrix(rnorm(nobs[2]*(nvars-1)), nrow = nobs[2], ncol = nvars-1)
-  x2_2 <- rnorm(nobs[2], mean = delta)
-  x2 <- cbind(x2_1, x2_2)
-  x <- rbind(x1, x2)
-  rownames(x) <- paste0("p", 1:sum(nobs))
-  
-  # x1 <- rmvnorm(n = nobs_nk2[1], mean = rep(0, nvars), sigma = diag(nvars))
-  # x2 <- rmvnorm(n = nobs_nk2[2], mean = c(delta, rep(0, nvars-1)), sigma = diag(nvars))
-  # x <- rbind(x1, x2)
-  
-  # UMAP projection  
-  umap_out <- umap(x, n_components = 2, 
-                   random_state = seed)
-  
-  # Distance matrix
-  d <- 1 - cor(t(x))
-  
-  # Free up memory
-  rm(list = c("x1", "x2", "x")); gc()
-  
-  # Affinity matrix
-  W <- affinityMatrix(d, K = 10, sigma = 0.5)
-  
-  # Run SNF because it seems to apply some normalization?
-  W <- SNF(list(W, W), K = 10, t = 20)
-  
-  # Estimate clustering metrics
-  metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
-  
-  clusters <- create_clusters(W = W, nk = 2)
-  
-  umap_x <- umap_out$layout
-  colnames(umap_x) <- paste0("x", 1:2)
-  p_umap <- umap_x %>% 
-    as_tibble() %>% 
-    bind_cols(clusters) %>% 
-    ggplot(aes(x = x1, y = x2, col = factor(nk2))) + 
-    geom_point() + 
-    coord_equal() +
-    labs(color = "Cluster",
-         title = paste0("Number of variables: ", nvars, "; Delta: ", delta, "; Seed: ", seed)) + 
-    theme_bw()
-  
-  outfile_umap <- paste("umap_nvars", nvars, "delta", delta, "seed", seed, sep = "_")
-  outfile_umap <- paste0(outfile_umap, ".pdf")
-  outfile_umap <- file.path(outdir, outfile_umap)
-  pdf(file = outfile_umap,
-      width = unit(8, "inch"),
-      height = unit(8, "inch"))
-  print(p_umap)
-  dev.off()
-  
-  results <- metrics %>% 
-    mutate(nvars = nvars, delta = delta, seed = seed)
-  
-  return(results)
-  
-}
+pb <- txtProgressBar(max = nrow(df_grid), style = 3)
+progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
+cl <- makeSOCKcluster(6)
+registerDoSNOW(cl)
+opts <- list(progress=progress)
+results <- foreach(i = 1:nrow(df_grid),
+                   .packages = c("tidyverse", "SNFtool", "umap"),
+                   .options.snow = opts) %dopar% {
+                     simulate_clusters(i = i,
+                                       grid = df_grid, 
+                                       nobs = nobs, 
+                                       outdir = output_dir,
+                                       run_umap = FALSE)
+                   }
+close(pb)
+stopCluster(cl)
 
+# df_metrics <- bind_rows(results)
+# 
+# outfile <- "clustering_metrics.csv"
+# outfile <- file.path(output_dir, outfile)
+# write_csv(x = df_metrics, file = outfile)
 
-simulate_clusters(i = 1, grid = df_grid, nobs = nobs_nk2, outdir = output_dir)

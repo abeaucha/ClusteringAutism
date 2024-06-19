@@ -605,200 +605,173 @@ df_grid <- expand_grid(delta = seq(0, 10, by = 0.5),
 results <- vector(mode = "list", length = nrow(df_grid))
 # for (i in 1:length(results)) {
 
-  i <- 1
-    
-  # print(paste("i:", i, "of", length(results)))
-  # 
-  # seed <- df_grid[[i, "seed"]]
-  # delta <- df_grid[[i, "delta"]]
-  
-  seed <- 1
-  delta <- 100
-  
-  # Generate normal distributions
-  set.seed(seed)
+i <- 1
 
-  x1 <- matrix(rnorm(nobs_nk2[1]*nvars), nrow = nobs_nk2[1], ncol = nvars)
-  x2_1 <- matrix(rnorm(nobs_nk2[2]*(nvars-1)), nrow = nobs_nk2[2], ncol = nvars-1)
-  x2_2 <- rnorm(nobs_nk2[2], mean = delta)
-  x2 <- cbind(x2_1, x2_2)
-  x <- rbind(x1, x2)
-  rownames(x) <- paste0("p", 1:nobs)
-  
-  # x1 <- rmvnorm(n = nobs_nk2[1], mean = rep(0, nvars), sigma = diag(nvars))
-  # x2 <- rmvnorm(n = nobs_nk2[2], mean = c(delta, rep(0, nvars-1)), sigma = diag(nvars))
-  # x <- rbind(x1, x2)
+# print(paste("i:", i, "of", length(results)))
+# 
+# seed <- df_grid[[i, "seed"]]
+# delta <- df_grid[[i, "delta"]]
 
-  # UMAP projection  
-  umap_out <- umap(x, n_components = 2, 
-                   random_state = seed)
-  
-  # Distance matrix
-  d <- 1 - cor(t(x))
-  
-  # Free up memory
-  rm(list = c("x1", "x2", "x")); gc()
-  
-  # Affinity matrix
-  W <- affinityMatrix(d, K = 10, sigma = 0.5)
-  
-  # Run SNF because it seems to apply some normalization?
-  W <- SNF(list(W, W), K = 10, t = 20)
-  
-  # Estimate clustering metrics
-  metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
-  
-  results[[i]] <- metrics %>% 
-    mutate(seed = seed, delta = delta)
-  
-  clusters <- create_clusters(W = W, nk = 2)
-  
-  umap_x <- umap_out$layout
-  colnames(umap_x) <- paste0("x", 1:2)
-  p_umap <- umap_x %>% 
-    as_tibble() %>% 
-    bind_cols(clusters) %>% 
-    ggplot(aes(x = x1, y = x2, col = factor(nk2))) + 
-    geom_point() + 
-    coord_equal() +
-    labs(color = "Cluster",
-         title = paste0("Delta: ", delta, "; Seed: ", seed)) + 
-    theme_bw()
-  
-  outfile_umap <- paste("umap_delta", delta, "seed", seed, sep = "_")
-  outfile_umap <- paste0(outfile_umap, ".pdf")
-  outfile_umap <- file.path(output_dir, outfile_umap)
-  pdf(file = outfile_umap,
-      width = unit(8, "inch"),
-      height = unit(8, "inch"))
-  print(p_umap)
-  dev.off()
-  
+seed <- 1
+delta <- 100
+
+# Generate normal distributions
+set.seed(seed)
+
+x1 <- matrix(rnorm(nobs_nk2[1]*nvars), nrow = nobs_nk2[1], ncol = nvars)
+x2_1 <- matrix(rnorm(nobs_nk2[2]*(nvars-1)), nrow = nobs_nk2[2], ncol = nvars-1)
+x2_2 <- rnorm(nobs_nk2[2], mean = delta)
+x2 <- cbind(x2_1, x2_2)
+x <- rbind(x1, x2)
+rownames(x) <- paste0("p", 1:nobs)
+
+# x1 <- rmvnorm(n = nobs_nk2[1], mean = rep(0, nvars), sigma = diag(nvars))
+# x2 <- rmvnorm(n = nobs_nk2[2], mean = c(delta, rep(0, nvars-1)), sigma = diag(nvars))
+# x <- rbind(x1, x2)
+
+# UMAP projection  
+umap_out <- umap(x, n_components = 2, 
+                 random_state = seed)
+
+# Distance matrix
+d <- 1 - cor(t(x))
+
+# Free up memory
+rm(list = c("x1", "x2", "x")); gc()
+
+# Affinity matrix
+W <- affinityMatrix(d, K = 10, sigma = 0.5)
+
+# Run SNF because it seems to apply some normalization?
+W <- SNF(list(W, W), K = 10, t = 20)
+
+# Estimate clustering metrics
+metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
+
+results[[i]] <- metrics %>% 
+  mutate(seed = seed, delta = delta)
+
+clusters <- create_clusters(W = W, nk = 2)
+
+umap_x <- umap_out$layout
+colnames(umap_x) <- paste0("x", 1:2)
+p_umap <- umap_x %>% 
+  as_tibble() %>% 
+  bind_cols(clusters) %>% 
+  ggplot(aes(x = x1, y = x2, col = factor(nk2))) + 
+  geom_point() + 
+  coord_equal() +
+  labs(color = "Cluster",
+       title = paste0("Delta: ", delta, "; Seed: ", seed)) + 
+  theme_bw()
+
+outfile_umap <- paste("umap_delta", delta, "seed", seed, sep = "_")
+outfile_umap <- paste0(outfile_umap, ".pdf")
+outfile_umap <- file.path(output_dir, outfile_umap)
+pdf(file = outfile_umap,
+    width = unit(8, "inch"),
+    height = unit(8, "inch"))
+print(p_umap)
+dev.off()
+
 # }
 ```
 
-
-
 ```{r}
-df_metrics <- bind_rows(results)
-ggplot(df_metrics, aes(x = nk, y = eigengap, col = factor(seed), group = factor(seed))) + 
-  geom_line() + 
-  geom_point() + 
-  facet_wrap(~delta)
-```
+library(patchwork)
 
+df_human_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:10) 
 
+df_human_metrics <- df_human_metrics %>% 
+  mutate(seed = 1, data = "truth")
 
-```{r}
-# Create clusters from affinity matrix
-clusters <- create_clusters(W = W, nk = 10)
+files <- list.files(output_dir, full.names = TRUE, pattern = "*.csv")
+df_metrics <- map_dfr(.x = files, .f = read_csv, show_col_types = FALSE)
 
-clusters_nk <- clusters %>% 
-  select(ID, k = nk2)
+delta_range <- df_metrics %>% 
+  pull(delta) %>% 
+  unique() %>% 
+  sort()
 
-x_umap <- umap(x, n_components = 2, random_state = 2)
+nvars <- df_metrics %>% 
+  pull(nvars) %>% 
+  unique() 
 
-umap_scatter(u = x_umap, 
-             clusters = clusters_nk)
-```
-
-```{r}
-estimate_cluster_metrics(W = test, NUMC = 2:10)
-```
-
-
-```{r}
-plot_eigengap(x = test, nk_max = 10)
-```
-
-
-
-```{r}
-umap_seed <- 2
-umap_components <- 2
-
-mat_umap <- umap(mat, 
-                 n_components = 2, 
-                 random_state = 2)
-
-umap_scatter(u = mat_umap, 
-             clusters = clusters_nk)
-```
-
-
-```{r}
-create_clusters <- function(W, nk = 10, outfile = NULL) {
+for (i in 1:length(delta_range)) {
   
-  for(k in 2:nk) {
-    group <- spectralClustering(affinity = W, K = k)
-    group_name <- paste0("nk", k)
-    assign(group_name, group)
-    if (k == 2) {
-      if (is.null(rownames(W))) {
-        ids <- as.character(1:nrow(W))
-      } else {
-        ids <- rownames(W)
-      }
-      all_clusters <- data.frame(ids, group, stringsAsFactors = F)
-      colnames(all_clusters) <- c("ID", group_name)
-    } else {
-      group <- data.frame(group)
-      colnames(group) <- group_name
-      all_clusters <- cbind(all_clusters, group)
-    }
-  }
+  df_metrics_all <- df_metrics %>% 
+    filter(delta == delta_range[i]) %>% 
+    select(nk, seed, eigengap, rotation) %>% 
+    mutate(data = "simulated") %>% 
+    bind_rows(df_human_metrics) %>% 
+    unite(col = "group", data, seed, remove = FALSE) %>% 
+    pivot_longer(cols = c("eigengap", "rotation"), names_to = "metric", values_to = "value")
   
-  if (!is.null(outfile)) {
-    write.csv(x = all_clusters, file = outfile, row.names = FALSE)
-  }
+  p_metrics <- ggplot(df_metrics_all, aes(x = nk, y = value, group = group, col = data)) + 
+    geom_line(size = 0.1) + 
+    geom_point(size = 1) + 
+    facet_grid(metric~., scales = "free_y") + 
+    scale_color_manual(values = c("grey50", "red")) + 
+    labs(x = "Number of clusters (nk)", 
+         y = NULL,
+         col = "Data",
+         title = paste0("2-cluster Gaussian mixture with delta = ", delta_range[i])) + 
+    theme_bw()
   
-  return(all_clusters)
+  outfile_metrics <- paste("clustering_metrics_nvars", nvars, "delta", delta_range[i], sep = "_")
+  outfile_metrics <- paste0(outfile_metrics, ".pdf")
+  outfile_metrics <- file.path(output_dir, outfile_metrics)
+  pdf(file = outfile_metrics,
+      width = unit(8, "inch"),
+      height = unit(6, "inch"))
+  print(p_metrics)
+  dev.off()
   
 }
 ```
 
-
-
 ```{r}
-similarity_network <- function(x1, x2, metric = "correlation", K = 10,
-                               sigma = 0.5, t = 20, outfile = NULL){
-  
-  if (metric == "correlation") {
-    d1 <- (1-cor(t(x1)))
-    d2 <- (1-cor(t(x2)))
-  } else if (metric == "euclidean") {
-    d1 <- (dist2(as.matrix(x1), as.matrix(x1)))^(1/2)
-    d2 <- (dist2(as.matrix(x2), as.matrix(x2)))^(1/2)
-  } else {
-    stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
-  }
-  
-  W1 <- affinityMatrix(d1, K = K, sigma = sigma)
-  W2 <- affinityMatrix(d2, K = K, sigma = sigma)
-  
-  W <- SNF(list(W1, W2), K = K, t = t)
-  
-  if (!is.null(outfile)){
-    data.table::fwrite(x = as_tibble(W), file = outfile)
-  }
-  
-  return(W)
-  
-}
+df_metrics_summary <- df_metrics %>% 
+  filter(nk == 2) %>% 
+  select(delta, eigengap, rotation) %>% 
+  pivot_longer(cols = c("eigengap", "rotation"), names_to = "metric", values_to = "value") %>% 
+  group_by(delta, metric) %>% 
+  summarise(value_mean = mean(value),
+            value_sd = sd(value),
+            .groups = "drop") %>% 
+  mutate(value_lwr = value_mean - 2*value_sd,
+         value_upr = value_mean + 2*value_sd)
+
+eigengap_true <- df_human_metrics %>% 
+  filter(nk == 2) 
+
+df_metrics_true <- df_human_metrics %>% 
+  filter(nk == 2) %>% 
+  select(eigengap, rotation) %>% 
+  pivot_longer(cols = c("eigengap", "rotation"), names_to = "metric", values_to = "value")
+
+p_metric_summary <- ggplot(df_metrics_summary, aes(x = delta, y = value_mean)) + 
+  geom_point() +
+  geom_errorbar(mapping = aes(ymin = value_lwr, ymax = value_upr)) + 
+  geom_hline(data = df_metrics_true, 
+             mapping = aes(yintercept = value),
+             linetype = "dashed", col = "red") + 
+  facet_grid(metric~., scales = "free_y") + 
+  scale_x_continuous(breaks = seq(0, 50, by = 1)) + 
+  labs(x = "Delta",
+       y = "Metric value") +
+  theme_bw()
+
+outfile_metrics <- paste("clustering_metrics_nk2_summary_nvars", nvars, sep = "_")
+outfile_metrics <- paste0(outfile_metrics, ".pdf")
+outfile_metrics <- file.path(output_dir, outfile_metrics)
+pdf(file = outfile_metrics,
+    width = unit(8, "inch"),
+    height = unit(6, "inch"))
+print(p_metric_summary)
+dev.off()
 ```
 
-
-
-```{r}
-mat_sim <- matrix(data = rnorm(n = nobs*nvars), nrow = nobs, ncol = nvars)
-mat_sim_abs_nocor <- matrix(data = rnorm(n = nobs*nvars), nrow = nobs, ncol = nvars)
-
-rownames(mat_sim_rel_nocor) <- rownames(mat_es_rel)
-rownames(mat_sim_abs_nocor) <- rownames(mat_es_abs)
-
-affinity_sim_nocor <- similarity_network(x1 = mat_sim_rel_nocor, x2 = mat_sim_abs_nocor)
-clusters_sim_nocor <- create_clusters(W = affinity_sim_nocor)
-```
 
 
 ## Lower dimensional
