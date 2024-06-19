@@ -1,5 +1,6 @@
 library(tidyverse)
 
+# Get list of mouse-human homologues from JAX
 hom <- read_tsv("http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt") %>% 
   select(DBClassKey = `DB Class Key`,
          Species = `Common Organism Name`,
@@ -19,20 +20,27 @@ hom_mouse <- hom %>%
 
 hom_joined <- inner_join(hom_human, hom_mouse, by = "DBClassKey")
 
+expr_mouse <- "data/mouse/expression/MouseExpressionMatrix_voxel_coronal_log2_grouped_imputed.csv"
+genes_mouse_amba <- as_tibble(data.table::fread(expr_mouse, header = TRUE)) %>% 
+  pull(Gene)
 
+expr_human <- "data/human/expression/HumanExpressionMatrix_samples_pipeline_abagen.csv"
+genes_human_ahba <- as_tibble(data.table::fread(expr_human, header = TRUE)) %>% 
+  pull(Gene)
 
-sum(hom_human$`DB Class Key` %in% hom_mouse$`DB Class Key`)
-sum(hom_mouse$`DB Class Key` %in% hom_human$`DB Class Key`)
+# 3724 of 3958 with human homologues and in AMBA coronal
+hom_joined %>% 
+  filter(Mouse %in% genes_mouse_amba) %>% 
+  nrow()
 
-hom
+# 15,078 of 15,627 with mouse homologues and in AHBA
+hom_joined %>% 
+  filter(Human %in% genes_human_ahba) %>% 
+  nrow()
 
-hom %>% 
-  select(`DB Class Key`, `Common Organism Name`) 
-  
-nrow(hom_human)
-  
-  homologene_ids <- hom$`DB Class Key`[which((hom$Symbol %in% genes) & hom$`Common Organism Name`==species)]
-genes_mouse <- hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="mouse, laboratory"))]
-genes_human <- hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="human"))]
+hom_joined <- hom_joined %>% 
+  filter(Mouse %in% genes_mouse_amba,
+         Human %in% genes_human_ahba)
 
-
+# 3,252 homologous genes present in both AMBA and AHBA
+nrow(hom_joined)
