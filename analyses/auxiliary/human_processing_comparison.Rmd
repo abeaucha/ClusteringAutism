@@ -1,0 +1,219 @@
+---
+title: "Pairwise comparison of human processing pipeline parameters"
+author: "Antoine Beauchamp"
+date: '`r Sys.Date()`'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RColorBrewer))
+```
+
+```{r functions}
+source("../../src/utils.R")
+# source("../../src/processing.R")
+# source("../../src/analysis.R")
+```
+
+```{r parameters}
+#Output directory
+output_dir <- "outputs/human_processing_comparison/"
+
+#Human directories
+version <- "v2"
+
+registration_dir <- "../../data/human/registration/"
+registration_dir <- file.path(registration_dir, version)
+
+pipeline_dir <- "../../data/human/derivatives/"
+pipeline_dir <- file.path(pipeline_dir, version)
+
+#Human parameters
+resolution <- c(0.8, 3.0)
+es_method <- c("normative-growth", "normative-growth")
+es_group <- c("patients", "patients")
+es_df <- c(3, 3)
+cluster_map_method <- c("mean", "mean")
+
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params_1 <- fetch_params_metadata(metadata = metadata,
+                                  resolution = resolution[1],
+                                  es_method = es_method[1],
+                                  es_group = es_group[1],
+                                  es_df = es_df[1],
+                                  cluster_map_method = cluster_map_method[1])
+params_1
+```
+
+```{r}
+params_2 <- fetch_params_metadata(metadata = metadata,
+                                  resolution = resolution[2],
+                                  es_method = es_method[2],
+                                  es_group = es_group[2],
+                                  es_df = es_df[2],
+                                  cluster_map_method = cluster_map_method[2])
+params_2
+```
+
+```{r}
+params_id <- c(700, 620)
+
+pipeline_dirs <- file.path(pipeline_dir, params_id)
+
+cluster_resolution_1 <- params_1 %>% 
+  filter(id == params_id[1]) %>% 
+  pull(cluster_resolution)
+cluster_resolution_1 <- sprintf("%.1f", cluster_resolution_1)
+
+cluster_resolution_2 <- params_2 %>% 
+  filter(id == params_id[2]) %>% 
+  pull(cluster_resolution)
+cluster_resolution_2 <- sprintf("%.1f", cluster_resolution_2)
+
+cluster_resolution <- c(cluster_resolution_1, cluster_resolution_2)
+
+#Cluster directory
+cluster_dirs <- file.path(pipeline_dirs, "clusters", paste0("resolution_", cluster_resolution))
+
+#Output directory
+output_dir <- file.path(output_dir, version)
+output_dir <- file.path(output_dir, str_flatten(sort(params_id), collapse = "-"))
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
+
+```{r}
+cluster_files <- file.path(cluster_dirs, "clusters.csv")
+clusters <- map(.x = cluster_files, .f = read_csv)
+names(clusters) <- params_id
+```
+
+```{r}
+nk_max_1 <-  params_1 %>% 
+  filter(id == params_id[1]) %>% 
+  pull(cluster_nk_max)
+
+nk_max_2 <-  params_2 %>% 
+  filter(id == params_id[2]) %>% 
+  pull(cluster_nk_max)
+
+nk_max <- min(c(nk_max_1, nk_max_2))
+
+list_jaccard <- vector(mode = "list", length = nk_max-1)
+names(list_jaccard) <- 2:nk_max
+for (nk in 2:nk_max) {
+
+  nk_col <- paste0("nk", nk)
+  ind_cols_1 <- colnames(clusters[[1]]) %in% c("ID", nk_col)
+  ind_cols_2 <- colnames(clusters[[2]]) %in% c("ID", nk_col)
+  
+  df_nk_1 <- clusters[[1]][, ind_cols_1]
+  df_nk_2 <- clusters[[2]][, ind_cols_2]
+  
+  df_jaccard_nk <- expand_grid(k1 = 1:nk,
+                               k2 = 1:nk,
+                               intersection = 0,
+                               union = 0,
+                               jaccard = 0)
+  for (i in 1:nrow(df_jaccard_nk)) {
+    
+    k1 <- df_jaccard_nk[[i, "k1"]]
+    k2 <- df_jaccard_nk[[i, "k2"]]
+    
+    ind_k1 <- df_nk_1[[nk_col]] == k1
+    ind_k2 <- df_nk_2[[nk_col]] == k2
+    
+    ids_k1 <- df_nk_1[["ID"]][ind_k1]
+    ids_k2 <- df_nk_2[["ID"]][ind_k2]
+    
+    df_jaccard_nk[[i, "intersection"]] <- length(intersect(x = ids_k1, ids_k2))
+    df_jaccard_nk[[i, "union"]] <- length(union(x = ids_k1, ids_k2))
+    df_jaccard_nk[[i, "jaccard"]] <- df_jaccard_nk[[i, "intersection"]]/df_jaccard_nk[[i, "union"]]
+  }
+
+  nk_str <- as.character(nk)
+  list_jaccard[[nk_str]] <- df_jaccard_nk
+  
+}
+
+df_jaccard <- map_dfr(.x = list_jaccard, 
+                      .f = bind_rows, 
+                      .id = "nk") %>% 
+  mutate(nk = as.numeric(nk)) %>% 
+  unite(col = "cluster_id_1", nk, k1, sep = "-", remove = FALSE) %>% 
+  unite(col = "cluster_id_2", nk, k2, sep = "-", remove = FALSE) 
+```
+
+```{r}
+cluster_id_lvls <- df_jaccard %>% 
+  select(cluster_id_1, nk, k1) %>% 
+  distinct() %>% 
+  arrange(nk, k1) %>% 
+  pull(cluster_id_1)
+
+df_jaccard <- df_jaccard %>% 
+  mutate(cluster_id_1 = factor(cluster_id_1, levels = cluster_id_lvls),
+         cluster_id_2 = factor(cluster_id_2, levels = cluster_id_lvls))
+
+ggplot(df_jaccard, aes(x = cluster_id_2, y = fct_rev(cluster_id_1), fill = jaccard)) + 
+  geom_tile(col = "grey50") + 
+  coord_fixed() + 
+  labs(x = "Clusters in set 2",
+       y = "Clusters in set 1",
+       fill = "Jaccard index") + 
+  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "OrRd")) + 
+  theme_bw() + 
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))  
+```
+
+```{r}
+thresholds <- seq(0.1, 1.0, by = 0.01)
+list_jaccard_threshold <- vector(mode = "list", length = length(thresholds))
+for (i in 1:length(list_jaccard_threshold)) {
+  
+  list_jaccard_threshold[[i]] <- df_jaccard %>% 
+    mutate(threshold_pass = jaccard > thresholds[i]) %>% 
+    group_by(nk) %>% 
+    summarise(pass_count = sum(threshold_pass),
+              .groups = "drop") %>% 
+    mutate(threshold = thresholds[i])
+  
+}
+
+df_jaccard_threshold <- reduce(.x = list_jaccard_threshold, .f = bind_rows)
+
+df_jaccard_threshold <- df_jaccard_threshold %>% 
+  mutate(prop = pass_count/nk)
+
+ggplot(df_jaccard_threshold,
+       aes(x = threshold, y = prop, col = factor(nk))) +
+  geom_line() + 
+  scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  labs(x = "Jaccard index threshold",
+       y = "Proportion of clusters above threshold",
+       col = "nk") +
+  theme_bw()
+```
+
+```{r}
+file.path(registration_dir, "reference_files"
+```
+
+
+```{r}
+#Effect size directories
+es_dirs <- file.path(pipeline_dirs, "effect_sizes", paste0("resolution_", cluster_resolution))
+
+jacobians <- c("absolute", "relative")
+
+es_dirs_abs <- file.path(es_dirs, "absolute")
+
+list.files(es_files_abs)
+```
+

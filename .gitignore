@@ -5,7 +5,11 @@
 .venv/
 .venv_hpc/
 __pycache__/
-analyses/auxiliary/
+analyses/auxiliary/centroids
+analyses/auxiliary/gene_space_decomposition
+analyses/auxiliary/human_interpolation
+analyses/auxiliary/human_processing_comparison
+analyses/auxiliary/outputs
 analyses/primary/outputs
 analyses/troubleshooting/
 data/

@@ -1,0 +1,174 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Description
+
+# Initialization
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+# suppressPackageStartupMessages(library(RMINC))
+# suppressPackageStartupMessages(library(data.tree))
+# suppressPackageStartupMessages(library(patchwork))
+# suppressPackageStartupMessages(library(RColorBrewer))
+```
+
+```{r functions}
+SRCPATH <- Sys.getenv("SRCPATH")
+if (SRCPATH == "") {
+  SRCPATH <- "../../src/"
+  Sys.setenv(SRCPATH=SRCPATH)
+}
+
+source(file.path(SRCPATH, "utils.R"))
+# source(file.path(SRCPATH, "processing.R"))
+# source(file.path(SRCPATH, "analysis.R"))
+# source(file.path(SRCPATH, "tree_tools.R"))
+```
+
+```{r parameters}
+# Output directory
+output_dir <- "outputs/latent_space_stability/"
+
+# Similarity pipeline
+version <- "v3"
+pipeline_dir <- "../../data/cross_species/"
+pipeline_dir <- file.path(pipeline_dir, version)
+
+# Identify matching parameter sets
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                input_1_dataset = "POND-SickKids",
+                                input_2_dataset = "MICe")
+params
+```
+
+```{r directories}
+# Parameter set ID
+# params_id <- 984 #PONDSK-MICe
+# params_id <- 394 #HBN-MICe
+params_id <- 278 #PONDSK-HBN
+
+param_ids <- c(984, 375, 738)
+
+# Extract parameter set
+params_subset <- params %>% 
+  filter(id %in% param_ids)
+
+input_ids <- numeric(2)
+species <- character(2)
+datasets <- character(2)
+resolutions <- numeric(2)
+for (i in 1:2) {
+  input_ids[i] <- unique(params_subset[[paste("input", i, "id", sep = "_")]])
+  species[i] <- unique(params_subset[[paste("input", i, "species", sep = "_")]])
+  datasets[i] <- unique(params_subset[[paste("input", i, "dataset", sep = "_")]])
+  resolutions[i] <- unique(params_subset[[paste("input", i, "resolution", sep = "_")]])
+}
+
+# Extract number of latent spaces
+df_ls <- params_subset %>% 
+  select(id, n_latent_spaces)
+
+# Pipeline directory
+pipeline_dirs <- file.path(pipeline_dir, param_ids, "similarity")
+
+# Output directory
+output_dir <- file.path(output_dir, version, str_flatten(datasets, collapse = "_"))
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
+
+```{r import}
+list_similarity <- vector(mode = "list", length = length(param_ids))
+names(list_similarity) <- param_ids
+for (l in 1:length(list_similarity)) {
+  
+  # Import absolute and relative similarity data
+  similarity_file <- file.path(pipeline_dirs[l], "similarity.csv")
+  similarity <- read_csv(similarity_file, show_col_types = FALSE)
+  for (i in 1:2) {
+    
+    # Get files for input i
+    files_i <- similarity[[paste0("img", i)]]
+    
+    # Get Jacobian IDs
+    similarity[[paste("img", i, "jacobians", sep = "_")]] <- str_extract(files_i, "absolute|relative")
+    
+    # Extract nk values
+    similarity[[paste("img", i, "nk", sep = "_")]] <- files_i %>% 
+      basename() %>% 
+      str_extract("_nk_[0-9]+") %>% 
+      str_extract("[0-9]+") %>% 
+      as.numeric()
+    
+    # Extract k values  
+    similarity[[paste("img", i, "k", sep = "_")]] <- files_i %>% 
+      basename() %>% 
+      str_extract("_k_[0-9]+") %>% 
+      str_extract("[0-9]+") %>% 
+      as.numeric()
+    
+    # Construct cluster ID
+    similarity[[paste("img", i, "cluster_id", sep = "_")]] <- str_c(similarity[[paste("img", i, "nk", sep = "_")]],
+                                                                    similarity[[paste("img", i, "k", sep = "_")]], 
+                                                                    sep = "-")
+    
+  }
+  
+  list_similarity[[l]] <- similarity %>%
+    select(img_1_cluster_id, img_2_cluster_id, similarity) %>% 
+    group_by(img_1_cluster_id, img_2_cluster_id) %>% 
+    summarise(similarity = mean(similarity), .groups = "drop") %>% 
+    arrange(img_1_cluster_id, img_2_cluster_id)
+}
+```
+
+```{r fig.width = 10, fig.height = 5}
+df_similarity <- bind_rows(list_similarity, .id = "id") %>% 
+  unite(col = "joint_cluster_id", img_1_cluster_id, img_2_cluster_id)
+
+lvls <- df_similarity %>%
+  filter(id == param_ids[1]) %>% 
+  arrange(similarity) %>% 
+  pull(joint_cluster_id)
+
+df_similarity <- df_similarity %>% 
+  mutate(id = as.numeric(id)) %>% 
+  left_join(df_ls, by = "id") %>% 
+  mutate(joint_cluster_id = factor(joint_cluster_id, levels = lvls),
+         joint_cluster_id = as.numeric(joint_cluster_id), 
+         n_latent_spaces = factor(n_latent_spaces))
+
+ggplot(df_similarity, aes(x = joint_cluster_id, y = similarity, col = n_latent_spaces, group = n_latent_spaces)) +
+  # geom_point() +
+  geom_line() +
+  labs(x = "Cluster pairs",
+       y = "Similarity",
+       col = "Number of latent spaces") + 
+  theme_bw() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+```
+
+```{r}
+nrows <- nrow(list_similarity[[1]])
+ncols <- length(list_similarity)
+mat_similarity <- matrix(data = 0, nrow = nrows, ncol = ncols)
+colnames(mat_similarity) <- names(list_similarity)
+for (j in 1:ncols) {mat_similarity[,j] <- list_similarity[[j]][[3]]}
+cor(mat_similarity)
+```
+
+```{r}
+dist(t(mat_similarity))
+```
+
+

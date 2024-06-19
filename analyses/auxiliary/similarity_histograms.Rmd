@@ -1,0 +1,408 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: '2022-11-01'
+output: html_document
+---
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(data.tree))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(pheatmap))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(ggplotify))
+suppressPackageStartupMessages(library(patchwork))
+```
+
+```{r functions}
+source("../functions/buildSimilarityMatrix.R")
+source("../functions/tree_tools.R")
+source("cluster_similarity/analysis_tools_v2.R")
+```
+
+```{r}
+#Mouse files
+mouse_treefile <- '../data/mouse/expression/MouseExpressionTree_DSURQE.RData'
+
+#Human files
+human_treefile <- '../data/human/expression/HumanExpressionTree.RData'
+
+#Tree labels
+treelabels <- '../data/TreeLabelsReordered.RData'
+
+#Trees
+load(mouse_treefile)
+tree_mouse <- Clone(treeMouseExpr)
+rm(treeMouseExpr)
+
+load(human_treefile)
+tree_human <- Clone(treeHumanExpr)
+rm(treeHumanExpr)
+
+#Tree labels
+load(treelabels)
+
+#Prune mouse tree to desired level
+mouse_regions <- c(listLabelsMouseReordered$Region67, 
+                   'fiber tracts', 
+                   'ventricular systems')
+tree_mouse_pruned <- Clone(tree_mouse)
+pruneAnatTree(tree_mouse_pruned, 
+              nodes = mouse_regions, 
+              method = 'BelowNode')
+
+#Pruned human tree to desired level
+human_regions <- c(listLabelsHumanReordered$Region88, 
+                   'white matter', 
+                   'sulci & spaces')
+tree_human_pruned <- Clone(tree_human)
+pruneAnatTree(tree_human_pruned, 
+              nodes = human_regions, 
+              method = 'BelowNode')
+
+neuro_pairs <- "../data/MouseHumanMatches_H88M67.csv"
+df_neuro_pairs <- read_csv(neuro_pairs, show_col_types = FALSE)
+df_neuro_pairs
+```
+
+
+```{r}
+simfile <- "../data/similarity_matrix//anatomical_similarity.csv"
+df_sim <- read_csv(simfile, show_col_types = FALSE)
+
+df_sim
+```
+
+```{r}
+df_sim_neuro_pairs <- df_sim %>% 
+  pivot_longer(cols = -Human, names_to = "Mouse", values_to = "Similarity") %>% 
+  semi_join(df_neuro_pairs, by = c("Mouse", "Human"))
+
+```
+
+```{r}
+mouse_regions_coarse <- c(listLabelsMouseReordered$Region11_reordered,
+                          "fiber tracts",
+                          "ventricular systems")
+human_regions_coarse <- c(listLabelsHumanReordered$Region16_reordered,
+                          "white matter",
+                          "sulci & spaces")
+```
+
+```{r}
+df_sim_long <- df_sim %>% 
+  pivot_longer(cols = -Human, names_to = "Mouse", values_to = "Similarity")
+```
+
+```{r}
+relabel_anatomy <- function(x, tree, structs){
+  y <- character(length(x))
+  paths <- tree$Get("path", filterFun = isLeaf)
+  for(i in 1:length(paths)){
+    ind <- which(x == names(paths)[[i]])
+    y[ind] <- structs[structs %in% paths[[i]]]
+  }
+  return(y)
+}
+```
+
+```{r}
+df_adjacent <- tibble(Mouse = c("Hippocampal formation",
+                                "Isocortex",
+                                "Isocortex", 
+                                "Isocortex",
+                                "Isocortex",
+                                "Isocortex",
+                                "Cerebral nuclei",
+                                "Cerebral nuclei",
+                                "Cerebral nuclei",
+                                "Interbrain",
+                                "Midbrain",
+                                "Pons",
+                                "Medulla",
+                                "Cerebellar cortex",
+                                "Cerebellar nuclei"),
+                      Human = c("limbic lobe", 
+                                "frontal lobe",
+                                "insula",
+                                "occipital lobe",
+                                "parietal lobe",
+                                "temporal lobe",
+                                "amygdala", 
+                                "basal ganglia",
+                                "basal forebrain",
+                                "diencephalon", 
+                                "mesencephalon",
+                                "pons",
+                                "myelencephalon",
+                                "cerebellar cortex",
+                                "cerebellar nuclei"))
+
+
+```
+
+
+```{r}
+df_sim_homologous <- df_sim_long %>% 
+  semi_join(df_neuro_pairs, by = c("Human", "Mouse")) %>% 
+  mutate(Type = "Homologous") %>% 
+  filter(!(Human %in% c("white matter", "sulci & spaces")))
+```
+
+```{r}
+df_sim_adjacent <- df_sim_long %>% 
+  anti_join(df_neuro_pairs, by = c("Human", "Mouse"))
+df_sim_adjacent$Mouse <- relabel_anatomy(x = df_sim_adjacent$Mouse,
+                                         tree = tree_mouse_pruned,
+                                         structs = mouse_regions_coarse)
+
+df_sim_adjacent$Human <- relabel_anatomy(x = df_sim_adjacent$Human,
+                                         tree = tree_human_pruned,
+                                         structs <- human_regions_coarse)
+df_sim_adjacent <- df_sim_adjacent %>% 
+  semi_join(df_adjacent, by = c("Human", "Mouse")) %>% 
+  mutate(Type = "Homologous-adjacent")
+```
+
+```{r}
+df_sim_non_homologous <- df_sim_long %>% 
+  anti_join(df_neuro_pairs, by = c("Human", "Mouse"))
+df_sim_non_homologous$Mouse <- relabel_anatomy(x = df_sim_non_homologous$Mouse,
+                                               tree = tree_mouse_pruned,
+                                               structs = mouse_regions_coarse)
+
+df_sim_non_homologous$Human <- relabel_anatomy(x = df_sim_non_homologous$Human,
+                                               tree = tree_human_pruned,
+                                               structs <- human_regions_coarse)
+df_sim_non_homologous <- df_sim_non_homologous %>% 
+  anti_join(df_adjacent, by = c("Human", "Mouse")) %>% 
+  mutate(Type = "Non-homologous")
+
+```
+
+```{r}
+df_sim_hist <- bind_rows(df_sim_homologous,
+                         df_sim_adjacent,
+                         df_sim_non_homologous) %>% 
+  select(Type, Similarity) %>% 
+  mutate(Type = factor(Type, levels = c("Homologous", "Homologous-adjacent", "Non-homologous")))
+
+outfile <- "anatomical_similarity_histogram.csv"
+write_csv(x = df_sim_hist,
+          file = outfile)
+```
+
+
+```{r}
+p_density <- ggplot(df_sim_hist, aes(x = Similarity, 
+                        y = ..density..,
+                        fill = Type,
+                        col = Type)) + 
+  geom_density(alpha = 0.1,
+               bw = 0.05) + 
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1),
+                     expand = expansion(mult = 0)) + 
+  labs(x = "Correlation",
+       y = "Density",
+       col = NULL,
+       fill = NULL,
+       title = "Distributions of mouse-human anatomical latent space correlations") + 
+  theme_bw()
+
+pdf(file = "anatomical_similarity_kde.pdf",
+    width = unit(10, "inch"),
+    height = unit(5, "inch"))
+print(p_density)
+dev.off()
+```
+
+```{r}
+p_histogram <- ggplot(df_sim_hist, aes(x = Similarity, 
+                        y = ..density..,
+                        fill = Type,
+                        col = Type)) + 
+  geom_histogram(position = "dodge",
+                 binwidth = 0.03) + 
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1),
+                     expand = expansion(mult = 0)) + 
+    labs(x = "Correlation",
+       y = "Density",
+       col = NULL,
+       fill = NULL,
+       title = "Distributions of mouse-human anatomical latent space correlations") + 
+  theme_bw()
+
+pdf(file = "anatomical_similarity_hist.pdf",
+    width = unit(10, "inch"),
+    height = unit(5, "inch"))
+print(p_histogram)
+dev.off()
+```
+
+```{r}
+tmp <- df_sim_homologous %>% 
+  inner_join(df_neuro_pairs, by = c("Mouse", "Human")) %>% 
+  mutate(name = fct_rev(factor(name, levels = df_neuro_pairs$name)),
+         MouseCoarse = relabel_anatomy(x = Mouse,
+                                       tree = tree_mouse_pruned,
+                                       structs = mouse_regions_coarse))
+
+tree_mouse_coarse <- Clone(tree_mouse_pruned)
+pruneAnatTree(tree_mouse_coarse, nodes = mouse_regions_coarse, method = "BelowNode")
+palette <- tree_mouse_coarse$Get("color_hex_triplet", filterFun = isLeaf) 
+df_palette <- enframe(palette, 
+                      name = "MouseCoarse", 
+                      value = "color_hex_triplet")
+
+tmp <- inner_join(tmp, df_palette, by = "MouseCoarse") %>% 
+  mutate(MouseCoarse = factor(MouseCoarse, levels = mouse_regions_coarse)) %>% 
+  arrange(name)
+```
+
+
+```{r}
+p_homologs <- ggplot(tmp, aes(x = Similarity, y = name, col = MouseCoarse)) + 
+  geom_segment(aes(xend = 0.5, yend = name, col = MouseCoarse)) + 
+  geom_point() + 
+  coord_cartesian(xlim = c(0.5, 1)) +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1),
+                     expand = expansion(mult = 0)) +
+  scale_color_manual(values = palette) + 
+  labs(x = "Correlation",
+       y = "Region",
+       col = NULL,
+       title = "Latent space correlations of homologous neuroanatomical pairs") + 
+  theme_dark() 
+
+pdf(file = "anatomical_homologs_correlations.pdf",
+    width = unit(10, "inch"),
+    height = unit(8, "inch"))
+print(p_homologs)
+dev.off()
+```
+
+```{r}
+thresholds <- seq(0.0, 1.0, by = 0.05)
+df_roc_homologous <- tibble(threshold = thresholds,
+                            percentage = 0,
+                            Type = "Homologous")
+df_roc_adjacent <- tibble(threshold = thresholds,
+                          percentage = 0,
+                          Type = "Homologous-adjacent")
+df_roc_non_homologous <- tibble(threshold = thresholds,
+                                percentage = 0,
+                                Type = "Non-homologous")
+for (i in 1:length(thresholds)) {
+  df_roc_homologous[[i, "percentage"]] <- sum(df_sim_homologous[["Similarity"]] >= thresholds[i])/nrow(df_sim_homologous)
+  df_roc_adjacent[[i, "percentage"]] <- sum(df_sim_adjacent[["Similarity"]] >= thresholds[i])/nrow(df_sim_adjacent)
+  df_roc_non_homologous[[i, "percentage"]] <- sum(df_sim_non_homologous[["Similarity"]] >= thresholds[i])/nrow(df_sim_non_homologous)
+}
+
+df_roc <- bind_rows(df_roc_homologous,
+                    df_roc_adjacent,
+                    df_roc_non_homologous)
+
+df_roc <- df_roc %>% 
+ mutate(Type = factor(Type, levels = c("Homologous", "Homologous-adjacent", "Non-homologous")))
+```
+
+
+```{r}
+p_roc <- ggplot(df_roc, aes(x = threshold, y = percentage, col = Type)) + 
+  geom_line() + 
+  geom_point() +
+  coord_equal() +
+  scale_x_continuous(breaks = seq(0, 1, by = 0.1)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  labs(x = "Correlation",
+       y = "Fraction of anatomical pairs",
+       col = NULL,
+       title = "Fraction of anatomical pairs greater than correlation ") + 
+  theme_bw()
+
+pdf(file = "anatomical_correlations_roc.pdf",
+    width = unit(10, "inch"),
+    height = unit(8, "inch"))
+print(p_roc)
+dev.off()
+```
+
+```{r}
+ecdf <- function(x, start, end, step) {
+  thresholds <- seq(start, end, by = step)
+  y <- numeric(length(thresholds))
+  for (i in 1:length(thresholds)) {
+    y[i] <- sum(x <= thresholds[i])/length(x)
+  }
+  out <- tibble(x = thresholds,
+                cdf = y)
+  return(out)
+}
+```
+
+```{r}
+start <- -1
+end <- 1
+step <- 0.02
+df_cdf_homologous <- ecdf(x = df_sim_homologous$Similarity,
+                          start = start, 
+                          end = end,
+                          step = step) %>% 
+  mutate(Type = "Homologous")
+df_cdf_adjacent <- ecdf(x = df_sim_adjacent$Similarity,
+                          start = start, 
+                          end = end,
+                          step = step) %>% 
+  mutate(Type = "Homologous-adjacent")
+df_cdf_non_homologous <- ecdf(x = df_sim_non_homologous$Similarity,
+                          start = start, 
+                          end = end,
+                          step = step) %>% 
+  mutate(Type = "Non-homologous")
+
+df_cdf <- bind_rows(df_cdf_homologous,
+                    df_cdf_adjacent,
+                    df_cdf_non_homologous)
+
+df_cdf <- df_cdf %>% 
+ mutate(Type = factor(Type, levels = c("Homologous", "Homologous-adjacent", "Non-homologous")))
+```
+
+```{r}
+p_cdf <- ggplot(df_cdf, aes(x = x, y = 1-cdf, col = Type)) + 
+  geom_line() + 
+  geom_point(size = 0.75) +
+  coord_cartesian(xlim = c(-1, 1),
+                  ylim = c(0, 1)) +
+    scale_x_continuous(breaks = seq(start, end, by = 0.2)) +
+  scale_y_continuous(breaks = seq(start, end, by = 0.1)) +
+  labs(x = "Correlation",
+       y = "1-CDF",
+       col = NULL,
+       title = "Cumulative distributions of latent space correlations between anatomical pairs") + 
+  theme_bw()
+
+
+pdf(file = "anatomical_correlations_cdf.pdf",
+    width = unit(10, "inch"),
+    height = unit(8, "inch"))
+print(p_cdf)
+dev.off()
+```
+
+
+```{r}
+df_sim_homologous %>% 
+  arrange(Similarity)
+```
+
+```{r}
+df_sim %>% 
+  select(Human, Pallidum) %>% 
+  arrange(desc(Pallidum))
+```
+
+

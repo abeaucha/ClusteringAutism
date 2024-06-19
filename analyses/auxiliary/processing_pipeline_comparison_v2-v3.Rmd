@@ -1,0 +1,996 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+# suppressPackageStartupMessages(library(parallel))
+```
+
+```{r}
+SRCPATH <- Sys.getenv("SRCPATH")
+
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+
+```{r}
+versions <- paste0("v", 2:3)
+
+registration_dir <- "../../data/human/registration/"
+registration_dirs <- file.path(registration_dir, versions)
+names(registration_dirs) <- versions
+
+pipeline_dir <- "../../data/human/derivatives/"
+pipeline_dirs <- file.path(pipeline_dir, versions)
+
+resolution <- 3.0
+resolution_str <- sprintf("%.1f", resolution)
+
+params_id <- 547
+
+pipeline_dirs <- file.path(pipeline_dirs, params_id)
+names(pipeline_dirs) <- versions
+```
+
+```{r}
+mask <- paste0("mask_", resolution_str, "mm.mnc")
+maskfiles <- file.path(registration_dirs, "reference_files", mask)
+masks <- map(.x = maskfiles, .f = mincGetVolume)
+
+model <- paste0("model_", resolution_str, "mm.mnc")
+models <- file.path(registration_dirs, "reference_files", model)
+models <- map(.x = models, .f = mincGetVolume)
+models <- map2(.x = models, .y = masks, .f = function(x,y){x[y < 0.5] <- 0; return(x)})
+models_vol <- map(.x = models, .f = mincArray)
+
+# Cropped human images along sagittal and transverse planes
+slices_crop <- list(list(5:60, 5:60),
+                    list(1:66, 1:63))
+models_vol_cropped <- map2(.x = models_vol, 
+                           .y = slices_crop,
+                           .f = function(x,y){x[y[[1]],,y[[2]]]})
+
+anat_low <- c(v2=3,v3=40)
+anat_high <- c(v2=10,v3=110)
+```
+
+
+```{r fig.height = 5, fig.width = 2}
+centroid_dirs <- file.path(pipeline_dirs, "centroids", paste0("resolution_", resolution_str))
+
+jacobians <- c("absolute", "relative")
+nk <- 2
+k <- 1
+
+centroids <- vector(mode = "list", length = length(centroid_dirs))
+names(centroids) <- versions
+for (l in 1:length(centroids)) {
+  centroids[[l]] <- vector(mode = "list", length = length(jacobians))
+  names(centroids[[l]]) <- jacobians
+  for (j in 1:2) {
+    imgdir <- file.path(centroid_dirs[[l]], jacobians[[j]])
+    centroid <- import_cluster_map(imgdir = imgdir, 
+                                   nk = nk, k = k,
+                                   mask = maskfiles[[l]], 
+                                   threshold = "top_n",
+                                   threshold_value = 0.2,
+                                   threshold_symmetric = TRUE)
+    centroid <- mincArray(centroid)
+    centroid <- centroid[slices_crop[[l]][[1]],,slices_crop[[l]][[2]]]
+    centroids[[l]][[j]] <- centroid
+  }
+}
+```
+
+
+```{r fig.height = 5, fig.width = 2}
+sliceSeries(nrow = 8, ncol = 1, begin = 15, end = 60) %>% 
+  anatomy(models_vol_cropped[[1]], low = anat_low["v2"], high = anat_high["v2"]) %>% 
+  overlay(centroids[[1]][[1]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle(jacobians[1]) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(centroids[[1]][[2]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle(jacobians[2]) %>% 
+  legend() %>% 
+  draw()
+```
+
+
+
+```{r fig.height = 5, fig.width = 2}
+sliceSeries(nrow = 8, ncol = 1, begin = 15, end = 60) %>% 
+  anatomy(models_vol_cropped[[2]], low = anat_low["v3"], high = 80) %>% 
+  overlay(centroids[[2]][[1]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle(jacobians[1]) %>%
+  sliceSeries() %>% anatomy() %>%
+  overlay(centroids[[2]][[2]], low = 0.2, high = 1.0, symmetric = TRUE) %>%
+  addtitle(jacobians[2]) %>%
+  legend() %>%
+  draw()
+```
+
+
+```{r}
+compare_es <- function(id, outdir){
+  jacobians <- c("absolute", "relative")  
+  
+  es <- vector(mode = "list", length = length(es_dirs))
+  names(es) <- versions
+  for (l in 1:length(es)) {
+    es[[l]] <- vector(mode = "list", length = length(jacobians))
+    names(es[[l]]) <- jacobians
+    for (j in 1:length(jacobians)){
+      
+      imgfiles <- list.files(file.path(es_dirs[[l]], jacobians[j]), 
+                             full.names = TRUE, 
+                             pattern = "*.mnc")
+      
+      imgfile <- str_subset(imgfiles, id)
+      
+      mask <- mincGetVolume(maskfiles[[l]])
+      
+      img <- mincGetVolume(imgfile)
+      img[mask < 0.5] <- 0
+      img <- mincArray(img)
+      img <- img[slices_crop[[l]][[1]],,slices_crop[[l]][[2]]]
+      es[[l]][[j]] <- img
+    }
+  }
+  
+  
+  ss_es <- sliceSeries(nrow = 8, ncol = 3, begin = 10, end = 60) %>% 
+    anatomy(models_vol_cropped[[1]], low = anat_low["v2"], high = anat_high["v2"]) %>% 
+    overlay(es[["v2"]][["absolute"]], low = 0.1, high = 1, symmetric = TRUE) %>% 
+    addtitle("v2 absolute") %>% 
+    sliceSeries(nrow = 8, ncol = 3, begin = 11, end = 65) %>% 
+    anatomy(models_vol_cropped[[2]], low = anat_low["v3"], high = anat_high["v3"]) %>% 
+    overlay(es[["v3"]][["absolute"]], low = 0.1, high = 1, symmetric = TRUE) %>% 
+    addtitle("v3 absolute") %>% 
+    sliceSeries(nrow = 8, ncol = 3, begin = 10, end = 60) %>% 
+    anatomy(models_vol_cropped[[1]], low = anat_low["v2"], high = anat_high["v2"]) %>%
+    overlay(es[["v2"]][["relative"]], low = 0.1, high = 1, symmetric = TRUE) %>% 
+    addtitle("v2 relative") %>% 
+    sliceSeries(nrow = 8, ncol = 3, begin = 11, end = 65) %>% 
+    anatomy(models_vol_cropped[[2]], low = anat_low["v3"], high = anat_high["v3"]) %>% 
+    overlay(es[["v3"]][["relative"]], low = 0.1, high = 1, symmetric = TRUE) %>% 
+    addtitle("v3 relative") 
+  
+  outfile <- paste0(id, "_effect_sizes", ".pdf")
+  outfile <- file.path(outdir, outfile)
+  pdf(file = outfile,
+      width = unit(10, "in"),
+      height = unit(5, "in"))
+  draw(ss_es)
+  dev.off()
+  
+  return(outfile)
+}
+
+compare_jacobians <- function(id, outdir) {
+  
+  jacobians <- c("absolute", "relative")
+  
+  jac <- vector(mode = "list", length = length(jacobian_dirs))
+  names(jac) <- versions
+  for (l in 1:length(jac)) {
+    jac[[l]] <- vector(mode = "list", length = length(jacobians))
+    names(jac[[l]]) <- jacobians
+    for (j in 1:length(jacobians)){
+      imgfiles <- list.files(file.path(jacobian_dirs[[l]], jacobians[j]), 
+                             full.names = TRUE, 
+                             pattern = "*.mnc")
+      
+      imgfile <- str_subset(imgfiles, id)
+      
+      mask <- mincGetVolume(maskfiles[[l]])
+      
+      img <- mincGetVolume(imgfile)
+      img[mask < 0.5] <- 0
+      img <- mincArray(img)
+      img <- img[slices_crop[[l]][[1]],,slices_crop[[l]][[2]]]
+      jac[[l]][[j]] <- img
+    }
+  }
+  
+  
+  ss_jac <- sliceSeries(nrow = 8, ncol = 3, begin = 10, end = 60) %>% 
+    anatomy(models_vol_cropped[[1]], low = anat_low["v2"], high = anat_high["v2"]) %>% 
+    overlay(jac[["v2"]][["absolute"]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+    addtitle("v2 absolute") %>% 
+    sliceSeries(nrow = 8, ncol = 3, begin = 11, end = 63) %>% 
+    anatomy(models_vol_cropped[[2]], low = anat_low["v3"], high = anat_high["v3"]) %>% 
+    overlay(jac[["v3"]][["absolute"]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+    addtitle("v3 absolute") %>% 
+    sliceSeries(nrow = 8, ncol = 3, begin = 10, end = 60) %>% 
+    anatomy(models_vol_cropped[[1]], low = anat_low["v2"], high = anat_high["v2"]) %>%
+    overlay(jac[["v2"]][["relative"]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+    addtitle("v2 relative") %>% 
+    sliceSeries(nrow = 8, ncol = 3, begin = 11, end = 63) %>% 
+    anatomy(models_vol_cropped[[2]], low = anat_low["v3"], high = anat_high["v3"]) %>% 
+    overlay(jac[["v3"]][["relative"]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+    addtitle("v3 relative") 
+  
+  
+  outfile <- paste0(id, "_jacobians", ".pdf")
+  outfile <- file.path(outdir, outfile)
+  pdf(file = outfile,
+      width = unit(10, "in"),
+      height = unit(5, "in"))
+  draw(ss_jac)
+  dev.off()
+  
+  return(outfile)
+  
+}
+```
+
+
+```{r fig.width = 6, fig.height = 6}
+jacobian_dirs <- file.path(registration_dirs, "jacobians_resampled", "resolution_3.0")
+es_dirs <- file.path(pipeline_dirs, "effect_sizes", paste0("resolution_", resolution_str))
+
+ids <- es_dirs[[1]] %>% 
+  file.path("absolute") %>% 
+  list.files(pattern = "*.mnc") %>% 
+  str_remove(".denoise.*")
+
+sample_id <- sample(ids, size = 1)
+
+compare_es(id = sample_id)
+compare_jacobians(id = sample_id)
+
+```
+
+
+```{r}
+cluster_dirs <- file.path(pipeline_dirs, "clusters", paste0("resolution_", resolution_str))
+cluster_files <- file.path(cluster_dirs, "clusters.csv")
+clusters <- map(cluster_files, read_csv, show_col_types = FALSE)
+clusters <- map(clusters, .f = function(x){x %>% mutate(ID = str_remove(ID, ".denoise.*"))})
+
+ids <- clusters[[1]][["ID"]]
+
+nk <- 2
+
+
+clusters_nk <- map(clusters, .f = function(x){x[[paste0("nk", nk)]]})
+
+map(clusters_nk, table)
+
+# nk_grid <- expand_grid(k_v2 = 1:nk,
+#                        k_v3 = 1:nk,
+#                        overlap = 0)
+# 
+# for (i in 1:nrow(nk_grid)) {
+#   
+#   k_v2 <- nk_grid[[i, "k_v2"]]
+#   k_v3 <- nk_grid[[i, "k_v3"]]
+#   
+#   ind_k_v2 <- clusters_nk[[1]] == k_v2
+#   ind_k_v3 <- clusters_nk[[2]] == k_v3
+#   
+#   files_k_old <- files[ind_k_old]
+#   files_k_new <- files[ind_k_new]
+#   
+#   nk_grid[[i, "overlap"]] <- length(intersect(files_k_old, files_k_new))/length(union(files_k_old, files_k_new))
+#   
+# }
+```
+
+```{r}
+ids_v3_2_2 <- ids[clusters_nk[[2]] == 2]
+for(id in ids_v3_2_2) {
+  compare_jacobians(id = id)
+  compare_es(id = id)
+}
+```
+
+```{r}
+demographics <- file.path(registration_dirs, "subject_info", "demographics.csv")
+demographics <- map(demographics, read_csv, show_col_types = FALSE)
+
+ids_sickkids <- demographics[[2]] %>% 
+  filter(Dataset == "SickKids",
+         DX != "Control",
+         !(Subject_ID %in% ids_v3_2_2)) %>% 
+  pull(Subject_ID)
+
+for (id in ids_sickkids) {
+  iid <- which(id == ids_sickkids)
+  msg <- paste(iid, "of", length(ids_sickkids))
+  print(msg)
+  outfile <- compare_jacobians(id = id)
+}
+```
+
+d8_0033_01
+d8_0034_01
+d8_0035_01
+d8_0036_01
+d8_0037_01
+d8_0038_01
+d8_0039_01
+d8_0040_01
+d8_0041_01
+d8_0042_01
+d8_0043_01
+d8_0044_01
+
+```{r}
+outdir <- "outputs/jacobians/"
+# dir.create(outdir)
+
+ids <- demographics[[2]] %>% 
+  filter(Dataset != "HBN",
+         DX != "Control") %>% 
+  pull(Scan_ID) %>% 
+  str_remove(".mnc")
+
+for (id in ids) {
+  iid <- which(id == ids)
+  if (iid %% 10 == 0) {
+    msg <- paste(iid, "of", length(ids))
+    print(msg)
+  }
+  outfile <- compare_jacobians(id = id, outdir = outdir)
+}
+```
+
+d8_0033_01
+d8_0034_01
+d8_0035_01
+d8_0036_01
+d8_0037_01
+d8_0038_01
+d8_0039_01
+d8_0040_01
+d8_0041_01
+d8_0042_01
+d8_0043_01
+d8_0044_01
+sub-0881009_ses-01_T1w (except this one it's version 2 that's fucked?)
+
+```{r}
+demographics[[2]] %>% 
+  filter(Subject_ID == id)
+```
+
+
+```{r}
+plot_jacobians_v3 <- function(id, outdir) {
+  
+  jacobians <- c("absolute", "relative")
+  
+  jac <- vector(mode = "list", length = length(jacobians))
+  names(jac) <- jacobians
+  for (j in 1:length(jacobians)){
+    imgfiles <- list.files(file.path(jacobian_dirs[[2]], jacobians[j]), 
+                           full.names = TRUE, 
+                           pattern = "*.mnc")
+    
+    imgfile <- str_subset(imgfiles, id)
+    
+    mask <- mincGetVolume(maskfiles[[l]])
+    
+    img <- mincGetVolume(imgfile)
+    img[mask < 0.5] <- 0
+    img <- mincArray(img)
+    img <- img[slices_crop[[2]][[1]],,slices_crop[[2]][[2]]]
+    jac[[j]] <- img
+  }
+  
+  
+  ss_jac <- sliceSeries(nrow = 8, ncol = 3, begin = 11, end = 63) %>% 
+    anatomy(models_vol_cropped[[2]], low = anat_low["v3"], high = anat_high["v3"]) %>% 
+    overlay(jac[["absolute"]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+    addtitle("v3 absolute") %>% 
+    sliceSeries(nrow = 8, ncol = 3, begin = 11, end = 63) %>% 
+    anatomy(models_vol_cropped[[2]], low = anat_low["v3"], high = anat_high["v3"]) %>% 
+    overlay(jac[["relative"]], low = 0.1, high = 0.5, symmetric = TRUE) %>% 
+    addtitle("v3 relative") 
+  
+  
+  outfile <- paste0(id, "_jacobians", ".pdf")
+  outfile <- file.path(outdir, outfile)
+  pdf(file = outfile,
+      width = unit(10, "in"),
+      height = unit(5, "in"))
+  draw(ss_jac)
+  dev.off()
+  
+  return(outfile)
+  
+}
+```
+
+```{r}
+outdir <- "outputs/jacobians_v3/"
+# dir.create(outdir)
+
+ids <- demographics[[2]] %>% 
+  filter(Dataset != "HBN",
+         DX != "Control") %>% 
+  pull(Scan_ID) %>% 
+  str_remove(".mnc")
+
+for (id in ids) {
+  iid <- which(id == ids)
+  if (iid %% 10 == 0) {
+    msg <- paste(iid, "of", length(ids))
+    print(msg)
+  }
+  outfile <- compare_jacobians(id = id, outdir = outdir)
+}
+```
+
+
+```{r}
+list_quantiles <- vector(mode = "list", length = length(jacobians))
+names(list_quantiles) <- jacobians
+for (j in jacobians) {
+  
+  imgfiles <- demographics[[2]][["file"]] 
+  imgfiles <- file.path(jacobian_dirs[[2]], j, imgfiles)
+  
+  df_quantiles <- tibble(file = imgfiles, 
+                         lwr = 0, upr = 0)
+  for (i in 1:nrow(df_quantiles)) {
+    if (i %% 100 == 0) {
+      print(paste(i, "of", nrow(df_quantiles)))
+    }
+    img <- import_image(img = df_quantiles[[i, "file"]], mask = maskfiles[[2]])  
+    quantiles <- quantile(img, c(0.025,0.975))
+    df_quantiles[[i, "lwr"]] <- quantiles[1]
+    df_quantiles[[i, "upr"]] <- quantiles[2]
+  }
+  
+  list_quantiles[[j]] <- df_quantiles
+}
+```
+
+```{r}
+for (l in 1:2) {
+  list_quantiles[[l]] <- list_quantiles[[l]] %>% 
+    mutate(IQR = upr - lwr) %>% 
+    arrange(IQR) %>% 
+    mutate(x = 1:nrow(.),
+           type = names(list_quantiles)[l])
+}
+df_quantiles <- bind_rows(list_quantiles)
+
+ggplot(df_quantiles, aes(x = x, y = IQR, col = type)) + 
+  geom_point(size = 0.2)
+```
+```{r}
+ids_to_remove <- df_quantiles %>% 
+  filter(IQR < 0.5) %>% 
+  pull(file) %>% 
+  basename() %>% 
+  str_remove(".denoise.*")
+ids_to_remove
+```
+
+```{r}
+df_quantiles %>% 
+  filter(IQR > 1)
+```
+
+```{r}
+demographics_v2 <- "../../data/human/registration/v2/subject_info/demographics.csv"
+demographics_v2 <- read_csv(demographics_v2)
+
+sum(demographics_v2$Subject_ID %in% ids_to_remove)
+
+demographics_v2_test <- demographics_v2 %>% 
+  filter(!(Subject_ID %in% ids_to_remove))
+
+outfile <- "../../data/test/human/demographics_v2_test.csv"
+write_csv(x = demographics_v2_test, file = outfile)
+```
+
+```{r}
+demographics_v3 <- "../../data/human/registration/v3/subject_info/demographics.csv"
+demographics_v3 <- read_csv(demographics_v3)
+
+demographics_v3_test <- demographics_v3 %>% 
+  filter(!(Subject_ID %in% ids_to_remove))
+
+outfile <- "../../data/test/human/demographics_v3_test.csv"
+write_csv(x = demographics_v3_test, file = outfile)
+```
+
+
+
+# ------------------
+
+```{r}
+template_POND_SK <- "../../data/human/registration/v2/reference_files/model_3.0mm.mnc"
+template_HBN <- "../../data/human/registration/v3/reference_files/model_3.0mm.mnc"
+
+template_POND_SK <- mincGetVolume(template_POND_SK)
+template_POND_SK <- mincArray(template_POND_SK)
+template_POND_SK_cropped <- template_POND_SK[slices_crop[[1]][[1]],,slices_crop[[1]][[2]]]
+
+template_HBN <- mincGetVolume(template_HBN)
+template_HBN <- mincArray(template_HBN)
+template_HBN_cropped <- template_HBN[slices_crop[[2]][[1]],,slices_crop[[2]][[2]]]
+
+mask_POND_SK <- "../../data/human/registration/v2/reference_files/mask_3.0mm.mnc"
+mask_HBN <- "../../data/human/registration/v3/reference_files/mask_3.0mm.mnc"
+
+centroid_dirs_POND_SK <- "../../data/human/derivatives/v2/547/centroids/resolution_3.0/"
+centroid_dirs_HBN <- "/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/human/derivatives/v3/664/centroids/resolution_3.0/"
+
+jacobians <- c("absolute", "relative")
+
+centroid_dirs_POND_SK <- file.path(centroid_dirs_POND_SK, jacobians)
+centroid_dirs_HBN <- file.path(centroid_dirs_HBN, jacobians)
+
+names(centroid_dirs_POND_SK) <- jacobians
+names(centroid_dirs_HBN) <- jacobians
+
+output_dir <- "centroids"
+# dir.create(output_dir)
+```
+
+
+```{r}
+nk <- 2
+
+list_centroids_POND_SK <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  list_centroids_POND_SK[[k]] <- vector(mode = "list", length = length(jacobians))
+  names(list_centroids_POND_SK[[k]]) <- jacobians
+  for (j in jacobians) {
+    imgdir <- centroid_dirs_POND_SK[[j]]
+    img <- import_cluster_map(imgdir=centroid_dirs_POND_SK[[j]],
+                              nk = nk, k = k,
+                              mask = mask_POND_SK,
+                              threshold = "top_n",
+                              threshold_value = 0.2,
+                              threshold_symmetric = TRUE)sq
+    img <- mincArray(img)
+    img <- img[slices_crop[[1]][[1]],,slices_crop[[1]][[2]]]
+    list_centroids_POND_SK[[k]][[j]] <- img
+  }
+}
+
+ss_centroids_POND_SK_nk2 <- sliceSeries(nrow = 8, ncol = 2, begin = 15, end = 60) %>% 
+  anatomy(template_POND_SK_cropped, low = anat_low["v2"], high = anat_high["v2"]) %>% 
+  overlay(list_centroids_POND_SK[[1]][["absolute"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-1 absolute") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_POND_SK[[1]][["relative"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-1 relative") %>% 
+  sliceSeries() %>% anatomy() %>% 
+    overlay(list_centroids_POND_SK[[2]][["absolute"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-2 absolute") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_POND_SK[[2]][["relative"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-2 relative") %>% 
+  legend("Effect size")
+
+outfile <- "centroids_POND_SK_nk_2_threshold_0.2.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 8)
+draw(ss_centroids_POND_SK_nk2)
+dev.off()
+```
+
+```{r}
+list_centroids_HBN <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  list_centroids_HBN[[k]] <- vector(mode = "list", length = length(jacobians))
+  names(list_centroids_HBN[[k]]) <- jacobians
+  for (j in jacobians) {
+    imgdir <- centroid_dirs_HBN[[j]]
+    img <- import_cluster_map(imgdir=centroid_dirs_HBN[[j]],
+                              nk = nk, k = k,
+                              mask = mask_HBN,
+                                                            threshold = "top_n",
+                              threshold_value = 0.2,
+                              threshold_symmetric = TRUE)
+    img <- mincArray(img)
+    img <- img[slices_crop[[2]][[1]],,slices_crop[[2]][[2]]]
+    list_centroids_HBN[[k]][[j]] <- img
+  }
+}
+
+
+ss_centroids_HBN_nk2 <- sliceSeries(nrow = 8, ncol = 2, begin = 15, end = 60) %>% 
+  anatomy(template_HBN_cropped, low = anat_low["v3"], high = anat_high["v3"]) %>% 
+  overlay(list_centroids_HBN[[1]][["absolute"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-1 absolute") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_HBN[[1]][["relative"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-1 relative") %>% 
+  sliceSeries() %>% anatomy() %>% 
+    overlay(list_centroids_HBN[[2]][["absolute"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-2 absolute") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_HBN[[2]][["relative"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-2 relative") %>% 
+  legend("Effect size") 
+
+outfile <- "centroids_HBN_nk_2_threshold_0.2.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 8)
+draw(ss_centroids_HBN_nk2)
+dev.off()
+```
+
+
+```{r fig.height = 5, fig.width = 2}
+centroid_dirs <- file.path(pipeline_dirs, "centroids", paste0("resolution_", resolution_str))
+
+jacobians <- c("absolute", "relative")
+nk <- 2
+k <- 1
+
+centroids <- vector(mode = "list", length = length(centroid_dirs))
+names(centroids) <- versions
+for (l in 1:length(centroids)) {
+  centroids[[l]] <- vector(mode = "list", length = length(jacobians))
+  names(centroids[[l]]) <- jacobians
+  for (j in 1:2) {
+    imgdir <- file.path(centroid_dirs[[l]], jacobians[[j]])
+    centroid <- import_cluster_map(imgdir = imgdir, 
+                                   nk = nk, k = k,
+                                   mask = maskfiles[[l]], 
+                                   threshold = "top_n",
+                                   threshold_value = 0.2,
+                                   threshold_symmetric = TRUE)
+    centroid <- mincArray(centroid)
+    centroid <- centroid[slices_crop[[l]][[1]],,slices_crop[[l]][[2]]]
+    centroids[[l]][[j]] <- centroid
+  }
+}
+```
+
+
+```{r fig.height = 5, fig.width = 2}
+sliceSeries(nrow = 8, ncol = 1, begin = 15, end = 60) %>% 
+  anatomy(models_vol_cropped[[1]], low = anat_low["v2"], high = anat_high["v2"]) %>% 
+  overlay(centroids[[1]][[1]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle(jacobians[1]) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(centroids[[1]][[2]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle(jacobians[2]) %>% 
+  legend() %>% 
+  draw()
+```
+
+
+# ------------------
+
+
+
+```{r}
+template_POND_SK <- "../../data/human/registration/v2/reference_files/model_3.0mm.mnc"
+template_POND_SK <- mincGetVolume(template_POND_SK)
+template_POND_SK <- mincArray(template_POND_SK)
+template_POND_SK_cropped <- template_POND_SK[slices_crop[[1]][[1]],,slices_crop[[1]][[2]]]
+
+mask_POND_SK <- "../../data/human/registration/v2/reference_files/mask_3.0mm.mnc"
+
+centroid_dirs_POND_SK_test <- "/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/test/human/derivatives/v2/547/centroids/resolution_3.0/"
+
+jacobians <- c("absolute", "relative")
+
+centroid_dirs_POND_SK_test <- file.path(centroid_dirs_POND_SK_test, jacobians)
+names(centroid_dirs_POND_SK_test) <- jacobians
+
+output_dir <- "centroids"
+# dir.create(output_dir)
+```
+
+
+```{r}
+nk <- 2
+
+list_centroids_POND_SK_test <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  list_centroids_POND_SK_test[[k]] <- vector(mode = "list", length = length(jacobians))
+  names(list_centroids_POND_SK_test[[k]]) <- jacobians
+  for (j in jacobians) {
+    imgdir <- centroid_dirs_POND_SK_test[[j]]
+    img <- import_cluster_map(imgdir=centroid_dirs_POND_SK_test[[j]],
+                              nk = nk, k = k,
+                              mask = mask_POND_SK,
+                              threshold = "top_n",
+                              threshold_value = 0.2,
+                              threshold_symmetric = TRUE)
+    img <- mincArray(img)
+    img <- img[slices_crop[[1]][[1]],,slices_crop[[1]][[2]]]
+    list_centroids_POND_SK_test[[k]][[j]] <- img
+  }
+}
+
+ss_centroids_POND_SK_test_nk2 <- sliceSeries(nrow = 8, ncol = 2, begin = 15, end = 60) %>% 
+  anatomy(template_POND_SK_cropped, low = anat_low["v2"], high = anat_high["v2"]) %>% 
+  overlay(list_centroids_POND_SK_test[[1]][["absolute"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-1 absolute") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_POND_SK_test[[1]][["relative"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-1 relative") %>% 
+  sliceSeries() %>% anatomy() %>% 
+    overlay(list_centroids_POND_SK_test[[2]][["absolute"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-2 absolute") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_POND_SK_test[[2]][["relative"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-2 relative") %>% 
+  legend("Effect size")
+
+outfile <- "centroids_POND_SK_nk_2_threshold_0.2_test.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 8)
+draw(ss_centroids_POND_SK_test_nk2)
+dev.off()
+```
+
+
+```{r}
+template_POND_SK_v3 <- "../../data/human/registration/v3/reference_files/model_3.0mm.mnc"
+template_POND_SK_v3 <- mincGetVolume(template_POND_SK_v3)
+template_POND_SK_v3 <- mincArray(template_POND_SK_v3)
+template_POND_SK_v3_cropped <- template_POND_SK_v3[slices_crop[[2]][[1]],,slices_crop[[2]][[2]]]
+
+mask_POND_SK_v3 <- "../../data/human/registration/v3/reference_files/mask_3.0mm.mnc"
+
+centroid_dirs_POND_SK_v3 <- "/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/test/human/derivatives/v3/547/centroids/resolution_3.0/"
+
+jacobians <- c("absolute", "relative")
+
+centroid_dirs_POND_SK_v3 <- file.path(centroid_dirs_POND_SK_v3, jacobians)
+names(centroid_dirs_POND_SK_v3) <- jacobians
+
+output_dir <- "centroids"
+# dir.create(output_dir)
+```
+
+
+```{r}
+nk <- 2
+
+list_centroids_POND_SK_v3 <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  list_centroids_POND_SK_v3[[k]] <- vector(mode = "list", length = length(jacobians))
+  names(list_centroids_POND_SK_v3[[k]]) <- jacobians
+  for (j in jacobians) {
+    imgdir <- centroid_dirs_POND_SK_v3[[j]]
+    img <- import_cluster_map(imgdir=centroid_dirs_POND_SK_v3[[j]],
+                              nk = nk, k = k,
+                              mask = mask_POND_SK_v3,
+                              threshold = "top_n",
+                              threshold_value = 0.2,
+                              threshold_symmetric = TRUE)
+    img <- mincArray(img)
+    img <- img[slices_crop[[2]][[1]],,slices_crop[[2]][[2]]]
+    list_centroids_POND_SK_v3[[k]][[j]] <- img
+  }
+}
+
+ss_centroids_POND_SK_v3_nk2 <- sliceSeries(nrow = 8, ncol = 2, begin = 16, end = 63) %>% 
+  anatomy(template_POND_SK_v3_cropped, low = anat_low["v3"], high = anat_high["v3"]) %>% 
+  overlay(list_centroids_POND_SK_v3[[1]][["absolute"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-1 absolute") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_POND_SK_v3[[1]][["relative"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-1 relative") %>% 
+  sliceSeries() %>% anatomy() %>% 
+    overlay(list_centroids_POND_SK_v3[[2]][["absolute"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-2 absolute") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_POND_SK_v3[[2]][["relative"]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("2-2 relative") %>% 
+  legend("Effect size")
+
+outfile <- "centroids_POND_SK_v3_nk_2_threshold_0.2_test.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 8)
+draw(ss_centroids_POND_SK_v3_nk2)
+dev.off()
+```
+
+
+
+```{r}
+template_v3 <- "../../data/human/registration/v3/reference_files/model_3.0mm.mnc"
+template_v3 <- mincGetVolume(template_v3)
+template_v3 <- mincArray(template_v3)
+template_v3_cropped <- template_v3[slices_crop[[2]][[1]],,slices_crop[[2]][[2]]]
+
+mask_v3 <- "../../data/human/registration/v3/reference_files/mask_3.0mm.mnc"
+
+centroid_dirs_v3 <- c("/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/test/human/derivatives/v3/547/centroids/resolution_3.0/",
+                      "/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/human/derivatives/v3/664/centroids/resolution_3.0/")
+
+jacobians <- "relative"
+
+centroid_dirs_v3 <- file.path(centroid_dirs_v3, jacobians)
+names(centroid_dirs_v3) <- c("PONDSK", "HBN")                      
+
+output_dir <- "centroids"
+# dir.create(output_dir)
+```
+
+
+```{r}
+nk <- 2
+
+list_centroids_v3 <- vector(mode = "list", length = length(centroid_dirs_v3))
+names(list_centroids_v3) <- names(centroid_dirs_v3)
+for (l in 1:length(list_centroids_v3)) {
+  list_centroids_v3[[l]] <- vector(mode = "list", length = nk)  
+  for (k in 1:nk) {
+    img <- import_cluster_map(imgdir=centroid_dirs_v3[[l]],
+                              nk = nk, k = k,
+                              mask = mask_v3,
+                              threshold = "top_n",
+                              threshold_value = 0.2,
+                              threshold_symmetric = TRUE)
+    img <- mincArray(img)
+    img <- img[slices_crop[[2]][[1]],,slices_crop[[2]][[2]]]
+    list_centroids_v3[[l]][[k]] <- img
+  }
+}
+
+
+ss_centroids_v3_nk2 <- sliceSeries(nrow = 8, ncol = 2, begin = 16, end = 63) %>% 
+  anatomy(template_v3_cropped, low = anat_low["v3"], high = anat_high["v3"]) %>% 
+  overlay(list_centroids_v3[["PONDSK"]][[1]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("POND-SK 2-1") %>% 
+    sliceSeries() %>% anatomy() %>% 
+    overlay(list_centroids_v3[["HBN"]][[1]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("HBN 2-1") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_v3[["PONDSK"]][[2]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("POND-SK 2-2") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_v3[["HBN"]][[2]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("HBN 2-2") %>% 
+  legend("Relative effect size")
+
+outfile <- "centroids_v3_nk_2_comparison_threshold_0.2.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 8)
+draw(ss_centroids_v3_nk2)
+dev.off()
+```
+
+
+```{r}
+nk <- 2
+
+list_centroids_v3 <- vector(mode = "list", length = length(centroid_dirs_v3))
+names(list_centroids_v3) <- names(centroid_dirs_v3)
+for (l in 1:length(list_centroids_v3)) {
+  list_centroids_v3[[l]] <- vector(mode = "list", length = nk)  
+  for (k in 1:nk) {
+    img <- import_cluster_map(imgdir=centroid_dirs_v3[[l]],
+                              nk = nk, k = k,
+                              mask = mask_v3)
+    img <- mincArray(img)
+    img <- img[slices_crop[[2]][[1]],,slices_crop[[2]][[2]]]
+    list_centroids_v3[[l]][[k]] <- img
+  }
+}
+
+
+ss_centroids_v3_nk2 <- sliceSeries(nrow = 8, ncol = 2, begin = 16, end = 63) %>% 
+  anatomy(template_v3_cropped, low = anat_low["v3"], high = anat_high["v3"]) %>% 
+  overlay(list_centroids_v3[["PONDSK"]][[1]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("POND-SK 2-1") %>% 
+    sliceSeries() %>% anatomy() %>% 
+    overlay(list_centroids_v3[["HBN"]][[1]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("HBN 2-1") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_v3[["PONDSK"]][[2]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("POND-SK 2-2") %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_centroids_v3[["HBN"]][[2]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+  addtitle("HBN 2-2") %>% 
+  legend("Relative effect size")
+
+outfile <- "centroids_v3_nk_2_comparison.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 8)
+draw(ss_centroids_v3_nk2)
+dev.off()
+```
+
+
+
+```{r}
+estimate_cluster_metrics <- function (W, NUMC = 2:5){
+  if (min(NUMC) == 1) {
+    warning("Note that we always assume there are more than one cluster.")
+    NUMC <- NUMC[NUMC > 1]
+  }
+  W <- (W + t(W))/2
+  diag(W) <- 0
+  if (length(NUMC) <= 0) {
+    warning(paste("Invalid NUMC provided, must be an integer vector", 
+                  "with atleast one other number than 1.", "Using default NUMC=c(2,3,4,5)", 
+                  sep = ""))
+    NUMC <- 2:5
+  }
+  degs <- rowSums(W)
+  degs[degs == 0] <- .Machine$double.eps
+  D <- diag(degs)
+  L <- D - W
+  Di <- diag(1/sqrt(degs))
+  L <- Di %*% L %*% Di
+  eigs <- eigen(L)
+  eigs_order <- sort(eigs$values, index.return = T)$ix
+  eigs$values <- eigs$values[eigs_order]
+  eigs$vectors <- eigs$vectors[, eigs_order]
+  eigengap <- abs(diff(eigs$values))
+  quality <- list()
+  for (c_index in 1:length(NUMC)) {
+    ck <- NUMC[c_index]
+    UU <- eigs$vectors[, 1:ck]
+    EigenvectorsDiscrete <- SNFtool:::.discretisation(UU)[[1]]
+    EigenVectors <- EigenvectorsDiscrete^2
+    temp1 <- EigenVectors[do.call(order, lapply(1:ncol(EigenVectors), 
+                                                function(i) EigenVectors[, i])), ]
+    temp1 <- t(apply(temp1, 1, sort, TRUE))
+    quality[[c_index]] <- (1 - eigs$values[ck + 1])/(1 - 
+                                                       eigs$values[ck]) * sum(sum(diag(1/(temp1[, 1] + .Machine$double.eps)) %*% 
+                                                                                    temp1[, 1:max(2, ck - 1)]))
+  }
+  
+  out <- tibble(nk = NUMC,
+                eigengap = eigengap[NUMC],
+                rotation = unlist(quality))
+  
+  return(out)
+}
+```
+
+```{r}
+hbn_affinity <- read_csv("/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main/data/human/derivatives/v3/664/clusters/resolution_3.0/affinity.csv")
+mat_affinity <- as.matrix(hbn_affinity)
+
+#Human optimal nk
+SNFtool::estimateNumberOfClustersGivenGraph(W = mat_affinity, NUMC = 2:100)
+```
+
+```{r}
+#Get human cluster metrics
+df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_affinity, NUMC = 2:10)
+
+#Plot x-axis breaks
+xbreaks <- seq(0, 10, by = 4)
+
+#Plot of eigengap distribution
+ggplot(df_human_cluster_metrics,
+                           aes(x = nk, y = eigengap)) + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed",
+             col = "grey50") + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = xbreaks) + 
+  labs(y = "Eigengap") +
+  theme_bw()
+```
+

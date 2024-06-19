@@ -1,0 +1,899 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: '2023-06-28'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Initialization
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(viridisLite))
+suppressPackageStartupMessages(library(SNFtool))
+suppressPackageStartupMessages(library(mvtnorm))
+suppressPackageStartupMessages(library(umap))
+```
+
+```{r environment}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+```
+
+```{r functions}
+# compute_cluster_delta <- function(x, clusters, normalize = TRUE) {
+#   
+#   x[lower.tri(x, diag = TRUE)] <- NA
+#   
+#   x <- x %>% 
+#     as_tibble(rownames = "ID1") %>% 
+#     pivot_longer(cols = -ID1, 
+#                  names_to = "ID2", 
+#                  values_to = "similarity") %>% 
+#     filter(!is.na(similarity)) %>% 
+#     left_join(clusters, by = c("ID1" = "ID")) %>% 
+#     rename(k1 = k) %>% 
+#     left_join(clusters, by = c("ID2" = "ID")) %>% 
+#     rename(k2 = k) %>% 
+#     mutate(within = ifelse(k1 == k2, TRUE, FALSE))
+#   
+#   mu_within <- x %>% 
+#     filter(within) %>% 
+#     pull(similarity) %>% 
+#     mean()
+#   
+#   mu_without <- x %>% 
+#     filter(!within) %>% 
+#     pull(similarity) %>% 
+#     mean()
+#   
+#   if (normalize) {
+#     sigma <- sd(x[["similarity"]])
+#   } else {
+#     sigma <- 1
+#   }
+#   
+#   delta <- (mu_within - mu_without)/sigma
+#   
+#   return(delta)
+#   
+# }
+
+# permute_cluster_delta <- function(x, clusters, npermutations = 1000, start = 1) {
+#   delta <- numeric(npermutations)
+#   for (p in start:npermutations) {
+#     set.seed(p)
+#     clusters[["k"]] <- sample(x = clusters[["k"]], size = nrow(clusters), replace = FALSE)
+#     delta[p] <- compute_cluster_delta(x = x, clusters = clusters)
+#   }
+#   return(delta)
+# }
+
+#' Run similarity network fusion (SNF)
+#'
+#' @param x1 (matrix) Input matrix
+#' @param x2 (matrix) Input matrix
+#' @param metric (character scalar) Distance metric used to compute the 
+#' affinity matrices.
+#' @param K (numeric scalar) Number of nearest-neighbours used to 
+#' compute the SNF affinity matrices. 
+#' @param sigma (numeric scalar) Variance for the local model in the 
+#' SNF affinity matrices.
+#' @param t (numeric scalar) Number of iterations for the diffusion
+#' process in SNF.
+#' @param outfile (character scalar) Path to file in which to save
+#' affinity matrix.
+#'
+#' @return (matrix) SNF affinity matrix.
+# similarity_network <- function(x1, x2, metric = "correlation", K = 10,
+#                                sigma = 0.5, t = 20, outfile = NULL){
+#   
+#   if (metric == "correlation") { 
+#     d1 <- (1-cor(t(x1)))
+#     d2 <- (1-cor(t(x2)))
+#   } else if (metric == "euclidean") {
+#     d1 <- (dist2(as.matrix(x1), as.matrix(x1)))^(1/2)
+#     d2 <- (dist2(as.matrix(x2), as.matrix(x2)))^(1/2)
+#   } else {
+#     stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
+#   }
+#   
+#   W1 <- affinityMatrix(d1, K = K, sigma = sigma)
+#   W2 <- affinityMatrix(d2, K = K, sigma = sigma)
+#   
+#   W <- SNF(list(W1, W2), K = K, t = t)
+#   
+#   if (!is.null(outfile)){
+#     data.table::fwrite(x = as_tibble(W), file = outfile)
+#   }
+#   
+#   return(W)
+#   
+# }
+
+#' Create clusters from SNF affinity matrix
+#'
+#' @param W (matrix) SNF affinity matrix.
+#' @param nk (numeric scalar) Maximum number of clusters to use in 
+#' clustering.
+#' @param outfile (character scalar) Optional path to .csv file in 
+#' which to save cluster assignments.
+#'
+#' @return (data.frame) Cluster assignments.
+create_clusters <- function(W, nk = 10, outfile = NULL) {
+  
+  for(k in 2:nk) {
+    group <- spectralClustering(affinity = W, K = k)
+    group_name <- paste0("nk", k)
+    assign(group_name, group)
+    if (k == 2) {
+      if (is.null(rownames(W))) {
+        ids <- as.character(1:nrow(W))
+      } else {
+        ids <- rownames(W)
+      }
+      all_clusters <- data.frame(ids, group, stringsAsFactors = F)
+      colnames(all_clusters) <- c("ID", group_name)
+    } else {
+      group <- data.frame(group)
+      colnames(group) <- group_name
+      all_clusters <- cbind(all_clusters, group)
+    }
+  }
+  
+  if (!is.null(outfile)) {
+    write.csv(x = all_clusters, file = outfile, row.names = FALSE)
+  }
+  
+  return(all_clusters)
+  
+}
+
+estimate_cluster_metrics <- function (W, NUMC = 2:5){
+  if (min(NUMC) == 1) {
+    warning("Note that we always assume there are more than one cluster.")
+    NUMC <- NUMC[NUMC > 1]
+  }
+  W <- (W + t(W))/2
+  diag(W) <- 0
+  if (length(NUMC) <= 0) {
+    warning(paste("Invalid NUMC provided, must be an integer vector",
+                  "with atleast one other number than 1.", "Using default NUMC=c(2,3,4,5)",
+                  sep = ""))
+    NUMC <- 2:5
+  }
+  degs <- rowSums(W)
+  degs[degs == 0] <- .Machine$double.eps
+  D <- diag(degs)
+  L <- D - W
+  Di <- diag(1/sqrt(degs))
+  L <- Di %*% L %*% Di
+  eigs <- eigen(L)
+  eigs_order <- sort(eigs$values, index.return = T)$ix
+  eigs$values <- eigs$values[eigs_order]
+  eigs$vectors <- eigs$vectors[, eigs_order]
+  eigengap <- abs(diff(eigs$values))
+  quality <- list()
+  for (c_index in 1:length(NUMC)) {
+    ck <- NUMC[c_index]
+    UU <- eigs$vectors[, 1:ck]
+    EigenvectorsDiscrete <- SNFtool:::.discretisation(UU)[[1]]
+    EigenVectors <- EigenvectorsDiscrete^2
+    temp1 <- EigenVectors[do.call(order, lapply(1:ncol(EigenVectors),
+                                                function(i) EigenVectors[, i])), ]
+    temp1 <- t(apply(temp1, 1, sort, TRUE))
+    quality[[c_index]] <- (1 - eigs$values[ck + 1])/(1 -
+                                                       eigs$values[ck]) * sum(sum(diag(1/(temp1[, 1] + .Machine$double.eps)) %*%
+                                                                                    temp1[, 1:max(2, ck - 1)]))
+  }
+  
+  out <- tibble(nk = NUMC,
+                eigengap = eigengap[NUMC],
+                rotation = unlist(quality))
+  
+  return(out)
+}
+
+similarity_heatmap <- function(x, clusters, threshold = NULL) {
+  
+  x <- x %>% 
+    as_tibble(rownames = "ID1") %>% 
+    pivot_longer(cols = -ID1, names_to = "ID2", values_to = "similarity") %>% 
+    left_join(clusters, by = c("ID1" = "ID")) %>% 
+    rename(k1 = k) %>% 
+    left_join(clusters, by = c("ID2" = "ID")) %>% 
+    rename(k2 = k)
+  
+  lvls <- x %>% 
+    select(ID1, k1) %>% 
+    distinct() %>% 
+    arrange(k1) %>% 
+    pull(ID1)
+  
+  x <- x %>% 
+    mutate(ID1 = factor(ID1, levels = lvls),
+           ID2 = factor(ID2, levels = lvls),
+           similarity = ifelse(ID1 == ID2, NA, similarity))
+  
+  if (!is.null(threshold)) {
+    x <- x %>% 
+      mutate(similarity = ifelse(similarity >= threshold, threshold, similarity))
+  }
+  
+  p <- ggplot(x, aes(x = ID1, y = ID2, fill = similarity)) +
+    geom_tile() + 
+    scale_fill_viridis() + 
+    theme(axis.title = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank())
+  
+  return(p)
+  
+}
+
+umap_scatter <- function(u, clusters) {
+  
+  df_u <- u[["layout"]]
+  colnames(df_u) <- c("x1", "x2")
+  df_u <- as_tibble(df_u)
+  df_u[["ID"]] <- rownames(u[["data"]])
+  
+  df_u <- df_u %>% 
+    inner_join(clusters, by = "ID") %>% 
+    mutate(k = factor(k))
+  
+  p <- ggplot(df_u, 
+              aes(x = x1, y = x2, col = k)) + 
+    geom_point()
+  
+  return(p)
+  
+}
+
+plot_eigengap <- function(x, nk_max = 10) {
+  p <- x %>% 
+    estimate_cluster_metrics(NUMC = 2:nk_max) %>% 
+    ggplot(aes(x = nk, y = eigengap)) + 
+    geom_hline(yintercept = 0,
+               linetype = "dashed",
+               col = "grey50") + 
+    geom_line() + 
+    geom_point() +
+    scale_x_continuous(breaks = seq(0, nk_max, by = 4)) + 
+    labs(y = "Eigengap") +
+    theme_bw()
+  
+  return(p)
+}
+```
+
+```{r}
+output_dir <- file.path(PROJECTPATH, "analyses", "auxiliary", "outputs", "cluster_simulations")
+if (!file.exists(output_dir)) {
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+
+```{r import}
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v2/700/")
+human_clusters_dir <- file.path(human_pipeline_dir, "clusters", "resolution_3.0")
+human_es_dir <- file.path(human_pipeline_dir, "effect_sizes", "resolution_3.0")
+
+human_clusters <- "clusters.csv"
+human_clusters <- file.path(human_clusters_dir, human_clusters)
+df_human_clusters <- read_csv(human_clusters, show_col_types = FALSE)
+
+human_affinity <- "affinity.csv"
+human_affinity <- file.path(human_clusters_dir, human_affinity)
+df_human_affinity <- read_csv(human_affinity, show_col_types = FALSE)
+
+human_es <- "effect_sizes.csv"
+
+human_es_rel <- file.path(human_es_dir, "relative", human_es)
+df_human_es_rel <- as_tibble(data.table::fread(human_es_rel, header = TRUE))
+
+# human_es_abs <- file.path(human_es_dir, "absolute", human_es)
+# df_human_es_abs <- as_tibble(data.table::fread(human_es_abs, header = TRUE))
+```
+
+# Human imaging data
+
+```{r human-affinity}
+df_human_clusters_nk <- df_human_clusters %>% 
+  select(ID, k = nk2)
+
+mat_human_affinity <- as.matrix(df_human_affinity)
+rownames(mat_human_affinity) <- colnames(mat_human_affinity)
+
+similarity_heatmap(x = mat_human_affinity, 
+                   clusters = df_human_clusters_nk,
+                   threshold = 0.015)
+```
+
+
+```{r human-cluster-delta}
+compute_cluster_delta(x = mat_human_affinity, 
+                      clusters = df_human_clusters_nk)
+```
+
+```{r human-eigengap}
+plot_eigengap(x = mat_human_affinity, nk_max = 10)
+```
+
+```{r human-es-mat}
+mat_es_rel <- df_human_es_rel %>% 
+  select(-file) %>% 
+  as.matrix()
+
+mat_es_abs <- df_human_es_abs %>% 
+  select(-file) %>% 
+  as.matrix()
+
+rownames(mat_es_rel) <- df_human_es_rel[["file"]]
+rownames(mat_es_abs) <- df_human_es_abs[["file"]]
+```
+
+```{r human-umap}
+umap_seed <- 2
+umap_components <- 2
+
+es_rel_umap <- umap(mat_es_rel, 
+                    n_components = umap_components, 
+                    random_state = umap_seed)
+
+umap_scatter(u = es_rel_umap, 
+             clusters = df_human_clusters_nk)
+```
+
+
+# Gaussian noise simulations
+
+## Two-dimensional examples
+
+### Uncorrelated Gaussian distribution
+
+```{r gaussian-uncorrelated}
+nvars <- 2
+nobs <- 10000
+
+mat <- rmvnorm(n = nobs, mean = rep(0, nvars), sigma = diag(nvars))
+colnames(mat) <- c("x", "y")
+
+ggplot(as_tibble(mat),
+       aes(x = x, y = y)) + 
+  geom_hex() + 
+  coord_fixed() + 
+  scale_fill_viridis() + 
+  theme_bw()
+```
+
+```{r}
+df <- tibble(x = rnorm(n = 1000), 
+             y = rnorm(n = 1000, mean = 2))
+
+df %>% 
+  pivot_longer(cols = everything(), names_to = "dist", values_to = "x") %>% 
+  ggplot(aes(x = x, fill = dist, col = dist)) + 
+  geom_density(alpha = 0.5)
+```
+
+
+
+### Mixture of uncorrelated Gaussians
+
+```{r gaussian-mixture}
+nvars <- 10
+nobs <- 1000
+
+mat_1 <- rmvnorm(n = nobs/2, mean = rep(0, nvars), sigma = diag(nvars))
+mat_2 <- rmvnorm(n = nobs/2, mean = c(1, rep(0, nvars-1)), sigma = diag(nvars))
+mat <- rbind(mat_1, mat_2)
+colnames(mat) <- paste0("x", 1:nvars)
+
+# ggplot(as_tibble(mat), 
+# aes(x = x, y = y)) + 
+# geom_hex() + 
+# coord_fixed() + 
+# scale_fill_viridis() + 
+# theme_bw()
+```
+
+```{r}
+umap_out <- umap(mat, 
+                 n_components = 2, 
+                 random_state = 2)
+
+df <- umap_out[["layout"]]
+colnames(df) <- c("x", "y")
+df <- as_tibble(df)
+df$label <- rep(c(1, 2), each = nobs/2)
+
+ggplot(df, aes(x = x, y = y, col = factor(label))) + 
+  geom_point(alpha = 0.8)
+```
+
+
+
+### Correlated Gaussian distribution
+
+```{r gaussian-correlated}
+nvars <- 2
+nobs <- 10000
+
+sigma_ii <- 1.0
+sigma_ij <- 0.9
+sigma <- rbind(c(sigma_ii, sigma_ij), 
+               c(sigma_ij, sigma_ii))
+mat <- rmvnorm(n = nobs, mean = rep(0, nvars), sigma = sigma)
+colnames(mat) <- c("x", "y")
+
+ggplot(as_tibble(mat),
+       aes(x = x, y = y)) + 
+  geom_hex() + 
+  coord_fixed() + 
+  scale_fill_viridis() + 
+  theme_bw()
+```
+
+```{r gaussian-cor-mat}
+cor(mat)
+```
+
+```{r gaussian-cor-lm}
+summary(lm(y ~ x, data = as_tibble(mat)))
+```
+
+So given one Gaussian variable, we can generate a highly correlated second variable using a linear model. The residual standard error needs to be around 0.5. 
+
+```{r gaussian-cor-sim}
+x <- rnorm(n = nobs)
+y <- x + rnorm(n = nobs, sd = 0.5)
+
+tibble(x = x, y = y) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_hex() +
+  coord_fixed() + 
+  scale_fill_viridis() + 
+  theme_bw()
+```
+
+This will allow us to generate a correlated pair of images. 
+
+## Simulations at image dimension
+
+### Uncorrelated image pairs
+
+```{r}
+nobs <- nrow(mat_es_rel)
+nvars <- ncol(mat_es_rel)
+
+mat_sim_rel_nocor <- matrix(data = rnorm(n = nobs*nvars), nrow = nobs, ncol = nvars)
+mat_sim_abs_nocor <- matrix(data = rnorm(n = nobs*nvars), nrow = nobs, ncol = nvars)
+
+rownames(mat_sim_rel_nocor) <- rownames(mat_es_rel)
+rownames(mat_sim_abs_nocor) <- rownames(mat_es_abs)
+
+affinity_sim_nocor <- similarity_network(x1 = mat_sim_rel_nocor, x2 = mat_sim_abs_nocor)
+clusters_sim_nocor <- create_clusters(W = affinity_sim_nocor)
+```
+
+```{r}
+clusters_sim_nocor_nk <- select(clusters_sim_nocor, ID, k = nk2)
+similarity_heatmap(x = affinity_sim_nocor, 
+                   clusters = clusters_sim_nocor_nk,
+                   threshold = 0.015)
+```
+
+```{r}
+plot_eigengap(x = affinity_sim_nocor, nk_max = 10)
+```
+
+```{r}
+umap_seed <- 2
+umap_components = 2
+
+sim_nocor_umap <- umap(mat_sim_rel_nocor, 
+                       n_components = umap_components, 
+                       random_state = umap_seed)
+
+umap_scatter(u = sim_nocor_umap, 
+             clusters = clusters_sim_nocor_nk)
+```
+
+```{r}
+rm(list = ls()[str_detect(ls(), "_nocor")])
+gc()
+```
+
+
+
+### Correlated image pairs
+
+```{r}
+es_cor <- numeric(nrow(mat_es_rel))
+for (i in 1:length(es_cor)) {
+  es_cor[i] <- cor(mat_es_rel[i,], mat_es_abs[i,])
+}
+
+tibble(x = es_cor) %>% 
+  ggplot(aes(x = x)) + 
+  geom_histogram()
+```
+
+Absolute and relative images correlated above 0.9
+
+```{r}
+nobs <- nrow(mat_es_rel)
+nvars <- ncol(mat_es_rel)
+
+mat_sim_rel_cor <- matrix(data = rnorm(n = nobs*nvars), nrow = nobs, ncol = nvars)
+mat_sim_abs_cor <- matrix(data = 0, nrow = nobs, ncol = nvars)
+for (i in 1:nobs) {
+  mat_sim_abs_cor[i,] <- mat_sim_rel_cor[i,] + rnorm(n = nvars, sd = 0.5)
+}
+
+rownames(mat_sim_rel_cor) <- rownames(mat_es_rel)
+rownames(mat_sim_abs_cor) <- rownames(mat_es_abs)
+
+affinity_sim_cor <- similarity_network(x1 = mat_sim_rel_cor, x2 = mat_sim_abs_cor)
+clusters_sim_cor <- create_clusters(W = affinity_sim_cor)
+```
+
+```{r}
+clusters_sim_cor_nk <- select(clusters_sim_cor, ID, k = nk2)
+similarity_heatmap(x = affinity_sim_cor, 
+                   clusters = clusters_sim_cor_nk,
+                   threshold = 0.015)
+```
+
+```{r}
+compute_cluster_delta(x = affinity_sim_cor, clusters = clusters_sim_cor_nk, normalize = TRUE)
+```
+
+```{r}
+plot_eigengap(x = affinity_sim_cor, nk_max = 10)
+```
+
+```{r}
+umap_seed <- 2
+umap_components = 2
+
+sim_cor_umap <- umap(mat_sim_rel_cor, 
+                     n_components = umap_components, 
+                     random_state = umap_seed)
+
+umap_scatter(u = sim_cor_umap, 
+             clusters = clusters_sim_cor_nk)
+```
+
+```{r}
+rm(list = ls()[str_detect(ls(), "_cor")])
+gc()
+```
+
+
+### Single feature affinity matrix
+
+
+```{r}
+df_human_clusters_nk <- df_human_clusters %>% 
+  select(ID, k = nk2)
+
+# Number of observations per cluster
+nobs_nk2 <- df_human_clusters_nk %>% 
+  group_by(k) %>% 
+  count() %>% 
+  pull(n)
+
+# Total number of observations
+nobs <- sum(nobs_nk2)
+# nvars <- ncol(df_human_es_rel)
+
+# Number of variables
+nvars <- ncol(df_human_es_rel)
+
+niter <- 10
+df_grid <- expand_grid(delta = seq(0, 10, by = 0.5),
+                       seed = 1:niter)
+results <- vector(mode = "list", length = nrow(df_grid))
+# for (i in 1:length(results)) {
+
+  i <- 1
+    
+  # print(paste("i:", i, "of", length(results)))
+  # 
+  # seed <- df_grid[[i, "seed"]]
+  # delta <- df_grid[[i, "delta"]]
+  
+  seed <- 1
+  delta <- 100
+  
+  # Generate normal distributions
+  set.seed(seed)
+
+  x1 <- matrix(rnorm(nobs_nk2[1]*nvars), nrow = nobs_nk2[1], ncol = nvars)
+  x2_1 <- matrix(rnorm(nobs_nk2[2]*(nvars-1)), nrow = nobs_nk2[2], ncol = nvars-1)
+  x2_2 <- rnorm(nobs_nk2[2], mean = delta)
+  x2 <- cbind(x2_1, x2_2)
+  x <- rbind(x1, x2)
+  rownames(x) <- paste0("p", 1:nobs)
+  
+  # x1 <- rmvnorm(n = nobs_nk2[1], mean = rep(0, nvars), sigma = diag(nvars))
+  # x2 <- rmvnorm(n = nobs_nk2[2], mean = c(delta, rep(0, nvars-1)), sigma = diag(nvars))
+  # x <- rbind(x1, x2)
+
+  # UMAP projection  
+  umap_out <- umap(x, n_components = 2, 
+                   random_state = seed)
+  
+  # Distance matrix
+  d <- 1 - cor(t(x))
+  
+  # Free up memory
+  rm(list = c("x1", "x2", "x")); gc()
+  
+  # Affinity matrix
+  W <- affinityMatrix(d, K = 10, sigma = 0.5)
+  
+  # Run SNF because it seems to apply some normalization?
+  W <- SNF(list(W, W), K = 10, t = 20)
+  
+  # Estimate clustering metrics
+  metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
+  
+  results[[i]] <- metrics %>% 
+    mutate(seed = seed, delta = delta)
+  
+  clusters <- create_clusters(W = W, nk = 2)
+  
+  umap_x <- umap_out$layout
+  colnames(umap_x) <- paste0("x", 1:2)
+  p_umap <- umap_x %>% 
+    as_tibble() %>% 
+    bind_cols(clusters) %>% 
+    ggplot(aes(x = x1, y = x2, col = factor(nk2))) + 
+    geom_point() + 
+    coord_equal() +
+    labs(color = "Cluster",
+         title = paste0("Delta: ", delta, "; Seed: ", seed)) + 
+    theme_bw()
+  
+  outfile_umap <- paste("umap_delta", delta, "seed", seed, sep = "_")
+  outfile_umap <- paste0(outfile_umap, ".pdf")
+  outfile_umap <- file.path(output_dir, outfile_umap)
+  pdf(file = outfile_umap,
+      width = unit(8, "inch"),
+      height = unit(8, "inch"))
+  print(p_umap)
+  dev.off()
+  
+# }
+```
+
+
+
+```{r}
+df_metrics <- bind_rows(results)
+ggplot(df_metrics, aes(x = nk, y = eigengap, col = factor(seed), group = factor(seed))) + 
+  geom_line() + 
+  geom_point() + 
+  facet_wrap(~delta)
+```
+
+
+
+```{r}
+# Create clusters from affinity matrix
+clusters <- create_clusters(W = W, nk = 10)
+
+clusters_nk <- clusters %>% 
+  select(ID, k = nk2)
+
+x_umap <- umap(x, n_components = 2, random_state = 2)
+
+umap_scatter(u = x_umap, 
+             clusters = clusters_nk)
+```
+
+```{r}
+estimate_cluster_metrics(W = test, NUMC = 2:10)
+```
+
+
+```{r}
+plot_eigengap(x = test, nk_max = 10)
+```
+
+
+
+```{r}
+umap_seed <- 2
+umap_components <- 2
+
+mat_umap <- umap(mat, 
+                 n_components = 2, 
+                 random_state = 2)
+
+umap_scatter(u = mat_umap, 
+             clusters = clusters_nk)
+```
+
+
+```{r}
+create_clusters <- function(W, nk = 10, outfile = NULL) {
+  
+  for(k in 2:nk) {
+    group <- spectralClustering(affinity = W, K = k)
+    group_name <- paste0("nk", k)
+    assign(group_name, group)
+    if (k == 2) {
+      if (is.null(rownames(W))) {
+        ids <- as.character(1:nrow(W))
+      } else {
+        ids <- rownames(W)
+      }
+      all_clusters <- data.frame(ids, group, stringsAsFactors = F)
+      colnames(all_clusters) <- c("ID", group_name)
+    } else {
+      group <- data.frame(group)
+      colnames(group) <- group_name
+      all_clusters <- cbind(all_clusters, group)
+    }
+  }
+  
+  if (!is.null(outfile)) {
+    write.csv(x = all_clusters, file = outfile, row.names = FALSE)
+  }
+  
+  return(all_clusters)
+  
+}
+```
+
+
+
+```{r}
+similarity_network <- function(x1, x2, metric = "correlation", K = 10,
+                               sigma = 0.5, t = 20, outfile = NULL){
+  
+  if (metric == "correlation") {
+    d1 <- (1-cor(t(x1)))
+    d2 <- (1-cor(t(x2)))
+  } else if (metric == "euclidean") {
+    d1 <- (dist2(as.matrix(x1), as.matrix(x1)))^(1/2)
+    d2 <- (dist2(as.matrix(x2), as.matrix(x2)))^(1/2)
+  } else {
+    stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
+  }
+  
+  W1 <- affinityMatrix(d1, K = K, sigma = sigma)
+  W2 <- affinityMatrix(d2, K = K, sigma = sigma)
+  
+  W <- SNF(list(W1, W2), K = K, t = t)
+  
+  if (!is.null(outfile)){
+    data.table::fwrite(x = as_tibble(W), file = outfile)
+  }
+  
+  return(W)
+  
+}
+```
+
+
+
+```{r}
+mat_sim <- matrix(data = rnorm(n = nobs*nvars), nrow = nobs, ncol = nvars)
+mat_sim_abs_nocor <- matrix(data = rnorm(n = nobs*nvars), nrow = nobs, ncol = nvars)
+
+rownames(mat_sim_rel_nocor) <- rownames(mat_es_rel)
+rownames(mat_sim_abs_nocor) <- rownames(mat_es_abs)
+
+affinity_sim_nocor <- similarity_network(x1 = mat_sim_rel_nocor, x2 = mat_sim_abs_nocor)
+clusters_sim_nocor <- create_clusters(W = affinity_sim_nocor)
+```
+
+
+## Lower dimensional
+
+### With signal
+
+```{r}
+mu_1 <- rep(0, nvars)
+mu_2 <- c(5, rep(0, nvars-1))
+
+mat_gaussian_1_1 <- rmvnorm(n = nobs/2, mean = mu_1, sigma = diag(nvars))
+mat_gaussian_1_2 <- rmvnorm(n = nobs/2, mean = mu_2, sigma = diag(nvars))
+mat_gaussian_1 <- rbind(mat_gaussian_1_1, mat_gaussian_1_2)
+
+mat_gaussian_2_1 <- rmvnorm(n = nobs/2, mean = mu_1, sigma = diag(nvars))
+mat_gaussian_2_2 <- rmvnorm(n = nobs/2, mean = mu_2, sigma = diag(nvars))
+mat_gaussian_2 <- rbind(mat_gaussian_2_1, mat_gaussian_2_2)
+
+rownames(mat_gaussian_1) <- human_es[["file"]]
+rownames(mat_gaussian_2) <- human_es[["file"]]
+
+gaussian_affinity <- similarity_network(x1 = mat_gaussian_1, x2 = mat_gaussian_2,
+                                        metric = "euclidean", K = 10, sigma = 0.5, t = 20)
+
+gaussian_clusters <- create_clusters(W = gaussian_affinity, nk = 10)
+```
+
+```{r}
+sqrt(sum((mu_1 - mu_2)^2))
+```
+```{r}
+df_clusters_true <- tibble(ID = human_es[["file"]],
+                           k_true = rep(1:2, each = nobs/2))
+
+gaussian_clusters_nk <- gaussian_clusters %>% 
+  select(ID, k = nk2)
+
+df_clusters_compare <- inner_join(df_clusters_true, 
+                                  gaussian_clusters_nk, 
+                                  by = "ID")
+
+noverlap <- df_clusters_compare %>% 
+  mutate(overlap = ifelse(k_true == k, TRUE, FALSE)) %>% 
+  pull(overlap) %>% 
+  sum()
+
+noverlap/nrow(df_clusters_compare)  
+```
+
+
+```{r}
+df_gaussian_affinity_nk <- gaussian_affinity %>% 
+  as_tibble(rownames = "ID1") %>% 
+  pivot_longer(cols = -ID1, names_to = "ID2", values_to = "affinity") %>% 
+  left_join(gaussian_clusters_nk, by = c("ID1" = "ID")) %>% 
+  rename(k1 = k) %>% 
+  left_join(gaussian_clusters_nk, by = c("ID2" = "ID")) %>% 
+  rename(k2 = k)
+
+patient_lvls <- df_gaussian_affinity_nk %>% 
+  select(ID1, k1) %>% 
+  distinct() %>% 
+  arrange(k1) %>% 
+  pull(ID1)
+
+df_gaussian_affinity_nk <- df_gaussian_affinity_nk %>% 
+  mutate(ID1 = factor(ID1, levels = patient_lvls),
+         ID2 = factor(ID2, levels = patient_lvls),
+         affinity = ifelse(ID1 == ID2, NA, affinity))
+
+df_gaussian_affinity_nk %>% 
+  mutate(affinity = ifelse(affinity >= 0.015, 0.015, affinity)) %>% 
+  ggplot(aes(x = ID1, y = ID2, fill = affinity)) +
+  geom_tile() + 
+  scale_fill_viridis() + 
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+```
+
+
+
+```{r}
+mat_gaussian_1 <- rmvnorm(n = 10000, mean = rep(0, 2), sigma = diag(2))
+mat_gaussian_2 <- rmvnorm(n = 10000, mean = rep(5, 2), sigma = diag(2))
+mat_gaussian <- rbind(mat_gaussian_1, mat_gaussian_2)
+colnames(mat_gaussian) <- c("x1", "x2")
+
+ggplot(as_tibble(mat_gaussian), 
+       aes(x = x1, y = x2)) + 
+  geom_hex() + 
+  coord_fixed() + 
+  scale_fill_viridis() + 
+  theme_bw()
+```
+
+
+

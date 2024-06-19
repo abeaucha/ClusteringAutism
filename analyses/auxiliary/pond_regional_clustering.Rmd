@@ -1,0 +1,648 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: '2023-06-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(splines))
+suppressPackageStartupMessages(library(SNFtool))
+suppressPackageStartupMessages(library(umap))
+suppressPackageStartupMessages(library(ggalluvial))
+```
+
+```{r functions}
+#' Fit and predict normative model
+#'
+#' @param y (numeric vector) Voxel values across study participants.
+#' @param demographics (data.frame) Demographics information for study 
+#' participants.
+#' @param batch (character scalar) Batch variable to residualize.
+#' @param df (numeric scalar) Degrees of freedom in natural spline 
+#' model.
+#'
+#' @return (data.frame) Model predictions for test participants.
+fit_predict_model <- function(y, demographics, batch = NULL, df = 3) {
+  
+  if (length(y) != nrow(demographics)) {
+    stop()
+  }
+  
+  # Residualize using batch variable if specified
+  if (!is.null(batch)) {
+    batch <- demographics %>% 
+      select(all_of(batch)) %>% 
+      unite(col = batch) %>% 
+      pull(batch)
+    y <- residuals(lm(y ~ batch))
+    names(y) <- NULL
+  }
+  
+  # Filters for train and test sets
+  ind_fit <- demographics[["DX"]] == "Control"
+  ind_pred <- !ind_fit
+  
+  # Training data frame
+  df_fit <- demographics[ind_fit, c("Age", "Sex")]
+  df_fit[["y"]] <- y[ind_fit] 
+  
+  # Test data frame
+  df_pred <- demographics[ind_pred, c("Age", "Sex")]
+  df_pred[["y"]] <- y[ind_pred]
+  
+  # Fit model and predict on test set
+  model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
+  model_pred <- predict(model_fit, 
+                        newdata = df_pred, 
+                        interval = "prediction",
+                        level = pnorm(q = 1) - pnorm(q = -1))
+  
+  # Extract model parameters of interest
+  df_pred <- df_pred %>% 
+    mutate(y_pred = model_pred[,"fit"],
+           y_lwr = model_pred[,"lwr"],
+           y_upr = model_pred[,"upr"],
+           y_sd = y_pred - y_lwr)
+  
+  return(df_pred)
+  
+}
+
+
+#' Compute z-score
+#'
+#' @param x (data.frame) Data frame containing normative growth 
+#' model outputs. 
+#'
+#' @return (data.frame) Input data frame with new column containing 
+#' z-scores.
+zscore <- function(x){
+  
+  cols_check <- c("y", "y_pred", "y_sd")
+  if (any(!(cols_check %in% colnames(x)))){
+    stop()
+  }
+  x <- mutate(x, z = (y - y_pred)/y_sd)
+  return(x)  
+}
+
+
+#' Compute normative z-score for a voxel
+#'
+#' @param y (numeric vector) Voxel values across study participants.
+#' @param demographics (data.frame) Demographics information for study 
+#' participants.
+#' @param batch (character scalar) Batch variable to residualize.
+#' @param df (numeric scalar) Degrees of freedom in natural spline 
+#' model.
+#'
+#' @return (numeric vector) Voxel normative z-scores
+compute_normative_zscore <- function(y, demographics, batch = NULL, df = 3) {
+  
+  y_pred <- fit_predict_model(y = y, demographics = demographics,
+                              batch = batch, df = df)
+  z <- pull(zscore(y_pred), "z")
+  
+  return(z)
+}
+
+
+#' Run similarity network fusion (SNF)
+#'
+#' @param x1 (matrix) Input matrix
+#' @param x2 (matrix) Input matrix
+#' @param metric (character scalar) Distance metric used to compute the 
+#' affinity matrices.
+#' @param K (numeric scalar) Number of nearest-neighbours used to 
+#' compute the SNF affinity matrices. 
+#' @param sigma (numeric scalar) Variance for the local model in the 
+#' SNF affinity matrices.
+#' @param t (numeric scalar) Number of iterations for the diffusion
+#' process in SNF.
+#' @param outfile (character scalar) Path to file in which to save
+#' affinity matrix.
+#'
+#' @return (matrix) SNF affinity matrix.
+similarity_network <- function(x1, x2, metric = "correlation", K = 10,
+                               sigma = 0.5, t = 20, outfile = NULL){
+  
+  if (metric == "correlation") { 
+    d1 <- (1-cor(t(x1)))
+    d2 <- (1-cor(t(x2)))
+  } else if (metric == "euclidean") {
+    d1 <- (dist2(as.matrix(x1), as.matrix(x1)))^(1/2)
+    d2 <- (dist2(as.matrix(x2), as.matrix(x2)))^(1/2)
+  } else {
+    stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
+  }
+  
+  W1 <- affinityMatrix(d1, K = K, sigma = sigma)
+  W2 <- affinityMatrix(d2, K = K, sigma = sigma)
+  
+  W <- SNF(list(W1, W2), K = K, t = t)
+  
+  if (!is.null(outfile)){
+    data.table::fwrite(x = as_tibble(W), file = outfile)
+  }
+  
+  return(W)
+  
+}
+
+
+#' Create clusters from SNF affinity matrix
+#'
+#' @param W (matrix) SNF affinity matrix.
+#' @param nk (numeric scalar) Maximum number of clusters to use in 
+#' clustering.
+#' @param outfile (character scalar) Optional path to .csv file in 
+#' which to save cluster assignments.
+#'
+#' @return (data.frame) Cluster assignments.
+create_clusters <- function(W, nk = 10, outfile = NULL) {
+  
+  for(k in 2:nk) {
+    group <- spectralClustering(affinity = W, K = k)
+    group_name <- paste0("nk", k)
+    assign(group_name, group)
+    if (k == 2) {
+      if (is.null(rownames(W))) {
+        ids <- as.character(1:nrow(W))
+      } else {
+        ids <- rownames(W)
+      }
+      all_clusters <- data.frame(ids, group, stringsAsFactors = F)
+      colnames(all_clusters) <- c("ID", group_name)
+    } else {
+      group <- data.frame(group)
+      colnames(group) <- group_name
+      all_clusters <- cbind(all_clusters, group)
+    }
+  }
+  
+  if (!is.null(outfile)) {
+    write.csv(x = all_clusters, file = outfile, row.names = FALSE)
+  }
+  
+  return(all_clusters)
+  
+}
+```
+
+```{r import}
+# Human registration directory
+registration_dir <- "../../data/human/registration/v2/"
+
+# POND neuroanatomy file
+neuroanatomy <- "pond-neuroanatomy20230111.csv"
+neuroanatomy <- file.path(registration_dir, "subject_info", neuroanatomy)
+neuroanatomy <- read_csv(neuroanatomy, show_col_types = FALSE)
+```
+```{r processing}
+# Filter neuroanatomy for QC
+neuroanatomy <- neuroanatomy %>% 
+  filter(MAGeT_QC == TRUE,
+         QC_PASS == TRUE,
+         best_of_subject == TRUE,
+         subject != "sub-1050429",
+         !is.na(Dx),
+         !is.na(sex),
+         !is.na(age_at_scan),
+         !is.na(scanned_on))
+
+# Extract demographics information
+demographics <- neuroanatomy %>% 
+  select(Subject = subject, 
+         DX = Dx, 
+         Sex = sex, 
+         Age = age_at_scan, 
+         Scanner = scanned_on) %>% 
+  mutate()
+
+# Table for diagnoses
+diagnoses <- tibble(DX = c("ADHD", 
+                           "OCD", 
+                           "ASD",
+                           "Sub-threshold OCD",
+                           "Anxiety",
+                           "Sub-threshold ADHD", 
+                           "Intellectual Disability only",
+                           "Tourette Syndrome",
+                           "Other",
+                           "Typically Developing",
+                           "Unaffected Sibling"),
+                    DX_new = c("ADHD",
+                               "OCD",
+                               "ASD",
+                               "OCD",
+                               "Anxiety",
+                               "ADHD",
+                               "Intellectual Disability",
+                               "Tourette Syndrome",
+                               "Other", 
+                               "Control",
+                               "Control"))
+
+# Consolidate diagnoses
+demographics <- demographics %>% 
+  left_join(diagnoses, by = "DX") %>% 
+  select(-DX) %>% 
+  rename(DX = DX_new)
+
+# Extract neuroanatomy only
+neuroanatomy <- neuroanatomy %>%
+  select(Subject = subject,
+         contains("lobeVolume"),
+         -contains("combatted"),
+         `left nucleus accumbens / ventral striatum`:`right thalamus`,
+         -ITV, -Pituitary)
+
+# Compute participant total brain volumes
+tbv <- neuroanatomy %>% 
+  column_to_rownames("Subject") %>% 
+  as.matrix() %>% 
+  rowSums()
+```
+
+```{r volumes}
+# Absolute regional volumes
+vol_abs <- neuroanatomy %>% 
+  column_to_rownames("Subject") %>% 
+  as.matrix()
+
+# Relative regional volumes
+vol_rel <- apply(vol_abs, 
+                 MARGIN = 2, 
+                 FUN = function(x) {x/tbv})
+```
+
+```{r volumes-cx}
+# ind_cx <- str_detect(colnames(vol_abs), "lobeVolume")
+# vol_abs <- vol_abs[,ind_cx]
+# vol_rel <- vol_rel[,ind_cx]
+```
+
+```{r}
+batchvar <- "Scanner"
+
+list_pred <- vector(mode = "list", length = ncol(vol_abs))
+for (j in 1:length(list_pred)) {
+  
+  y <- vol_abs[,j]
+  
+  # Residualize using batch variable if specified
+  if (!is.null(batchvar)) {
+    batch <- demographics %>%
+      select(all_of(batchvar)) %>%
+      unite(col = batchvar) %>%
+      pull(batchvar)
+    y <- residuals(lm(y ~ batch))
+    names(y) <- NULL
+  }
+  
+  ind_fit <- demographics[["DX"]] == "Control"
+  df_fit <- demographics[ind_fit, c("Age", "Sex")]
+  df_fit[["y"]] <- y[ind_fit] 
+  
+  model_fit <- lm(y ~ Sex + ns(Age, df = 3), data = df_fit)
+  
+  ages <- seq(3, 24, length.out = 500)
+  sexes <- c("Male", "Female")
+  df_pred_j <- tibble(Age = rep(ages, 2),
+                      Sex = rep(sexes, each = length(ages)))
+  
+  df_pred_j[["y"]] <- predict(model_fit, newdata = df_pred_j)
+  df_pred_j[["Region"]] <- colnames(vol_abs)[j]
+  
+  list_pred[[j]] <- df_pred_j
+}
+
+df_pred <- reduce(.x = list_pred, .f = bind_rows)
+
+df_pred <- df_pred %>% 
+  unite(col = "RegionSex", Region, Sex, 
+        remove = FALSE)
+
+ggplot(df_pred, 
+       aes(x = Age, 
+           y = y, 
+           col = Sex, 
+           group = RegionSex)) + 
+  geom_line(size = 0.2, alpha = 0.8) + 
+  theme_bw()
+```
+
+```{r}
+vol_abs_combat <- sva::ComBat(dat = t(vol_abs), batch = demographics[["Scanner"]])
+vol_abs_combat <- t(vol_abs_combat)
+
+list_pred <- vector(mode = "list", length = ncol(vol_abs))
+for (j in 1:length(list_pred)) {
+  
+  y <- vol_abs_combat[,j]
+  
+  ind_fit <- demographics[["DX"]] == "Control"
+  df_fit <- demographics[ind_fit, c("Age", "Sex")]
+  df_fit[["y"]] <- y[ind_fit] 
+  
+  model_fit <- lm(y ~ Sex + ns(Age, df = 3), data = df_fit)
+  
+  ages <- seq(3, 24, length.out = 500)
+  sexes <- c("Male", "Female")
+  df_pred_j <- tibble(Age = rep(ages, 2),
+                      Sex = rep(sexes, each = length(ages)))
+  
+  df_pred_j[["y"]] <- predict(model_fit, newdata = df_pred_j)
+  df_pred_j[["Region"]] <- colnames(vol_abs)[j]
+  
+  list_pred[[j]] <- df_pred_j
+}
+
+df_pred <- reduce(.x = list_pred, .f = bind_rows)
+
+df_pred <- df_pred %>% 
+  unite(col = "RegionSex", Region, Sex, 
+        remove = FALSE)
+
+ggplot(df_pred, 
+       aes(x = Age, 
+           y = y, 
+           col = Sex, 
+           group = RegionSex)) + 
+  geom_line(size = 0.2, alpha = 0.8) + 
+  theme_bw()
+```
+
+```{r effect-sizes}
+# Compute absolute effect sizes
+es_abs <- apply(X = vol_abs,
+                MARGIN = 2,
+                FUN = compute_normative_zscore,
+                demographics = demographics,
+                batch = "Scanner",
+                df = 3)
+
+# Compute relative effect sizes
+es_rel <- apply(X = vol_rel,
+                MARGIN = 2,
+                FUN = compute_normative_zscore,
+                demographics = demographics,
+                batch = "Scanner",
+                df = 3)
+
+rownames(es_abs) <- demographics[demographics[["DX"]] != "Control", "Subject"][[1]]
+rownames(es_rel) <- rownames(es_abs)
+```
+
+```{r effect-sizes-combat}
+# ComBat normalization
+vol_abs_combat <- sva::ComBat(dat = t(vol_abs), batch = demographics[["Scanner"]])
+vol_abs_combat <- t(vol_abs_combat)
+
+vol_rel_combat <- sva::ComBat(dat = t(vol_rel), batch = demographics[["Scanner"]])
+vol_rel_combat <- t(vol_rel_combat)
+
+# Compute absolute effect sizes
+es_abs_combat <- apply(X = vol_abs_combat,
+                       MARGIN = 2,
+                       FUN = compute_normative_zscore,
+                       demographics = demographics,
+                       batch = NULL,
+                       df = 3)
+
+# Compute relative effect sizes
+es_rel_combat <- apply(X = vol_rel_combat,
+                       MARGIN = 2,
+                       FUN = compute_normative_zscore,
+                       demographics = demographics,
+                       batch = NULL,
+                       df = 3)
+
+rownames(es_abs_combat) <- demographics[demographics[["DX"]] != "Control", "Subject"][[1]]
+rownames(es_rel_combat) <- rownames(es_abs_combat)
+```
+
+```{r combat-comparison}
+es_cor_abs <- numeric(ncol(es_abs))
+es_cor_rel <- es_cor_abs
+for (j in 1:ncol(es_abs)) {
+  es_cor_abs[j] <- cor(es_abs[,j], es_abs_combat[,j])
+  es_cor_rel[j] <- cor(es_rel[,j], es_rel_combat[,j])
+}
+
+df_es_cor <- tibble(absolute = es_cor_abs,
+                    relative = es_cor_rel) 
+
+df_es_cor <- df_es_cor %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "jacobians", 
+               values_to = "correlation")
+
+ggplot(df_es_cor, aes(x = correlation, fill = jacobians)) + 
+  geom_histogram(bins = 30, 
+                 position = "dodge")
+```
+
+```{r es-selection}
+# Option to use ComBat effect sizes
+# es_abs <- es_abs_combat
+# es_rel <- es_rel_combat
+```
+
+```{r clustering}
+# Compute SNF affinity matrix
+affinity <- similarity_network(x1 = es_abs, x2 = es_rel, 
+                               K = 10, sigma = 0.5, 
+                               t = 20, metric = "correlation")
+
+# Identify clusters
+clusters <- create_clusters(W = affinity, nk = 10)
+
+# Convert clusters to long format
+clusters_long <- clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+# Cluster sankey diagram
+ggplot(clusters_long,
+       aes(x = nk,
+           stratum = k,
+           alluvium = ID,
+           fill = k, 
+           label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 0.5) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients",
+       title = "Human cluster dispersion") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+```
+
+```{r umap-abs}
+# UMAP random seed
+umap_seed <- 2
+
+# Run UMAP on absolute effect sizes
+umap_abs <- umap(es_abs, n_components = 2,
+                 random_state = umap_seed)
+
+# UMAP data frame
+df_umap_abs <- umap_abs[["layout"]]
+colnames(df_umap_abs) <- paste0("x", 1:2)
+df_umap_abs <- df_umap_abs %>% 
+  as_tibble(rownames = "ID") %>% 
+  inner_join(clusters, by = "ID")
+
+# Convert UMAP data to long format
+df_umap_abs_long <- df_umap_abs %>% 
+  column_to_rownames("ID") %>% 
+  pivot_longer(cols = c(-x1, -x2), 
+               names_to = "nk", 
+               values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+# UMAP scatter plots
+ggplot(df_umap_abs_long,
+       aes(x = x1, y = x2, col = k)) +
+  geom_point() + 
+  facet_wrap(~nk, nrow = 3) + 
+  labs(title = paste("Human absolute effect size UMAP projection")) + 
+  theme_bw()
+```
+
+```{r umap-rel}
+# Run UMAP on absolute effect sizes
+umap_rel <- umap(es_rel, n_components = 2,
+                 random_state = umap_seed)
+
+# UMAP data frame
+df_umap_rel <- umap_rel[["layout"]]
+colnames(df_umap_rel) <- paste0("x", 1:2)
+df_umap_rel <- df_umap_rel %>% 
+  as_tibble(rownames = "ID") %>% 
+  inner_join(clusters, by = "ID")
+
+# Convert UMAP data to long format
+df_umap_rel_long <- df_umap_rel %>% 
+  column_to_rownames("ID") %>% 
+  pivot_longer(cols = c(-x1, -x2), 
+               names_to = "nk", 
+               values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+# UMAP scatter plots
+ggplot(df_umap_rel_long,
+       aes(x = x1, y = x2, col = k)) +
+  geom_point() + 
+  facet_wrap(~nk, nrow = 3) + 
+  labs(title = paste("Human relative effect size UMAP projection")) + 
+  theme_bw()
+```
+
+```{r cluster-centroid-abs}
+df_es_abs_clusters <- es_abs %>% 
+  as_tibble(rownames = "ID") %>% 
+  pivot_longer(cols = -ID, names_to = "Region", values_to = "Value") %>% 
+  left_join(clusters, by = "ID")
+
+
+df_abs_nk2 <- df_es_abs_clusters %>% 
+  group_by(nk2, Region) %>% 
+  summarise(Value = mean(Value), 
+            .groups = "drop")
+
+levels <- colnames(neuroanatomy)[colnames(neuroanatomy) != "Subject"]
+
+df_abs_nk2 <- df_abs_nk2 %>% 
+  mutate(Region = factor(Region, levels = levels),
+         RegionCoarse = ifelse(str_detect(Region, "lobeVolume"), "Cortex", "Sub-cortex"))
+
+ggplot(df_abs_nk2, aes(x = Value, y = Region, fill = RegionCoarse)) + 
+  geom_col() + 
+  geom_vline(xintercept = 0) + 
+  facet_wrap(~factor(nk2), ncol = 2) + 
+  labs(x = "Effect size",
+       y = "Regions",
+       fill = NULL) + 
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+
+```{r cluster-centroid-rel}
+df_es_rel_clusters <- es_rel %>% 
+  as_tibble(rownames = "ID") %>% 
+  pivot_longer(cols = -ID, names_to = "Region", values_to = "Value") %>% 
+  left_join(clusters, by = "ID")
+
+
+df_rel_nk2 <- df_es_rel_clusters %>% 
+  group_by(nk2, Region) %>% 
+  summarise(Value = mean(Value), 
+            .groups = "drop")
+
+levels <- colnames(neuroanatomy)[colnames(neuroanatomy) != "Subject"]
+
+df_rel_nk2 <- df_rel_nk2 %>% 
+  mutate(Region = factor(Region, levels = levels),
+         RegionCoarse = ifelse(str_detect(Region, "lobeVolume"), "Cortex", "Sub-cortex"))
+
+ggplot(df_rel_nk2, aes(x = Value, y = Region, fill = RegionCoarse)) + 
+  geom_col() + 
+  geom_vline(xintercept = 0) + 
+  facet_wrap(~factor(nk2), ncol = 2) + 
+  labs(x = "Effect size",
+       y = "Regions",
+       fill = NULL) + 
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+
+```{r}
+cluster_demographics <- left_join(clusters, demographics, 
+                                  by = c("ID" = "Subject"))
+
+cluster_demographics_dx <- cluster_demographics %>% 
+  group_by(nk10, DX) %>% 
+  count()
+
+ggplot(cluster_demographics_dx,
+       aes(x = factor(nk10), y = n, fill = DX)) + 
+  geom_col(position = "dodge")
+```
+
+```{r}
+cluster_demographics_sex <- cluster_demographics %>% 
+  group_by(nk10, Sex) %>% 
+  count()
+
+ggplot(cluster_demographics_sex,
+       aes(x = factor(nk10), y = n, fill = Sex)) + 
+  geom_col(position = "dodge")
+```
+
+```{r}
+library(ggridges)
+
+ggplot(cluster_demographics, 
+       aes(x = Age, y = factor(nk10), fill = factor(nk10))) + 
+  geom_density_ridges(scale = 1, show.legend = FALSE)
+```
+

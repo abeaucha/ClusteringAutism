@@ -1,0 +1,105 @@
+---
+title: "POND imaging numbers"
+author: "Antoine Beauchamp"
+date: '2023-06-30'
+output: html_document
+---
+
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+
+```{r}
+registration_dir <- "../../data/human/registration/v2/"
+demographics_dir <- file.path(registration_dir, "subject_info")
+
+demographics <- "demographics.csv"
+demographics <- file.path(demographics_dir, demographics)
+
+pond_neuroanatomy <- "pond-neuroanatomy20230111.csv"
+pond_neuroanatomy <- file.path(demographics_dir, pond_neuroanatomy)
+```
+
+
+```{r}
+demographics <- read_csv(demographics, show_col_types = FALSE)
+pond_neuroanatomy <- read_csv(pond_neuroanatomy, show_col_types = FALSE)
+```
+
+```{r}
+pond_demographics_ids <- demographics %>% 
+  filter(Dataset == "POND") %>% 
+  pull(Subject_ID) %>% 
+  str_remove("POND_")
+
+length(pond_demographics_ids)
+```
+
+```{r}
+pond_neuroanatomy <- pond_neuroanatomy %>% 
+  mutate(Subject_ID = str_remove(subject, "sub-"))
+```
+
+```{r}
+pond_neuroanatomy %>% 
+  pull(Subject_ID) %>% 
+  unique() %>% 
+  length()
+```
+
+```{r}
+pond_neuroanatomy <- pond_neuroanatomy %>% 
+  filter(best_of_subject, 
+         Subject_ID != "1050429")
+
+nrow(pond_neuroanatomy)
+```
+
+
+```{r}
+pond_neuroanatomy %>% 
+  filter(MAGeT_QC) %>% 
+  nrow()
+```
+
+```{r}
+pond_neuroanatomy %>% 
+  filter(QC_PASS) %>% 
+  nrow()
+```
+
+```{r}
+pond_neuroanatomy %>% 
+  filter(MAGeT_QC, QC_PASS) %>% 
+  nrow()
+```
+
+```{r}
+pond_neuroanatomy %>% 
+  filter(Subject_ID %in% pond_demographics_ids) %>% 
+  nrow()
+```
+
+
+```{r}
+pond_qc <- pond_neuroanatomy %>% 
+  select(Subject_ID, 
+         Session = session,
+         MAGeT_QC, 
+         CIVET_QC = QC_PASS) %>% 
+  mutate(Manual_QC = ifelse(Subject_ID %in% pond_demographics_ids, TRUE, FALSE), 
+         Manual_QC = as.numeric(Manual_QC),
+         MAGeT_QC = as.numeric(Manual_QC),
+         CIVET_QC = as.numeric(CIVET_QC),
+         Subject_ID = str_c("sub-", Subject_ID))
+```
+
+```{r}
+outfile <- "pond_qc_20230630.csv"
+write_csv(x = pond_qc, file = outfile)
+```
+
+
+
