@@ -51,7 +51,7 @@ get_homologs <- function(genes, species, ordered=T) {
 # Parameters
 
 # Human pipeline version
-pipeline_version <- "v2"
+pipeline_version <- "v3"
 
 # Human pipeline parameter set ID
 params_id <- 700
@@ -70,8 +70,8 @@ background_set <- "sagittal_gene_table_normalized_filtered.csv"
 
 # Gene score for StringDB
 # gene_scores <- c(850, 900, 950)
-# gene_scores <- 950
-gene_scores <- seq(400, 950, by = 50)
+gene_scores <- 950
+# gene_scores <- seq(400, 950, by = 50)
 
 # Version of StringDB
 # stringdb_versions <- c("11.5", "12.0")
@@ -101,16 +101,29 @@ variants <- file.path(variants, "cluster_variants.csv")
 df_variants <- read_csv(variants, show_col_types = FALSE)
 
 # Identify genes for those patients with single gene mutations
-df_variants[["gene"]] <- c(NA, NA, 
-                           "Kcnq2", "Gria2",
+# Version 2
+# df_variants[["gene"]] <- c(NA, NA, 
+#                            "Kcnq2", "Gria2",
+#                            "Rai1", "Fmr1",
+#                            "Tnpo3", "Stxbp1",
+#                            NA, "Rbm10", 
+#                            NA, NA, 
+#                            "Fgf14", "Tsc1",
+#                            "Meis2", "Rfx3",
+#                            "Pten", "Rtl9",
+#                            "Nlgn1")
+
+# Version 3
+df_variants[["gene"]] <- c("Pten", "Rtl9", 
+                           "Nlgn1", NA,
+                           "Rbm10", NA,
+                           NA, "Fgf14",
+                           "Tsc1", "Meis2",
+                           NA, "Kcnq2",
+                           "Gria2", "Rfx3",
                            "Rai1", "Fmr1",
                            "Tnpo3", "Stxbp1",
-                           NA, "Rbm10", 
-                           NA, NA, 
-                           "Fgf14", "Tsc1",
-                           "Meis2", "Rfx3",
-                           "Pten", "Rtl9",
-                           "Nlgn1")
+                           NA) 
 
 # Import background gene set
 background_set <- file.path(enrichment_dir, background_set)

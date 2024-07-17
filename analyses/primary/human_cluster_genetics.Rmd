@@ -27,7 +27,7 @@ source("../../src/utils.R")
 output_dir <- "outputs/human_cluster_genetics/"
 
 #Human directories
-version <- "v2"
+version <- "v3"
 
 registration_dir <- "../../data/human/registration/"
 registration_dir <- file.path(registration_dir, version)
@@ -39,14 +39,14 @@ pipeline_dir <- file.path(pipeline_dir, version)
 resolution <- 0.8
 es_method <- "normative-growth"
 es_df <- 3
-cluster_map_method <- "mean"
+centroid_method <- "mean"
 
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
                                 resolution = resolution,
                                 es_method = es_method,
                                 es_df = es_df,
-                                cluster_map_method = cluster_map_method)
+                                centroid_method = centroid_method)
 params
 ```
 
@@ -91,7 +91,8 @@ clusters <- clusters %>%
   left_join(demographics %>% 
               select(Subject_ID, file),
             by = c("ID" = "file")) %>% 
-  mutate(Subject_ID = str_remove(Subject_ID, "POND_"))
+  mutate(Subject_ID = str_remove(Subject_ID, "POND_"),
+         Subject_ID = str_remove(Subject_ID, "sub-"))
 
 clusters_genetics <- clusters %>% 
   left_join(genetics, by = c("Subject_ID" = "POND_ID")) %>% 

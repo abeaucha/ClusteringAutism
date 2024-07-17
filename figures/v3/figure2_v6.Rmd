@@ -1311,10 +1311,12 @@ df_polar_plot <- df_polar_plot %>%
   mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
 
 # Palette for human pathway plot
-pathways_human_palette <- pathways_mouse_palette[c(4, 1)]
+# pathways_human_palette <- pathways_mouse_palette[c(4, 1)]
+pathways_human_palette <- pathways_mouse_palette[c(1, 4)]
 
 # Transparency for human pathway plot
-pathway_human_alpha <- pathways_mouse_alpha[c(4, 1)]
+# pathway_human_alpha <- pathways_mouse_alpha[c(4, 1)]
+pathway_human_alpha <- pathways_mouse_alpha[c(1, 4)]
 
 # Generate polar plot
 fig2_pathways_human <- ggplot(df_polar_plot, 
@@ -1402,8 +1404,8 @@ for (k in 1:nk_human) {
   
   # ID for matching mouse cluster
   mouse_match_id <- df_similarity_nk %>% 
-    filter(human_cluster_id == paste(nk_human, k, sep = "-"),
-           significant) %>% 
+    filter(human_cluster_id == paste(nk_human, k, sep = "-")) %>% 
+    filter(pval == min(pval)) %>% 
     pull(mouse_cluster_id)
   
   # Combine human and mouse pathway enrichment
@@ -1445,8 +1447,7 @@ for (l in 1:length(list_pathways_roc)) {
     
     # Generate ROC curve data
     df_roc <- tibble(alpha = human_alpha_seq,
-                     fpr = 0,
-                     tpr = 0)
+                     fpr = 0, tpr = 0)
     for (i in 1:nrow(df_roc)) {
       
       # Human pathway predictions at alpha threshold
