@@ -650,6 +650,11 @@ df_similarity_nk <- similarity %>%
             .groups = "drop")
 ```
 
+```{r}
+df_similarity_nk
+```
+
+
 ```{r fig2-sim-perm-import}
 # Path to permutations directory
 permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
