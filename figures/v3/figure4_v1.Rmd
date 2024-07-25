@@ -18,7 +18,7 @@ suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
 suppressPackageStartupMessages(library(grid))
 suppressPackageStartupMessages(library(gridExtra))
-# suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(viridis))
 suppressPackageStartupMessages(library(viridisLite))
 # suppressPackageStartupMessages(library(RColorBrewer))
@@ -257,8 +257,10 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
          qval_log = -log10(qval),
-         significant = ifelse(pval < 0.05, TRUE, FALSE),
-         pval_lab = ifelse(significant, "*", ""))
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"))
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -285,10 +287,7 @@ df_similarity_nk <- df_similarity_nk %>%
 # Clamp log p-values when infinite
 df_similarity_nk <- df_similarity_nk %>% 
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
-```
 
-
-```{r fig4-PONDSK-MICe-heatmap}
 # Numerical values for the heatmap scale
 heatmap_scale_values <- seq(similarity_min, similarity_max, length.out = heatmap_palette_length)
 heatmap_scale_values <- (heatmap_scale_values - similarity_min)/(similarity_max - similarity_min)
@@ -300,18 +299,17 @@ heatmap_scale_colours <- magma(n = heatmap_palette_length, begin = 0.3)
 heatmap_scale_palette <- colorRampPalette(heatmap_scale_colours)(heatmap_palette_length)
 
 # Heatmap plot
-fig4_sim_heatmap <- ggplot(df_similarity_nk, 
-                           aes(x = img2_cluster_id, 
-                               y = fct_rev(img1_cluster_id), 
-                               fill = similarity)) + 
+fig4_heatmap_PONDSK_MICe <- ggplot(df_similarity_nk, 
+                                   aes(x = img2_cluster_id, 
+                                       y = fct_rev(img1_cluster_id), 
+                                       fill = similarity)) + 
   geom_tile(col = "grey50") + 
   geom_text(mapping = aes(label = pval_lab),
-            size = 6, 
+            size = 1.6, 
             hjust = "center", 
-            vjust = "center",
-            nudge_y = -0.12) + 
+            vjust = "center") + 
   labs(x = "Mouse clusters",
-       y = "Human clusters",
+       y = "POND-SickKids clusters",
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
@@ -328,7 +326,7 @@ outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_sim_heatmap)
+print(fig4_heatmap_PONDSK_MICe)
 dev.off()
 ```
 
@@ -471,9 +469,10 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
          qval_log = -log10(qval),
-         significant = ifelse(pval < 0.05, TRUE, FALSE),
-         pval_lab = ifelse(significant, "*", ""))
-
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"))
 
 # Generate heatmap -----------------------------------------------------------
 
@@ -482,18 +481,17 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_sim_heatmap <- ggplot(df_similarity_nk, 
-                           aes(x = img2_cluster_id, 
-                               y = fct_rev(img1_cluster_id), 
-                               fill = similarity)) + 
+fig4_heatmap_PONDSK_MICe_nk6 <- ggplot(df_similarity_nk, 
+                                       aes(x = img2_cluster_id, 
+                                           y = fct_rev(img1_cluster_id), 
+                                           fill = similarity)) + 
   geom_tile(col = "grey50") + 
   geom_text(mapping = aes(label = pval_lab),
-            size = 6, 
+            size = 1.4, 
             hjust = "center", 
-            vjust = "center",
-            nudge_y = -0.12) + 
+            vjust = "center") + 
   labs(x = "Mouse clusters",
-       y = "Human clusters",
+       y = "POND-SickKids clusters",
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
@@ -510,7 +508,7 @@ outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_sim_heatmap)
+print(fig4_heatmap_PONDSK_MICe_nk6)
 dev.off()
 ```
 
@@ -653,8 +651,10 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
          qval_log = -log10(qval),
-         significant = ifelse(pval < 0.05, TRUE, FALSE),
-         pval_lab = ifelse(significant, "*", ""))
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"))
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -664,18 +664,17 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_sim_heatmap <- ggplot(df_similarity_nk, 
-                           aes(x = img2_cluster_id, 
-                               y = fct_rev(img1_cluster_id), 
-                               fill = similarity)) + 
+fig4_heatmap_HBN_MICe <- ggplot(df_similarity_nk, 
+                                aes(x = img2_cluster_id, 
+                                    y = fct_rev(img1_cluster_id), 
+                                    fill = similarity)) + 
   geom_tile(col = "grey50") + 
   geom_text(mapping = aes(label = pval_lab),
-            size = 6, 
+            size = 1.6, 
             hjust = "center", 
-            vjust = "center",
-            nudge_y = -0.12) + 
+            vjust = "center") + 
   labs(x = "Mouse clusters",
-       y = "Human clusters",
+       y = "HBN clusters",
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
@@ -692,9 +691,10 @@ outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_sim_heatmap)
+print(fig4_heatmap_HBN_MICe)
 dev.off()
 ```
+
 
 ```{r}
 df_similarity_nk %>% 
@@ -837,8 +837,10 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
          qval_log = -log10(qval),
-         significant = ifelse(pval < 0.05, TRUE, FALSE),
-         pval_lab = ifelse(significant, "*", ""))
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"))
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -848,18 +850,17 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_sim_heatmap <- ggplot(df_similarity_nk, 
-                           aes(x = img2_cluster_id, 
-                               y = fct_rev(img1_cluster_id), 
-                               fill = similarity)) + 
+fig4_heatmap_HBN_MICe_nk6 <- ggplot(df_similarity_nk, 
+                                    aes(x = img2_cluster_id, 
+                                        y = fct_rev(img1_cluster_id), 
+                                        fill = similarity)) + 
   geom_tile(col = "grey50") + 
   geom_text(mapping = aes(label = pval_lab),
-            size = 6, 
+            size = 1.4, 
             hjust = "center", 
-            vjust = "center",
-            nudge_y = -0.12) + 
+            vjust = "center") + 
   labs(x = "Mouse clusters",
-       y = "Human clusters",
+       y = "HBN clusters",
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
@@ -876,9 +877,10 @@ outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_sim_heatmap)
+print(fig4_heatmap_HBN_MICe_nk6)
 dev.off()
 ```
+
 
 ```{r}
 df_matches_HBN_MICe <- bind_rows(df_matches_HBN_MICe,
@@ -1018,8 +1020,10 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
          qval_log = -log10(qval),
-         significant = ifelse(pval < 0.05, TRUE, FALSE),
-         pval_lab = ifelse(significant, "*", ""))
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"))
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -1029,18 +1033,17 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_sim_heatmap <- ggplot(df_similarity_nk, 
-                           aes(x = img2_cluster_id, 
-                               y = fct_rev(img1_cluster_id), 
-                               fill = similarity)) + 
+fig4_heatmap_PONDSK_HBN <- ggplot(df_similarity_nk, 
+                                  aes(x = img2_cluster_id, 
+                                      y = fct_rev(img1_cluster_id), 
+                                      fill = similarity)) + 
   geom_tile(col = "grey50") + 
   geom_text(mapping = aes(label = pval_lab),
-            size = 6, 
+            size = 1.6, 
             hjust = "center", 
-            vjust = "center",
-            nudge_y = -0.12) + 
-  labs(x = "Mouse clusters",
-       y = "Human clusters",
+            vjust = "center") + 
+  labs(x = "HBN clusters",
+       y = "POND-SickKids clusters",
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
@@ -1057,9 +1060,10 @@ outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_sim_heatmap)
+print(fig4_heatmap_PONDSK_HBN)
 dev.off()
 ```
+
 
 ```{r}
 df_similarity_nk %>% 
@@ -1202,8 +1206,10 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
          qval_log = -log10(qval),
-         significant = ifelse(pval < 0.05, TRUE, FALSE),
-         pval_lab = ifelse(significant, "*", ""))
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"))
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -1213,18 +1219,17 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_sim_heatmap <- ggplot(df_similarity_nk, 
-                           aes(x = img2_cluster_id, 
-                               y = fct_rev(img1_cluster_id), 
-                               fill = similarity)) + 
+fig4_heatmap_PONDSK_HBN_nk6 <- ggplot(df_similarity_nk, 
+                                      aes(x = img2_cluster_id, 
+                                          y = fct_rev(img1_cluster_id), 
+                                          fill = similarity)) + 
   geom_tile(col = "grey50") + 
   geom_text(mapping = aes(label = pval_lab),
-            size = 6, 
+            size = 1.4, 
             hjust = "center", 
-            vjust = "center",
-            nudge_y = -0.12) + 
-  labs(x = "Mouse clusters",
-       y = "Human clusters",
+            vjust = "center") + 
+  labs(x = "HBN clusters",
+       y = "POND-SickKids clusters",
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
@@ -1241,7 +1246,7 @@ outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_sim_heatmap)
+print(fig4_heatmap_PONDSK_HBN_nk6)
 dev.off()
 ```
 
@@ -1252,6 +1257,31 @@ df_matches_PONDSK_HBN <- bind_rows(df_matches_PONDSK_HBN,
                                      filter(significant) %>% 
                                      select(img1_cluster_id, img2_cluster_id))
 ```
+
+
+```{r}
+# Font family
+font_family <- "Helvetica"
+
+# Nature suggested font size: 5-7 pt
+font_size <- 6
+
+fig4_heatmap <- (fig4_heatmap_PONDSK_MICe | fig4_heatmap_HBN_MICe | fig4_heatmap_PONDSK_HBN) /
+  (fig4_heatmap_PONDSK_MICe_nk6 | fig4_heatmap_HBN_MICe_nk6 | fig4_heatmap_PONDSK_HBN_nk6) +
+  plot_layout(heights = c(1, 2)) &
+  theme(axis.text = element_text(size = font_size-1, family = font_family),
+        axis.title = element_text(size = font_size, family = font_family),
+        plot.margin = margin(t = 3, r = 3, b = 3, l = 3))
+
+outfile <- paste0("figure4_heatmap.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(510/72, "in"),
+    height = unit(254/72, "in"))
+print(fig4_heatmap)
+dev.off()
+```
+
 
 
 # Brain slices
@@ -1288,7 +1318,6 @@ human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_
 
 
 ## PONDSK-MICe
-
 
 ```{r}
 # Fetch parameter set for PONDSK-MICe pipeline
@@ -1864,8 +1893,8 @@ for(i in 1:nrow(df_matches_PONDSK_HBN)) {
   
   # Generate slice series
   list_PONDSK_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                        dimension = human_slc_dim, 
-                                        slices = human_slc) %>% 
+                                         dimension = human_slc_dim, 
+                                         slices = human_slc) %>% 
     anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
     overlay(img, 
             low = overlay_threshold[1], 
@@ -1919,8 +1948,8 @@ for(i in 1:nrow(df_matches_PONDSK_HBN)) {
   
   # Generate slice series
   list_HBN_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                        dimension = human_slc_dim, 
-                                        slices = human_slc) %>% 
+                                      dimension = human_slc_dim, 
+                                      slices = human_slc) %>% 
     anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
     overlay(img, 
             low = overlay_threshold[1], 

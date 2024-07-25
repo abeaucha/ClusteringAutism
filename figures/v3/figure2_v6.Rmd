@@ -728,7 +728,12 @@ df_similarity_nk <- df_similarity_nk %>%
          pval_log = -log10(pval),
          qval_log = -log10(qval),
          significant = ifelse(pval < 0.05, TRUE, FALSE),
-         pval_lab = ifelse(significant, "*", ""))
+         pval_lab = case_when(pval >= 0.15 ~ "",
+                              pval > 0 & pval < 0.15 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval == 0 ~ "p < 0.001"))
+         # pval_lab = ifelse(significant, "*", ""))
+
+df_similarity_nk
 ```
 
 ```{r fig2-sim-heatmap-plot}
@@ -760,10 +765,9 @@ fig2_sim_heatmap <- ggplot(df_similarity_nk,
                                fill = similarity)) + 
   geom_tile(col = "grey50") + 
   geom_text(mapping = aes(label = pval_lab),
-            size = 6, 
+            size = 1.6, 
             hjust = "center", 
-            vjust = "center",
-            nudge_y = -0.12) + 
+            vjust = "center") + 
   labs(x = "Mouse clusters",
        y = "Human clusters",
        fill = "Correlation") + 
@@ -778,7 +782,7 @@ fig2_sim_heatmap <- ggplot(df_similarity_nk,
   theme_bw() +
   theme(plot.margin = margin(t = 0, b = 0, l = 5, unit = "bigpts"),
         legend.position = c(1, 0),
-        legend.justification = c("left", "bottom"),)
+        legend.justification = c("left", "bottom"))
 ```
 
 ```{r}
@@ -867,20 +871,24 @@ df_dx_nk_freq <- df_dx_nk %>%
 
 ```{r fig2-dx-plot}
 # Diagnostic plot palette
-dx_palette <- brewer.pal(n = length(dx_lvls), name = "Dark2")
+# dx_palette <- brewer.pal(n = length(dx_lvls), name = "Dark2")
+dx_palette <- colorRampPalette(c("grey10", "grey80"))(4)
 
 # Generate plot
 fig2_dx <- ggplot(df_dx_nk_freq,
                   aes(x = cluster_id, y = prop_per_k_per_dx,
                       fill = DX_new, col = DX_new, alpha = DX_new)) + 
-  geom_col(position = "dodge", alpha = 0.6) +
+  geom_col(position = "dodge", alpha = 1.0) +
+  coord_cartesian(ylim = c(0, 0.7)) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
-  scale_colour_manual(values = dx_palette,
-                      guide = guide_legend(title.position = "top",
-                                           hjust = 0)) +
-  scale_fill_manual(values = dx_palette,
-                    guide = guide_legend(title.position = "top",
-                                         hjust = 0)) +
+  scale_colour_grey() + 
+  scale_fill_grey() + 
+  # scale_colour_manual(values = dx_palette,
+  #                     guide = guide_legend(title.position = "top",
+  #                                          hjust = 0)) +
+  # scale_fill_manual(values = dx_palette,
+  #                   guide = guide_legend(title.position = "top",
+  #                                        hjust = 0)) +
   labs(x = "Human clusters",
        y = "Proportion per cluster",
        fill = "Diagnosis",
@@ -888,9 +896,10 @@ fig2_dx <- ggplot(df_dx_nk_freq,
   theme_bw() +
   theme(legend.key.size = unit(15, "bigpts"),
         legend.position = c(1, 0.5),
-        legend.justification = c("left", "center"), 
+        legend.justification = c("left", "center"),
         plot.margin = margin(t = 10, l = 5, r = 40, unit = "bigpts"))
 ```
+
 
 ```{r}
 df_dx_chi2 <- df_dx_nk %>% 
@@ -1147,8 +1156,8 @@ polar_labels <- tibble(pathway = polar_plot_lvls[2],
 #                             "#E63716")
 pathways_mouse_palette <- c("darkorchid1",
                             "seashell4",
-                            "green3",
-                            "sienna2")
+                            "sienna2",
+                            "green3")
 
 # Transparency for mouse pathway plot
 pathways_mouse_alpha <- c(0.4, 0.3, 0.6, 0.4)
@@ -1665,6 +1674,11 @@ export_pdf(x = fig2_grob,
 
 
 # Supplementary
+
+```{r}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
 
 ```{r fig2-supp-pathways-roc-plots, eval = FALSE}
 # Sequence of alpha thresholds
