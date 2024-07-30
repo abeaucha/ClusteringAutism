@@ -656,6 +656,10 @@ pdf(file = outfile,
 print(p_scale_completion)
 dev.off()
 ```
+```{r}
+p_scale_completion
+```
+
 
 ```{r}
 # Get the scales with the minimum completion rate
