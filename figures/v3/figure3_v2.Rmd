@@ -103,6 +103,8 @@ mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version, mouse_params_id)
 
 # Mouse cluster directory
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
+
+mouse_id <- 107
 ```
 
 ```{r fig3-graphical-params}
@@ -774,7 +776,7 @@ df_clusters_subset <- df_pathways_subset %>%
 ```{r fig3-pathways-cluster-streams}
 # Import mouse clusters
 mouse_cluster_file <- "clusters.csv"
-mouse_cluster_file <- file.path(mouse_cluster_dir, mouse_cluster_file)
+mouse_cluster_file <- file.path(mouse_cluster_dir, "resolution_0.2", mouse_cluster_file)
 df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
 colnames(df_mouse_clusters) <- c("ID", paste0("nk", 2:nk_max))
 
@@ -837,16 +839,30 @@ df_cluster_grid <- df_cluster_grid %>%
   filter(nk %in% nk_subset)
 ```
 
+```{r}
+df_cluster_grid %>% 
+  arrange(nk, k)
+```
+
+
 ```{r fig3-pathways-polar-plots}
 # Palette for mouse pathway plot in Figure 2
 # pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
 #                             carto_pal(12, "Vivid")[1],
 #                             carto_pal(12, "Safe")[4],
 #                             carto_pal(12, "Prism")[8])
-pathways_mouse_palette <- c("#008CFF",
-                            carto_pal(12, "Vivid")[1],
-                            "green3",
-                            "#E63716")
+# pathways_mouse_palette <- c("#008CFF",
+#                             carto_pal(12, "Vivid")[1],
+#                             "green3",
+#                             "#E63716")
+# pathways_mouse_palette <- c("darkorchid1",
+#                             "seashell4",
+#                             "green3",
+#                             "sienna2")
+pathways_mouse_palette <- c("darkorchid1",
+                            "seashell4",
+                            "sienna2",
+                            "green3")
 
 # Store polar plot palette in data frame
 df_cluster_palette_nk4 <- tibble(nk = 4, k = 1:4,
@@ -975,7 +991,7 @@ for (i in 1:length(nk_subset)) {
 # Mouse parameter set ID
 mouse_params_id <- params %>% 
   filter(id == params_id) %>% 
-  pull(mouse_id)
+  pull(input_2_id)
 
 # Jacobians to display
 jacobians <- "relative"
@@ -1001,7 +1017,7 @@ mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version)
 mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_params_id)
 
 # Mouse centroid map directory
-mouse_centroid_dir <- file.path(mouse_pipeline_dir, "cluster_maps")
+mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids")
 mouse_centroid_dir <- file.path(mouse_centroid_dir, "resolution_0.05")
 mouse_centroid_dir <- file.path(mouse_centroid_dir, jacobians)
 
@@ -1114,7 +1130,7 @@ for (l in 1:length(list_mouse_slices)) {
 # Human parameter set ID
 human_params_id <- params %>% 
   filter(id == params_id) %>% 
-  pull(human_id)
+  pull(input_1_id)
 
 # Jacobians to display
 jacobians <- "relative"
@@ -1137,7 +1153,7 @@ threshold_symmetric <- params %>%
 # Human image resolution
 human_resolution <- params %>% 
   filter(id == params_id) %>% 
-  pull(human_resolution)
+  pull(input_1_resolution)
 human_resolution <- sprintf("%.1f", human_resolution)
 
 # Human pipeline directory
@@ -1146,24 +1162,25 @@ human_pipeline_dir <- file.path(human_pipeline_dir, version)
 human_pipeline_dir <- file.path(human_pipeline_dir, human_params_id)
 
 # Human centroid map directory
-human_centroid_dir <- file.path(human_pipeline_dir, "cluster_maps")
+human_centroid_dir <- file.path(human_pipeline_dir, "centroids")
 human_centroid_dir <- file.path(human_centroid_dir, paste("resolution", human_resolution, sep = "_"))
 human_centroid_dir <- file.path(human_centroid_dir, jacobians)
 
+# Human mask
+human_mask_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/mask_0.8mm.mnc")
+human_mask <- mincGetVolume(human_mask_file)
+
 # Human anatomy
-human_anat_file <- file.path(PROJECTPATH, "data/human/registration/v2/reference_files/model_0.8mm.mnc")
+human_anat_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/model_0.8mm.mnc")
 human_anat <- mincGetVolume(human_anat_file)
+human_anat[human_mask != 1] <- 0
 human_anat_vol <- mincArray(human_anat)
 
 # Cropped human human images
-slices_dim_1 <- 25:200
-slices_dim_2 <- 25:250
-slices_dim_3 <- 25:220
+slices_dim_1 <- 27:220
+slices_dim_2 <- 10:280
+slices_dim_3 <- 10:220
 human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
-
-# Human mask
-human_mask_file <- file.path(PROJECTPATH, "data/human/registration/v2/reference_files/mask_0.8mm.mnc")
-human_mask <- mincGetVolume(human_mask_file)
 ```
 
 ```{r fig3-ss-human-import}
@@ -1263,7 +1280,7 @@ for(l in 1:length(list_human_slices)) {
     list_human_slices[[l]][[i]] <- sliceSeries(nrow = 1, ncol = 1, 
                                                dimension = human_slc_dim, 
                                                slices = human_slc) %>% 
-      anatomy(human_anat_vol_cropped, low = 3, high = 7) %>% 
+      anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
       overlay(img, 
               low = overlay_threshold[1], 
               high = overlay_threshold[2], 
@@ -1546,6 +1563,11 @@ dev.off()
 
 
 # Supplementary
+
+```{r}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
 
 ## Export matching mouse-human clusters
 

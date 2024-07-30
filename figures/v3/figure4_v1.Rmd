@@ -314,11 +314,27 @@ fig4_heatmap_PONDSK_MICe <- ggplot(df_similarity_nk,
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
                        limits = c(0.1, 1.0),
-                       breaks = seq(0, 1, by = 0.2)) + 
+                       breaks = seq(0, 1, by = 0.2),
+                       guide = guide_colourbar(title.position = "top",
+                                               title.hjust = 0.5)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal")
+
+# Export
+outfile <- paste0("figure4_PONDSK_MICe_heatmap_with_legend.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(500/72, "in"),
+    height = unit(500/72, "in"))
+print(fig4_heatmap_PONDSK_MICe)
+dev.off()
+
+
+fig4_heatmap_PONDSK_MICe <- fig4_heatmap_PONDSK_MICe +
+    theme(legend.position = "none")
 
 # Export
 outfile <- paste0("figure4_PONDSK_MICe_heatmap.pdf")
