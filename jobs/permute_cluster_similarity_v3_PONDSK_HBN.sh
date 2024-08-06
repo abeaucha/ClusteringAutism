@@ -23,9 +23,9 @@ permute_cluster_similarity.py \
 --expr-dirs data/human/expression data/human/expression \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/human/registration/v3/reference_files/mask_0.8mm.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
---permutations-start 111 \
---permutations-n 10 \
---off-diagonal 2 \
+--permutations-start 121 \
+--permutations-n 20 \
+--off-diagonal 1 \
 --execution slurm \
 --registry-name $REGISTRY \
 --registry-cleanup true \
