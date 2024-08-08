@@ -6,7 +6,7 @@
 #SBATCH --time=72:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/permute_cluster_similarity_v3_PONDSK_HBN_%j.out
-##SBATCH --dependency=afterok:
+#SBATCH --dependency=afterok:12190422
 
 # Activate virtual environment
 source activate_venv_hpc.sh
@@ -23,8 +23,8 @@ permute_cluster_similarity.py \
 --expr-dirs data/human/expression data/human/expression \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/human/registration/v3/reference_files/mask_0.8mm.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
---permutations-start 121 \
---permutations-n 20 \
+--permutations-start 141 \
+--permutations-n 10 \
 --off-diagonal 1 \
 --execution slurm \
 --registry-name $REGISTRY \
