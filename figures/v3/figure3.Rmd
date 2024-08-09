@@ -65,7 +65,6 @@ metric <- "correlation"
 
 # Fetch parameter set
 metadata <- file.path(pipeline_dir, "metadata.csv")
-metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
                                 input_1_species = "human",
                                 input_1_id = "700",
@@ -78,23 +77,28 @@ params
 
 ```{r fig3-paths}
 # Parameter set ID
-params_id <- 375
+# params_id <- 375
+params_ids <- c(375, 861)
+names(params_ids) <- c("POND", "HBN")
 
 # Update pipeline directory with parameter set ID
-pipeline_dir <- file.path(pipeline_dir, params_id)
+pipeline_dir <- file.path(pipeline_dir, params_ids)
+names(pipeline_dir) <- names(params_ids)
 
 # Directory for mouse-human cluster similarity 
 similarity_dir <- file.path(pipeline_dir, "similarity")
+names(similarity_dir) <- names(params_ids)
 
 # Directory for mouse-human cluster similarity permutations
 permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+names(permutation_dir) <- names(params_ids)
 
 # Max number of clusters
 nk_max <- 10
 
 # Mouse pipeline parameter set ID
 mouse_params_id <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(input_2_id)
 
 # Mouse processing pipeline directory
@@ -142,10 +146,11 @@ fig3_width <- fig3_total_width - 2*fig3_border_padding_width
 
 # Cluster similarity and significance by permutation testing
 
+## POND-SickKids
+
 ```{r fig3-similarity-import}
 # Path to mouse-human similarity directory
-similarity_dir <- file.path(pipeline_dir, "similarity")
-similarity_file <- file.path(similarity_dir, "similarity.csv")
+similarity_file <- file.path(similarity_dir[1], "similarity.csv")
 
 # Import the similarity data and extract cluster information
 similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
@@ -197,11 +202,8 @@ df_similarity %>%
 
 
 ```{r fig3-similarity-import-permutations}
-# Path to permutations directory
-permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
-
 # Permutation file names
-permutation_files <- list.files(permutation_dir)
+permutation_files <- list.files(permutation_dir[1])
 
 # Number of permutations
 np <- length(permutation_files)
@@ -211,7 +213,7 @@ for (p in 1:np) {
   # Permutation data to import
   permutation_file <- permutation_files %>% 
     str_subset(str_c("similarity_permutation_", p, ".csv"))
-  permutation_file <- file.path(permutation_dir, permutation_file)
+  permutation_file <- file.path(permutation_dir[1], permutation_file)
   
   # Import permutation data
   list_permutations[[p]] <- read_csv(permutation_file, 
@@ -303,6 +305,164 @@ df_sim_pvals %>%
   arrange(mouse_nk, mouse_k) %>% 
   select(mouse_cluster_id, human_cluster_id, similarity, pval) 
 ```
+
+```{r}
+df_sim_pvals_POND <- df_sim_pvals
+```
+
+
+## HBN
+
+```{r fig3-similarity-import}
+# Path to mouse-human similarity directory
+similarity_file <- file.path(similarity_dir[2], "similarity.csv")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  rename(human_img = img1,
+         mouse_img = img2) %>% 
+  mutate(human_nk = human_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_k = human_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_jacobians = human_img %>% 
+           str_extract("absolute|relative"),
+         mouse_nk = mouse_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_k = mouse_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_jacobians = mouse_img %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "human_cluster_id", human_nk, human_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity <- similarity %>% 
+  group_by(human_cluster_id, human_nk, human_k, 
+           mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir[2])
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir[2], permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    rename(human_img = img1,
+           mouse_img = img2) %>% 
+    mutate(human_nk = human_img %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           human_k = human_img %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           mouse_nk = mouse_img %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           mouse_k = mouse_img %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "human_cluster_id", human_nk, human_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations <- list_permutations %>% 
+  bind_rows() %>% 
+  group_by(permutation, human_nk, mouse_nk, human_cluster_id, mouse_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+```
+
+```{r fig3-similarity-compute-pvals}
+# Mouse and human max nk
+human_nk_max <- max(df_similarity[["human_nk"]])
+mouse_nk_max <- max(df_similarity[["mouse_nk"]])
+
+# Iterate along nk diagonal +/- 1
+df_sim_pvals <- tibble()
+for (h_nk in 2:human_nk_max) {
+  for (m_nk in (h_nk-1):(h_nk+1)){
+    
+    if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
+      
+      df_sim_nk <- df_similarity %>% 
+        select(human_cluster_id, human_nk, human_k,
+               mouse_cluster_id, mouse_nk, mouse_k,
+               similarity) %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        mutate(pval = 0)
+      
+      sim_perm_nk <- df_permutations %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        pull(similarity) %>% 
+        sort()
+      
+      for (i in 1:nrow(df_sim_nk)) {
+        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
+        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+      }
+      
+      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      
+    }
+  }
+}
+
+# Evaluate significance
+sim_alpha <- 0.05
+df_sim_pvals <- df_sim_pvals %>% 
+  mutate(significant = ifelse(pval < sim_alpha, 1, 0))
+
+df_sim_pvals %>% 
+  filter(significant == 1) %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  select(mouse_cluster_id, human_cluster_id, similarity, pval) 
+
+df_sim_pvals_HBN <- df_sim_pvals
+```
+
 
 
 
@@ -559,7 +719,7 @@ df_pathways_heatmap <- df_pathways_nk_gt4_subset %>%
   mutate(pathway = factor(pathway, levels = pathway_lvls_clustered),
          acronym = factor(acronym, levels = pathway_label_lvls_clustered))
 
-df_sig_nk <- df_sim_pvals %>% 
+df_sig_nk_POND <- df_sim_pvals_POND %>% 
   group_by(mouse_nk, mouse_k) %>% 
   summarise(p = min(pval),
             nsignificant = sum(significant),
@@ -568,14 +728,32 @@ df_sig_nk <- df_sim_pvals %>%
                           p >= 0.05 & p < 0.1 ~ "*",
                           p >= 0.1 ~ ""),
          has_match = ifelse(nsignificant > 0, TRUE, FALSE),
-         y = "y") %>% 
+         y = "POND") %>% 
   select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
   filter(nk >= 4) %>% 
   unite(col = "cluster_id", "nk", "k", 
         sep = "-", remove = FALSE) 
 
+df_sig_nk_HBN <- df_sim_pvals_HBN %>% 
+  group_by(mouse_nk, mouse_k) %>% 
+  summarise(p = min(pval),
+            nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(plab = case_when(p < 0.05 ~ "**",
+                          p >= 0.05 & p < 0.1 ~ "*",
+                          p >= 0.1 ~ ""),
+         has_match = ifelse(nsignificant > 0, TRUE, FALSE),
+         y = "HBN") %>% 
+  select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", "nk", "k", 
+        sep = "-", remove = FALSE) 
+
+df_sig_nk <- bind_rows(df_sig_nk_POND,
+                       df_sig_nk_HBN)
+
 df_pathways_heatmap <- df_pathways_heatmap %>% 
-  left_join(df_sig_nk %>% 
+  left_join(df_sig_nk_POND %>% 
               select(cluster_id, has_match),
             by = "cluster_id")
 
@@ -696,7 +874,7 @@ fig3_heatmap_human_match <- fig3_heatmap_human_match +
 ```{r fig3-heatmap-build}
 # Combine heatmaps using patchwork
 fig3_heatmap_patchwork <- (fig3_heatmap_human_match / plot_spacer() / fig3_heatmap_pathways) +
-  plot_layout(heights = c(0.05, 0.015, 0.935)) &
+  plot_layout(heights = c(0.10, 0.015, 0.930)) &
   theme(plot.margin = margin(l = 0))
 fig3_heatmap_patchwork_grob <- patchworkGrob(fig3_heatmap_patchwork)
 
@@ -705,10 +883,10 @@ fig3_heatmap_dendrogram_width_pt <- 26
 
 # Dimensions of heatmap patchwork in bigpts
 fig3_heatmap_patchwork_width_pt <- fig3_width - fig3_heatmap_dendrogram_width_pt
-fig3_heatmap_patchwork_height_pt <- 205
+fig3_heatmap_patchwork_height_pt <- 215
 
 # Heights of padding elements in bigpts
-fig3_heatmap_padding_height_1_pt <- 24
+fig3_heatmap_padding_height_1_pt <- 37
 fig3_heatmap_padding_height_2_pt <- 19
 
 # Dimensions of heatmap plot
@@ -754,7 +932,7 @@ export_pdf(x = fig3_heatmap_grob,
 nk_subset <- c(4, 6, 8, 10)
 
 # Determine mouse clusters with human matches
-df_mouse_matches <- df_sig_nk %>% 
+df_mouse_matches <- df_sig_nk_POND %>% 
   filter(has_match) %>% 
   select(cluster_id, nk, k) %>% 
   mutate(nk = as.numeric(as.character(nk)),
@@ -990,7 +1168,7 @@ for (i in 1:length(nk_subset)) {
 ```{r fig3-ss-mouse-paths}
 # Mouse parameter set ID
 mouse_params_id <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(input_2_id)
 
 # Jacobians to display
@@ -998,17 +1176,17 @@ jacobians <- "relative"
 
 # Threshold method
 threshold <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(threshold)
 
 # Threshold value
 threshold_value <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(threshold_value)
 
 # Threshold symmetric option
 threshold_symmetric <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(threshold_symmetric)
 
 # Mouse pipeline directory
@@ -1128,31 +1306,32 @@ for (l in 1:length(list_mouse_slices)) {
 
 ```{r fig3-ss-human-paths}
 # Human parameter set ID
-human_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_1_id)
+# human_params_id <- params %>% 
+#   filter(id == params_ids[1]) %>% 
+#   pull(input_1_id)
+human_params_id <- c("700", "013")
 
 # Jacobians to display
 jacobians <- "relative"
 
 # Threshold method
 threshold <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(threshold)
 
 # Threshold value
 threshold_value <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(threshold_value)
 
 # Threshold symmetric option
 threshold_symmetric <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(threshold_symmetric)
 
 # Human image resolution
 human_resolution <- params %>% 
-  filter(id == params_id) %>% 
+  filter(id == params_ids[1]) %>% 
   pull(input_1_resolution)
 human_resolution <- sprintf("%.1f", human_resolution)
 
@@ -1160,11 +1339,13 @@ human_resolution <- sprintf("%.1f", human_resolution)
 human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
 human_pipeline_dir <- file.path(human_pipeline_dir, version)
 human_pipeline_dir <- file.path(human_pipeline_dir, human_params_id)
+names(human_pipeline_dir) <- c("POND", "HBN")
 
 # Human centroid map directory
 human_centroid_dir <- file.path(human_pipeline_dir, "centroids")
 human_centroid_dir <- file.path(human_centroid_dir, paste("resolution", human_resolution, sep = "_"))
 human_centroid_dir <- file.path(human_centroid_dir, jacobians)
+names(human_centroid_dir) <- c("POND", "HBN")
 
 # Human mask
 human_mask_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/mask_0.8mm.mnc")
@@ -1183,6 +1364,8 @@ slices_dim_3 <- 10:220
 human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
 ```
 
+## POND-SickKids
+
 ```{r fig3-ss-human-import}
 # Anatomical plane to display
 # Sagittal: 1
@@ -1194,16 +1377,16 @@ human_slc_dim <- 1
 human_slc <- 82
 
 # Iterate over mouse slices
-list_human_slices <- vector(mode = "list", length = length(list_mouse_slices))
-names(list_human_slices) <- names(list_mouse_slices)
-for(l in 1:length(list_human_slices)) {
+list_human_slices_POND <- vector(mode = "list", length = length(list_mouse_slices))
+names(list_human_slices_POND) <- names(list_mouse_slices)
+for(l in 1:length(list_human_slices_POND)) {
   
   # Get cluster info for current nk
   df_clusters_subset_nk <- df_clusters_subset %>% 
     filter(nk == nk_subset[l]) 
   
   # Iterate over cluster solutions
-  list_human_slices[[l]] <- vector(mode = "list", length = nrow(df_clusters_subset_nk))
+  list_human_slices_POND[[l]] <- vector(mode = "list", length = nrow(df_clusters_subset_nk))
   for (i in 1:nrow(df_clusters_subset_nk)) {
     
     # Extract mouse cluster ID
@@ -1211,7 +1394,7 @@ for(l in 1:length(list_human_slices)) {
     k_mouse <- df_clusters_subset_nk[[i, "k"]]
     
     # Identify matches to mouse cluster
-    df_match_i <- df_sim_pvals %>% 
+    df_match_i <- df_sim_pvals_POND %>% 
       filter(mouse_nk == nk_mouse,
              mouse_k == k_mouse,
              significant == 1)
@@ -1259,7 +1442,7 @@ for(l in 1:length(list_human_slices)) {
     print(paste(nk, k, sep = "-"))
     
     # Import centroid image and threshold
-    img <- import_cluster_map(imgdir = human_centroid_dir,
+    img <- import_cluster_map(imgdir = human_centroid_dir[["POND"]],
                               mask = human_mask_file,
                               nk = nk, k = k,
                               threshold = threshold,
@@ -1277,9 +1460,9 @@ for(l in 1:length(list_human_slices)) {
     img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
     
     # Generate slice series
-    list_human_slices[[l]][[i]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                               dimension = human_slc_dim, 
-                                               slices = human_slc) %>% 
+    list_human_slices_POND[[l]][[i]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                                    dimension = human_slc_dim, 
+                                                    slices = human_slc) %>% 
       anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
       overlay(img, 
               low = overlay_threshold[1], 
@@ -1291,6 +1474,134 @@ for(l in 1:length(list_human_slices)) {
 }
 ```
 
+
+## HBN
+
+
+```{r}
+df_sim_pvals_HBN %>% 
+  filter(mouse_nk == 8, pval <= 0.05) %>% 
+  arrange(mouse_k, pval) %>% 
+  select(mouse_cluster_id, human_cluster_id, similarity, pval) 
+```
+
+
+```{r fig3-ss-human-import}
+# Anatomical plane to display
+# Sagittal: 1
+# Coronal: 2 
+# Transverse: 3
+human_slc_dim <- 1
+
+# Human brain slice to display
+human_slc <- 82
+
+# Iterate over mouse slices
+list_human_slices_HBN <- vector(mode = "list", length = length(list_mouse_slices))
+names(list_human_slices_HBN) <- names(list_mouse_slices)
+for(l in 1:length(list_human_slices_HBN)) {
+  
+  # Get cluster info for current nk
+  df_clusters_subset_nk <- df_clusters_subset %>% 
+    filter(nk == nk_subset[l]) 
+  
+  # Iterate over cluster solutions
+  list_human_slices_HBN[[l]] <- vector(mode = "list", length = nrow(df_clusters_subset_nk))
+  for (i in 1:nrow(df_clusters_subset_nk)) {
+    
+    # Extract mouse cluster ID
+    nk_mouse <- df_clusters_subset_nk[[i, "nk"]]
+    k_mouse <- df_clusters_subset_nk[[i, "k"]]
+    
+    # Identify matches to mouse cluster
+    df_match_i <- df_sim_pvals_HBN %>% 
+      filter(mouse_nk == nk_mouse,
+             mouse_k == k_mouse,
+             significant == 1)
+    
+    # If only one match, select that one
+    if (nrow(df_match_i) == 1) {
+      df_match_i <- df_match_i %>% 
+        select(cluster_id = human_cluster_id,
+               nk = human_nk, k = human_k)
+    } else {
+      
+      # If more than one match, test whether there is a match at the same nk
+      nk_test <- df_match_i %>% 
+        filter(mouse_nk == human_nk) %>% 
+        nrow()
+      
+      # If only one match at same nk, select that one
+      if (nk_test == 1) {
+        df_match_i <- df_match_i %>% 
+          filter(mouse_nk == human_nk) %>% 
+          select(cluster_id = human_cluster_id,
+                 nk = human_nk, k = human_k)
+        
+        # If more than one match at nk, select the most significant
+      } else if (nk_test > 1) {
+        df_match_i <- df_match_i %>% 
+          filter(mouse_nk == human_nk) %>% 
+          top_n(n = -1, wt = pval) %>% 
+          select(cluster_id = human_cluster_id,
+                 nk = human_nk, k = human_k)
+        
+        # If no matches at nk, select the most significant amid the others
+      } else {
+        df_match_i <- df_match_i %>% 
+          top_n(n = -1, wt = pval) %>% 
+          select(cluster_id = human_cluster_id,
+                 nk = human_nk, k = human_k)
+      } 
+    }
+    
+    
+    # Extract matching human cluster ID
+    if (nk_mouse == 6 & k_mouse == 5) {
+      nk <- 6; k <- 2
+    } else if (nk_mouse == 8 & k_mouse == 2) {
+      nk <- 8; k <- 3
+    } else if (nk_mouse == 10 & k_mouse == 4) {
+      nk <- 10; k <- 4
+    } else {
+      nk <- df_match_i[["nk"]]
+      k <- df_match_i[["k"]]
+    }
+    
+    print(paste(nk, k, sep = "-"))
+    
+    # Import centroid image and threshold
+    img <- import_cluster_map(imgdir = human_centroid_dir[["HBN"]],
+                              mask = human_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    # Convert mincSingleDim to mincArray and crop
+    img <- mincArray(img)
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+    # Generate slice series
+    list_human_slices_HBN[[l]][[i]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                                   dimension = human_slc_dim, 
+                                                   slices = human_slc) %>% 
+      anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], 
+              high = overlay_threshold[2], 
+              symmetric = TRUE) %>% 
+      grobify()
+    
+  }
+}
+```
 
 # Figure
 
@@ -1342,13 +1653,15 @@ for (i in 1:length(list_mouse_slices)) {
     
     # Dimensions of slice series grid
     fig3_neuro_ss_widths <- fig3_mouse_ss_width_pt
-    fig3_neuro_ss_heights <- c(fig3_human_ss_height_pt, fig3_neuro_ss_padding_pt, fig3_mouse_ss_height_pt)
+    fig3_neuro_ss_heights <- c(fig3_human_ss_height_pt, fig3_neuro_ss_padding_pt, fig3_mouse_ss_height_pt, fig3_neuro_ss_padding_pt, fig3_human_ss_height_pt)
     
     # Generate slice series for cluster solution    
-    ss <- arrangeGrob(list_human_slices[[i]][[j]],
+    ss <- arrangeGrob(list_human_slices_POND[[i]][[j]],
                       black_rect_grob,
                       list_mouse_slices[[i]][[j]],
-                      layout_matrix = cbind(1:3),
+                      black_rect_grob,
+                      list_human_slices_HBN[[i]][[j]],
+                      layout_matrix = cbind(1:5),
                       widths = unit(fig3_neuro_ss_widths, "bigpts"),
                       heights = unit(fig3_neuro_ss_heights, "bigpts"))
     
@@ -1372,8 +1685,10 @@ for (i in 1:length(list_mouse_slices)) {
     
   }
 }
-#```
+```
 
+
+```{r fig3-neuro-ss-grobs}
 # BREAK HERE ####
 #```{r fig3-neuro-panel-grobs}
 # Height of polar plot based on ss width
