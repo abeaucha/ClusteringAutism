@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "PLSDA"
 author: "Antoine Beauchamp"
 date: "`r Sys.Date()`"
 output: html_document
@@ -15,13 +15,17 @@ library(tidyverse)
 
 
 ```{r}
+# Path to PLSDA results
 file <- "outputs/human_clinical_multivariate/v3/700/PLSDA_results.csv"
 
+# Import results
 df_results <- read_csv(file, show_col_types = FALSE)
 
+# Variable indicating cluster comparison
 df_results <- df_results %>% 
   mutate(comparison = paste(cluster1, "to", cluster2))
 
+# Generate all cluster IDs
 cluster_ids <- c()
 for (nk in 2:10) {
   for (k in 1:nk) {
@@ -29,128 +33,32 @@ for (nk in 2:10) {
   }
 }
 
+# Sort comparison labels and use as factor levels
 comparison_lvls <- df_results %>% 
   select(nk, cluster1, cluster2, comparison) %>% 
   arrange(nk, cluster1, cluster2) %>% 
   distinct() %>% 
   pull(comparison)
 
+# Convert comparisons to factor
 df_results <- df_results %>% 
   mutate(comparison = factor(comparison, levels = comparison_lvls))
-
-df_results %>% 
-  select(comparison, cluster1_n, cluster2_n) %>% 
-  distinct()
-```
-
-
-```{r}
-df_results_1 <- df_results %>% 
-  group_by(nk, comparison, threshold) %>% 
-  summarise(auc_min = min(auc),
-            auc_max = max(auc),
-            .groups = "drop")
-```
-
-```{r fig.width=5, fig.height=20}
-df_results_1 %>% 
-  filter(threshold == 0.6) %>% 
-  ggplot(aes(x = fct_rev(comparison), ymin = auc_min, ymax = auc_max)) +
-  geom_linerange() +
-  geom_hline(yintercept = c(0.5, 1),
-             linetype = "dashed") + 
-  coord_flip(ylim = c(0.5, 1)) +
-  facet_grid(nk~., scales = "free_y") +
-  theme_bw()
-```
-
-```{r fig.width = 10, fig.height = 10}
-df_results_2 <- df_results %>% 
-  group_by(nk, threshold, cluster1, cluster2) %>% 
-  summarise(auc_min = min(auc), 
-            .groups = "drop")
-
-# df_cluster_grid <- expand_grid(cluster1 = cluster_ids,
-#             cluster2 = cluster_ids) %>% 
-#   mutate(cluster1 = factor(cluster1, levels = cluster_ids),
-#          cluster2 = factor(cluster2, levels = cluster_ids))
-
-
-clusters_with_match <- c("2-1",
-                         "3-1", "3-3", 
-                         "4-1", "4-2", "4-3",
-                         "5-2", "5-5", 
-                         "6-2", "6-6", 
-                         "7-1", "7-2", "7-4", "7-5", 
-                         "8-1", "8-2", "8-4", "8-6", "8-7",
-                         "9-1", "9-4", "9-5", "9-7", 
-                         "10-1", "10-4", "10-6", "10-7", "10-10")
-
-df_results_2 <- df_results_2 %>% 
-  mutate(cluster1_hasmatch = cluster1 %in% clusters_with_match,
-         cluster2_hasmatch = cluster2 %in% clusters_with_match,
-         matches = case_when(cluster1_hasmatch & cluster2_hasmatch ~ "**",
-                             cluster1_hasmatch | cluster2_hasmatch ~ "*",
-                             !cluster1_hasmatch & !cluster2_hasmatch ~ ""))
-         
-         
-         # matches = factor(matches, levels = c("none", "*", "**")))
-
-
-
-# cluster1 = factor(cluster1, levels = cluster_ids),
-#          cluster2 = factor(cluster2, levels = cluster_ids)
-
-
-p2 <- df_results_2 %>% 
-  filter(threshold == 0.6) %>% 
-  ggplot(aes(x = cluster2, y = fct_rev(cluster1), fill = auc_min)) + 
-  geom_tile(col = "grey50") + 
-  geom_text(aes(label = matches)) + 
-  facet_wrap(~nk, scales = "free") +
-  scale_x_discrete(expand = expansion()) +
-  scale_y_discrete(expand = expansion()) +
-  scale_fill_distiller(palette = "Spectral", direction = 1, limits = c(0.5, 1.0)) + 
-  labs(x = NULL, y = NULL,
-       fill = "Minimum AUC") +
-  theme_bw() 
-
-outfile = "outputs/human_clinical_multivariate/v3/700/AUC_min.pdf"
-pdf(file = outfile,
-    width = unit(12, "in"),
-    height = unit(10, "in"))
-print(p2)
-dev.off()
-```
-
-
-```{r}
-tmp <- df_results %>% 
-  mutate(cluster_nmin = ifelse(cluster1_n < cluster2_n, cluster1_n, cluster2_n))
-
-tmp %>% 
-  filter(nk == 8, threshold == 0.6) %>% 
-  select(cluster1, cluster2, cluster1_n, cluster2_n, cluster_nmin) %>% 
-  distinct() %>% 
-  arrange(cluster_nmin)
 ```
 
 
 ```{r fig.width = 10, fig.height = 10}
+# Compute minimum AUC per comparison
 df_results_2 <- df_results %>% 
   group_by(nk, threshold, cluster1, cluster2, cluster1_n, cluster2_n) %>% 
   summarise(auc_min = min(auc), 
             .groups = "drop")
 
+# Flag which comparisons have low numbers
 df_results_2 <- df_results_2 %>% 
   mutate(nsmall = cluster1_n < 20 | cluster2_n < 20)
 
 
-# df_cluster_grid <- expand_grid(cluster1 = cluster_ids,
-#             cluster2 = cluster_ids) %>% 
-#   mutate(cluster1 = factor(cluster1, levels = cluster_ids),
-#          cluster2 = factor(cluster2, levels = cluster_ids))
-
+# Labels for higher AUC values
 df_results_2 <- df_results_2 %>% 
   mutate(label = case_when(auc_min >= 0.70 & auc_min < 0.8 ~ "*",
                            auc_min >= 0.80 ~ "**",
@@ -158,6 +66,7 @@ df_results_2 <- df_results_2 %>%
          cluster1 = factor(cluster1, levels = cluster_ids),
          cluster2 = factor(cluster2, levels = cluster_ids))
 
+# Generate heatmaps
 p2 <- df_results_2 %>% 
   filter(threshold == 0.6) %>% 
   ggplot(aes(x = cluster2, y = fct_rev(cluster1), fill = auc_min)) + 
@@ -172,16 +81,13 @@ p2 <- df_results_2 %>%
        fill = "Minimum AUC") +
   theme_bw() 
 
-outfile = "outputs/human_clinical_multivariate/v3/700/AUC_min_2.pdf"
+# Export plot
+outfile = "outputs/human_clinical_multivariate/v3/700/AUC_min.pdf"
 pdf(file = outfile,
     width = unit(12, "in"),
     height = unit(10, "in"))
 print(p2)
 dev.off()
-```
-
-```{r}
-df_results 
 ```
 
 
@@ -226,10 +132,6 @@ print(p3)
 dev.off()
 ```
 
-```{r}
-df_cluster_grid %>% 
-  pivot_longer()
-```
 
 ```{r}
 # Path to similarity directory
@@ -247,7 +149,6 @@ permutation_ids <- permutation_files %>%
   as.numeric() %>% 
   unique() %>% 
   sort()
-
 
 # Import the similarity data and extract cluster information
 similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
@@ -366,14 +267,6 @@ for (nk_1 in 2:nk_max_1) {
         df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
       }
       
-      # df_sim_nk <- df_sim_nk %>%
-      #   mutate(significant = ifelse(pval <= 0.10, TRUE, FALSE),
-      #          pval_lab = case_when(pval > 0.10 ~ "",
-      #                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
-      #                               pval < 0.001 ~ "p < 0.001"),
-      #          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
-      #          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
-      
       df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
       
     }
@@ -382,17 +275,10 @@ for (nk_1 in 2:nk_max_1) {
 
 ```
 
-```{r}
-df_sim_pvals
-```
 
 ```{r}
 df_cluster_grid <- expand_grid(img1_cluster_id = cluster_ids,
                                img2_cluster_id = cluster_ids)
-```
-
-```{r}
-df_sim_pvals
 ```
 
 
