@@ -1,0 +1,478 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+file <- "outputs/human_clinical_multivariate/v3/700/PLSDA_results.csv"
+
+df_results <- read_csv(file, show_col_types = FALSE)
+
+df_results <- df_results %>% 
+  mutate(comparison = paste(cluster1, "to", cluster2))
+
+cluster_ids <- c()
+for (nk in 2:10) {
+  for (k in 1:nk) {
+    cluster_ids <- c(cluster_ids, paste(nk, k, sep = "-"))
+  }
+}
+
+comparison_lvls <- df_results %>% 
+  select(nk, cluster1, cluster2, comparison) %>% 
+  arrange(nk, cluster1, cluster2) %>% 
+  distinct() %>% 
+  pull(comparison)
+
+df_results <- df_results %>% 
+  mutate(comparison = factor(comparison, levels = comparison_lvls))
+
+df_results %>% 
+  select(comparison, cluster1_n, cluster2_n) %>% 
+  distinct()
+```
+
+
+```{r}
+df_results_1 <- df_results %>% 
+  group_by(nk, comparison, threshold) %>% 
+  summarise(auc_min = min(auc),
+            auc_max = max(auc),
+            .groups = "drop")
+```
+
+```{r fig.width=5, fig.height=20}
+df_results_1 %>% 
+  filter(threshold == 0.6) %>% 
+  ggplot(aes(x = fct_rev(comparison), ymin = auc_min, ymax = auc_max)) +
+  geom_linerange() +
+  geom_hline(yintercept = c(0.5, 1),
+             linetype = "dashed") + 
+  coord_flip(ylim = c(0.5, 1)) +
+  facet_grid(nk~., scales = "free_y") +
+  theme_bw()
+```
+
+```{r fig.width = 10, fig.height = 10}
+df_results_2 <- df_results %>% 
+  group_by(nk, threshold, cluster1, cluster2) %>% 
+  summarise(auc_min = min(auc), 
+            .groups = "drop")
+
+# df_cluster_grid <- expand_grid(cluster1 = cluster_ids,
+#             cluster2 = cluster_ids) %>% 
+#   mutate(cluster1 = factor(cluster1, levels = cluster_ids),
+#          cluster2 = factor(cluster2, levels = cluster_ids))
+
+
+clusters_with_match <- c("2-1",
+                         "3-1", "3-3", 
+                         "4-1", "4-2", "4-3",
+                         "5-2", "5-5", 
+                         "6-2", "6-6", 
+                         "7-1", "7-2", "7-4", "7-5", 
+                         "8-1", "8-2", "8-4", "8-6", "8-7",
+                         "9-1", "9-4", "9-5", "9-7", 
+                         "10-1", "10-4", "10-6", "10-7", "10-10")
+
+df_results_2 <- df_results_2 %>% 
+  mutate(cluster1_hasmatch = cluster1 %in% clusters_with_match,
+         cluster2_hasmatch = cluster2 %in% clusters_with_match,
+         matches = case_when(cluster1_hasmatch & cluster2_hasmatch ~ "**",
+                             cluster1_hasmatch | cluster2_hasmatch ~ "*",
+                             !cluster1_hasmatch & !cluster2_hasmatch ~ ""))
+         
+         
+         # matches = factor(matches, levels = c("none", "*", "**")))
+
+
+
+# cluster1 = factor(cluster1, levels = cluster_ids),
+#          cluster2 = factor(cluster2, levels = cluster_ids)
+
+
+p2 <- df_results_2 %>% 
+  filter(threshold == 0.6) %>% 
+  ggplot(aes(x = cluster2, y = fct_rev(cluster1), fill = auc_min)) + 
+  geom_tile(col = "grey50") + 
+  geom_text(aes(label = matches)) + 
+  facet_wrap(~nk, scales = "free") +
+  scale_x_discrete(expand = expansion()) +
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_distiller(palette = "Spectral", direction = 1, limits = c(0.5, 1.0)) + 
+  labs(x = NULL, y = NULL,
+       fill = "Minimum AUC") +
+  theme_bw() 
+
+outfile = "outputs/human_clinical_multivariate/v3/700/AUC_min.pdf"
+pdf(file = outfile,
+    width = unit(12, "in"),
+    height = unit(10, "in"))
+print(p2)
+dev.off()
+```
+
+
+```{r}
+tmp <- df_results %>% 
+  mutate(cluster_nmin = ifelse(cluster1_n < cluster2_n, cluster1_n, cluster2_n))
+
+tmp %>% 
+  filter(nk == 8, threshold == 0.6) %>% 
+  select(cluster1, cluster2, cluster1_n, cluster2_n, cluster_nmin) %>% 
+  distinct() %>% 
+  arrange(cluster_nmin)
+```
+
+
+```{r fig.width = 10, fig.height = 10}
+df_results_2 <- df_results %>% 
+  group_by(nk, threshold, cluster1, cluster2, cluster1_n, cluster2_n) %>% 
+  summarise(auc_min = min(auc), 
+            .groups = "drop")
+
+df_results_2 <- df_results_2 %>% 
+  mutate(nsmall = cluster1_n < 20 | cluster2_n < 20)
+
+
+# df_cluster_grid <- expand_grid(cluster1 = cluster_ids,
+#             cluster2 = cluster_ids) %>% 
+#   mutate(cluster1 = factor(cluster1, levels = cluster_ids),
+#          cluster2 = factor(cluster2, levels = cluster_ids))
+
+df_results_2 <- df_results_2 %>% 
+  mutate(label = case_when(auc_min >= 0.70 & auc_min < 0.8 ~ "*",
+                           auc_min >= 0.80 ~ "**",
+                           auc_min < 0.70 ~ ""),
+         cluster1 = factor(cluster1, levels = cluster_ids),
+         cluster2 = factor(cluster2, levels = cluster_ids))
+
+p2 <- df_results_2 %>% 
+  filter(threshold == 0.6) %>% 
+  ggplot(aes(x = cluster2, y = fct_rev(cluster1), fill = auc_min)) + 
+  geom_tile(col = "grey50") + 
+  geom_text(aes(label = label, col = nsmall)) + 
+  facet_wrap(~nk, scales = "free") +
+  scale_x_discrete(expand = expansion()) +
+  scale_y_discrete(expand = expansion()) +
+  scale_color_manual(values = c("black", "royalblue1")) + 
+  scale_fill_distiller(palette = "Spectral", direction = -1, limits = c(0.6, 1.0)) + 
+  labs(x = NULL, y = NULL,
+       fill = "Minimum AUC") +
+  theme_bw() 
+
+outfile = "outputs/human_clinical_multivariate/v3/700/AUC_min_2.pdf"
+pdf(file = outfile,
+    width = unit(12, "in"),
+    height = unit(10, "in"))
+print(p2)
+dev.off()
+```
+
+```{r}
+df_results 
+```
+
+
+```{r}
+clusters_with_match <- c("2-1",
+                         "3-1", "3-3", 
+                         "4-1", "4-2", "4-3",
+                         "5-2", "5-5", 
+                         "6-2", "6-6", 
+                         "7-1", "7-2", "7-4", "7-5", 
+                         "8-1", "8-2", "8-4", "8-6", "8-7",
+                         "9-1", "9-4", "9-5", "9-7", 
+                         "10-1", "10-4", "10-6", "10-7", "10-10")
+
+df_results_3 <- df_results %>% 
+  mutate(cluster1_hasmatch = cluster1 %in% clusters_with_match,
+         cluster2_hasmatch = cluster2 %in% clusters_with_match,
+         both_match = cluster1_hasmatch & cluster2_hasmatch) %>% 
+  filter(both_match) %>% 
+  group_by(nk, comparison, threshold) %>% 
+  summarise(auc_min = min(auc),
+            auc_max = max(auc),
+            .groups = "drop")
+
+p3 <- df_results_3 %>% 
+  mutate(threshold = factor(threshold, levels = c("0.6", "0.8"))) %>% 
+  ggplot(aes(x = fct_rev(comparison), ymin = auc_min, ymax = auc_max, col = threshold)) +
+  geom_linerange() +
+  geom_hline(yintercept = c(0.5, 1),
+             linetype = "dashed") + 
+  coord_flip(ylim = c(0.5, 1)) +
+  facet_grid(nk~., scales = "free_y", space = "free_y") +
+  labs(x = "AUC", y = "Cluster comparison", color = "Completion threshold") +
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+
+outfile = "outputs/human_clinical_multivariate/v3/700/clusters_with_match_AUC.pdf"
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(10, "in"))
+print(p3)
+dev.off()
+```
+
+```{r}
+df_cluster_grid %>% 
+  pivot_longer()
+```
+
+```{r}
+# Path to similarity directory
+similarity_dir <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main/data/cross_species/v3/375/similarity/"
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Permutation directory and files
+permutation_dir <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main/data/cross_species/v3/375/permutations/similarity/"
+permutation_files <- list.files(permutation_dir, full.names = TRUE)
+
+# Permutation IDs
+permutation_ids <- permutation_files %>% 
+  basename() %>% 
+  str_extract("[0-9]+") %>% 
+  as.numeric() %>% 
+  unique() %>% 
+  sort()
+
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  mutate(img1_nk = img1 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_k = img1 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_jacobians = img1 %>% 
+           str_extract("absolute|relative"),
+         img2_nk = img2 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_k = img2 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_jacobians = img2 %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "img1_cluster_id", img1_nk, img1_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "img2_cluster_id", img2_nk, img2_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity <- similarity %>%
+  group_by(img1_nk, img2_nk, img1_k, img2_k, img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in permutation_ids) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations <- list_permutations %>% 
+  bind_rows() %>% 
+  group_by(permutation, img1_nk, img2_nk, img1_k, img2_k, img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+
+# Mouse and human max nk
+nk_max_1 <- max(df_similarity[["img1_nk"]])
+nk_max_2 <- max(df_similarity[["img2_nk"]])
+
+# Iterate along nk diagonal +/- 1
+df_sim_pvals <- tibble()
+for (nk_1 in 2:nk_max_1) {
+  for (nk_2 in (nk_1-1):(nk_1+1)){
+    
+    if ((nk_2 > 1) & (nk_2 <= nk_max_2)) {
+      
+      df_sim_nk <- df_similarity %>% 
+        select(img1_cluster_id, img1_nk, img1_k,
+               img2_cluster_id, img2_nk, img2_k,
+               similarity) %>% 
+        filter(img1_nk == nk_1,
+               img2_nk == nk_2) %>% 
+        mutate(pval = 0)
+      
+      sim_perm_nk <- df_permutations %>% 
+        filter(img1_nk == nk_1,
+               img2_nk == nk_2) %>% 
+        pull(similarity) %>% 
+        sort()
+      
+      for (i in 1:nrow(df_sim_nk)) {
+        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
+        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+      }
+      
+      # df_sim_nk <- df_sim_nk %>%
+      #   mutate(significant = ifelse(pval <= 0.10, TRUE, FALSE),
+      #          pval_lab = case_when(pval > 0.10 ~ "",
+      #                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+      #                               pval < 0.001 ~ "p < 0.001"),
+      #          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+      #          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+      
+      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      
+    }
+  }
+}
+
+```
+
+```{r}
+df_sim_pvals
+```
+
+```{r}
+df_cluster_grid <- expand_grid(img1_cluster_id = cluster_ids,
+                               img2_cluster_id = cluster_ids)
+```
+
+```{r}
+df_sim_pvals
+```
+
+
+```{r}
+tmp <- df_sim_pvals %>% 
+  right_join(df_cluster_grid, by = c("img1_cluster_id", "img2_cluster_id"))
+
+tmp <- tmp %>% 
+  select(img1_cluster_id, img2_cluster_id, pval)
+
+tmp <- tmp %>% 
+  mutate(pair = factor(1:nrow(.)))
+
+tmp <- tmp %>% 
+  pivot_longer(cols = c("img1_cluster_id", "img2_cluster_id"), names_to = "dataset", values_to = "cluster_id")
+
+tmp <- tmp %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_ids),
+         cluster_num = as.numeric(cluster_id),
+         dataset = ifelse(dataset == "img1_cluster_id", "POND-SickKids", "MICe"),
+         dataset = factor(dataset, levels = c("MICe", "POND-SickKids")))
+
+df_lines <- tmp %>% 
+  filter(pval <= 0.1) %>% 
+  mutate(significant = ifelse(pval < 0.01, TRUE, FALSE))
+```
+
+
+```{r fig.width = 5, fig.height = 10}
+palette <- RColorBrewer::brewer.pal(n = 9, name = "PuBu")[3:9]
+
+p_connections <- ggplot(tmp, aes(x = dataset, y = cluster_num, group = pair, col = 1-pval)) + 
+  # geom_text(aes(label = cluster_id)) + 
+  geom_line(data = df_lines) +
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_reverse(breaks = 1:length(cluster_ids), 
+                  labels = cluster_ids, 
+                  sec.axis = dup_axis(),
+                  expand = expansion(add = 1)) + 
+  scale_color_gradientn(colours = palette) + 
+  labs(x = NULL,
+       y = NULL) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none")
+
+outfile = "outputs/human_clinical_multivariate/v3/700/cluster_connections_p0.1.pdf"
+pdf(file = outfile,
+    width = unit(5, "in"),
+    height = unit(10, "in"))
+print(p_connections)
+dev.off()
+```
+
+```{r}
+df_lines <- tmp %>% 
+  filter(pval <= 0.05)
+
+p_connections <- ggplot(tmp, aes(x = dataset, y = cluster_num, group = pair, col = 1-pval)) + 
+  # geom_text(aes(label = cluster_id)) + 
+  geom_line(data = df_lines) +
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_reverse(breaks = 1:length(cluster_ids), 
+                  labels = cluster_ids, 
+                  sec.axis = dup_axis(),
+                  expand = expansion(add = 1)) + 
+  scale_color_gradientn(colours = palette) + 
+  labs(x = NULL,
+       y = NULL) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none")
+
+outfile = "outputs/human_clinical_multivariate/v3/700/cluster_connections_p0.05.pdf"
+pdf(file = outfile,
+    width = unit(5, "in"),
+    height = unit(10, "in"))
+print(p_connections)
+dev.off()
+```
+
