@@ -1,5 +1,5 @@
 ---
-title: "Figure 4"
+title: "Figure 3"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
 date: "2024-07-22"
@@ -39,13 +39,13 @@ source(file.path(SRCPATH, "analysis.R"))
 
 ```{r fig4-pipeline-params}
 # Output directory
-output_dir <- "figure4/"
+output_dir <- "figure3_nk8/"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 }
 
 # Plot file prefix
-output_plot_prefix <- "figure4"
+output_plot_prefix <- "figure3"
 
 # Similarity pipeline
 version <- "v3"
@@ -108,7 +108,7 @@ black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
 ```{r}
 # Max and min similarity values
 similarity_max <- 1.00
-similarity_min <- 0.10
+similarity_min <- 0.05
 # similarity_max <- max(df_similarity_nk[["similarity"]])
 # similarity_min <- min(df_similarity_nk[["similarity"]])
 
@@ -318,7 +318,7 @@ fig4_heatmap_PONDSK_MICe <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2),
                        guide = guide_colourbar(title.position = "top",
                                                title.hjust = 0.5)) + 
@@ -330,7 +330,7 @@ fig4_heatmap_PONDSK_MICe <- ggplot(df_similarity_nk,
         plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
 
 # Export
-outfile <- paste0("figure4_PONDSK_MICe_heatmap_with_legend.pdf")
+outfile <- paste0("figure3_PONDSK_MICe_heatmap_with_legend.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
@@ -343,7 +343,7 @@ fig4_heatmap_PONDSK_MICe <- fig4_heatmap_PONDSK_MICe +
   theme(legend.position = "none")
 
 # Export
-outfile <- paste0("figure4_PONDSK_MICe_heatmap.pdf")
+outfile <- paste0("figure3_PONDSK_MICe_heatmap.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
@@ -375,12 +375,12 @@ df_similarity_nk %>%
 
 
 
-```{r fig4-PONDSK-MICe-nk6-heatmap}
+```{r fig4-PONDSK-MICe-nk8-heatmap}
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/375/")
 
 # Cluster solutions to visualize
-nk_1 <- 6
-nk_2 <- 6
+nk_1 <- 8
+nk_2 <- 8
 
 
 # Import similarity ----------------------------------------------------------
@@ -498,6 +498,17 @@ for (i in 1:nrow(df_similarity_nk)) {
 }
 
 # Compute q-values and -log10 transforms
+# df_similarity_nk <- df_similarity_nk %>% 
+#   mutate(qval = p.adjust(pval, method = "fdr"),
+#          pval_log = -log10(pval),
+#          qval_log = -log10(qval),
+#          significant = ifelse(pval <= 0.10, TRUE, FALSE),
+#          pval_lab = case_when(pval > 0.10 ~ "",
+#                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+#                               pval < 0.001 ~ "p < 0.001"),
+#          pval_lab = ifelse(img2_cluster_id == "6-5" & img1_cluster_id == "6-4", paste0("p = ", as.character(round(pval, 3))), pval_lab),
+#          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+#          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 df_similarity_nk <- df_similarity_nk %>% 
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
@@ -506,7 +517,6 @@ df_similarity_nk <- df_similarity_nk %>%
          pval_lab = case_when(pval > 0.10 ~ "",
                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
                               pval < 0.001 ~ "p < 0.001"),
-         pval_lab = ifelse(img2_cluster_id == "6-5" & img1_cluster_id == "6-4", paste0("p = ", as.character(round(pval, 3))), pval_lab),
          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 
@@ -517,7 +527,7 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_heatmap_PONDSK_MICe_nk6 <- ggplot(df_similarity_nk, 
+fig4_heatmap_PONDSK_MICe_nk8 <- ggplot(df_similarity_nk, 
                                        aes(x = img2_cluster_id, 
                                            y = fct_rev(img1_cluster_id), 
                                            fill = similarity)) + 
@@ -535,7 +545,7 @@ fig4_heatmap_PONDSK_MICe_nk6 <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
@@ -543,24 +553,24 @@ fig4_heatmap_PONDSK_MICe_nk6 <- ggplot(df_similarity_nk,
   theme(legend.position = "none")
 
 # Export
-outfile <- paste0("figure4_PONDSK_MICe_heatmap_nk6.pdf")
+outfile <- paste0("figure3_PONDSK_MICe_heatmap_nk8.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_heatmap_PONDSK_MICe_nk6)
+print(fig4_heatmap_PONDSK_MICe_nk8)
 dev.off()
 ```
 
 ```{r}
-df_matches_PONDSK_MICe_nk6 <- df_similarity_nk %>% 
+df_matches_PONDSK_MICe_nk8 <- df_similarity_nk %>% 
   # filter(significant) %>% 
   filter(pval_lab != "") %>% 
   select(POND = img1_cluster_id, MICe = img2_cluster_id)
 ```
 
 ```{r}
-outfile <- "PONDSK_MICe_nk6.csv"
+outfile <- "PONDSK_MICe_nk8.csv"
 outfile <- file.path(output_dir, outfile)
 df_similarity_nk %>% 
     select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
@@ -731,7 +741,7 @@ fig4_heatmap_HBN_MICe <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
@@ -740,7 +750,7 @@ fig4_heatmap_HBN_MICe <- ggplot(df_similarity_nk,
         plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
 
 # Export
-outfile <- paste0("figure4_HBN_MICe_heatmap.pdf")
+outfile <- paste0("figure3_HBN_MICe_heatmap.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
@@ -771,12 +781,12 @@ df_similarity_nk %>%
 ```
 
 
-```{r fig4-HBN-MICe-nk6-heatmap}
+```{r fig4-HBN-MICe-nk8-heatmap}
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/861/")
 
 # Cluster solutions to visualize
-nk_1 <- 6
-nk_2 <- 6
+nk_1 <- 8
+nk_2 <- 8
 
 
 # Import similarity ----------------------------------------------------------
@@ -913,7 +923,7 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_heatmap_HBN_MICe_nk6 <- ggplot(df_similarity_nk, 
+fig4_heatmap_HBN_MICe_nk8 <- ggplot(df_similarity_nk, 
                                     aes(x = img2_cluster_id, 
                                         y = fct_rev(img1_cluster_id), 
                                         fill = similarity)) + 
@@ -931,7 +941,7 @@ fig4_heatmap_HBN_MICe_nk6 <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
@@ -939,25 +949,25 @@ fig4_heatmap_HBN_MICe_nk6 <- ggplot(df_similarity_nk,
   theme(legend.position = "none")
 
 # Export
-outfile <- paste0("figure4_HBN_MICe_heatmap_nk6.pdf")
+outfile <- paste0("figure3_HBN_MICe_heatmap_nk8.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_heatmap_HBN_MICe_nk6)
+print(fig4_heatmap_HBN_MICe_nk8)
 dev.off()
 ```
 
 
 ```{r}
-df_matches_HBN_MICe_nk6 <- df_similarity_nk %>% 
+df_matches_HBN_MICe_nk8 <- df_similarity_nk %>% 
   # filter(significant) %>% 
   filter(pval_lab != "") %>% 
   select(HBN = img1_cluster_id, MICe = img2_cluster_id)
 ```
 
 ```{r}
-outfile <- "HBN_MICe_nk6.csv"
+outfile <- "HBN_MICe_nk8.csv"
 outfile <- file.path(output_dir, outfile)
 df_similarity_nk %>% 
     select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
@@ -1128,7 +1138,7 @@ fig4_heatmap_PONDSK_HBN <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
@@ -1137,7 +1147,7 @@ fig4_heatmap_PONDSK_HBN <- ggplot(df_similarity_nk,
         plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
 
 # Export
-outfile <- paste0("figure4_PONDSK_HBN_heatmap.pdf")
+outfile <- paste0("figure3_PONDSK_HBN_heatmap.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
@@ -1168,12 +1178,12 @@ df_similarity_nk %>%
 ```
 
 
-```{r fig4-PONDSK-HBN-nk6-heatmap}
+```{r fig4-PONDSK-HBN-nk8-heatmap}
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/779/")
 
 # Cluster solutions to visualize
-nk_1 <- 6
-nk_2 <- 6
+nk_1 <- 8
+nk_2 <- 8
 
 
 # Import similarity ----------------------------------------------------------
@@ -1291,15 +1301,29 @@ for (i in 1:nrow(df_similarity_nk)) {
 }
 
 # Compute q-values and -log10 transforms
+# df_similarity_nk <- df_similarity_nk %>% 
+#   mutate(qval = p.adjust(pval, method = "fdr"),
+#          pval_log = -log10(pval),
+#          qval_log = -log10(qval),
+#          significant = ifelse(pval <= 0.05, TRUE, FALSE),
+#          pval_lab = case_when(pval > 0.05 ~ "",
+#                               pval >= 0.001 & pval <= 0.05 ~ paste0("p = ", as.character(round(pval, 3))),
+#                               pval < 0.001 ~ "p < 0.001"),
+#          pval_lab = ifelse(img2_cluster_id == "6-4", "", pval_lab),
+#          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+#          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 df_similarity_nk <- df_similarity_nk %>% 
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
          qval_log = -log10(qval),
-         significant = ifelse(pval <= 0.05, TRUE, FALSE),
-         pval_lab = case_when(pval > 0.05 ~ "",
-                              pval >= 0.001 & pval <= 0.05 ~ paste0("p = ", as.character(round(pval, 3))),
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
                               pval < 0.001 ~ "p < 0.001"),
-         pval_lab = ifelse(img2_cluster_id == "6-4", "", pval_lab),
+         pval_lab = ifelse(img1_cluster_id == "8-1" & img2_cluster_id == "8-8", paste0("p = ", as.character(round(pval, 3))) ,pval_lab),
+         pval_lab = ifelse(img1_cluster_id == "8-4" & img2_cluster_id == "8-4", paste0("p = ", as.character(round(pval, 3))), pval_lab),
+         pval_lab = ifelse(img1_cluster_id == "8-4" & img2_cluster_id == "8-5", paste0("p = ", as.character(round(pval, 3))), pval_lab),
+         pval_lab = ifelse(img1_cluster_id == "8-7" & img2_cluster_id == "8-3", paste0("p = ", as.character(round(pval, 3))), pval_lab),
          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 
@@ -1312,7 +1336,7 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_heatmap_PONDSK_HBN_nk6 <- ggplot(df_similarity_nk, 
+fig4_heatmap_PONDSK_HBN_nk8 <- ggplot(df_similarity_nk, 
                                       aes(x = img2_cluster_id, 
                                           y = fct_rev(img1_cluster_id), 
                                           fill = similarity)) + 
@@ -1330,7 +1354,7 @@ fig4_heatmap_PONDSK_HBN_nk6 <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
@@ -1338,25 +1362,44 @@ fig4_heatmap_PONDSK_HBN_nk6 <- ggplot(df_similarity_nk,
   theme(legend.position = "none")
 
 # Export
-outfile <- paste0("figure4_PONDSK_HBN_heatmap_nk6.pdf")
+outfile <- paste0("figure3_PONDSK_HBN_heatmap_nk8.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_heatmap_PONDSK_HBN_nk6)
+print(fig4_heatmap_PONDSK_HBN_nk8)
 dev.off()
+```
+```{r}
+df_similarity_nk %>% 
+  filter(img1_cluster_id == "8-2")
 ```
 
 
 ```{r}
-df_matches_PONDSK_HBN_nk6 <- df_similarity_nk %>% 
+df_similarity_nk %>% 
+  filter(img1_cluster_id == "8-1")
+```
+
+```{r}
+df_similarity_nk %>% 
+  filter(img1_cluster_id == "8-4")
+```
+
+```{r}
+df_similarity_nk %>% 
+  filter(img1_cluster_id == "8-7")
+```
+
+```{r}
+df_matches_PONDSK_HBN_nk8 <- df_similarity_nk %>% 
   # filter(significant) %>% 
   filter(pval_lab != "") %>% 
   select(POND = img1_cluster_id, HBN = img2_cluster_id)
 ```
 
 ```{r}
-outfile <- "PONDSK_HBN_nk6.csv"
+outfile <- "PONDSK_HBN_nk8.csv"
 outfile <- file.path(output_dir, outfile)
 df_similarity_nk %>% 
     select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
@@ -1372,13 +1415,13 @@ font_family <- "Helvetica"
 font_size <- 6
 
 fig4_heatmap <- (fig4_heatmap_PONDSK_MICe | fig4_heatmap_HBN_MICe | fig4_heatmap_PONDSK_HBN) /
-  (fig4_heatmap_PONDSK_MICe_nk6 | fig4_heatmap_HBN_MICe_nk6 | fig4_heatmap_PONDSK_HBN_nk6) +
+  (fig4_heatmap_PONDSK_MICe_nk8 | fig4_heatmap_HBN_MICe_nk8 | fig4_heatmap_PONDSK_HBN_nk8) +
   plot_layout(heights = c(1, 2)) &
   theme(axis.text = element_text(size = font_size-1, family = font_family),
         axis.title = element_text(size = font_size, family = font_family))
         # plot.margin = margin(t = 3, r = 3, b = 3, l = 3))
 
-outfile <- paste0("figure4_heatmap.pdf")
+outfile <- paste0("figure3_heatmap_nk8.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(510/72, "in"),
@@ -1397,10 +1440,10 @@ dev.off()
 df_matches_opt <- df_matches_PONDSK_MICe_opt %>% 
   inner_join(df_matches_HBN_MICe_opt, by = "MICe")
 
-df_matches_nk6 <- df_matches_PONDSK_MICe_nk6 %>% 
-  inner_join(df_matches_HBN_MICe_nk6, by = "MICe")
+df_matches_nk7 <- df_matches_PONDSK_MICe_nk7 %>% 
+  inner_join(df_matches_HBN_MICe_nk7, by = "MICe")
 
-df_matches <- bind_rows(df_matches_opt, df_matches_nk6)
+df_matches <- bind_rows(df_matches_opt, df_matches_nk7)
 df_matches
 ```
 

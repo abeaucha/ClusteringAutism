@@ -1,5 +1,5 @@
 ---
-title: "Figure 4"
+title: "Figure 3"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
 date: "2024-07-22"
@@ -39,13 +39,13 @@ source(file.path(SRCPATH, "analysis.R"))
 
 ```{r fig4-pipeline-params}
 # Output directory
-output_dir <- "figure4/"
+output_dir <- "figure3_nk7/"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 }
 
 # Plot file prefix
-output_plot_prefix <- "figure4"
+output_plot_prefix <- "figure3"
 
 # Similarity pipeline
 version <- "v3"
@@ -108,7 +108,7 @@ black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
 ```{r}
 # Max and min similarity values
 similarity_max <- 1.00
-similarity_min <- 0.10
+similarity_min <- 0.05
 # similarity_max <- max(df_similarity_nk[["similarity"]])
 # similarity_min <- min(df_similarity_nk[["similarity"]])
 
@@ -260,8 +260,9 @@ df_similarity_nk <- df_similarity_nk %>%
          significant = ifelse(pval <= 0.10, TRUE, FALSE),
          pval_lab = case_when(pval > 0.10 ~ "",
                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
-                              pval < 0.001 ~ "p < 0.001"))
-
+                              pval < 0.001 ~ "p < 0.001"),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 
 # Generate heatmap -----------------------------------------------------------
 
@@ -304,7 +305,11 @@ fig4_heatmap_PONDSK_MICe <- ggplot(df_similarity_nk,
                                        y = fct_rev(img1_cluster_id), 
                                        fill = similarity)) + 
   geom_tile(col = "grey50") + 
-  geom_text(mapping = aes(label = pval_lab),
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.6, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
             size = 1.6, 
             hjust = "center", 
             vjust = "center") + 
@@ -313,7 +318,7 @@ fig4_heatmap_PONDSK_MICe <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2),
                        guide = guide_colourbar(title.position = "top",
                                                title.hjust = 0.5)) + 
@@ -321,10 +326,11 @@ fig4_heatmap_PONDSK_MICe <- ggplot(df_similarity_nk,
   scale_y_discrete(expand = expansion(mult = 0)) + 
   theme_bw() +
   theme(legend.position = "bottom",
-        legend.direction = "horizontal")
+        legend.direction = "horizontal",
+        plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
 
 # Export
-outfile <- paste0("figure4_PONDSK_MICe_heatmap_with_legend.pdf")
+outfile <- paste0("figure3_PONDSK_MICe_heatmap_with_legend.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
@@ -334,10 +340,10 @@ dev.off()
 
 
 fig4_heatmap_PONDSK_MICe <- fig4_heatmap_PONDSK_MICe +
-    theme(legend.position = "none")
+  theme(legend.position = "none")
 
 # Export
-outfile <- paste0("figure4_PONDSK_MICe_heatmap.pdf")
+outfile <- paste0("figure3_PONDSK_MICe_heatmap.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
@@ -352,18 +358,29 @@ df_similarity_nk %>%
 ```
 
 ```{r}
-df_matches_PONDSK_MICe <- df_similarity_nk %>% 
-  filter(significant) %>% 
-  select(img1_cluster_id, img2_cluster_id)
+df_matches_PONDSK_MICe_opt <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(POND = img1_cluster_id, MICe = img2_cluster_id)
 ```
 
 
-```{r fig4-PONDSK-MICe-nk6-heatmap}
+```{r}
+outfile <- "PONDSK_MICe_opt.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
+
+
+
+```{r fig4-PONDSK-MICe-nk7-heatmap}
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/375/")
 
 # Cluster solutions to visualize
-nk_1 <- 6
-nk_2 <- 6
+nk_1 <- 7
+nk_2 <- 7
 
 
 # Import similarity ----------------------------------------------------------
@@ -481,6 +498,17 @@ for (i in 1:nrow(df_similarity_nk)) {
 }
 
 # Compute q-values and -log10 transforms
+# df_similarity_nk <- df_similarity_nk %>% 
+#   mutate(qval = p.adjust(pval, method = "fdr"),
+#          pval_log = -log10(pval),
+#          qval_log = -log10(qval),
+#          significant = ifelse(pval <= 0.10, TRUE, FALSE),
+#          pval_lab = case_when(pval > 0.10 ~ "",
+#                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+#                               pval < 0.001 ~ "p < 0.001"),
+#          pval_lab = ifelse(img2_cluster_id == "6-5" & img1_cluster_id == "6-4", paste0("p = ", as.character(round(pval, 3))), pval_lab),
+#          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+#          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 df_similarity_nk <- df_similarity_nk %>% 
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
@@ -488,7 +516,9 @@ df_similarity_nk <- df_similarity_nk %>%
          significant = ifelse(pval <= 0.10, TRUE, FALSE),
          pval_lab = case_when(pval > 0.10 ~ "",
                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
-                              pval < 0.001 ~ "p < 0.001"))
+                              pval < 0.001 ~ "p < 0.001"),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 
 # Generate heatmap -----------------------------------------------------------
 
@@ -497,12 +527,16 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_heatmap_PONDSK_MICe_nk6 <- ggplot(df_similarity_nk, 
+fig4_heatmap_PONDSK_MICe_nk7 <- ggplot(df_similarity_nk, 
                                        aes(x = img2_cluster_id, 
                                            y = fct_rev(img1_cluster_id), 
                                            fill = similarity)) + 
   geom_tile(col = "grey50") + 
-  geom_text(mapping = aes(label = pval_lab),
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.4, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
             size = 1.4, 
             hjust = "center", 
             vjust = "center") + 
@@ -511,7 +545,7 @@ fig4_heatmap_PONDSK_MICe_nk6 <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
@@ -519,22 +553,29 @@ fig4_heatmap_PONDSK_MICe_nk6 <- ggplot(df_similarity_nk,
   theme(legend.position = "none")
 
 # Export
-outfile <- paste0("figure4_PONDSK_MICe_heatmap_nk6.pdf")
+outfile <- paste0("figure3_PONDSK_MICe_heatmap_nk7.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_heatmap_PONDSK_MICe_nk6)
+print(fig4_heatmap_PONDSK_MICe_nk7)
 dev.off()
 ```
 
 ```{r}
-df_matches_PONDSK_MICe <- bind_rows(df_matches_PONDSK_MICe,
-                                    df_similarity_nk %>% 
-                                      filter(significant) %>% 
-                                      select(img1_cluster_id, img2_cluster_id))
+df_matches_PONDSK_MICe_nk7 <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(POND = img1_cluster_id, MICe = img2_cluster_id)
 ```
 
+```{r}
+outfile <- "PONDSK_MICe_nk7.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
 
 
 ## HBN-MICe
@@ -670,7 +711,9 @@ df_similarity_nk <- df_similarity_nk %>%
          significant = ifelse(pval <= 0.10, TRUE, FALSE),
          pval_lab = case_when(pval > 0.10 ~ "",
                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
-                              pval < 0.001 ~ "p < 0.001"))
+                              pval < 0.001 ~ "p < 0.001"),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -685,7 +728,11 @@ fig4_heatmap_HBN_MICe <- ggplot(df_similarity_nk,
                                     y = fct_rev(img1_cluster_id), 
                                     fill = similarity)) + 
   geom_tile(col = "grey50") + 
-  geom_text(mapping = aes(label = pval_lab),
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.6, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
             size = 1.6, 
             hjust = "center", 
             vjust = "center") + 
@@ -694,15 +741,16 @@ fig4_heatmap_HBN_MICe <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
 
 # Export
-outfile <- paste0("figure4_HBN_MICe_heatmap.pdf")
+outfile <- paste0("figure3_HBN_MICe_heatmap.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
@@ -718,20 +766,27 @@ df_similarity_nk %>%
 ```
 
 ```{r}
-df_matches_HBN_MICe <- tibble()
-df_matches_HBN_MICe <- bind_rows(df_matches_HBN_MICe,
-                                 df_similarity_nk %>% 
-                                   filter(significant) %>% 
-                                   select(img1_cluster_id, img2_cluster_id))
+df_matches_HBN_MICe_opt <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(HBN = img1_cluster_id, MICe = img2_cluster_id)
+```
+
+```{r}
+outfile <- "HBN_MICe_opt.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
 ```
 
 
-```{r fig4-HBN-MICe-nk6-heatmap}
+```{r fig4-HBN-MICe-nk7-heatmap}
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/861/")
 
 # Cluster solutions to visualize
-nk_1 <- 6
-nk_2 <- 6
+nk_1 <- 7
+nk_2 <- 7
 
 
 # Import similarity ----------------------------------------------------------
@@ -856,7 +911,9 @@ df_similarity_nk <- df_similarity_nk %>%
          significant = ifelse(pval <= 0.10, TRUE, FALSE),
          pval_lab = case_when(pval > 0.10 ~ "",
                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
-                              pval < 0.001 ~ "p < 0.001"))
+                              pval < 0.001 ~ "p < 0.001"),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -866,12 +923,16 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_heatmap_HBN_MICe_nk6 <- ggplot(df_similarity_nk, 
+fig4_heatmap_HBN_MICe_nk7 <- ggplot(df_similarity_nk, 
                                     aes(x = img2_cluster_id, 
                                         y = fct_rev(img1_cluster_id), 
                                         fill = similarity)) + 
   geom_tile(col = "grey50") + 
-  geom_text(mapping = aes(label = pval_lab),
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.4, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
             size = 1.4, 
             hjust = "center", 
             vjust = "center") + 
@@ -880,7 +941,7 @@ fig4_heatmap_HBN_MICe_nk6 <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
@@ -888,23 +949,30 @@ fig4_heatmap_HBN_MICe_nk6 <- ggplot(df_similarity_nk,
   theme(legend.position = "none")
 
 # Export
-outfile <- paste0("figure4_HBN_MICe_heatmap_nk6.pdf")
+outfile <- paste0("figure3_HBN_MICe_heatmap_nk7.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_heatmap_HBN_MICe_nk6)
+print(fig4_heatmap_HBN_MICe_nk7)
 dev.off()
 ```
 
 
 ```{r}
-df_matches_HBN_MICe <- bind_rows(df_matches_HBN_MICe,
-                                 df_similarity_nk %>% 
-                                   filter(significant) %>% 
-                                   select(img1_cluster_id, img2_cluster_id))
+df_matches_HBN_MICe_nk7 <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(HBN = img1_cluster_id, MICe = img2_cluster_id)
 ```
 
+```{r}
+outfile <- "HBN_MICe_nk7.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
 
 
 ## PONDSK-HBN
@@ -1039,7 +1107,10 @@ df_similarity_nk <- df_similarity_nk %>%
          significant = ifelse(pval <= 0.10, TRUE, FALSE),
          pval_lab = case_when(pval > 0.10 ~ "",
                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
-                              pval < 0.001 ~ "p < 0.001"))
+                              pval < 0.001 ~ "p < 0.001"),
+         pval_lab = ifelse(img1_cluster_id == "2-2" & img2_cluster_id == "3-3", paste0("p = ", as.character(round(pval, 3))), pval_lab),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -1054,7 +1125,11 @@ fig4_heatmap_PONDSK_HBN <- ggplot(df_similarity_nk,
                                       y = fct_rev(img1_cluster_id), 
                                       fill = similarity)) + 
   geom_tile(col = "grey50") + 
-  geom_text(mapping = aes(label = pval_lab),
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.6, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
             size = 1.6, 
             hjust = "center", 
             vjust = "center") + 
@@ -1063,15 +1138,16 @@ fig4_heatmap_PONDSK_HBN <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
   theme_bw() +
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
 
 # Export
-outfile <- paste0("figure4_PONDSK_HBN_heatmap.pdf")
+outfile <- paste0("figure3_PONDSK_HBN_heatmap.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
@@ -1087,20 +1163,27 @@ df_similarity_nk %>%
 ```
 
 ```{r}
-df_matches_PONDSK_HBN <- tibble()
-df_matches_PONDSK_HBN <- bind_rows(df_matches_PONDSK_HBN,
-                                   df_similarity_nk %>% 
-                                     filter(significant) %>% 
-                                     select(img1_cluster_id, img2_cluster_id))
+df_matches_PONDSK_HBN_opt <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(POND = img1_cluster_id, HBN = img2_cluster_id)
+```
+
+```{r}
+outfile <- "PONDSK_HBN_opt.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
 ```
 
 
-```{r fig4-PONDSK-HBN-nk6-heatmap}
+```{r fig4-PONDSK-HBN-nk7-heatmap}
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/779/")
 
 # Cluster solutions to visualize
-nk_1 <- 6
-nk_2 <- 6
+nk_1 <- 7
+nk_2 <- 7
 
 
 # Import similarity ----------------------------------------------------------
@@ -1218,6 +1301,17 @@ for (i in 1:nrow(df_similarity_nk)) {
 }
 
 # Compute q-values and -log10 transforms
+# df_similarity_nk <- df_similarity_nk %>% 
+#   mutate(qval = p.adjust(pval, method = "fdr"),
+#          pval_log = -log10(pval),
+#          qval_log = -log10(qval),
+#          significant = ifelse(pval <= 0.05, TRUE, FALSE),
+#          pval_lab = case_when(pval > 0.05 ~ "",
+#                               pval >= 0.001 & pval <= 0.05 ~ paste0("p = ", as.character(round(pval, 3))),
+#                               pval < 0.001 ~ "p < 0.001"),
+#          pval_lab = ifelse(img2_cluster_id == "6-4", "", pval_lab),
+#          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+#          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
 df_similarity_nk <- df_similarity_nk %>% 
   mutate(qval = p.adjust(pval, method = "fdr"),
          pval_log = -log10(pval),
@@ -1225,7 +1319,11 @@ df_similarity_nk <- df_similarity_nk %>%
          significant = ifelse(pval <= 0.10, TRUE, FALSE),
          pval_lab = case_when(pval > 0.10 ~ "",
                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
-                              pval < 0.001 ~ "p < 0.001"))
+                              pval < 0.001 ~ "p < 0.001"),
+         pval_lab = ifelse(img1_cluster_id == "7-1" & img2_cluster_id == "7-2", paste0("p = ", as.character(round(pval, 3))) ,pval_lab),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+
 
 
 # Generate heatmap -----------------------------------------------------------
@@ -1235,12 +1333,16 @@ df_similarity_nk <- df_similarity_nk %>%
   mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
 
 # Heatmap plot
-fig4_heatmap_PONDSK_HBN_nk6 <- ggplot(df_similarity_nk, 
+fig4_heatmap_PONDSK_HBN_nk7 <- ggplot(df_similarity_nk, 
                                       aes(x = img2_cluster_id, 
                                           y = fct_rev(img1_cluster_id), 
                                           fill = similarity)) + 
   geom_tile(col = "grey50") + 
-  geom_text(mapping = aes(label = pval_lab),
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.4, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
             size = 1.4, 
             hjust = "center", 
             vjust = "center") + 
@@ -1249,7 +1351,7 @@ fig4_heatmap_PONDSK_HBN_nk6 <- ggplot(df_similarity_nk,
        fill = "Correlation") + 
   scale_fill_gradientn(colors = heatmap_scale_palette,
                        values = heatmap_scale_values,
-                       limits = c(0.1, 1.0),
+                       limits = c(similarity_min, similarity_max),
                        breaks = seq(0, 1, by = 0.2)) + 
   scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
   scale_y_discrete(expand = expansion(mult = 0)) + 
@@ -1257,21 +1359,34 @@ fig4_heatmap_PONDSK_HBN_nk6 <- ggplot(df_similarity_nk,
   theme(legend.position = "none")
 
 # Export
-outfile <- paste0("figure4_PONDSK_HBN_heatmap_nk6.pdf")
+outfile <- paste0("figure3_PONDSK_HBN_heatmap_nk7.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(500/72, "in"),
     height = unit(500/72, "in"))
-print(fig4_heatmap_PONDSK_HBN_nk6)
+print(fig4_heatmap_PONDSK_HBN_nk7)
 dev.off()
+```
+
+```{r}
+df_similarity_nk %>% 
+  filter(img1_cluster_id == "7-1")
 ```
 
 
 ```{r}
-df_matches_PONDSK_HBN <- bind_rows(df_matches_PONDSK_HBN,
-                                   df_similarity_nk %>% 
-                                     filter(significant) %>% 
-                                     select(img1_cluster_id, img2_cluster_id))
+df_matches_PONDSK_HBN_nk7 <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>%  
+  select(POND = img1_cluster_id, HBN = img2_cluster_id)
+```
+
+```{r}
+outfile <- "PONDSK_HBN_nk7.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
 ```
 
 
@@ -1283,17 +1398,17 @@ font_family <- "Helvetica"
 font_size <- 6
 
 fig4_heatmap <- (fig4_heatmap_PONDSK_MICe | fig4_heatmap_HBN_MICe | fig4_heatmap_PONDSK_HBN) /
-  (fig4_heatmap_PONDSK_MICe_nk6 | fig4_heatmap_HBN_MICe_nk6 | fig4_heatmap_PONDSK_HBN_nk6) +
+  (fig4_heatmap_PONDSK_MICe_nk7 | fig4_heatmap_HBN_MICe_nk7 | fig4_heatmap_PONDSK_HBN_nk7) +
   plot_layout(heights = c(1, 2)) &
   theme(axis.text = element_text(size = font_size-1, family = font_family),
-        axis.title = element_text(size = font_size, family = font_family),
-        plot.margin = margin(t = 3, r = 3, b = 3, l = 3))
+        axis.title = element_text(size = font_size, family = font_family))
+        # plot.margin = margin(t = 3, r = 3, b = 3, l = 3))
 
-outfile <- paste0("figure4_heatmap.pdf")
+outfile <- paste0("figure3_heatmap_nk7.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(510/72, "in"),
-    height = unit(254/72, "in"))
+    height = unit(236/72, "in"))
 print(fig4_heatmap)
 dev.off()
 ```
@@ -1303,15 +1418,30 @@ dev.off()
 # Brain slices
 
 
+
+```{r}
+df_matches_opt <- df_matches_PONDSK_MICe_opt %>% 
+  inner_join(df_matches_HBN_MICe_opt, by = "MICe")
+
+df_matches_nk7 <- df_matches_PONDSK_MICe_nk7 %>% 
+  inner_join(df_matches_HBN_MICe_nk7, by = "MICe")
+
+df_matches <- bind_rows(df_matches_opt, df_matches_nk7)
+df_matches
+```
+
+
 ```{r fig3-ss-mouse-paths}
+# Mouse mask
+# mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc")
+mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_mask_50um.mnc")
+mouse_mask <- mincGetVolume(mouse_mask_file)
+
 # Mouse anatomy
 mouse_anat_file <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc")
 mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_anat[mouse_mask < 0.4] <- 0
 mouse_anat_vol <- mincArray(mouse_anat)
-
-# Mouse mask
-mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc")
-mouse_mask <- mincGetVolume(mouse_mask_file)
 ```
 
 ```{r fig3-ss-human-paths}
@@ -1327,187 +1457,18 @@ human_anat_vol <- mincArray(human_anat)
 
 # Cropped human human images
 slices_dim_1 <- 27:220
-slices_dim_2 <- 10:280
-slices_dim_3 <- 10:220
+slices_dim_2 <- 25:275
+slices_dim_3 <- 1:205
 human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
 ```
 
 
-## PONDSK-MICe
-
 ```{r}
-# Fetch parameter set for PONDSK-MICe pipeline
-params_id <- 375
-metadata <- file.path(PROJECTPATH, "data/cross_species/v3/metadata.csv")
-params <- fetch_params_metadata(metadata = metadata,
-                                id = params_id)
+threshold <- "top_n"
+threshold_value <- 0.2
+threshold_symmetric <- TRUE
 ```
 
-```{r fig3-ss-mouse-paths}
-# Jacobians to display
-jacobians <- "relative"
-
-# Threshold method
-threshold <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold)
-
-# Threshold value
-threshold_value <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_value)
-
-# Threshold symmetric option
-threshold_symmetric <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_symmetric)
-
-# Mouse parameter set ID
-mouse_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_2_id)
-
-# Mouse pipeline directory
-mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/")
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version)
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_params_id)
-
-# Mouse centroid map directory
-mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids")
-mouse_centroid_dir <- file.path(mouse_centroid_dir, "resolution_0.05")
-mouse_centroid_dir <- file.path(mouse_centroid_dir, jacobians)
-
-# Human parameter set ID
-human_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_1_id)
-
-# Human image resolution
-human_resolution <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_1_resolution)
-human_resolution <- sprintf("%.1f", human_resolution)
-
-# Human pipeline directory
-human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
-human_pipeline_dir <- file.path(human_pipeline_dir, version)
-human_pipeline_dir <- file.path(human_pipeline_dir, human_params_id)
-
-# Human centroid map directory
-human_centroid_dir <- file.path(human_pipeline_dir, "centroids")
-human_centroid_dir <- file.path(human_centroid_dir, paste("resolution", human_resolution, sep = "_"))
-human_centroid_dir <- file.path(human_centroid_dir, jacobians)
-```
-
-```{r}
-df_matches_PONDSK_MICe
-```
-
-```{r fig3-ss-human-import}
-# Anatomical plane to display
-# Sagittal: 1
-# Coronal: 2 
-# Transverse: 3
-human_slc_dim <- 1
-
-# Human brain slice to display
-human_slc <- 82
-
-# Iterate over mouse slices
-list_human_slices <- vector(mode = "list", length = nrow(df_matches_PONDSK_MICe))
-names(list_human_slices) <- df_matches_PONDSK_MICe$img1_cluster_id
-for(i in 1:nrow(df_matches_PONDSK_MICe)) {
-  
-  cluster_id <- df_matches_PONDSK_MICe[[i, "img1_cluster_id"]]
-  
-  nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
-  k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
-  
-  print(paste(nk, k, sep = "-"))
-  
-  # Import centroid image and threshold
-  img <- import_cluster_map(imgdir = human_centroid_dir,
-                            mask = human_mask_file,
-                            nk = nk, k = k,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  # Compute overlay thresholds
-  overlay_threshold <- numeric(2)
-  overlay_threshold[1] <- min(abs(img[img != 0]))
-  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
-  overlay_threshold <- round(overlay_threshold, 2)
-  
-  # Convert mincSingleDim to mincArray and crop
-  img <- mincArray(img)
-  img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
-  
-  # Generate slice series
-  list_human_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                        dimension = human_slc_dim, 
-                                        slices = human_slc) %>% 
-    anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
-    overlay(img, 
-            low = overlay_threshold[1], 
-            high = overlay_threshold[2], 
-            symmetric = TRUE) %>% 
-    grobify()
-  
-}
-```
-
-```{r fig3-ss-mouse-import}
-# Anatomical plane to display
-# Sagittal: 1
-# Coronal: 2 
-# Transverse: 3
-mouse_slc_dim <- 1
-
-# Mouse brain slice to display
-mouse_slc <- 92
-
-# Iterate over nk subset
-list_mouse_slices <- vector(mode = "list", length = nrow(df_matches_PONDSK_MICe))
-names(list_mouse_slices) <- df_matches_PONDSK_MICe$img2_cluster_id
-for(i in 1:nrow(df_matches_PONDSK_MICe)) {
-  
-  cluster_id <- df_matches_PONDSK_MICe[[i, "img2_cluster_id"]]
-  
-  nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
-  k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
-  
-  print(paste(nk, k, sep = "-"))
-  
-  # Import centroid image and threshold
-  img <- import_cluster_map(imgdir = mouse_centroid_dir,
-                            mask = mouse_mask_file,
-                            nk = nk, k = k,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  # Compute overlay thresholds
-  overlay_threshold <- numeric(2)
-  overlay_threshold[1] <- min(abs(img[img != 0]))
-  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
-  overlay_threshold <- round(overlay_threshold, 2)
-  
-  # Convert mincSingleDim to mincArray
-  img <- mincArray(img)
-  
-  # Generate slice series
-  list_mouse_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                        dimension = mouse_slc_dim, 
-                                        slices = mouse_slc) %>% 
-    anatomy(mouse_anat_vol, low = 700, high = 1400) %>% 
-    overlay(img, 
-            low = overlay_threshold[1], high = overlay_threshold[2], 
-            symmetric = TRUE) %>% 
-    grobify()
-  
-}
-```
 
 ```{r}
 # Mouse slice dimensions in pixels
@@ -1518,119 +1479,19 @@ mouse_height_px <- dim(mouse_anat_vol)[3]
 human_width_px <- dim(human_anat_vol_cropped)[2]
 human_height_px <- dim(human_anat_vol_cropped)[3]
 
-fig3_mouse_ss_width_pt <- 38.83
-fig3_mouse_ss_height_pt <- fig3_mouse_ss_width_pt*(mouse_height_px/mouse_width_px)
+human_slc_height_pt <- 30.23
+human_slc_width_pt <- human_slc_height_pt*(human_width_px/human_height_px)
 
-fig3_human_ss_width_pt <- fig3_mouse_ss_width_pt
-fig3_human_ss_height_pt <- fig3_human_ss_width_pt*(human_height_px/human_width_px)
-
-fig3_neuro_ss_padding_pt <- 3.0
-
-# Dimensions of slice series grid
-fig3_neuro_ss_widths <- fig3_mouse_ss_width_pt
-fig3_neuro_ss_heights <- c(fig3_human_ss_height_pt, fig3_neuro_ss_padding_pt, fig3_mouse_ss_height_pt)
-
-for (i in 1:length(list_human_slices)) {
-  
-  # Generate slice series for cluster solution    
-  ss <- arrangeGrob(list_human_slices[[i]],
-                    black_rect_grob,
-                    list_mouse_slices[[i]],
-                    layout_matrix = cbind(1:3),
-                    widths = unit(fig3_neuro_ss_widths, "bigpts"),
-                    heights = unit(fig3_neuro_ss_heights, "bigpts"))
-  
-  # Coloured border for slice series
-  # ss_border <- rectGrob(gp = gpar(fill = NA, 
-  #                                 col = neuro_palette_nk[j], 
-  #                                 lwd = 2.5))
-  
-  # Export slice series
-  
-  outfile <- paste(output_plot_prefix, "neuro_ss", "PONDSK_MICe", names(list_human_slices)[[i]], names(list_mouse_slices)[[i]], sep = "_")
-  outfile <- paste0(outfile, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  export_pdf(x = ss,
-             file = outfile,
-             width = sum(fig3_neuro_ss_widths),
-             height = sum(fig3_neuro_ss_heights),
-             units = "bigpts")
-  
-}
+mouse_slc_height_pt <- human_slc_height_pt
+mouse_slc_width_pt <- mouse_slc_height_pt*(mouse_width_px/mouse_height_px)
 ```
 
 
-## HBN-MICe
-
+## POND-SickKids
 
 ```{r}
-# Fetch parameter set for HBN-MICe pipeline
-params_id <- 861
-metadata <- file.path(PROJECTPATH, "data/cross_species/v3/metadata.csv")
-params <- fetch_params_metadata(metadata = metadata,
-                                id = params_id)
+centroid_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/700/centroids/resolution_0.8/relative/")
 
-# Jacobians to display
-jacobians <- "relative"
-
-# Threshold method
-threshold <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold)
-
-# Threshold value
-threshold_value <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_value)
-
-# Threshold symmetric option
-threshold_symmetric <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_symmetric)
-
-# Mouse parameter set ID
-mouse_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_2_id)
-
-# Mouse pipeline directory
-mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/")
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version)
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, mouse_params_id)
-
-# Mouse centroid map directory
-mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids")
-mouse_centroid_dir <- file.path(mouse_centroid_dir, "resolution_0.05")
-mouse_centroid_dir <- file.path(mouse_centroid_dir, jacobians)
-
-# Human parameter set ID
-human_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_1_id)
-
-# Human image resolution
-human_resolution <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_1_resolution)
-human_resolution <- sprintf("%.1f", human_resolution)
-
-# Human pipeline directory
-human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
-human_pipeline_dir <- file.path(human_pipeline_dir, version)
-human_pipeline_dir <- file.path(human_pipeline_dir, human_params_id)
-
-# Human centroid map directory
-human_centroid_dir <- file.path(human_pipeline_dir, "centroids")
-human_centroid_dir <- file.path(human_centroid_dir, paste("resolution", human_resolution, sep = "_"))
-human_centroid_dir <- file.path(human_centroid_dir, jacobians)
-```
-
-
-```{r}
-df_matches_HBN_MICe
-```
-
-```{r fig3-ss-human-import}
 # Anatomical plane to display
 # Sagittal: 1
 # Coronal: 2 
@@ -1638,54 +1499,148 @@ df_matches_HBN_MICe
 human_slc_dim <- 1
 
 # Human brain slice to display
-human_slc <- 82
+human_slc <- c(50, 82)
 
-# Iterate over mouse slices
-list_human_slices <- vector(mode = "list", length = nrow(df_matches_HBN_MICe))
-names(list_human_slices) <- df_matches_HBN_MICe$img1_cluster_id
-for(i in 1:nrow(df_matches_HBN_MICe)) {
-  
-  
-  cluster_id <- df_matches_HBN_MICe[[i, "img1_cluster_id"]]
-  
+for (i in 1:nrow(df_matches)) {
+
+  cluster_id <- df_matches[[i, "POND"]]
   nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
   k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
   
   print(paste(nk, k, sep = "-"))
   
-  # Import centroid image and threshold
-  img <- import_cluster_map(imgdir = human_centroid_dir,
-                            mask = human_mask_file,
-                            nk = nk, k = k,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
+  list_slices <- vector(mode = "list", length = length(human_slc))
+  for (s in 1:length(list_slices)) {
+    
+    # Import centroid image and threshold
+    img <- import_cluster_map(imgdir = centroid_dir,
+                              mask = human_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    # Convert mincSingleDim to mincArray and crop
+    img <- mincArray(img)
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+    # Generate slice series
+    list_slices[[s]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                    dimension = human_slc_dim, 
+                                    slices = human_slc[s]) %>% 
+      anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], 
+              high = overlay_threshold[2], 
+              symmetric = TRUE) %>% 
+      grobify()
+    
+  }
   
-  # Compute overlay thresholds
-  overlay_threshold <- numeric(2)
-  overlay_threshold[1] <- min(abs(img[img != 0]))
-  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
-  overlay_threshold <- round(overlay_threshold, 2)
+  ss_widths <- human_slc_width_pt
+  ss_heights <- c(human_slc_height_pt, 2.0, human_slc_height_pt)
+
+  ss <- arrangeGrob(list_slices[[1]],
+                    black_rect_grob,
+                    list_slices[[2]],
+                    layout_matrix = cbind(1:3),
+                    widths = unit(ss_widths, "bigpts"),
+                    heights = unit(ss_heights, "bigpts"))
   
-  # Convert mincSingleDim to mincArray and crop
-  img <- mincArray(img)
-  img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
-  
-  # Generate slice series
-  list_human_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                        dimension = human_slc_dim, 
-                                        slices = human_slc) %>% 
-    anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
-    overlay(img, 
-            low = overlay_threshold[1], 
-            high = overlay_threshold[2], 
-            symmetric = TRUE) %>% 
-    grobify()
+  outfile <- paste(output_plot_prefix, "neuro_ss", "PONDSK", cluster_id, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = ss,
+             file = outfile,
+             width = sum(ss_widths),
+             height = sum(ss_heights),
+             units = "bigpts")
   
 }
 ```
 
-```{r fig3-ss-mouse-import}
+## HBN
+
+```{r}
+centroid_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/013/centroids/resolution_0.8/relative/")
+
+
+for (i in 1:nrow(df_matches)) {
+  
+  cluster_id <- df_matches[[i, "HBN"]]
+  nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
+  k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
+  
+  print(paste(nk, k, sep = "-"))
+  
+  list_slices <- vector(mode = "list", length = length(human_slc))
+  for (s in 1:length(list_slices)) {
+    
+    # Import centroid image and threshold
+    img <- import_cluster_map(imgdir = centroid_dir,
+                              mask = human_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    # Convert mincSingleDim to mincArray and crop
+    img <- mincArray(img)
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+    # Generate slice series
+    list_slices[[s]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                    dimension = human_slc_dim, 
+                                    slices = human_slc[s]) %>% 
+      anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], 
+              high = overlay_threshold[2], 
+              symmetric = TRUE) %>% 
+      grobify()
+    
+  }
+  
+  ss_widths <- human_slc_width_pt
+  ss_heights <- c(human_slc_height_pt, 2.0, human_slc_height_pt)
+  
+  ss <- arrangeGrob(list_slices[[1]],
+                    black_rect_grob,
+                    list_slices[[2]],
+                    layout_matrix = cbind(1:3),
+                    widths = unit(ss_widths, "bigpts"),
+                    heights = unit(ss_heights, "bigpts"))
+  
+  outfile <- paste(output_plot_prefix, "neuro_ss", "HBN", cluster_id, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = ss,
+             file = outfile,
+             width = sum(ss_widths),
+             height = sum(ss_heights),
+             units = "bigpts")
+  
+}
+```
+
+
+## MICe
+
+```{r}
+centroid_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/107/centroids/resolution_0.05/relative/")
+
 # Anatomical plane to display
 # Sagittal: 1
 # Coronal: 2 
@@ -1693,331 +1648,67 @@ for(i in 1:nrow(df_matches_HBN_MICe)) {
 mouse_slc_dim <- 1
 
 # Mouse brain slice to display
-mouse_slc <- 92
+mouse_slc <- c(70, 92)
 
-# Iterate over nk subset
-list_mouse_slices <- vector(mode = "list", length = nrow(df_matches_HBN_MICe))
-names(list_mouse_slices) <- df_matches_HBN_MICe$img2_cluster_id
-for(i in 1:nrow(df_matches_HBN_MICe)) {
+for (i in 1:nrow(df_matches)) {
   
-  cluster_id <- df_matches_HBN_MICe[[i, "img2_cluster_id"]]
-  
+  cluster_id <- df_matches[[i, "MICe"]]
   nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
   k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
   
   print(paste(nk, k, sep = "-"))
   
-  # Import centroid image and threshold
-  img <- import_cluster_map(imgdir = mouse_centroid_dir,
-                            mask = mouse_mask_file,
-                            nk = nk, k = k,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  # Compute overlay thresholds
-  overlay_threshold <- numeric(2)
-  overlay_threshold[1] <- min(abs(img[img != 0]))
-  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
-  overlay_threshold <- round(overlay_threshold, 2)
-  
-  # Convert mincSingleDim to mincArray
-  img <- mincArray(img)
-  
-  # Generate slice series
-  list_mouse_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
+  list_slices <- vector(mode = "list", length = length(mouse_slc))
+  for (s in 1:length(list_slices)) {
+    
+    # Import centroid image and threshold
+    img <- import_cluster_map(imgdir = centroid_dir,
+                              mask = mouse_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    # Convert mincSingleDim to mincArray and crop
+    img <- mincArray(img)
+    
+    # Generate slice series
+    list_slices[[s]] <- sliceSeries(nrow = 1, ncol = 1, 
                                         dimension = mouse_slc_dim, 
-                                        slices = mouse_slc) %>% 
+                                        slices = mouse_slc[s]) %>% 
     anatomy(mouse_anat_vol, low = 700, high = 1400) %>% 
     overlay(img, 
             low = overlay_threshold[1], high = overlay_threshold[2], 
             symmetric = TRUE) %>% 
     grobify()
+    
+  }
   
-}
-```
-
-```{r}
-
-# Mouse slice dimensions in pixels
-mouse_width_px <- dim(mouse_anat_vol)[2]
-mouse_height_px <- dim(mouse_anat_vol)[3]
-
-# Human slice dimensions in pixels
-human_width_px <- dim(human_anat_vol_cropped)[2]
-human_height_px <- dim(human_anat_vol_cropped)[3]
-
-
-fig3_mouse_ss_width_pt <- 38.83
-fig3_mouse_ss_height_pt <- fig3_mouse_ss_width_pt*(mouse_height_px/mouse_width_px)
-
-fig3_human_ss_width_pt <- fig3_mouse_ss_width_pt
-fig3_human_ss_height_pt <- fig3_human_ss_width_pt*(human_height_px/human_width_px)
-
-fig3_neuro_ss_padding_pt <- 3.0
-
-# Dimensions of slice series grid
-fig3_neuro_ss_widths <- fig3_mouse_ss_width_pt
-fig3_neuro_ss_heights <- c(fig3_human_ss_height_pt, fig3_neuro_ss_padding_pt, fig3_mouse_ss_height_pt)
-
-for (i in 1:length(list_human_slices)) {
+  ss_widths <- mouse_slc_width_pt
+  ss_heights <- c(mouse_slc_height_pt, 2.0, mouse_slc_height_pt)
   
-  # Generate slice series for cluster solution    
-  ss <- arrangeGrob(list_human_slices[[i]],
+  ss <- arrangeGrob(list_slices[[1]],
                     black_rect_grob,
-                    list_mouse_slices[[i]],
+                    list_slices[[2]],
                     layout_matrix = cbind(1:3),
-                    widths = unit(fig3_neuro_ss_widths, "bigpts"),
-                    heights = unit(fig3_neuro_ss_heights, "bigpts"))
+                    widths = unit(ss_widths, "bigpts"),
+                    heights = unit(ss_heights, "bigpts"))
   
-  # Coloured border for slice series
-  # ss_border <- rectGrob(gp = gpar(fill = NA, 
-  #                                 col = neuro_palette_nk[j], 
-  #                                 lwd = 2.5))
-  
-  # Export slice series
-  
-  outfile <- paste(output_plot_prefix, "neuro_ss", "HBN_MICe", names(list_human_slices)[[i]], names(list_mouse_slices)[[i]], sep = "_")
+  outfile <- paste(output_plot_prefix, "neuro_ss", "MICe", cluster_id, sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
   export_pdf(x = ss,
              file = outfile,
-             width = sum(fig3_neuro_ss_widths),
-             height = sum(fig3_neuro_ss_heights),
+             width = sum(ss_widths),
+             height = sum(ss_heights),
              units = "bigpts")
   
 }
 ```
-
-
-## PONDSK-HBN
-
-
-```{r}
-# Fetch parameter set
-params_id <- 779
-metadata <- file.path(PROJECTPATH, "data/cross_species/v3/metadata.csv")
-params <- fetch_params_metadata(metadata = metadata,
-                                id = params_id)
-
-# Jacobians to display
-jacobians <- "relative"
-
-# Threshold method
-threshold <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold)
-
-# Threshold value
-threshold_value <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_value)
-
-# Threshold symmetric option
-threshold_symmetric <- params %>% 
-  filter(id == params_id) %>% 
-  pull(threshold_symmetric)
-
-# PONDSK parameter set ID
-PONDSK_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_1_id)
-
-# PONDSK image resolution
-PONDSK_resolution <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_1_resolution)
-PONDSK_resolution <- sprintf("%.1f", PONDSK_resolution)
-
-# PONDSK pipeline directory
-PONDSK_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
-PONDSK_pipeline_dir <- file.path(PONDSK_pipeline_dir, version)
-PONDSK_pipeline_dir <- file.path(PONDSK_pipeline_dir, PONDSK_params_id)
-
-# PONDSK centroid map directory
-PONDSK_centroid_dir <- file.path(PONDSK_pipeline_dir, "centroids")
-PONDSK_centroid_dir <- file.path(PONDSK_centroid_dir, paste("resolution", PONDSK_resolution, sep = "_"))
-PONDSK_centroid_dir <- file.path(PONDSK_centroid_dir, jacobians)
-
-# HBN parameter set ID
-HBN_params_id <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_2_id)
-
-# HBN image resolution
-HBN_resolution <- params %>% 
-  filter(id == params_id) %>% 
-  pull(input_2_resolution)
-HBN_resolution <- sprintf("%.1f", HBN_resolution)
-
-# HBN pipeline directory
-HBN_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
-HBN_pipeline_dir <- file.path(HBN_pipeline_dir, version)
-HBN_pipeline_dir <- file.path(HBN_pipeline_dir, HBN_params_id)
-
-# HBN centroid map directory
-HBN_centroid_dir <- file.path(HBN_pipeline_dir, "centroids")
-HBN_centroid_dir <- file.path(HBN_centroid_dir, paste("resolution", HBN_resolution, sep = "_"))
-HBN_centroid_dir <- file.path(HBN_centroid_dir, jacobians)
-```
-
-
-```{r}
-df_matches_PONDSK_HBN
-```
-
-```{r fig3-ss-human-import}
-# Anatomical plane to display
-# Sagittal: 1
-# Coronal: 2 
-# Transverse: 3
-human_slc_dim <- 1
-
-# Human brain slice to display
-human_slc <- 82
-
-# Iterate over mouse slices
-list_PONDSK_slices <- vector(mode = "list", length = nrow(df_matches_PONDSK_HBN))
-names(list_PONDSK_slices) <- df_matches_PONDSK_HBN$img1_cluster_id
-for(i in 1:nrow(df_matches_PONDSK_HBN)) {
-  
-  
-  cluster_id <- df_matches_PONDSK_HBN[[i, "img1_cluster_id"]]
-  
-  nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
-  k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
-  
-  print(paste(nk, k, sep = "-"))
-  
-  # Import centroid image and threshold
-  img <- import_cluster_map(imgdir = PONDSK_centroid_dir,
-                            mask = human_mask_file,
-                            nk = nk, k = k,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  # Compute overlay thresholds
-  overlay_threshold <- numeric(2)
-  overlay_threshold[1] <- min(abs(img[img != 0]))
-  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
-  overlay_threshold <- round(overlay_threshold, 2)
-  
-  # Convert mincSingleDim to mincArray and crop
-  img <- mincArray(img)
-  img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
-  
-  # Generate slice series
-  list_PONDSK_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                         dimension = human_slc_dim, 
-                                         slices = human_slc) %>% 
-    anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
-    overlay(img, 
-            low = overlay_threshold[1], 
-            high = overlay_threshold[2], 
-            symmetric = TRUE) %>% 
-    grobify()
-  
-}
-```
-
-```{r fig3-ss-human-import}
-# Anatomical plane to display
-# Sagittal: 1
-# Coronal: 2 
-# Transverse: 3
-human_slc_dim <- 1
-
-# Human brain slice to display
-human_slc <- 82
-
-# Iterate over mouse slices
-list_HBN_slices <- vector(mode = "list", length = nrow(df_matches_PONDSK_HBN))
-names(list_HBN_slices) <- df_matches_PONDSK_HBN$img2_cluster_id
-for(i in 1:nrow(df_matches_PONDSK_HBN)) {
-  
-  
-  cluster_id <- df_matches_PONDSK_HBN[[i, "img2_cluster_id"]]
-  
-  nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
-  k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
-  
-  print(paste(nk, k, sep = "-"))
-  
-  # Import centroid image and threshold
-  img <- import_cluster_map(imgdir = HBN_centroid_dir,
-                            mask = human_mask_file,
-                            nk = nk, k = k,
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  # Compute overlay thresholds
-  overlay_threshold <- numeric(2)
-  overlay_threshold[1] <- min(abs(img[img != 0]))
-  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
-  overlay_threshold <- round(overlay_threshold, 2)
-  
-  # Convert mincSingleDim to mincArray and crop
-  img <- mincArray(img)
-  img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
-  
-  # Generate slice series
-  list_HBN_slices[[i]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                      dimension = human_slc_dim, 
-                                      slices = human_slc) %>% 
-    anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
-    overlay(img, 
-            low = overlay_threshold[1], 
-            high = overlay_threshold[2], 
-            symmetric = TRUE) %>% 
-    grobify()
-  
-}
-```
-
-
-```{r}
-# Human slice dimensions in pixels
-human_width_px <- dim(human_anat_vol_cropped)[2]
-human_height_px <- dim(human_anat_vol_cropped)[3]
-
-fig3_human_ss_width_pt <- 38.83
-fig3_human_ss_height_pt <- fig3_human_ss_width_pt*(human_height_px/human_width_px)
-
-fig3_neuro_ss_padding_pt <- 3.0
-
-# Dimensions of slice series grid
-fig3_neuro_ss_widths <- fig3_human_ss_width_pt
-fig3_neuro_ss_heights <- c(fig3_human_ss_height_pt, fig3_neuro_ss_padding_pt, fig3_human_ss_height_pt)
-
-for (i in 1:length(list_PONDSK_slices)) {
-  
-  # Generate slice series for cluster solution    
-  ss <- arrangeGrob(list_PONDSK_slices[[i]],
-                    black_rect_grob,
-                    list_HBN_slices[[i]],
-                    layout_matrix = cbind(1:3),
-                    widths = unit(fig3_neuro_ss_widths, "bigpts"),
-                    heights = unit(fig3_neuro_ss_heights, "bigpts"))
-  
-  # Coloured border for slice series
-  # ss_border <- rectGrob(gp = gpar(fill = NA, 
-  #                                 col = neuro_palette_nk[j], 
-  #                                 lwd = 2.5))
-  
-  # Export slice series
-  
-  outfile <- paste(output_plot_prefix, "neuro_ss", "PONDSK_HBN", names(list_PONDSK_slices)[[i]], names(list_HBN_slices)[[i]], sep = "_")
-  outfile <- paste0(outfile, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  export_pdf(x = ss,
-             file = outfile,
-             width = sum(fig3_neuro_ss_widths),
-             height = sum(fig3_neuro_ss_heights),
-             units = "bigpts")
-  
-}
-```
-
 
