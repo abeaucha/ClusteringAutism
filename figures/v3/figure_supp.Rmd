@@ -2,7 +2,7 @@
 title: "Supplementary Figures"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2023-12-18"
+date: "2024-08-27"
 output: html_document
 ---
 
@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ```{r packages}
 suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggnewscale))
 suppressPackageStartupMessages(library(grid))
 suppressPackageStartupMessages(library(gridExtra))
 suppressPackageStartupMessages(library(RMINC))
@@ -27,10 +28,15 @@ suppressPackageStartupMessages(library(rcartocolor))
 suppressPackageStartupMessages(library(pheatmap))
 ```
 
+```{r environment}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+```
+
 ```{r functions}
-source("../src/utils.R")
-source("../src/processing.R")
-source("../src/analysis.R")
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
 
 #Function to estimate cluster metrics over a range of solutions
 estimate_cluster_metrics <- function (W, NUMC = 2:5){
@@ -88,38 +94,21 @@ if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 output_plot_prefix <- "figure_supp"
 
 # Similarity pipeline
-version <- "v2"
-pipeline_dir <- "../data/cross_species/"
+version <- "v3"
+pipeline_dir <- file.path(PROJECTPATH, "/data/cross_species/")
 pipeline_dir <- file.path(pipeline_dir, version)
-
-# Human parameters
-human_resolution <- 0.8
-human_es_method <- "normative-growth"
-human_es_df <- 3
-human_cluster_map_method <- "mean"
-
-# Mouse parameters
-mouse_resolution <- 0.2
-mouse_cluster_map_method <- human_cluster_map_method
-
-# Similarity parameters
-metric <- "correlation"
 
 # Fetch parameter set
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
-                                human_resolution = human_resolution,
-                                human_es_method = human_es_method,
-                                human_es_df = human_es_df,
-                                human_cluster_map_method = human_cluster_map_method,
-                                metric = metric)
+                                id = 375)
 params
 ```
 
 
 ```{r paths}
 # Parameter set ID
-params_id <- 405
+params_id <- 375
 
 # Update pipeline directory with parameter set ID
 pipeline_dir <- file.path(pipeline_dir, params_id)
@@ -130,54 +119,52 @@ jacobians <- c("absolute", "relative")
 # Human parameter set ID
 human_params_id <- params %>% 
   filter(id == params_id) %>% 
-  pull(human_id)
+  pull(input_1_id)
 
 # Mouse parameter set ID
 mouse_params_id <- params %>% 
   filter(id == params_id) %>% 
-  pull(mouse_id)
+  pull(input_2_id)
 
 # Max number of clusters
-nk_max <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_cluster_nk_max)
+nk_max <- 10
 
 # Human pipeline directory
-human_pipeline_dir <- "../data/human/derivatives/"
+human_pipeline_dir <- file.path(PROJECTPATH, "/data/human/derivatives/")
 human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
 
 # Human cluster directory
 human_cluster_dir <- file.path(human_pipeline_dir, "clusters")
-human_cluster_resolution <- params %>% 
-  filter(id == params_id) %>% 
-  pull(human_cluster_resolution)
+human_cluster_resolution <- 3.0
 human_cluster_resolution <- sprintf("%.1f", human_cluster_resolution)
 human_cluster_dir <- file.path(human_cluster_dir, str_c("resolution_", human_cluster_resolution))
 
 # Human cluster map directories
-human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
-human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
-human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
-names(human_cluster_map_dirs) <- jacobians
+human_resolution <- 0.8
+human_centroid_dirs <- file.path(human_pipeline_dir, "centroids")
+human_centroid_dirs <- file.path(human_centroid_dirs, str_c("resolution_", human_resolution))
+human_centroid_dirs <- file.path(human_centroid_dirs, jacobians)
+names(human_centroid_dirs) <- jacobians
 
 # Mouse pipeline directory
-mouse_pipeline_dir <- "../data/mouse/derivatives/"
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
+mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/")
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version, mouse_params_id)
 
 # Mouse cluster directory
-mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters", "resolution_0.2")
 
 # Mouse cluster map directories
-mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
-mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
-mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
-names(mouse_cluster_map_dirs) <- jacobians
+mouse_resolution <- 0.2
+mouse_centroid_dirs <- file.path(mouse_pipeline_dir, "centroids")
+mouse_centroid_dirs <- file.path(mouse_centroid_dirs, str_c("resolution_", mouse_resolution))
+mouse_centroid_dirs <- file.path(mouse_centroid_dirs, jacobians)
+names(mouse_centroid_dirs) <- jacobians
 
 # Mouse cluster map directories at 50um
-mouse_cluster_map_dirs_50um <- file.path(mouse_pipeline_dir, "cluster_maps")
-mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, "resolution_0.05")
-mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, jacobians)
-names(mouse_cluster_map_dirs_50um) <- jacobians
+mouse_centroid_dirs_50um <- file.path(mouse_pipeline_dir, "centroids")
+mouse_centroid_dirs_50um <- file.path(mouse_centroid_dirs_50um, "resolution_0.05")
+mouse_centroid_dirs_50um <- file.path(mouse_centroid_dirs_50um, jacobians)
+names(mouse_centroid_dirs_50um) <- jacobians
 ```
 
 ```{r graphical-params}
@@ -289,17 +276,20 @@ export_pdf(x = ggplotGrob(fig_supp_1),
 
 ```{r fig-supp-2-ss-files}
 # Human anatomy
-human_anat_file <- "../data/human/registration/v2/reference_files/model_0.8mm.mnc"
+human_anat_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/model_0.8mm.mnc")
 human_anat <- mincGetVolume(human_anat_file)
 human_anat_vol <- mincArray(human_anat)
 
 # Cropped human images along sagittal and transverse planes
-human_slices_dim_1 <- 25:200
-human_slices_dim_3 <- 25:220
+# human_slices_dim_1 <- 25:200
+# human_slices_dim_3 <- 25:220
+human_slices_dim_1 <- 27:220
+human_slices_dim_2 <- 10:280
+human_slices_dim_3 <- 10:220
 human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
 
 # Human mask
-human_mask_file <- "../data/human/registration/v2/reference_files/mask_0.8mm.mnc"
+human_mask_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/mask_0.8mm.mnc")
 human_mask <- mincGetVolume(human_mask_file)
 
 # Image threshold method
@@ -333,7 +323,7 @@ for (j in jacobians) {
   for (k in 1:nk_human) {
     
     # Import centroid image for specific cluster using threshold
-    img_human <- import_cluster_map(imgdir = human_cluster_map_dirs[[j]],
+    img_human <- import_cluster_map(imgdir = human_centroid_dirs[[j]],
                                     mask = human_mask_file,
                                     nk = nk_human, k = k,
                                     threshold = threshold,
@@ -375,12 +365,12 @@ ss_nslices <- 8
 human_slices <- floor(seq(60, 220, length.out = ss_nslices))
 
 # Human anatomy thresholds
-human_anat_low <- 3
-human_anat_high <- 10
+human_anat_low <- 40
+human_anat_high <- 110
 
 # Overlay thresholds from previous code chunk
-overlay_low <- 0.19
-overlay_high <- 1.0
+overlay_low <- 0.2
+overlay_high <- 0.7
 ```
 
 ```{r}
@@ -388,9 +378,9 @@ for (k in 1:nk_human) {
   
   fig_supp_2_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, begin = 60, end = 220) %>% 
     anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-    overlay(list_human_centroids[["absolute"]][[k]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+    overlay(list_human_centroids[["absolute"]][[k]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
     sliceSeries() %>% anatomy() %>% 
-    overlay(list_human_centroids[["relative"]][[k]], low = 0.2, high = 1.0, symmetric = TRUE) %>%   
+    overlay(list_human_centroids[["relative"]][[k]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>%   
     legend() %>% 
     grobify()
   
@@ -415,12 +405,12 @@ for (k in 1:nk_human) {
 
 ```{r fig2-ss-files}
 # Mouse anatomy
-mouse_anat_file <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
+mouse_anat_file <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc")
 mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
 
 # Mouse mask
-mouse_mask_file <- "../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
+mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc")
 mouse_mask <- mincGetVolume(mouse_mask_file)
 
 # Image threshold method
@@ -483,7 +473,7 @@ for (j in jacobians) {
   for (k in 1:nk_mouse) {
     
     # Import centroid image for specific cluster using threshold
-    img_mouse <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[[j]],
+    img_mouse <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[[j]],
                                     mask = mouse_mask_file,
                                     nk = nk_mouse, k = k,
                                     threshold = threshold,
@@ -528,9 +518,9 @@ for (k in 1:nk_mouse) {
   
   fig_supp_3_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, begin = 20, end = 200) %>% 
     anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-    overlay(list_mouse_centroids[["absolute"]][[k]], low = 0.2, high = 1.0, symmetric = TRUE) %>% 
+    overlay(list_mouse_centroids[["absolute"]][[k]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
     sliceSeries() %>% anatomy() %>% 
-    overlay(list_mouse_centroids[["relative"]][[k]], low = 0.2, high = 1.0, symmetric = TRUE) %>%   
+    overlay(list_mouse_centroids[["relative"]][[k]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>%   
     legend() %>% 
     grobify()
   
@@ -558,7 +548,7 @@ bader_version <- "2023"
 stringdb_score <- 950
 
 # Base directory for pathway data files
-mouse_pathways_dir <- "../data/mouse/enrichment/"
+mouse_pathways_dir <- file.path(PROJECTPATH, "data/mouse/enrichment/")
 mouse_pathways_dir <- file.path(mouse_pathways_dir, 
                                 paste("StringDB", stringdb_version, 
                                       "Bader", bader_version, 
@@ -844,102 +834,104 @@ similarity_dir <- file.path(pipeline_dir, "similarity")
 
 # Directory for mouse-human cluster similarity permutations
 permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
-```
 
-
-```{r fig3-similarity-import}
 # Set of similarity files
-similarity_files <- list.files(similarity_dir, full.names = TRUE)
+similarity_file <- file.path(similarity_dir, "similarity.csv")
 
 # Jacobians to use
 jacobians <- c("absolute", "relative")
 
-# Import absolute and relative similarity files
-similarity <- vector(mode = "list", length = length(jacobians))
-names(similarity) <- jacobians
-for (j in jacobians) {
-  similarity[[j]] <- similarity_files %>% 
-    str_subset(j) %>% 
-    read_csv(show_col_types = FALSE) %>% 
-    mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-           human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-           mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-           mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
-    unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
-    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
-    mutate(jacobians = j)
-}
-
-# Combine data frames for absolute and relative similarity
-df_similarity <- bind_rows(similarity)
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  rename(human_img = img1,
+         mouse_img = img2) %>% 
+  mutate(human_nk = human_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_k = human_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_jacobians = human_img %>% 
+           str_extract("absolute|relative"),
+         mouse_nk = mouse_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_k = mouse_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_jacobians = mouse_img %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "human_cluster_id", human_nk, human_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+        sep = "-", remove = FALSE)
 
 # Compute average similarity values across jacobians for each permutation
-df_similarity <- df_similarity %>% 
+df_similarity <- similarity %>% 
   group_by(human_cluster_id, human_nk, human_k, 
            mouse_cluster_id, mouse_nk, mouse_k) %>% 
   summarise(similarity = mean(similarity), .groups = "drop")
-```
 
-```{r fig3-similarity-import-permutations}
-# Set of permutation files
-permutation_files <- list.files(permutation_dir, full.names = TRUE)
 
-# Permutation IDs
-permutation_ids <- permutation_files %>% 
-  basename() %>% 
-  str_extract("[0-9]+") %>% 
-  as.numeric() %>% 
-  unique() %>% 
-  sort()
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
 
 # Number of permutations
-np <- length(permutation_ids)
-
-# Iterate over jacobians and permutations to import all permuted similarity 
-# values
-list_permutations <- vector(mode = "list", length = length(jacobians))
-names(list_permutations) <- jacobians
-for (j in jacobians) {
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
   
-  # Iterate over permutations
-  df_sim <- tibble()
-  for (p in 1:np) {
-    
-    # Permutation similarity data
-    infile <- permutation_files %>% 
-      str_subset(str_c("permutation_", permutation_ids[p], "_", j))
-    
-    # Import permutation similarity data
-    df_sim_tmp <- infile %>% 
-      read_csv(show_col_types = FALSE) %>% 
-      mutate(human_nk = human_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-             human_k = human_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-             mouse_nk = mouse_img %>% basename() %>% str_extract("_nk_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric(),
-             mouse_k = mouse_img %>% basename() %>% str_extract("_k_[0-9]+") %>% str_extract("[0-9]+") %>% as.numeric()) %>% 
-      unite(col = "human_cluster_id", human_nk, human_k, sep = "-", remove = FALSE) %>% 
-      unite(col = "mouse_cluster_id", mouse_nk, mouse_k, sep = "-", remove = FALSE) %>% 
-      mutate(permutation = permutation_ids[p]) 
-    
-    # Collate permutation data
-    df_sim <- bind_rows(df_sim, df_sim_tmp)
-  }
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
   
-  # Include jacobians information
-  df_sim <- df_sim %>% 
-    mutate(jacobians = j)
-  
-  list_permutations[[j]] <- df_sim
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    rename(human_img = img1,
+           mouse_img = img2) %>% 
+    mutate(human_nk = human_img %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           human_k = human_img %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           mouse_nk = mouse_img %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           mouse_k = mouse_img %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "human_cluster_id", human_nk, human_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
   
 }
 
-# Combine data frames for absolute and relative permutations
-df_permutations <- bind_rows(list_permutations)
-
-# Compute average similarity values across jacobians for each permutation
-df_permutations <- df_permutations %>% 
-  group_by(permutation, 
-           human_cluster_id, human_nk, human_k, 
-           mouse_cluster_id, mouse_nk, mouse_k) %>% 
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations <- list_permutations %>% 
+  bind_rows() %>% 
+  group_by(permutation, human_nk, mouse_nk, human_cluster_id, mouse_cluster_id) %>% 
   summarise(similarity = mean(similarity), .groups = "drop")
 ```
 
@@ -1078,14 +1070,14 @@ for (clust in clusters) {
   nk <- str_split(clust, pattern = "-", simplify = TRUE)[1]
   k <- str_split(clust, pattern = "-", simplify = TRUE)[2]
   
-  img_abs <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["absolute"]],
+  img_abs <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["absolute"]],
                                 mask = mouse_mask_file,
                                 nk = nk, k = k,
                                 threshold = threshold,
                                 threshold_value = threshold_value,
                                 threshold_symmetric = threshold_symmetric)
   
-  img_rel <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["relative"]],
+  img_rel <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["relative"]],
                                 mask = mouse_mask_file,
                                 nk = nk, k = k,
                                 threshold = threshold,
@@ -1117,21 +1109,21 @@ for (clust in clusters) {
 ```
 
 ```{r}
-run <- FALSE
+run <- TRUE
 if (run) {
   for (i in 1:nrow(df_cluster_grid)) {
     
     nk <- df_cluster_grid[[i, "nk"]]
     k <- df_cluster_grid[[i, "k"]]
     
-    img_abs <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["absolute"]],
+    img_abs <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["absolute"]],
                                   mask = mouse_mask_file,
                                   nk = nk, k = k,
                                   threshold = threshold,
                                   threshold_value = threshold_value,
                                   threshold_symmetric = threshold_symmetric)
     
-    img_rel <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["relative"]],
+    img_rel <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["relative"]],
                                   mask = mouse_mask_file,
                                   nk = nk, k = k,
                                   threshold = threshold,
@@ -1169,7 +1161,7 @@ if (run) {
 ```
 
 ```{r}
-run <- FALSE
+run <- TRUE
 if (run) {
   nk_subset <- c(4, 6, 8, 10)
   
@@ -1184,7 +1176,7 @@ if (run) {
     k <- df_sig_gt4[[i, "human_k"]]
     
     # Import centroid image for specific cluster using threshold
-    img_abs <- import_cluster_map(imgdir = human_cluster_map_dirs[["absolute"]],
+    img_abs <- import_cluster_map(imgdir = human_centroid_dirs[["absolute"]],
                                   mask = human_mask_file,
                                   nk = nk, k = k,
                                   threshold = threshold,
@@ -1192,7 +1184,7 @@ if (run) {
                                   threshold_symmetric = threshold_symmetric)
     
     # Import centroid image for specific cluster using threshold
-    img_rel <- import_cluster_map(imgdir = human_cluster_map_dirs[["relative"]],
+    img_rel <- import_cluster_map(imgdir = human_centroid_dirs[["relative"]],
                                   mask = human_mask_file,
                                   nk = nk, k = k,
                                   threshold = threshold,
@@ -1275,7 +1267,7 @@ bader_version <- "2023"
 stringdb_score <- 950
 
 # Base directory for pathway data files
-mouse_pathways_dir <- "../data/mouse/enrichment/"
+mouse_pathways_dir <- file.path(PROJECTPATH, "data/mouse/enrichment/")
 mouse_pathways_dir <- file.path(mouse_pathways_dir, 
                                 paste("StringDB", stringdb_version, 
                                       "Bader", bader_version, 
@@ -1473,13 +1465,174 @@ fig_supp_9_dendrogram_grob <- fig_supp_9_pheatmap[["gtable"]][["grobs"]][[1]]
 fig_supp_9_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
 ```
 
+```{r}
+df_sim_pvals_POND <- df_sim_pvals
+```
+
+
+```{r fig3-similarity-import}
+
+similarity_dir <- file.path(PROJECTPATH, "/data/cross_species//v3/", "861", "similarity")
+
+# Directory for mouse-human cluster similarity permutations
+permutation_dir <- file.path(PROJECTPATH, "/data/cross_species//v3/", "861", "permutations", "similarity")
+
+# Path to mouse-human similarity directory
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  rename(human_img = img1,
+         mouse_img = img2) %>% 
+  mutate(human_nk = human_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_k = human_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_jacobians = human_img %>% 
+           str_extract("absolute|relative"),
+         mouse_nk = mouse_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_k = mouse_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_jacobians = mouse_img %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "human_cluster_id", human_nk, human_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity <- similarity %>% 
+  group_by(human_cluster_id, human_nk, human_k, 
+           mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    rename(human_img = img1,
+           mouse_img = img2) %>% 
+    mutate(human_nk = human_img %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           human_k = human_img %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           mouse_nk = mouse_img %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           mouse_k = mouse_img %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "human_cluster_id", human_nk, human_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations <- list_permutations %>% 
+  bind_rows() %>% 
+  group_by(permutation, human_nk, mouse_nk, human_cluster_id, mouse_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+```
+
+```{r fig3-similarity-compute-pvals}
+# Mouse and human max nk
+human_nk_max <- max(df_similarity[["human_nk"]])
+mouse_nk_max <- max(df_similarity[["mouse_nk"]])
+
+# Iterate along nk diagonal +/- 1
+df_sim_pvals <- tibble()
+for (h_nk in 2:human_nk_max) {
+  for (m_nk in (h_nk-1):(h_nk+1)){
+    
+    if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
+      
+      df_sim_nk <- df_similarity %>% 
+        select(human_cluster_id, human_nk, human_k,
+               mouse_cluster_id, mouse_nk, mouse_k,
+               similarity) %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        mutate(pval = 0)
+      
+      sim_perm_nk <- df_permutations %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        pull(similarity) %>% 
+        sort()
+      
+      for (i in 1:nrow(df_sim_nk)) {
+        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
+        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+      }
+      
+      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      
+    }
+  }
+}
+
+# Evaluate significance
+sim_alpha <- 0.05
+df_sim_pvals <- df_sim_pvals %>% 
+  mutate(significant = ifelse(pval < sim_alpha, 1, 0))
+
+df_sim_pvals %>% 
+  filter(significant == 1) %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  select(mouse_cluster_id, human_cluster_id, similarity, pval) 
+
+df_sim_pvals_HBN <- df_sim_pvals
+```
+
 
 ```{r}
 df_pathways_topn_heatmap <- df_pathways_topn %>% 
   left_join(df_pathways_topn_hclust, by = "pathway") %>% 
   mutate(pathway = factor(pathway, levels = pathways_topn_lvls_clustered))
 
-df_sig_nk <- df_sim_pvals %>% 
+df_sig_nk_POND <- df_sim_pvals_POND %>% 
   group_by(mouse_nk, mouse_k) %>% 
   summarise(p = min(pval),
             nsignificant = sum(significant),
@@ -1494,8 +1647,26 @@ df_sig_nk <- df_sim_pvals %>%
   unite(col = "cluster_id", "nk", "k", 
         sep = "-", remove = FALSE) 
 
+df_sig_nk_HBN <- df_sim_pvals_HBN %>% 
+  group_by(mouse_nk, mouse_k) %>% 
+  summarise(p = min(pval),
+            nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(plab = case_when(p < 0.05 ~ "**",
+                          p >= 0.05 & p < 0.1 ~ "*",
+                          p >= 0.1 ~ ""),
+         has_match = ifelse(nsignificant > 0, TRUE, FALSE),
+         y = "HBN") %>% 
+  select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", "nk", "k", 
+        sep = "-", remove = FALSE) 
+
+df_sig_nk <- bind_rows(df_sig_nk_POND,
+                       df_sig_nk_HBN)
+
 df_pathways_topn_heatmap <- df_pathways_topn_heatmap %>% 
-  left_join(df_sig_nk %>% 
+  left_join(df_sig_nk_POND %>% 
               select(cluster_id, has_match),
             by = "cluster_id")
 
@@ -1719,5 +1890,371 @@ pathways_in_topn <- df_pathway_info$pathway[df_pathway_info$pathway %in% pathway
 print(length(pathways_in_topn))
 pathways_in_topn
 ```
+
+
+
+# Old Figure 4
+
+
+```{r fig4-paths}
+# Path to demographics data
+demographics_file <- file.path(PROJECTPATH, "data/human/registration/v3/subject_info/demographics.csv")
+```
+
+# Panel: Human diagnosis alluvial diagrams
+
+```{r fig4-import}
+# Import patient cluster assignments
+df_clusters <- df_human_clusters
+df_clusters <- rename(df_clusters, file = ID)
+
+# Import cohort demographics
+demographics <- read_csv(demographics_file, show_col_types = FALSE)
+
+# Filter demographics for set used in analysis
+demographics <- demographics %>% 
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner))
+
+# Join demographics information to cluster assignments
+df_cluster_demographics <- df_clusters %>% 
+  left_join(demographics, by = "file")
+
+# Re-map diagnoses to broader categories
+df_diagnoses <- tibble(DX = c("ASD", 
+                              "OCD", 
+                              "ADHD", 
+                              "Sub-threshold OCD", 
+                              "Anxiety", 
+                              "Sub-threshold ADHD",
+                              "Intellectual Disability only",
+                              "Tourette Syndrome",
+                              "Other", 
+                              "Fragile X"),
+                       DX_new = c("ASD",
+                                  "OCD",
+                                  "ADHD",
+                                  "OCD",
+                                  "Other",
+                                  "ADHD",
+                                  "Other",
+                                  "Other", 
+                                  "Other", 
+                                  "Other"))
+
+# Get re-mapped diagnoses
+df_cluster_demographics <- df_cluster_demographics %>% 
+  left_join(df_diagnoses, by = "DX")
+```
+
+```{r fig4-dx-proportions}
+# Extract diagnoses and convert cluster assignments to long format
+df_cluster_dx_long <- df_cluster_demographics %>% 
+  select(ID = file, contains("nk"), DX = DX_new) %>% 
+  pivot_longer(cols = c(-ID, -DX), 
+               names_to = "nk", 
+               values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, 
+        sep = "-", remove = FALSE) %>% 
+  select(ID, cluster_id, nk, k, DX)
+
+# Compute per cluster diagnostic proportions
+df_cluster_dx_freq <- df_cluster_dx_long %>%
+  select(-ID) %>% 
+  group_by(nk, k, DX) %>% 
+  mutate(n_per_dx_per_k = n()) %>% 
+  ungroup() %>% 
+  distinct()
+
+df_cluster_freq <- df_cluster_dx_long %>% 
+  select(-ID) %>% 
+  group_by(cluster_id, nk, k) %>% 
+  summarise(n_per_k = n(), 
+            .groups = "drop")
+
+# Cluster IDs in order
+cluster_ids <- df_cluster_freq %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)
+
+# Broad diagnostic groups
+diagnoses <- df_cluster_dx_freq %>% 
+  pull(DX) %>% 
+  unique() %>% 
+  sort()
+
+# Full grid of cluster labels and diagnoses
+df_cluster_dx_grid <- expand_grid(cluster_id = cluster_ids,
+                                  DX = diagnoses) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), 
+           sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k))
+
+# Include diagnoses where cluster proportion is null
+df_cluster_dx_freq <- df_cluster_dx_freq %>% 
+  right_join(df_cluster_dx_grid, 
+             by = c("cluster_id", "nk", "k", "DX")) %>% 
+  mutate(n_per_dx_per_k = ifelse(is.na(n_per_dx_per_k), 0, n_per_dx_per_k)) %>% 
+  left_join(df_cluster_freq,
+            by = c("cluster_id", "nk", "k")) %>% 
+  mutate(prop_dx_per_k = n_per_dx_per_k/n_per_k)
+```
+
+```{r fig4-dx-chi2}
+# Generate a grid of clusters and diagnoses
+df_chi2 <- expand_grid(nk = 2:nk_max,
+                       DX = diagnoses) %>% 
+  mutate(chi2 = 0, pval = 0)
+
+# Iterate over cluster-dx combinations
+for (i in 1:nrow(df_chi2)) {
+  
+  # Extract cluster nk and diagnosis
+  nk_i <- df_chi2[[i, "nk"]]
+  dx_i <- df_chi2[[i, "DX"]]
+  
+  # Format data to run a binary chi-squared test for the given diagnosis
+  df_chi2_test <- df_cluster_dx_long %>% 
+    filter(nk == nk_i) %>% 
+    mutate(isDX = factor(DX == dx_i),
+           k = factor(k))
+  
+  # Run the chi-squared test
+  chi2 <- chisq.test(x = df_chi2_test[["k"]],
+                     y = df_chi2_test[["isDX"]], 
+                     simulate.p.value = TRUE, 
+                     B = 1e5)
+  
+  # Assign the test values
+  df_chi2[[i, "chi2"]] <- chi2[["statistic"]]
+  df_chi2[[i, "pval"]] <- chi2[["p.value"]]
+}
+```
+
+```{r fig4-alluvial-plots}
+# Data frame containing cluster DX proportions with patient IDs
+df_alluvial_all <- df_cluster_dx_freq %>%
+  select(cluster_id, nk, k, DX, prop_dx_per_k) %>%
+  pivot_wider(id = c(cluster_id, nk, k), 
+              names_from = "DX", 
+              values_from = "prop_dx_per_k") %>% 
+  right_join(df_cluster_dx_long, 
+             by = c("cluster_id", "nk", "k"))  
+
+# Palette for alluvials
+alluvial_palette <- carto_pal(n = 7, "BurgYl")
+
+# Iterate over diagnoses
+for (i in 1:length(diagnoses)) {
+  
+  # Extract dx
+  dx_i <- diagnoses[i]
+  
+  # Subset alluvial data frame for given dx
+  df_alluvial_i <- df_alluvial_all %>% 
+    rename(prop = contains(dx_i)) %>% 
+    mutate(isDX = DX == dx_i,
+           nk = factor(nk, levels = 2:nk_max),
+           k = factor(k, levels = 1:nk_max))
+  
+  # Generate alluvial plot
+  fig4_alluvial_plot <- ggplot(data = df_alluvial_i,
+                               mapping = aes(x = nk, 
+                                             stratum = k, 
+                                             alluvium = ID)) + 
+    geom_flow(mapping = aes(alpha = isDX),
+              stat = "alluvium", aes.flow = "forward",
+              fill = "grey70",
+              show.legend = FALSE) +
+    scale_alpha_manual(values = c(0, 1)) +
+    new_scale_fill() + 
+    geom_stratum(mapping = aes(fill = prop),
+                 size = 0.25) + 
+    scale_fill_gradient(low = "white", high = "red",
+                        limits = c(0, 1)) + 
+    # scale_fill_gradientn(colors = alluvial_palette,
+    # limits = c(0, 1)) +
+    scale_y_continuous(breaks = seq(0, 700, by = 100), 
+                       minor_breaks = seq(0, 700, by = 50),
+                       expand = expansion(add = 20)) + 
+    labs(x = "Number of clusters",
+         y = "Number of patients",
+         fill = "Proportion per cluster") + 
+    theme_bw() + 
+    theme(panel.grid.major.x = element_blank(),
+          axis.title = element_text(size = font_size, family = font_family),
+          axis.text = element_text(size = font_size, family = font_family),
+          legend.title = element_text(size = font_size, family = font_family),
+          legend.text = element_text(size = font_size, family = font_family))
+  
+  # Extract chi-squared p-values for given dx  
+  df_pvals_i <- df_chi2 %>% 
+    filter(DX == dx_i) %>% 
+    mutate(nk = factor(nk, levels = 2:nk_max),
+           pval = sprintf("%.2f", pval),
+           pval = paste0("p = ", pval),
+           y = "y")
+  
+  # Generate a plot containing p-value labels
+  fig4_alluvial_pvals <- ggplot(df_pvals_i, 
+                                aes(x = nk, y = y, label = pval)) + 
+    geom_text(size = font_size*0.36,
+              family = font_family) + 
+    theme_void() +
+    theme(plot.margin = margin()) 
+  
+  # Combine p-values with alluvial
+  fig4_alluvial <- (fig4_alluvial_pvals / fig4_alluvial_plot) +
+    plot_layout(heights = c(0.05, 0.95)) &
+    theme(plot.margin = margin())
+  
+  # Figure width (bigpts)
+  fig4_width_pt <- 510
+  
+  # Plot dimensions in bigpts
+  fig4_alluvial_width_pt <- fig4_width_pt
+  fig4_alluvial_height_pt <- fig4_alluvial_width_pt/2
+  
+  # Plot dimensions in inches
+  fig4_alluvial_width_in <- fig4_alluvial_width_pt/pt_per_in
+  fig4_alluvial_height_in <- fig4_alluvial_height_pt/pt_per_in
+  
+  # Export plot
+  outfile <- paste(output_plot_prefix, "alluvial", dx_i, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(fig4_alluvial_width_in, "in"),
+      height = unit(fig4_alluvial_height_in, "in"))
+  print(fig4_alluvial)
+  dev.off()
+  
+}
+```
+
+```{r}
+df_chi2 %>% 
+  group_by(DX) %>% 
+  mutate(qval = p.adjust(pval, method = "fdr")) %>% 
+  summarise(fdr5 = sum(qval < 0.05),
+            fdr10 = sum(qval < 0.10),
+            fdr20 = sum(qval < 0.20))
+```
+
+
+# Supplementary
+
+```{r fig4-cluster-size-hist}
+df_cluster_dx_long <- df_cluster_dx_long %>% 
+  left_join(df_cluster_dx_freq %>% 
+              filter(DX == "ASD") %>% 
+              select(cluster_id, n_per_k),
+            by = "cluster_id") 
+
+ggplot(df_cluster_dx_long,
+       aes(x = n_per_k)) + 
+  geom_histogram() +
+  scale_x_continuous(breaks = seq(0, 500, by = 40))
+```
+
+
+```{r fig4-dx-chi2-large}
+nmin <- seq(10, 50, by = 10)
+list_chi2 <- vector(mode = "list", length = length(nmin))
+for (l in 1:length(list_chi2)) {
+  
+  # Generate a grid of clusters and diagnoses
+  df_chi2 <- expand_grid(nk = 2:nk_max,
+                         DX = diagnoses) %>% 
+    mutate(chi2 = 0, pval = 0, nmin = nmin[l])
+  
+  # Iterate over cluster-dx combinations
+  for (i in 1:nrow(df_chi2)) {
+    
+    # Extract cluster nk and diagnosis
+    nk_i <- df_chi2[[i, "nk"]]
+    dx_i <- df_chi2[[i, "DX"]]
+    
+    # Format data to run a binary chi-squared test for the given diagnosis
+    df_chi2_test <- df_cluster_dx_long %>% 
+      filter(n_per_k > nmin[l],
+             nk == nk_i) %>% 
+      mutate(isDX = factor(DX == dx_i),
+             k = factor(k))
+    
+    # Run the chi-squared test
+    chi2 <- chisq.test(x = df_chi2_test[["k"]],
+                       y = df_chi2_test[["isDX"]], 
+                       simulate.p.value = TRUE, 
+                       B = 1e5)
+    
+    # Assign the test values
+    df_chi2[[i, "chi2"]] <- chi2[["statistic"]]
+    df_chi2[[i, "pval"]] <- chi2[["p.value"]]
+  }
+  
+  list_chi2[[l]] <- df_chi2
+  
+}
+
+df_chi2_large <- bind_rows(list_chi2)
+```
+
+
+```{r fig4-dx-chi2-large}
+# for(dx in diagnoses[1:3]) {
+
+fig4_chi2_cluster_size <- df_chi2_large %>% 
+  filter(DX != "Other") %>%
+  mutate(nk = factor(nk),
+         DX = factor(DX, levels = c("ASD", "ADHD", "OCD"))) %>% 
+  ggplot(aes(x = nmin, y = pval, group = nk, col = nk)) + 
+  geom_line(size = 0.4) + 
+  geom_point(size = 0.75) +
+  geom_hline(yintercept = 0.05, 
+             linetype = "dashed",
+             size = 0.4) + 
+  facet_grid(.~DX) + 
+  scale_x_continuous(breaks = nmin, minor_breaks = NULL) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  labs(x = "Minimum cluster size",
+       y = "p-value",
+       col = "Number of clusters") + 
+  theme_bw() +
+  theme(axis.title = element_text(size = font_size, family = font_family),
+        axis.text = element_text(size = font_size, family = font_family),
+        legend.text = element_text(size = font_size, family = font_family),
+        legend.title = element_text(size = font_size, family = font_family),
+        strip.text = element_text(size = font_size, family = font_family))
+
+# Plot dimensions in bigpts
+fig4_chi2_cluster_size_width_pt <- fig4_width_pt
+fig4_chi2_cluster_size_height_pt <- 200
+
+# Plot dimensions in inches
+fig4_chi2_cluster_size_width_in <- fig4_chi2_cluster_size_width_pt/pt_per_in
+fig4_chi2_cluster_size_height_in <- fig4_chi2_cluster_size_height_pt/pt_per_in
+
+# Export plot
+# outfile <- paste("figure_supp_chi2_groupsize", dx, sep = "_")
+# outfile <- paste0(outfile, ".pdf")
+outfile <- "figure_supp_chi2_groupsize.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig4_chi2_cluster_size_width_in, "in"),
+    height = unit(fig4_chi2_cluster_size_height_in, "in"))
+print(fig4_chi2_cluster_size)
+dev.off()
+
+# }
+```
+
 
 
