@@ -24,6 +24,7 @@ suppressPackageStartupMessages(library(cluster))
 suppressPackageStartupMessages(library(ggalluvial))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(RColorBrewer))
+
 suppressPackageStartupMessages(library(rcartocolor))
 suppressPackageStartupMessages(library(pheatmap))
 ```
@@ -197,6 +198,16 @@ fig_height_pt <- 481
 
 # Supplementary Figure 1
 
+Human Sankey diagram
+
+
+# Supplementary Figure 2 
+
+Mouse Sankey diagram
+
+
+# Supplementary Figure 3
+
 ```{r fig-supp-1-import}
 #Human cluster assignments
 human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
@@ -262,7 +273,7 @@ fig_supp_1_width_pt <- fig_width_pt
 fig_supp_1_height_pt <- fig_width_pt/3
 
 # Export
-outfile <- paste(output_plot_prefix, 1, sep = "_")
+outfile <- paste(output_plot_prefix, 3, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 export_pdf(x = ggplotGrob(fig_supp_1),
@@ -272,7 +283,7 @@ export_pdf(x = ggplotGrob(fig_supp_1),
            file = outfile)
 ```
 
-# Supplementary Figure 2
+# Supplementary Figure 4
 
 ```{r fig-supp-2-ss-files}
 # Human anatomy
@@ -387,7 +398,7 @@ for (k in 1:nk_human) {
   fig_supp_2_width_pt <- fig_width_pt/(3)
   fig_supp_2_height_pt <- (fig_supp_2_width_pt/3)*ss_nslices
   
-  outfile <- paste(output_plot_prefix, 2, nk_human, k, sep = "_")
+  outfile <- paste(output_plot_prefix, 4, nk_human, k, sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
   export_pdf(x = fig_supp_2_grob,
@@ -401,7 +412,7 @@ for (k in 1:nk_human) {
 
 
 
-# Supplementary Figure 3
+# Supplementary Figure 5
 
 ```{r fig2-ss-files}
 # Mouse anatomy
@@ -527,7 +538,7 @@ for (k in 1:nk_mouse) {
   fig_supp_3_width_pt <- fig_width_pt/(2)
   fig_supp_3_height_pt <- (fig_supp_3_width_pt/4)*ss_nslices
   
-  outfile <- paste(output_plot_prefix, 3, nk_mouse, k, sep = "_")
+  outfile <- paste(output_plot_prefix, 5, nk_mouse, k, sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
   export_pdf(x = fig_supp_3_grob,
@@ -539,7 +550,7 @@ for (k in 1:nk_mouse) {
 }
 ```
 
-# Supplementary Figure 4
+# Supplementary Figure 6
 
 ```{r fig2-pathways-mouse-import}
 # Enrichment database versions
@@ -771,7 +782,7 @@ fig_supp_4_width_pt <- fig_width_pt
 fig_supp_4_height_pt <- fig_height_pt
 
 # Export
-outfile <- paste(output_plot_prefix, 4, sep = "_")
+outfile <- paste(output_plot_prefix, 6, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 export_pdf(x = ggplotGrob(fig_supp_4),
@@ -781,7 +792,7 @@ export_pdf(x = ggplotGrob(fig_supp_4),
            file = outfile)
 ```
 
-# Supplementary Figure 5
+# Supplementary Figure 7
 
 ```{r fig3-heatmap-pathway-clust-scree-plot}
 # Generate pathway cluster scree plot
@@ -813,7 +824,7 @@ fig_supp_5_width_pt <- fig_width_pt
 fig_supp_5_height_pt <- fig_width_pt/3
 
 # Export
-outfile <- paste(output_plot_prefix, 5, sep = "_")
+outfile <- paste(output_plot_prefix, 7, sep = "_")
 outfile <- paste0(outfile, ".jpeg")
 outfile <- file.path(output_dir, outfile)
 jpeg(filename = outfile,
@@ -826,7 +837,7 @@ print(fig_supp_5)
 dev.off()
 ```
 
-# Supplementary Figure 6-8
+# Supplementary Figure 8-10
 
 ```{r}
 # Directory for mouse-human cluster similarity 
@@ -1097,7 +1108,7 @@ for (clust in clusters) {
   fig_supp_6_width_pt <- fig_width_pt/(2)
   fig_supp_6_height_pt <- (fig_supp_6_width_pt/3)*6
   
-  outfile <- paste(output_plot_prefix, 6, clust, clust, sep = "_")
+    outfile <- paste(output_plot_prefix, 8, clust, clust, sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
   export_pdf(x = fig_supp_6_grob,
@@ -1146,7 +1157,7 @@ if (run) {
     id4 <- as.character(df_cluster_grid[[i, "cluster_id_nk4"]])
     id <- as.character(df_cluster_grid[[i, "cluster_id"]])
     
-    outfile <- paste(output_plot_prefix, 6, id4, id, sep = "_")
+    outfile <- paste(output_plot_prefix, 8, id4, id, sep = "_")
     outfile <- paste0(outfile, ".pdf")
     outfile <- file.path(output_dir, outfile)
     export_pdf(x = fig_supp_6_grob,
@@ -1212,7 +1223,7 @@ if (run) {
     mouse_clust <- df_sig_gt4[[i, "mouse_cluster_id"]]
     human_clust <- df_sig_gt4[[i, "human_cluster_id"]]
     
-    outfile <- paste(output_plot_prefix, 6, "mouse", mouse_clust, "human", human_clust, sep = "_")
+    outfile <- paste(output_plot_prefix, 8, "mouse", mouse_clust, "human", human_clust, sep = "_")
     outfile <- paste0(outfile, ".pdf")
     outfile <- file.path(output_dir, outfile)
     export_pdf(x = fig_supp_6_grob,
@@ -1258,7 +1269,7 @@ df_sim_pvals %>%
 ```
 
 
-# Supplementary Figure 9
+# Supplementary Figure 11
 
 ```{r fig2-pathways-mouse-import}
 # Enrichment database versions
@@ -1854,7 +1865,7 @@ fig_supp_9_width_in <- fig_supp_9_width_pt/pt_per_in
 fig_supp_9_height_in <- fig_supp_9_height_pt/pt_per_in
 
 # Export
-outfile <- paste(output_plot_prefix, 9, sep = "_")
+outfile <- paste(output_plot_prefix, 11, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -1873,7 +1884,7 @@ dev.off()
 
 ```{r}
 # Export
-outfile <- paste(output_plot_prefix, 9, sep = "_")
+outfile <- paste(output_plot_prefix, 11, sep = "_")
 outfile <- paste0(outfile, ".jpeg")
 outfile <- file.path(output_dir, outfile)
 jpeg(filename = outfile,
@@ -1893,15 +1904,13 @@ pathways_in_topn
 
 
 
-# Old Figure 4
+# Supplementary Figure 12 (and 14, 15)
 
 
 ```{r fig4-paths}
 # Path to demographics data
 demographics_file <- file.path(PROJECTPATH, "data/human/registration/v3/subject_info/demographics.csv")
 ```
-
-# Panel: Human diagnosis alluvial diagrams
 
 ```{r fig4-import}
 # Import patient cluster assignments
@@ -2127,7 +2136,8 @@ for (i in 1:length(diagnoses)) {
   fig4_alluvial_height_in <- fig4_alluvial_height_pt/pt_per_in
   
   # Export plot
-  outfile <- paste(output_plot_prefix, "alluvial", dx_i, sep = "_")
+  # outfile <- paste(output_plot_prefix, "alluvial", dx_i, sep = "_")
+  outfile <- paste(output_plot_prefix, 12, dx_i, sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile,
@@ -2149,7 +2159,7 @@ df_chi2 %>%
 ```
 
 
-# Supplementary
+# Supplementary Figure 13
 
 ```{r fig4-cluster-size-hist}
 df_cluster_dx_long <- df_cluster_dx_long %>% 
@@ -2245,7 +2255,9 @@ fig4_chi2_cluster_size_height_in <- fig4_chi2_cluster_size_height_pt/pt_per_in
 # Export plot
 # outfile <- paste("figure_supp_chi2_groupsize", dx, sep = "_")
 # outfile <- paste0(outfile, ".pdf")
-outfile <- "figure_supp_chi2_groupsize.pdf"
+# outfile <- "figure_supp_chi2_groupsize.pdf"
+outfile <- paste(output_plot_prefix, 13, sep = "_")
+outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(fig4_chi2_cluster_size_width_in, "in"),
