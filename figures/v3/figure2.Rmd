@@ -35,6 +35,13 @@ PROJECTPATH <- Sys.getenv("PROJECTPATH")
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
 source(file.path(SRCPATH, "analysis.R"))
+
+# Rectangle with number in it
+rect_w_num <- function(n) {
+  out <- gTree(children = gList(empty_rect_grob,
+                                textGrob(label = n)))
+  return(out)
+}
 ```
 
 ```{r fig2-pipeline-params}
@@ -51,17 +58,6 @@ output_plot_prefix <- "figure2"
 version <- "v3"
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species")
 pipeline_dir <- file.path(pipeline_dir, version)
-
-# Human parameters
-human_dataset <- "POND-SickKids"
-human_resolution <- 0.8
-human_es_method <- "normative-growth"
-human_es_df <- 3
-human_cluster_map_method <- "mean"
-
-# Mouse parameters
-mouse_resolution <- 0.2
-mouse_cluster_map_method <- human_cluster_map_method
 
 # Similarity parameters
 metric <- "correlation"
@@ -153,13 +149,6 @@ empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
 
 # Black rectangle grob
 black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
-
-# Rectangle with number in it
-rect_w_num <- function(n) {
-  out <- gTree(children = gList(empty_rect_grob,
-                                textGrob(label = n)))
-  return(out)
-}
 
 # Maximal figure dimensions in bigpts
 fig2_width_pt <- 510
@@ -603,7 +592,7 @@ export_pdf(x = fig2_ss_grob,
 # Panel: Mouse-human cluster similarity heatmap
 
 ```{r fig2-sim-import}
-# Path to mouse-human similarity directory
+# Path to mouse-human similarity directory and file
 similarity_dir <- file.path(pipeline_dir, "similarity")
 similarity_file <- file.path(similarity_dir, "similarity.csv")
 
@@ -649,11 +638,6 @@ df_similarity_nk <- similarity %>%
   summarise(similarity = mean(similarity),
             .groups = "drop")
 ```
-
-```{r}
-df_similarity_nk
-```
-
 
 ```{r fig2-sim-perm-import}
 # Path to permutations directory
@@ -731,9 +715,6 @@ df_similarity_nk <- df_similarity_nk %>%
          pval_lab = case_when(pval >= 0.15 ~ "",
                               pval > 0 & pval < 0.15 ~ paste0("p = ", as.character(round(pval, 3))),
                               pval == 0 ~ "p < 0.001"))
-         # pval_lab = ifelse(significant, "*", ""))
-
-df_similarity_nk
 ```
 
 ```{r fig2-sim-heatmap-plot}
@@ -783,11 +764,6 @@ fig2_sim_heatmap <- ggplot(df_similarity_nk,
   theme(plot.margin = margin(t = 0, b = 0, l = 5, unit = "bigpts"),
         legend.position = c(1, 0),
         legend.justification = c("left", "bottom"))
-```
-
-```{r}
-df_similarity_nk %>% 
-  select(human_cluster_id, mouse_cluster_id, similarity, pval)
 ```
 
 
@@ -901,7 +877,8 @@ fig2_dx <- ggplot(df_dx_nk_freq,
 ```
 
 
-```{r}
+```{r fig2-dx-chi2-1}
+# Data frame for chi2 test
 df_dx_chi2 <- df_dx_nk %>% 
   select(k, DX_new) %>% 
   mutate(k = factor(k),
@@ -913,7 +890,8 @@ chisq.test(df_dx_chi2$k,
            B = 1e5)
 ```
 
-```{r}
+```{r fig2-dx-chi2-2}
+# Remove "Other" DX category
 df_dx_chi2 <- df_dx_chi2 %>% 
   filter(DX_new != "Other")
 
@@ -922,7 +900,6 @@ chisq.test(df_dx_chi2$k,
            simulate.p.value = TRUE, 
            B = 1e5)
 ```
-
 
 
 # Panel: Mouse molecular pathways polar plot
@@ -1042,20 +1019,6 @@ df_pathway_info <- df_mouse_pathways %>%
   select(ID, pathway) %>% 
   distinct() %>% 
   arrange(pathway)
-
-# # Create pathway acronyms
-# df_pathway_info[["acronym"]] <- c(
-#   "Adherens junction", "Axon guid.",
-#   "Ca2+", "Chromatin",
-#   "Gap junction", "Gene expr.",
-#   "Transcription", "LTP",
-#   "Mapk", "Mtor",
-#   "Prot-prot int.", "erbb2",
-#   "erbb4", "gpcr",
-#   "hedgehog", "notch",
-#   "vegf", "wnt", 
-#   "Tight junction", "Trans. synapses"
-# )
 
 # Create pathway acronyms
 df_pathway_info[["acronym"]] <- c(
@@ -1257,16 +1220,6 @@ fig2_pathways_mouse_labels_y <- fig2_pathways_mouse_labels_y + fig2_pathways_mou
 fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]] <- fig2_pathways_mouse_labels_x
 fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]] <- fig2_pathways_mouse_labels_y
 ```
-
-```{r}
-df_mouse_pathways %>% 
-  mutate(pathway = factor(pathway, pathway_lvls_clustered)) %>% 
-  filter(cluster_id == "4-1") %>% 
-  select(pathway, E, adj.P.Val, NLQ) %>% 
-  filter(NLQ > 1.3) %>% 
-  arrange(pathway)
-```
-
 
 
 # Panel: Human molecular pathways polar plot
@@ -1595,7 +1548,8 @@ fig2_pathways_roc_auc <- ggplot(df_auc, aes(x = -log10(alpha),
         plot.margin = margin(t = 4, unit = "bigpts"))
 ```
 
-```{r}
+```{r fig2-pathways-roc-auc-print}
+# Print max and min AUC values
 df_auc %>% 
   group_by(cluster_id) %>% 
   summarise(auc_min = min(auc),
@@ -1674,10 +1628,6 @@ export_pdf(x = fig2_grob,
 
 
 # Supplementary
-
-```{r}
-knitr::opts_chunk$set(eval = FALSE)
-```
 
 
 ```{r fig2-supp-pathways-roc-plots, eval = FALSE}
