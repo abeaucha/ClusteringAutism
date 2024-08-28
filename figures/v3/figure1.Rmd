@@ -18,10 +18,15 @@ suppressPackageStartupMessages(library(RMINC))
 suppressPackageStartupMessages(library(MRIcrotome))
 ```
 
+```{r fig1-environment}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+```
+
 ```{r fig1-functions}
-source("../src/utils.R")
-source("../src/processing.R")
-source("../src/analysis.R")
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r fig1-pipeline-params}
@@ -35,38 +40,21 @@ if (!dir.exists(output_dir)) {
 output_plot_prefix <- "figure1"
 
 # Similarity pipeline
-version <- "v2"
-pipeline_dir <- "../data/cross_species/"
+version <- "v3"
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/")
 pipeline_dir <- file.path(pipeline_dir, version)
 
-# Human parameters
-human_resolution <- 0.8
-human_es_method <- "normative-growth"
-human_es_df <- 3
-human_cluster_map_method <- "mean"
-
-# Mouse parameters
-mouse_resolution <- 0.2
-mouse_cluster_map_method <- human_cluster_map_method
-
-# Similarity parameters
-metric <- "correlation"
+# Parameter set ID
+params_id <- 375
 
 # Fetch parameter set
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
-                                human_resolution = human_resolution,
-                                human_es_method = human_es_method,
-                                human_es_df = human_es_df,
-                                human_cluster_map_method = human_cluster_map_method,
-                                metric = metric)
+                                id = params_id)
 params
 ```
 
 ```{r fig1-paths}
-# Parameter set ID
-params_id <- 405
-
 # Update pipeline directory with parameter set ID
 pipeline_dir <- file.path(pipeline_dir, params_id)
 
@@ -76,41 +64,47 @@ jacobians <- c("absolute", "relative")
 # Human parameter set ID
 human_params_id <- params %>% 
   filter(id == params_id) %>% 
-  pull(human_id)
+  pull(input_1_id)
 
 # Mouse parameter set ID
 mouse_params_id <- params %>% 
   filter(id == params_id) %>% 
-  pull(mouse_id)
+  pull(input_2_id)
 
 # Human pipeline directory
-human_pipeline_dir <- "../data/human/derivatives/"
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
 human_pipeline_dir <- file.path(human_pipeline_dir, version, human_params_id)
 
 # Human cluster map directories
-human_cluster_map_dirs <- file.path(human_pipeline_dir, "cluster_maps")
-human_cluster_map_dirs <- file.path(human_cluster_map_dirs, str_c("resolution_", human_resolution))
-human_cluster_map_dirs <- file.path(human_cluster_map_dirs, jacobians)
-names(human_cluster_map_dirs) <- jacobians
+human_resolution <- params %>% 
+  filter(id == params_id) %>% 
+  pull(input_1_resolution)
+human_centroid_dirs <- file.path(human_pipeline_dir, "centroids")
+human_centroid_dirs <- file.path(human_centroid_dirs, str_c("resolution_", human_resolution))
+human_centroid_dirs <- file.path(human_centroid_dirs, jacobians)
+names(human_centroid_dirs) <- jacobians
 
 # Mouse pipeline directory
-mouse_pipeline_dir <- "../data/mouse/derivatives/"
-mouse_pipeline_dir <- file.path(mouse_pipeline_dir, "v2", mouse_params_id)
+mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/")
+mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version, mouse_params_id)
 
 # Mouse cluster map directories
-mouse_cluster_map_dirs <- file.path(mouse_pipeline_dir, "cluster_maps")
-mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, str_c("resolution_", mouse_resolution))
-mouse_cluster_map_dirs <- file.path(mouse_cluster_map_dirs, jacobians)
-names(mouse_cluster_map_dirs) <- jacobians
+mouse_resolution <- params %>% 
+  filter(id == params_id) %>% 
+  pull(input_2_resolution)
+mouse_centroid_dirs <- file.path(mouse_pipeline_dir, "centroids")
+mouse_centroid_dirs <- file.path(mouse_centroid_dirs, str_c("resolution_", mouse_resolution))
+mouse_centroid_dirs <- file.path(mouse_centroid_dirs, jacobians)
+names(mouse_centroid_dirs) <- jacobians
 
 # Mouse cluster map directories at 50um
-mouse_cluster_map_dirs_50um <- file.path(mouse_pipeline_dir, "cluster_maps")
-mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, "resolution_0.05")
-mouse_cluster_map_dirs_50um <- file.path(mouse_cluster_map_dirs_50um, jacobians)
-names(mouse_cluster_map_dirs_50um) <- jacobians
+mouse_centroid_dirs_50um <- file.path(mouse_pipeline_dir, "centroids")
+mouse_centroid_dirs_50um <- file.path(mouse_centroid_dirs_50um, "resolution_0.05")
+mouse_centroid_dirs_50um <- file.path(mouse_centroid_dirs_50um, jacobians)
+names(mouse_centroid_dirs_50um) <- jacobians
 
-# Mouse expressiond data directory
-mouse_expr_dir <- "../data/mouse/expression/latent_space/"
+# Mouse expression data directory
+mouse_expr_dir <- file.path(PROJECTPATH, "data/mouse/expression/latent_space/")
 ```
 
 
@@ -118,21 +112,21 @@ mouse_expr_dir <- "../data/mouse/expression/latent_space/"
 
 ```{r fig1-mouse-ss-files}
 # Mouse anatomy at 50um
-mouse_anat_file_50um <- "../data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc"
+mouse_anat_file_50um <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc")
 mouse_anat_50um <- mincGetVolume(mouse_anat_file_50um)
 mouse_anat_vol_50um <- mincArray(mouse_anat_50um)
 
 # Mouse anatomy at 200um
-mouse_anat_file_200um <- "../data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc"
+mouse_anat_file_200um <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_average_200um.mnc")
 mouse_anat_200um <- mincGetVolume(mouse_anat_file_200um)
 mouse_anat_vol_200um <- mincArray(mouse_anat_200um)
 
 # Mouse mask at 50um
-mouse_mask_file_50um <- "../data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc"
+mouse_mask_file_50um <- file.path(PROJECTPATH, "data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc")
 mouse_mask_50um <- mincGetVolume(mouse_mask_file_50um)
 
 # Mouse mask at 200um
-mouse_mask_file_200um <- "../data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc"
+mouse_mask_file_200um <- file.path(PROJECTPATH, "data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc")
 mouse_mask_200um <- mincGetVolume(mouse_mask_file_200um)
 
 # Image threshold method
@@ -166,7 +160,7 @@ slc_dim <- 3
 slc <- 90
 
 # Import centroid image
-mouse_centroid <- import_cluster_map(imgdir = mouse_cluster_map_dirs_50um[["relative"]],
+mouse_centroid <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["relative"]],
                                      mask = mouse_mask_file_50um,
                                      nk = nk_mouse, k = k_mouse,
                                      threshold = threshold,
