@@ -1,0 +1,11 @@
+tidyverse
+RMINC
+MRIcrotome
+grid
+gridExtra
+patchwork
+viridis
+viridisLite
+RColorBrewer
+rcartocolor
+pROC
