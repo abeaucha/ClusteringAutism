@@ -1037,10 +1037,14 @@ df_cluster_grid %>%
 #                             "seashell4",
 #                             "green3",
 #                             "sienna2")
+# pathways_mouse_palette <- c("darkorchid1",
+#                             "seashell4",
+#                             "sienna2",
+#                             "green3")
 pathways_mouse_palette <- c("darkorchid1",
                             "seashell4",
                             "sienna2",
-                            "green3")
+                            "springgreen4")
 
 # Store polar plot palette in data frame
 df_cluster_palette_nk4 <- tibble(nk = 4, k = 1:4,

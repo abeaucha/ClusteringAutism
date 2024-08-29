@@ -849,6 +849,10 @@ df_dx_nk_freq <- df_dx_nk %>%
 # Diagnostic plot palette
 # dx_palette <- brewer.pal(n = length(dx_lvls), name = "Dark2")
 dx_palette <- colorRampPalette(c("grey10", "grey80"))(4)
+# dx_palette <- paste0("thistle", 1:4)
+# dx_palette <- paste0("wheat", 1:4)
+# dx_palette <- paste0("seashell", 1:4)
+dx_palette <- paste0("mistyrose", 1:4)
 
 # Generate plot
 fig2_dx <- ggplot(df_dx_nk_freq,
@@ -857,14 +861,14 @@ fig2_dx <- ggplot(df_dx_nk_freq,
   geom_col(position = "dodge", alpha = 1.0) +
   coord_cartesian(ylim = c(0, 0.7)) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
-  scale_colour_grey() + 
-  scale_fill_grey() + 
-  # scale_colour_manual(values = dx_palette,
-  #                     guide = guide_legend(title.position = "top",
-  #                                          hjust = 0)) +
-  # scale_fill_manual(values = dx_palette,
-  #                   guide = guide_legend(title.position = "top",
-  #                                        hjust = 0)) +
+  # scale_colour_grey() + 
+  # scale_fill_grey() + 
+  scale_colour_manual(values = dx_palette,
+                      guide = guide_legend(title.position = "top",
+                                           hjust = 0)) +
+  scale_fill_manual(values = dx_palette,
+                    guide = guide_legend(title.position = "top",
+                                         hjust = 0)) +
   labs(x = "Human clusters",
        y = "Proportion per cluster",
        fill = "Diagnosis",
@@ -1117,10 +1121,14 @@ polar_labels <- tibble(pathway = polar_plot_lvls[2],
 #                             carto_pal(12, "Vivid")[1],
 #                             "green3",
 #                             "#E63716")
+# pathways_mouse_palette <- c("darkorchid1",
+#                             "seashell4",
+#                             "sienna2",
+#                             "green3")
 pathways_mouse_palette <- c("darkorchid1",
                             "seashell4",
                             "sienna2",
-                            "green3")
+                            "springgreen4")
 
 # Transparency for mouse pathway plot
 pathways_mouse_alpha <- c(0.4, 0.3, 0.6, 0.4)
