@@ -2,7 +2,7 @@
 title: "Figure 2"
 subtitle: "Clustering Autism"
 author: "Antoine Beauchamp"
-date: "2024-06-03"
+date: "2024-09-04"
 output: html_document
 ---
 
