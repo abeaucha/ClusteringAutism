@@ -77,7 +77,6 @@ params
 
 ```{r fig4-paths}
 # Parameter set ID
-# params_id <- 375
 params_ids <- c(375, 861)
 names(params_ids) <- c("POND", "HBN")
 
@@ -107,8 +106,6 @@ mouse_pipeline_dir <- file.path(mouse_pipeline_dir, version, mouse_params_id)
 
 # Mouse cluster directory
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters")
-
-mouse_id <- 107
 ```
 
 ```{r fig4-graphical-params}
@@ -126,12 +123,6 @@ empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
 
 # Black rectangle grob
 black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
-
-rect_w_num <- function(n) {
-  out <- gTree(children = gList(empty_rect_grob,
-                                textGrob(label = n)))
-  return(out)
-}
 
 # Maximal dimensions of figure in bigpts
 fig4_total_width <- 510
@@ -192,14 +183,12 @@ df_similarity <- similarity %>%
            mouse_cluster_id, mouse_nk, mouse_k) %>% 
   summarise(similarity = mean(similarity),
             .groups = "drop")
-```
 
-```{r}
+# Print pairwise similarity values for optimal solutions
 df_similarity %>% 
   filter(human_nk == 2, mouse_nk == 4) %>% 
   select(human_cluster_id, mouse_cluster_id, similarity)  
 ```
-
 
 ```{r fig4-similarity-import-permutations}
 # Permutation file names
@@ -268,6 +257,7 @@ for (h_nk in 2:human_nk_max) {
     
     if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
       
+      # Filter similarity for given cluster solutions
       df_sim_nk <- df_similarity %>% 
         select(human_cluster_id, human_nk, human_k,
                mouse_cluster_id, mouse_nk, mouse_k,
@@ -276,12 +266,14 @@ for (h_nk in 2:human_nk_max) {
                mouse_nk == m_nk) %>% 
         mutate(pval = 0)
       
+      # Filter permutations for given cluster solutions
       sim_perm_nk <- df_permutations %>% 
         filter(human_nk == h_nk,
                mouse_nk == m_nk) %>% 
         pull(similarity) %>% 
         sort()
       
+      # Iterate over similarity values and compute associated p-values
       for (i in 1:nrow(df_sim_nk)) {
         ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
         df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
@@ -297,16 +289,8 @@ for (h_nk in 2:human_nk_max) {
 sim_alpha <- 0.05
 df_sim_pvals <- df_sim_pvals %>% 
   mutate(significant = ifelse(pval < sim_alpha, 1, 0))
-```
 
-```{r}
-df_sim_pvals %>% 
-  filter(significant == 1) %>% 
-  arrange(mouse_nk, mouse_k) %>% 
-  select(mouse_cluster_id, human_cluster_id, similarity, pval) 
-```
-
-```{r}
+# Assign data frame for POND
 df_sim_pvals_POND <- df_sim_pvals
 ```
 
@@ -455,24 +439,15 @@ sim_alpha <- 0.05
 df_sim_pvals <- df_sim_pvals %>% 
   mutate(significant = ifelse(pval < sim_alpha, 1, 0))
 
-df_sim_pvals %>% 
-  filter(significant == 1) %>% 
-  arrange(mouse_nk, mouse_k) %>% 
-  select(mouse_cluster_id, human_cluster_id, similarity, pval) 
-
 df_sim_pvals_HBN <- df_sim_pvals
 ```
-
-
 
 
 # Figure element: Mouse pathway enrichment heatmap
 
 ```{r fig4-heatmap-pathways-import}
 # Database versions
-# stringdb_version <- "11.5"
 stringdb_version <- "12.0"
-# bader_version <- "2020"
 bader_version <- "2023"
 stringdb_threshold <- 950
 
@@ -581,20 +556,6 @@ df_pathway_info <- df_pathways_all %>%
   distinct() %>% 
   arrange(pathway)
 
-# # Create pathway acronyms
-# df_pathway_info[["acronym"]] <- c(
-#   "Adherens junction", "Axon guid.",
-#   "Ca2+", "Chromatin",
-#   "Gap junction", "Gene expr.",
-#   "Transcription", "LTP",
-#   "Mapk", "Mtor",
-#   "Prot-prot int.", "erbb2",
-#   "erbb4", "gpcr",
-#   "hedgehog", "notch",
-#   "vegf", "wnt", 
-#   "Tight junction", "Trans. synapses"
-# )
-
 # Create pathway acronyms
 df_pathway_info[["acronym"]] <- c(
   "AJI", "AG", "Ca2+", "CO",
@@ -604,7 +565,6 @@ df_pathway_info[["acronym"]] <- c(
   "VEGF", "WNT", "TJI", "TACS"
 )
 ```
-
 
 ```{r fig4-heatmap-pathway-clust-proc}
 # Filter for cluster solutions with nk >= 4
@@ -719,6 +679,8 @@ df_pathways_heatmap <- df_pathways_nk_gt4_subset %>%
   mutate(pathway = factor(pathway, levels = pathway_lvls_clustered),
          acronym = factor(acronym, levels = pathway_label_lvls_clustered))
 
+# Identify most significant POND p-values for each mouse cluster
+# Create labels for significance levels
 df_sig_nk_POND <- df_sim_pvals_POND %>% 
   group_by(mouse_nk, mouse_k) %>% 
   summarise(p = min(pval),
@@ -734,6 +696,8 @@ df_sig_nk_POND <- df_sim_pvals_POND %>%
   unite(col = "cluster_id", "nk", "k", 
         sep = "-", remove = FALSE) 
 
+# Identify most significant HBN p-values for each mouse cluster
+# Create labels for significance levels
 df_sig_nk_HBN <- df_sim_pvals_HBN %>% 
   group_by(mouse_nk, mouse_k) %>% 
   summarise(p = min(pval),
@@ -749,8 +713,10 @@ df_sig_nk_HBN <- df_sim_pvals_HBN %>%
   unite(col = "cluster_id", "nk", "k", 
         sep = "-", remove = FALSE) 
 
+# Combine POND and HBN significance data
 df_sig_nk <- bind_rows(df_sig_nk_POND,
                        df_sig_nk_HBN)
+
 
 df_pathways_heatmap <- df_pathways_heatmap %>% 
   left_join(df_sig_nk_POND %>% 
@@ -768,6 +734,7 @@ heatmap_fill_lab <- "Enrichment (-log10(q))"
 heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")
 heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
 
+# Heatmap legend width
 fig4_heatmap_pathways_legend_width_pt <- 50
 
 # Generate heatmap of enrichment significance
@@ -1017,30 +984,8 @@ df_cluster_grid <- df_cluster_grid %>%
   filter(nk %in% nk_subset)
 ```
 
-```{r}
-df_cluster_grid %>% 
-  arrange(nk, k)
-```
-
-
 ```{r fig4-pathways-polar-plots}
 # Palette for mouse pathway plot in Figure 2
-# pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
-#                             carto_pal(12, "Vivid")[1],
-#                             carto_pal(12, "Safe")[4],
-#                             carto_pal(12, "Prism")[8])
-# pathways_mouse_palette <- c("#008CFF",
-#                             carto_pal(12, "Vivid")[1],
-#                             "green3",
-#                             "#E63716")
-# pathways_mouse_palette <- c("darkorchid1",
-#                             "seashell4",
-#                             "green3",
-#                             "sienna2")
-# pathways_mouse_palette <- c("darkorchid1",
-#                             "seashell4",
-#                             "sienna2",
-#                             "green3")
 pathways_mouse_palette <- c("darkorchid1",
                             "seashell4",
                             "sienna2",
@@ -1058,7 +1003,7 @@ df_polar_palette <- df_cluster_grid %>%
             by = c("cluster_id_nk4" = "cluster_id")) %>% 
   mutate(colour = ifelse(cluster_id %in% c("6-4", "8-2", "10-5"), "seagreen2", colour))
 
-
+# Stack nk = 4 and other solutions
 df_polar_palette <- bind_rows(df_polar_palette %>% 
                                 select(cluster_id = cluster_id_nk4,
                                        colour) %>% 
@@ -1173,6 +1118,8 @@ for (i in 1:length(nk_subset)) {
   # Fix axis labels in each panel
   polar_plot_panel_ids <- str_subset(names(polar_plot_nk_grob[["children"]]), "panel")
   for (panel in polar_plot_panel_ids) {
+    
+    # Rename axis labels
     polar_plot_nk_grob[["children"]][[panel]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
     
     # Get initial label positions
@@ -1291,13 +1238,16 @@ list_mouse_slices <- vector(mode = "list", length = length(nk_subset))
 names(list_mouse_slices) <- nk_subset
 for (l in 1:length(list_mouse_slices)) {
   
+  # Subset cluster solution
   df_clusters_subset_nk <- df_clusters_subset %>% 
     filter(nk == nk_subset[l]) 
   
+  # Iterate over clusters in solution
   list_mouse_slices[[l]] <- vector(mode = "list", length = nrow(df_clusters_subset_nk))
   names(list_mouse_slices[[l]]) <- df_clusters_subset_nk[["cluster_id"]]
   for (i in 1:nrow(df_clusters_subset_nk)) {
     
+    # Extract cluster information
     nk <- df_clusters_subset_nk[[i, "nk"]]
     k <- df_clusters_subset_nk[[i, "k"]]
     
@@ -1339,9 +1289,6 @@ for (l in 1:length(list_mouse_slices)) {
 
 ```{r fig4-ss-human-paths}
 # Human parameter set ID
-# human_params_id <- params %>% 
-#   filter(id == params_ids[1]) %>% 
-#   pull(input_1_id)
 human_params_id <- c("700", "013")
 
 # Jacobians to display
@@ -1399,7 +1346,7 @@ human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_
 
 ## POND-SickKids
 
-```{r fig4-ss-human-import}
+```{r fig4-ss-human-import-POND}
 # Anatomical plane to display
 # Sagittal: 1
 # Coronal: 2 
@@ -1510,16 +1457,7 @@ for(l in 1:length(list_human_slices_POND)) {
 
 ## HBN
 
-
-```{r}
-df_sim_pvals_HBN %>% 
-  filter(mouse_nk == 8, pval <= 0.05) %>% 
-  arrange(mouse_k, pval) %>% 
-  select(mouse_cluster_id, human_cluster_id, similarity, pval) 
-```
-
-
-```{r fig4-ss-human-import}
+```{r fig4-ss-human-import-HBN}
 # Anatomical plane to display
 # Sagittal: 1
 # Coronal: 2 
@@ -1720,10 +1658,7 @@ for (i in 1:length(list_mouse_slices)) {
 }
 ```
 
-
-```{r fig4-neuro-ss-grobs}
-# BREAK HERE ####
-#```{r fig4-neuro-panel-grobs}
+```{r fig4-neuro-panel-grobs}
 # Height of polar plot based on ss width
 fig4_polar_height_pt <- 2*fig4_mouse_ss_width_pt
 
@@ -1788,10 +1723,9 @@ for (i in 1:length(fig4_neuro_panel_grobs)) {
   fig4_neuro_widths_nopadding[i] <- fig4_neuro_panel_width
   
 }
-#```
+```
 
-# BREAK HERE ####
-#```{r fig4-neuro-grob}
+```{r fig4-neuro-grob}
 # Number of grobs in the neuro panel
 ngrobs <- 2*nss-1
 
@@ -1834,10 +1768,9 @@ export_pdf(x = fig4_neuro_grob,
            width = fig4_neuro_width_pt,
            height = fig4_neuro_height_pt,
            units = "bigpts")
-#```
+```
 
-# BREAK HERE ####
-#```{r fig4-build}
+```{r fig4-build}
 # Padding between heatmap and neuro panel
 fig4_padding_height_pt <- 30
 
@@ -1915,7 +1848,6 @@ dev.off()
 ```{r}
 knitr::opts_chunk$set(eval = FALSE)
 ```
-
 
 ## Export matching mouse-human clusters
 
