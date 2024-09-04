@@ -1055,7 +1055,9 @@ df_cluster_palette_nk4 <- tibble(nk = 4, k = 1:4,
 # in nk = 4
 df_polar_palette <- df_cluster_grid %>% 
   left_join(df_cluster_palette_nk4, 
-            by = c("cluster_id_nk4" = "cluster_id")) 
+            by = c("cluster_id_nk4" = "cluster_id")) %>% 
+  mutate(colour = ifelse(cluster_id %in% c("6-4", "8-2", "10-5"), "seagreen2", colour))
+
 
 df_polar_palette <- bind_rows(df_polar_palette %>% 
                                 select(cluster_id = cluster_id_nk4,
@@ -1124,7 +1126,7 @@ for (i in 1:length(nk_subset)) {
                               fill = cluster_id, 
                               col = cluster_id)) + 
     geom_ribbon(alpha = 0.3, 
-                size = 0.5,
+                size = 0.3,
                 show.legend = FALSE) + 
     geom_text(data = polar_labels,
               inherit.aes = FALSE,
@@ -1132,7 +1134,7 @@ for (i in 1:length(nk_subset)) {
                             y = breaks,
                             label = breaks),
               family = font_family,
-              size = font_size*0.36) +
+              size = (font_size-1)*0.32) +
     coord_radar(start = theta_start, clip = "off") + 
     scale_x_discrete(expand = expansion(), 
                      labels = pathway_label_lvls_clustered) + 
@@ -1153,10 +1155,37 @@ for (i in 1:length(nk_subset)) {
   # Extract grob
   polar_plot_nk_grob <- grid.force(ggplotGrob(polar_plot_nk))
   
+  # Nudge label positions
+  polar_plot_nk_labels_x_nudge <- c(0.00, 0.05, 0.05, 0.05, 0.04, 
+                                    0.03, 0.04, 0.05, 0.08, 0.06, 
+                                    0.00, -0.02, -0.05, -0.05, -0.05, 
+                                    -0.04, -0.05, -0.05, -0.05, -0.04)
+  
+  polar_plot_nk_labels_y_nudge <- c(0.01, 0.01, 0.00, 0.00, 0.00, 
+                                    0.00, 0.00, 0.00, 0.00, -0.02, 
+                                    -0.05, -0.02, 0.00, 0.00, 0.00, 
+                                    0.00, 0.00, 0.00, 0.03, 0.01)
+  
+  # Add units to nudge values
+  polar_plot_nk_labels_x_nudge <- unit(polar_plot_nk_labels_x_nudge, "native")
+  polar_plot_nk_labels_y_nudge <- unit(polar_plot_nk_labels_y_nudge, "native")
+  
   # Fix axis labels in each panel
   polar_plot_panel_ids <- str_subset(names(polar_plot_nk_grob[["children"]]), "panel")
   for (panel in polar_plot_panel_ids) {
     polar_plot_nk_grob[["children"]][[panel]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
+    
+    # Get initial label positions
+    polar_plot_nk_labels_x <- polar_plot_nk_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]]
+    polar_plot_nk_labels_y <- polar_plot_nk_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]]
+    
+    # Update label positions
+    polar_plot_nk_labels_x <- polar_plot_nk_labels_x + polar_plot_nk_labels_x_nudge
+    polar_plot_nk_labels_y <- polar_plot_nk_labels_y + polar_plot_nk_labels_y_nudge
+    
+    # Set new label positions
+    polar_plot_nk_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]] <- polar_plot_nk_labels_x
+    polar_plot_nk_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]] <- polar_plot_nk_labels_y
   }
   
   # Assign grob to list
