@@ -849,23 +849,24 @@ df_dx_nk_freq <- df_dx_nk %>%
 # Diagnostic plot palette
 # dx_palette <- brewer.pal(n = length(dx_lvls), name = "Dark2")
 dx_palette <- colorRampPalette(c("grey10", "grey80"))(4)
-# dx_palette <- paste0("thistle", 1:4)
-# dx_palette <- paste0("wheat", 1:4)
-# dx_palette <- paste0("seashell", 1:4)
-dx_palette <- paste0("mistyrose", 1:4)
+dx_palette <- paste0("seashell", 1:4)
+# dx_palette <- paste0("mistyrose", 1:4)
+# dx_palette <- paste0("lavenderblush", 1:4)
 
 # Generate plot
 fig2_dx <- ggplot(df_dx_nk_freq,
                   aes(x = cluster_id, y = prop_per_k_per_dx,
-                      fill = DX_new, col = DX_new, alpha = DX_new)) + 
-  geom_col(position = "dodge", alpha = 1.0) +
-  coord_cartesian(ylim = c(0, 0.7)) + 
+                      fill = DX_new, 
+                      # col = DX_new, 
+                      alpha = DX_new)) + 
+  geom_col(position = "dodge", alpha = 1.0, col = "grey45", size = 0.35) +
+  coord_cartesian(ylim = c(0, 0.6)) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
   # scale_colour_grey() + 
   # scale_fill_grey() + 
-  scale_colour_manual(values = dx_palette,
-                      guide = guide_legend(title.position = "top",
-                                           hjust = 0)) +
+  # scale_colour_manual(values = dx_palette,
+                      # guide = guide_legend(title.position = "top",
+                                           # hjust = 0)) +
   scale_fill_manual(values = dx_palette,
                     guide = guide_legend(title.position = "top",
                                          hjust = 0)) +
@@ -879,7 +880,6 @@ fig2_dx <- ggplot(df_dx_nk_freq,
         legend.justification = c("left", "center"),
         plot.margin = margin(t = 10, l = 5, r = 40, unit = "bigpts"))
 ```
-
 
 ```{r fig2-dx-chi2-1}
 # Data frame for chi2 test
@@ -1267,7 +1267,6 @@ df_human_pathways <- list_human_pathways %>%
 
 ```{r fig2-pathways-human-plot}
 # An additional empty level must be added to close the polar plot
-# polar_plot_lvls <- c(" ", df_pathway_info[["pathway"]])
 polar_plot_lvls <- c(" ", pathway_lvls_clustered)
 
 # Create a temp df for the additional empty factor level
@@ -1290,7 +1289,6 @@ df_polar_plot <- df_polar_plot %>%
 pathways_human_palette <- pathways_mouse_palette[c(1, 4)]
 
 # Transparency for human pathway plot
-# pathway_human_alpha <- pathways_mouse_alpha[c(4, 1)]
 pathway_human_alpha <- pathways_mouse_alpha[c(1, 4)]
 
 # Generate polar plot
