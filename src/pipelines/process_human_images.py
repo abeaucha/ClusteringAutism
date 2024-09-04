@@ -406,7 +406,7 @@ def initialize(**kwargs):
     return paths
 
 
-@utils.timing
+# @utils.timing
 def effect_sizes(imgdir, demographics, mask, outdir,
                  method = 'normative-growth', group = 'patients',
                  df = 3, batch = ('Site', 'Scanner'), ncontrols = None,
@@ -574,7 +574,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
     return out
 
 
-@utils.timing
+# @utils.timing
 def clustering(infiles, rownames = 'file', nk_max = 10,
                metric = 'correlation', K = 10, sigma = 0.5, t = 20,
                cluster_file = 'clusters.csv', affinity_file = 'affinity.csv'):
@@ -624,7 +624,7 @@ def clustering(infiles, rownames = 'file', nk_max = 10,
     return cluster_file
 
 
-@utils.timing
+# @utils.timing
 def centroids(clusters, imgdir, outdir, mask,
               method = 'mean', execution = 'local', nproc = 1,
               registry_name = None, registry_cleanup = True,

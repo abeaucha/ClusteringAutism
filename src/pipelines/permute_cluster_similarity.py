@@ -372,6 +372,7 @@ def subset_cluster_pairs(centroid_pairs, off_diagonal = 1):
     return centroid_pairs_subset
 
 
+@utils.timing
 def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
          microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
          permutations_n = 100, permutations_start = 1, permutations_ids = None,
@@ -493,11 +494,6 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
             slurm_time = 120
         )
         centroid_outputs = centroids(**centroid_kwargs)
-        # TODO REMOVE WHEN DONE
-        # centroid_outputs = dict(
-        #     absolute = os.path.join(outdir, 'absolute', ''),
-        #     relative = os.path.join(outdir, 'relative', '')
-        # )
 
         # Generate all pairs of centroid images
         print("Generating centroid image pairs...", flush = True)
