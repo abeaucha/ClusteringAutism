@@ -22,6 +22,16 @@ suppressPackageStartupMessages(library(ggbeeswarm))
 ```{r environment}
 SRCPATH <- Sys.getenv("SRCPATH")
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
+
+if (PROJECTPATH == "") {
+  PROJECTPATH <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main"
+  Sys.setenv(PROJECTPATH = PROJECTPATH)
+}
+
+if (SRCPATH == "") {
+  SRCPATH <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main/src"
+  Sys.setenv(SRCPATH = SRCPATH)
+}
 ```
 
 ```{r functions}
@@ -817,7 +827,7 @@ p_nk2_pvals <- ggplot(df_wilcoxon_p,
   geom_point() +
   geom_vline(xintercept = pval_thresh_log,
              linetype = "dashed") +
-  scale_color_manual(values = c("grey40", "red")) + 
+  scale_color_manual(values = c("grey60", "red2", "red4")) + 
   labs(x = "-log10(p)",
        y = "Clinical scale",
        color = "Significance",

@@ -32,6 +32,16 @@ suppressPackageStartupMessages(library(pheatmap))
 ```{r environment}
 SRCPATH <- Sys.getenv("SRCPATH")
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
+
+if (PROJECTPATH == "") {
+  PROJECTPATH <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main"
+  Sys.setenv(PROJECTPATH = PROJECTPATH)
+}
+
+if (SRCPATH == "") {
+  SRCPATH <- "/projects/abeauchamp/Projects/MouseHumanMapping/Paper_ClusteringAutism/main/src"
+  Sys.setenv(SRCPATH = SRCPATH)
+}
 ```
 
 ```{r functions}
@@ -2150,95 +2160,671 @@ for (i in 1:length(figure_id)) {
 
 # Supplementary Figure 14
 
-
 ```{r fig4-dx-chi2-large}
-
 figure_id <- c(14, 15)
 for (i in 1:length(list_clusters_long)) {
-
-nmin <- seq(10, 50, by = 10)
-list_chi2 <- vector(mode = "list", length = length(nmin))
-for (l in 1:length(list_chi2)) {
   
-  # Generate a grid of clusters and diagnoses
-  df_chi2 <- expand_grid(nk = 2:nk_max,
-                         DX = diagnoses) %>% 
-    mutate(chi2 = 0, pval = 0, nmin = nmin[l])
-  
-  # Iterate over cluster-dx combinations
-  for (r in 1:nrow(df_chi2)) {
+  nmin <- seq(10, 50, by = 10)
+  list_chi2 <- vector(mode = "list", length = length(nmin))
+  for (l in 1:length(list_chi2)) {
     
-    # Extract cluster nk and diagnosis
-    nk_i <- df_chi2[[r, "nk"]]
-    dx_i <- df_chi2[[r, "DX"]]
+    # Generate a grid of clusters and diagnoses
+    df_chi2 <- expand_grid(nk = 2:nk_max,
+                           DX = diagnoses) %>% 
+      mutate(chi2 = 0, pval = 0, nmin = nmin[l])
     
-    # Format data to run a binary chi-squared test for the given diagnosis
-    df_chi2_test <- list_clusters_long[[i]] %>% 
-      filter(n_per_k > nmin[l],
-             nk == nk_i) %>% 
-      mutate(isDX = factor(DX == dx_i),
-             k = factor(k))
+    # Iterate over cluster-dx combinations
+    for (r in 1:nrow(df_chi2)) {
+      
+      # Extract cluster nk and diagnosis
+      nk_i <- df_chi2[[r, "nk"]]
+      dx_i <- df_chi2[[r, "DX"]]
+      
+      # Format data to run a binary chi-squared test for the given diagnosis
+      df_chi2_test <- list_clusters_long[[i]] %>% 
+        filter(n_per_k > nmin[l],
+               nk == nk_i) %>% 
+        mutate(isDX = factor(DX == dx_i),
+               k = factor(k))
+      
+      # Run the chi-squared test
+      chi2 <- chisq.test(x = df_chi2_test[["k"]],
+                         y = df_chi2_test[["isDX"]], 
+                         simulate.p.value = TRUE, 
+                         B = 1e5)
+      
+      # Assign the test values
+      df_chi2[[r, "chi2"]] <- chi2[["statistic"]]
+      df_chi2[[r, "pval"]] <- chi2[["p.value"]]
+    }
     
-    # Run the chi-squared test
-    chi2 <- chisq.test(x = df_chi2_test[["k"]],
-                       y = df_chi2_test[["isDX"]], 
-                       simulate.p.value = TRUE, 
-                       B = 1e5)
+    list_chi2[[l]] <- df_chi2
     
-    # Assign the test values
-    df_chi2[[r, "chi2"]] <- chi2[["statistic"]]
-    df_chi2[[r, "pval"]] <- chi2[["p.value"]]
   }
   
-  list_chi2[[l]] <- df_chi2
+  df_chi2_large <- bind_rows(list_chi2)
   
-}
-
-df_chi2_large <- bind_rows(list_chi2)
-
-fig4_chi2_cluster_size <- df_chi2_large %>% 
-  filter(DX != "Other") %>%
-  mutate(nk = factor(nk),
-         DX = factor(DX, levels = c("ASD", "ADHD", "OCD"))) %>% 
-  ggplot(aes(x = nmin, y = pval, group = nk, col = nk)) + 
-  geom_line(size = 0.4) + 
-  geom_point(size = 0.75) +
-  geom_hline(yintercept = 0.05, 
-             linetype = "dashed",
-             size = 0.4) + 
-  facet_grid(.~DX) + 
-  scale_x_continuous(breaks = nmin, minor_breaks = NULL) + 
-  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
-  labs(x = "Minimum cluster size",
-       y = "p-value",
-       col = "Number of clusters") + 
-  theme_bw() +
-  theme(axis.title = element_text(size = font_size, family = font_family),
-        axis.text = element_text(size = font_size, family = font_family),
-        legend.text = element_text(size = font_size, family = font_family),
-        legend.title = element_text(size = font_size, family = font_family),
-        strip.text = element_text(size = font_size, family = font_family))
-
-# Plot dimensions in bigpts
-fig4_chi2_cluster_size_width_pt <- fig4_width_pt
-fig4_chi2_cluster_size_height_pt <- 200
-
-# Plot dimensions in inches
-fig4_chi2_cluster_size_width_in <- fig4_chi2_cluster_size_width_pt/pt_per_in
-fig4_chi2_cluster_size_height_in <- fig4_chi2_cluster_size_height_pt/pt_per_in
-
-# Export plot
-outfile <- paste(output_plot_prefix, figure_id[i], sep = "_")
-outfile <- paste0(outfile, ".pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig4_chi2_cluster_size_width_in, "in"),
-    height = unit(fig4_chi2_cluster_size_height_in, "in"))
-print(fig4_chi2_cluster_size)
-dev.off()
-
+  fig4_chi2_cluster_size <- df_chi2_large %>% 
+    filter(DX != "Other") %>%
+    mutate(nk = factor(nk),
+           DX = factor(DX, levels = c("ASD", "ADHD", "OCD"))) %>% 
+    ggplot(aes(x = nmin, y = pval, group = nk, col = nk)) + 
+    geom_line(size = 0.4) + 
+    geom_point(size = 0.75) +
+    geom_hline(yintercept = 0.05, 
+               linetype = "dashed",
+               size = 0.4) + 
+    facet_grid(.~DX) + 
+    scale_x_continuous(breaks = nmin, minor_breaks = NULL) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+    labs(x = "Minimum cluster size",
+         y = "p-value",
+         col = "Number of clusters") + 
+    theme_bw() +
+    theme(axis.title = element_text(size = font_size, family = font_family),
+          axis.text = element_text(size = font_size, family = font_family),
+          legend.text = element_text(size = font_size, family = font_family),
+          legend.title = element_text(size = font_size, family = font_family),
+          strip.text = element_text(size = font_size, family = font_family))
+  
+  # Plot dimensions in bigpts
+  fig4_chi2_cluster_size_width_pt <- fig4_width_pt
+  fig4_chi2_cluster_size_height_pt <- 200
+  
+  # Plot dimensions in inches
+  fig4_chi2_cluster_size_width_in <- fig4_chi2_cluster_size_width_pt/pt_per_in
+  fig4_chi2_cluster_size_height_in <- fig4_chi2_cluster_size_height_pt/pt_per_in
+  
+  # Export plot
+  outfile <- paste(output_plot_prefix, figure_id[i], sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(fig4_chi2_cluster_size_width_in, "in"),
+      height = unit(fig4_chi2_cluster_size_height_in, "in"))
+  print(fig4_chi2_cluster_size)
+  dev.off()
+  
 }
 ```
 
 
+# Supplementary Figure ??
 
+```{r}
+# Demogrpahics information
+demographics <- file.path(PROJECTPATH, "data/human/registration/v3/", "subject_info", "demographics.csv")
+demographics <- read_csv(demographics, show_col_types = FALSE)
+
+demographics <- demographics %>% 
+  filter(!is.na(DX),
+         !is.na(Age),
+         !is.na(Sex),
+         !is.na(Site),
+         !is.na(Scanner))
+
+pond_clinical <- file.path(PROJECTPATH, "data/human/registration/v3/subject_info/POND/POND_clinical_scores_20230915.csv")
+pond_clinical <- read_csv(pond_clinical, show_col_types = FALSE)
+pond_clinical <- pond_clinical[,-1]
+
+# Remove columns that aren't directly related to clinical scales
+pond_clinical <- pond_clinical %>% 
+  select(-contains("NSI"), 
+         -contains("ETHNCTY"),
+         -contains("EDUC"),
+         -HSHLD_INCOME_STD,
+         -PRMY_CGVR_STD)
+
+# Remove additional columns
+# DX will be joined in later
+pond_clinical <- pond_clinical %>% 
+  select(-site, -SUB_ID, -DOB, 
+         -PRIMARY_DIAGNOSIS, -RESEARCH_CONFIRM_DIAG,
+         -SWANPDOC, -TPOCSPDOC) %>% 
+  rename(Subject_ID = subject)
+
+# Extract the set of clinical scales
+clinical_scales <- pond_clinical %>% 
+  select(-Subject_ID) %>% 
+  colnames()
+
+clusters <- file.path(PROJECTPATH, "data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv")
+clusters <- read_csv(clusters, show_col_types = FALSE)
+
+# Join demographics and clinical data to clusters data
+clusters_clinical <- clusters %>%
+  rename(file = ID) %>% 
+  left_join(demographics, by = "file") %>% 
+  mutate(Subject_ID = str_remove(Subject_ID, "sub-")) %>% 
+  filter(Dataset == "POND") %>% 
+  mutate(Subject_ID = as.numeric(Subject_ID)) %>% 
+  left_join(pond_clinical, by = "Subject_ID")
+
+# Convert cluster data to long format
+clusters_long <- clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk", values_to = "k") %>% 
+  mutate(nk = str_remove(nk, "nk"),
+         nk = as.numeric(nk),
+         k = as.numeric(k)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+# Number of participants per cluster
+cluster_counts <- clusters_long %>% 
+  group_by(cluster_id, nk, k) %>% 
+  count() %>% 
+  ungroup() %>% 
+  arrange(nk, k)
+```
+
+```{r}
+# Number of patients with clinical data
+npatients <- nrow(clusters_clinical)
+
+# Calculate the completion rate for each of the scales
+scales_completed <- clusters_clinical %>% 
+  select(Subject_ID, all_of(clinical_scales)) %>% 
+  pivot_longer(cols = -Subject_ID, 
+               names_to = "scale",
+               values_to = "score") %>% 
+  mutate(missing = is.na(score)) %>% 
+  group_by(scale) %>% 
+  summarise(ncompleted = sum(!missing),
+            pcompleted = ncompleted/npatients,
+            .groups = "drop") 
+
+# Proportions plot for scale completion rate.
+p_scale_completion <- scales_completed %>% 
+  select(-ncompleted) %>% 
+  mutate(scale = factor(scale, levels = clinical_scales),
+         pmissing = 1 - pcompleted) %>% 
+  rename(completed = pcompleted,
+         missing = pmissing) %>% 
+  pivot_longer(cols = -scale, names_to = "status", values_to = "percent") %>% 
+  mutate(status = factor(status, levels = c("missing", "completed"))) %>% 
+  ggplot(aes(x = percent, y = fct_rev(scale),
+             fill = status)) + 
+  geom_col(width = 1,
+           col = "grey50") + 
+  geom_vline(xintercept = seq(0.2, 1.0, by = 0.2),
+             linetype = "dashed",
+             col = "red") + 
+  scale_fill_manual(values = c("grey90", "green3"),
+                    labels = c("Missing", "Completed")) +
+  labs(x = "Percentage", y = "Scale", fill = NULL) +
+  scale_x_continuous(breaks = seq(0, 1.0, by = 0.2),
+                     expand = expansion(),
+                     sec.axis = sec_axis(~.*npatients,
+                                         name = "Number of patients",
+                                         breaks = round(seq(0, 1.0, by = 0.2)*npatients))) + 
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 7))
+
+# Export plot
+outfile <- "clinical_scale_completion.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "inch"),
+    height = unit(8, "inch"))
+print(p_scale_completion)
+dev.off()
+```
+
+```{r}
+# Get the scales with the minimum completion rate
+completion_threshold <- 120
+clinical_scales_thresh <- scales_completed %>% 
+  filter(ncompleted > completion_threshold) %>% 
+  pull(scale)
+
+# Subset the data set for those scales with suitable completion
+clusters_clinical_thresh <- clusters_clinical %>% 
+  select(Subject_ID, contains("nk"), all_of(clinical_scales_thresh))
+
+# Some scales have values of 999. Set these to NA.
+for (s in clinical_scales_thresh) {
+  scores <- clusters_clinical_thresh[[s]]
+  scores[scores == 999] <- NA
+  clusters_clinical_thresh[[s]] <- scores
+}
+```
+
+
+```{r}
+# Compute Wilcoxon rank sum tests for all select scales 
+# across 2-cluster solutions
+
+# Initialize results data frame
+df_wilcoxon <- tibble(nk = 2, 
+                      scale = clinical_scales_thresh) %>% 
+  mutate(uval = 0, pval = 0, npatients = 0)
+
+# Iterate over scales
+for (i in 1:nrow(df_wilcoxon)) {
+  
+  # Pull nk and scale acronym
+  nk <- df_wilcoxon[[i, "nk"]]
+  s <- df_wilcoxon[[i, "scale"]]
+  
+  # Get cluster labels and scale scores
+  labels <- clusters_clinical_thresh[[paste0("nk", nk)]]
+  scores <- clusters_clinical_thresh[[s]]
+  
+  # Remove patients with missing scores
+  missing <- is.na(scores)
+  labels <- labels[!missing]
+  scores <- scores[!missing]
+  
+  # Check that completed entries are not all in 
+  # a single cluster. If they are, set NA. 
+  # Otherwise, run Wilcoxon test.
+  labels_count <- table(labels)
+  test_ngroups <- length(labels_count) > 1
+  if (test_ngroups) {
+    wilcoxon <- wilcox.test(scores ~ factor(labels))
+    df_wilcoxon[[i, "uval"]] <- wilcoxon[["statistic"]]
+    df_wilcoxon[[i, "pval"]] <- wilcoxon[["p.value"]]
+  } else {
+    df_wilcoxon[[i, "uval"]] <- NA
+    df_wilcoxon[[i, "pval"]] <- NA
+  }
+  df_wilcoxon[[i, "npatients"]] <- length(labels)
+}
+
+# Significance bins
+sig_bins <- c("p >= 0.1",
+              "0.05 <= p < 0.1",
+              "0.01 <= p < 0.05",
+              "p < 0.01")
+
+# Convert p-values to log scale and create significance bins
+df_wilcoxon_p <- df_wilcoxon %>% 
+  mutate(pval_log = -log10(pval),
+         scale = factor(scale, levels = clinical_scales_thresh),
+         significance = case_when(pval >= 0.1 ~ sig_bins[1],
+                                  pval >= 0.05 & pval < 0.1 ~ sig_bins[2],
+                                  pval >= 0.01 & pval < 0.05 ~ sig_bins[3],
+                                  pval < 0.01 ~ sig_bins[3]),
+         significance = factor(significance, levels = sig_bins))
+
+# p-value thresholds
+pval_thresh <- c(0.1, 0.05, 0.01)
+pval_thresh_log <- -log10(pval_thresh)
+```
+
+
+```{r}
+# Point and segment plot for significance
+p_nk2_pvals <- ggplot(df_wilcoxon_p, 
+                      aes(x = pval_log, y = scale, col = significance)) + 
+  geom_segment(aes(xend = 0, yend = scale)) + 
+  geom_point() +
+  geom_vline(xintercept = pval_thresh_log,
+             linetype = "dashed") +
+  scale_color_manual(values = c("grey60", "red2", "red4")) +
+  scale_x_continuous(breaks = seq(0, 2, by = 0.2), 
+                     expand = expansion(add = c(0, 0.05)),
+                     sec.axis = sec_axis(~ 1/(10^.), breaks = c(1.0, 0.1, 0.05, 0.01), name = "p")) +
+  labs(x = "-log10(p)",
+       y = "Clinical scale") + 
+  theme_bw() +
+  theme(legend.position = "none")
+
+# Export plot
+outfile <- paste0("clinical_scores_nk_2_wilcoxon_pvals.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "inch"),
+    height = unit(8, "inch"))
+print(p_nk2_pvals)
+dev.off()
+```
+
+```{r}
+# Compute Kruskal-Wallis tests for all select scales 
+# across all cluster solutions
+
+# Maximum number of cluster solutions
+nk_max <- max(cluster_counts["nk"])
+
+# Initialize results data frame
+df_kw <- expand_grid(nk = 2:nk_max,
+                     scale = clinical_scales_thresh) %>% 
+  mutate(hval = 0, pval = 0, npatients = 0)
+
+# Iterate over scales
+for (i in 1:nrow(df_kw)) {
+  
+  # Pull nk and scale acronym
+  nk <- df_kw[[i, "nk"]]
+  s <- df_kw[[i, "scale"]]
+  
+  # Get cluster labels and scale scores
+  labels <- clusters_clinical_thresh[[paste0("nk", nk)]]
+  scores <- clusters_clinical_thresh[[s]]
+  
+  # Remove patients with missing scores
+  missing <- is.na(scores)
+  labels <- labels[!missing]
+  scores <- scores[!missing]
+  
+  # Check that completed entries are not all in 
+  # a single cluster. If they are, set NA. 
+  # Otherwise, run KW test.
+  labels_count <- table(labels)
+  test_ngroups <- length(labels_count) > 1
+  if (test_ngroups) {
+    kw <- kruskal.test(x = scores, g = factor(labels))
+    df_kw[[i, "hval"]] <- kw[["statistic"]]
+    df_kw[[i, "pval"]] <- kw[["p.value"]]
+  } else {
+    df_kw[[i, "hval"]] <- NA
+    df_kw[[i, "pval"]] <- NA
+  }
+  df_kw[[i, "npatients"]] <- length(labels)
+}
+
+# Convert p-values to log scale and create significance indicator
+df_kw_p <- df_kw %>% 
+  mutate(nk = factor(nk),
+         scale = factor(scale, levels = clinical_scales_thresh),
+         pval_log = -log10(pval),
+         significant = case_when(pval < 0.05 ~ "**",
+                                 pval >= 0.05 & pval < 0.1 ~ "*",
+                                 pval >= 0.1 ~ ""))
+
+p_kw_pvals <- ggplot(df_kw_p,
+                     aes(x = nk, y = scale, fill = pval_log)) + 
+  geom_tile(col = "black") +
+  geom_text(mapping = aes(label = significant)) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colours = brewer.pal(n = 9, name = "Reds")) +
+  labs(x = "Number of clusters",
+       y = "Clinical scale",
+       fill = "-log10(p)") +
+  theme_bw()
+
+# Export plot
+outfile <- paste0("clinical_scores_kruskalwallis_pvals.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "inch"),
+    height = unit(8, "inch"))
+print(p_kw_pvals)
+dev.off()
+```
+
+# Supplementary Figure ?? 
+
+```{r}
+plsda_results <- "figure_supplementary/plsda_results.csv"
+df_plsda_results <- read_csv(plsda_results, show_col_types = FALSE)
+```
+
+```{r}
+# Directory for mouse-human cluster similarity 
+similarity_dir <- file.path(pipeline_dir, "similarity")
+
+# Directory for mouse-human cluster similarity permutations
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+# Set of similarity files
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Jacobians to use
+jacobians <- c("absolute", "relative")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  rename(human_img = img1,
+         mouse_img = img2) %>% 
+  mutate(human_nk = human_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_k = human_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         human_jacobians = human_img %>% 
+           str_extract("absolute|relative"),
+         mouse_nk = mouse_img %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_k = mouse_img %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         mouse_jacobians = mouse_img %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "human_cluster_id", human_nk, human_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+        sep = "-", remove = FALSE)
+
+# Compute average similarity values across jacobians for each permutation
+df_similarity <- similarity %>% 
+  group_by(human_cluster_id, human_nk, human_k, 
+           mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    rename(human_img = img1,
+           mouse_img = img2) %>% 
+    mutate(human_nk = human_img %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           human_k = human_img %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           mouse_nk = mouse_img %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           mouse_k = mouse_img %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "human_cluster_id", human_nk, human_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations <- list_permutations %>% 
+  bind_rows() %>% 
+  group_by(permutation, human_nk, mouse_nk, human_cluster_id, mouse_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+```
+
+```{r fig3-similarity-compute-pvals}
+# Mouse and human max nk
+human_nk_max <- max(df_similarity[["human_nk"]])
+mouse_nk_max <- max(df_similarity[["mouse_nk"]])
+
+# Iterate along nk diagonal +/- 1
+df_sim_pvals <- tibble()
+for (h_nk in 2:human_nk_max) {
+  for (m_nk in (h_nk-1):(h_nk+1)){
+    
+    if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
+      
+      df_sim_nk <- df_similarity %>% 
+        select(human_cluster_id, human_nk, human_k,
+               mouse_cluster_id, mouse_nk, mouse_k,
+               similarity) %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        mutate(pval = 0)
+      
+      sim_perm_nk <- df_permutations %>% 
+        filter(human_nk == h_nk,
+               mouse_nk == m_nk) %>% 
+        pull(similarity) %>% 
+        sort()
+      
+      for (i in 1:nrow(df_sim_nk)) {
+        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
+        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+      }
+      
+      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      
+    }
+  }
+}
+
+# Evaluate significance
+sim_alpha <- 0.05
+df_sim_pvals <- df_sim_pvals %>% 
+  mutate(significant = pval < sim_alpha)
+```
+
+```{r}
+df_cluster_matches <- df_sim_pvals %>% 
+  group_by(human_nk, human_k) %>% 
+  summarise(nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(has_match = nsignificant > 0) %>% 
+  unite(col = "cluster_id", human_nk, human_k, sep = "-", remove = FALSE)
+
+cluster_lvls <- df_cluster_matches %>% 
+  select(cluster_id, human_nk, human_k) %>% 
+  distinct() %>% 
+  arrange(human_nk, human_k) %>% 
+  pull(cluster_id) 
+
+clusters_w_match <- df_cluster_matches %>% 
+  filter(has_match) %>% 
+  pull(cluster_id)
+```
+
+```{r}
+df_plsda_results <- df_plsda_results %>% 
+  mutate(has_match_1 = cluster_id_1 %in% clusters_w_match,
+         has_match_2 = cluster_id_2 %in% clusters_w_match,
+         matches = case_when((has_match_1 & has_match_2) ~ "Both",
+                             (has_match_1 | has_match_2) ~ "One",
+                             (!has_match_1 & !has_match_2) ~ "Neither")) %>% 
+  unite(col = "comparison", cluster_id_1, cluster_id_2, sep = " vs. ", remove = FALSE)  
+
+comparison_lvls <- df_plsda_results %>% 
+  select(cluster_id_1, cluster_id_2) %>% 
+  separate(cluster_id_1, into = c("nk_1", "k_1"), remove = FALSE) %>% 
+  separate(cluster_id_2, into = c("nk_2", "k_2"), remove = FALSE) %>% 
+  mutate(nk_1 = as.numeric(nk_1),
+         nk_2 = as.numeric(nk_2),
+         k_1 = as.numeric(k_1),
+         k_2 = as.numeric(k_2)) %>% 
+  unite(col = "comparison", cluster_id_1, cluster_id_2, sep = " vs. ") %>% 
+  distinct() %>% 
+  arrange(nk_1, k_1, nk_2, k_2) %>% 
+  pull(comparison)
+
+
+df_plsda_results
+```
+
+```{r}
+df_plsda_summary <- df_plsda_results %>% 
+  group_by(nk, comparison, threshold, matches) %>% 
+  summarise(auc_mean = mean(auc), 
+            auc_min = min(auc),
+            auc_max = max(auc),
+            .groups = "drop") %>% 
+  mutate(comparison = factor(comparison, levels = comparison_lvls))
+
+nk_list <- list(2:4, 5:7, 8:10)
+list_plots <- vector(mode = "list", length = 3)
+for (i in 1:3) {
+list_plots[[i]] <- df_plsda_summary %>% 
+  filter(nk %in% nk_list[[i]]) %>% 
+  ggplot(aes(x = fct_rev(comparison))) + 
+  geom_pointrange(mapping = aes(y = auc_mean, ymin = auc_min, ymax = auc_max)) + 
+  coord_flip(ylim = c(0.5, 1.0)) +
+  facet_wrap(~nk, ncol = 3, scales = "free_y") +
+  labs(y = "AUC",
+       x = "Cluster comparison") + 
+  theme_bw() +
+  theme(axis.text = element_text(size = font_size-2, family = font_family),
+        axis.title = element_text(size = font_size),
+        axis.ticks = element_line(size = 0.3),
+        strip.text = element_text(size = font_size),
+        plot.margin = margin())
+}
+
+p_plsda_summary <- (list_plots[[1]] / list_plots[[2]] / list_plots[[3]]) +
+  plot_layout(heights = c(0.20,0.66,1.10))
+
+# Plot dimensions in bigpts
+width_pt <- 510
+height_pt <- 430
+
+# Plot dimensions in inches
+width_in <- width_pt/pt_per_in
+height_in <- height_pt/pt_per_in
+
+outfile <- "plsda_summary.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+print(p_plsda_summary)
+dev.off()
+```
+
+
+
+```{r}
+df_sig_nk <- df_sim_pvals %>% 
+  group_by(mouse_nk, mouse_k) %>% 
+  summarise(p = min(pval),
+            nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(plab = case_when(p < 0.05 ~ "**",
+                          p >= 0.05 & p < 0.1 ~ "*",
+                          p >= 0.1 ~ ""),
+         has_match = ifelse(nsignificant > 0, TRUE, FALSE)) %>% 
+  select(nk = mouse_nk, k = mouse_k, p, plab, has_match) %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", "nk", "k", 
+        sep = "-", remove = FALSE) 
+
+# Determine mouse clusters with human matches
+df_mouse_matches <- df_sig_nk %>% 
+  filter(has_match) %>% 
+  select(cluster_id, nk, k) %>% 
+  mutate(nk = as.numeric(as.character(nk)),
+         k = as.numeric(as.character(k)))
+```
