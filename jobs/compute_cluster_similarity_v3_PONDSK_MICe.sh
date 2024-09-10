@@ -6,7 +6,7 @@
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
 #SBATCH --output=logs/compute_cluster_similarity_v3_POND_SK_%j.out
-#SBATCH --dependency=afterok:10503819
+##SBATCH --dependency=afterok:
 
 # Activate virtual environment
 source activate_venv_hpc.sh
