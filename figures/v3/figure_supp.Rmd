@@ -3194,3 +3194,129 @@ pdf(file = outfile,
 print(p_plsda_summary)
 dev.off()
 ```
+
+
+# Supplementary Figure ?? 
+
+```{r}
+plsda_comparisons <- list(c("7-4", "7-7"),
+                          c("8-7", "8-4"),
+                          c("9-4", "9-5"),
+                          c("10-4", "10-6"))
+
+plsda_scores <- map_chr(plsda_comparisons, str_flatten, collapse = "_")
+plsda_scores <- paste("plsda", plsda_scores, "scores", sep = "_")
+plsda_scores <- paste0(plsda_scores, ".csv")
+plsda_scores <- file.path(output_dir, plsda_scores)
+
+list_scores <- map(plsda_scores, read_csv, show_col_types = FALSE)
+
+plsda_loadings <- map_chr(plsda_comparisons, str_flatten, collapse = "_")
+plsda_loadings <- paste("plsda", plsda_loadings, "loadings", sep = "_")
+plsda_loadings <- paste0(plsda_loadings, ".csv")
+plsda_loadings <- file.path(output_dir, plsda_loadings)
+
+list_loadings <- map(plsda_loadings, read_csv, show_col_types = FALSE)
+```
+
+```{r}
+library(ggExtra)
+
+legend_labels_1 <- character(length(plsda_comparisons))
+legend_labels_2 <- character(length(plsda_comparisons))
+for (i in 1:length(plsda_comparisons)) {
+  legend_labels_1[i] <- plsda_comparisons[[i]][1]
+  legend_labels_2[i] <- plsda_comparisons[[i]][2]
+  
+}
+
+legend_labels_1 <- str_flatten(legend_labels_1, collapse = ", ")
+legend_labels_2 <- str_flatten(legend_labels_2, collapse = ", ")
+
+legend_labels <- c(legend_labels_1, legend_labels_2)
+```
+```{r}
+list_loadings
+```
+
+
+```{r}
+palette <- c("seagreen2", "sienna2")
+
+params_marginals <- list(position = "dodge",
+                         binwidth = 0.5)
+
+list_plots <- vector(mode = "list", length = length(list_scores)) 
+for (i in 1:length(list_plots)) {
+  
+  df_scores <- list_scores[[i]] %>% 
+    # mutate(cluster = ifelse(cluster == plsda_comparisons[[i]][1], "k1", "k2"))
+  mutate(cluster = factor(cluster, levels = plsda_comparisons[[i]]))
+  df_loadings <- list_loadings[[i]]
+  
+  p_i <- ggplot(df_scores, mapping = aes(x = x, y = y, col = cluster)) + 
+    geom_point() + 
+    annotate("segment", 
+             x = 0, y = 0, 
+             xend = df_loadings$x, 
+             yend = df_loadings$y,
+             arrow = arrow(type = "closed", length = unit(0.02, "npc")),
+             size = 0.1,
+             col = "grey30") +
+    annotate("text", 
+             x = df_loadings$x, 
+             y = df_loadings$y, 
+             label = df_loadings$features,
+             size = (font_size-1)*0.36) +
+    scale_colour_manual(values = palette) + 
+    labs(x = "Latent variable 1",
+         y = "Latent variable 2") + 
+    theme_bw() +
+    theme(legend.position = "bottom",
+          legend.direction = "horizontal",
+          axis.title = element_text(size = font_size),
+          axis.text = element_text(size = font_size),
+          legend.title = element_blank(),
+          legend.text = element_text(margin = margin()),
+          # legend.background = element_rect(colour = "black"),
+          legend.margin = margin(),
+          # plot.background = element_rect(colour = "black"),
+          plot.margin = margin(b = 10))
+  
+  list_plots[[i]] <- patchwork::wrap_elements(ggMarginal(p_i, type = "histogram", 
+                                                         groupColour = TRUE, 
+                                                         groupFill = TRUE, 
+                                                         xparams = params_marginals,
+                                                         yparams = params_marginals))
+}
+
+p_plsda_loadings <- ((list_plots[[1]] + list_plots[[2]]) / (list_plots[[3]] + list_plots[[4]]))
+
+# Plot dimensions in bigpts
+width_pt <- fig_width_pt
+height_pt <- fig_height_pt
+
+# Plot dimensions in inches
+width_in <- width_pt/pt_per_in
+height_in <- height_pt/pt_per_in
+
+outfile <- "plsda_loadings.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+print(p_plsda_loadings)
+dev.off()
+
+```
+
+```{r}
+library(patchwork)
+
+(list_plots[[1]] + list_plots[[2]]) / (list_plots[[3]] + list_plots[[4]])
+```
+
+```{r}
+list_plots[[1]]
+```
+
