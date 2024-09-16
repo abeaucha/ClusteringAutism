@@ -206,46 +206,39 @@ fig_width_pt <- 510
 fig_height_pt <- 481
 ```
 
-# Supplementary Figure 1
 
-Human Sankey diagram
+# Supplementary Figure 1: Human Sankey diagram
 
+# Supplementary Figure 2: Mouse Sankey diagram
 
-# Supplementary Figure 2 
+# Supplementary Figure 3: Eigengap distributions
 
-Mouse Sankey diagram
-
-
-# Supplementary Figure 3
-
-```{r fig-supp-1-import}
-#Human cluster assignments
+```{r fig-supp-3 }
+# Human cluster assignments
 human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
 df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
 
-#Mouse cluster assignments
+# Mouse cluster assignments
 mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
 df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
 colnames(df_mouse_clusters) <- c("ID", str_c("nk", 2:10))
 
-#Human affinity matrix
+# Human affinity matrix
 human_affinity_file <- file.path(human_cluster_dir, "affinity.csv")
 df_human_affinity <- read_csv(human_affinity_file, show_col_types = FALSE)
 mat_human_affinity <- as.matrix(df_human_affinity)
 rownames(mat_human_affinity) <- colnames(mat_human_affinity)
 
-#Mouse affinity matrix
+# Mouse affinity matrix
 mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
 load(mouse_affinity_file)
 mat_mouse_affinity <- W
 df_mouse_affinity <- as_tibble(mat_mouse_affinity)
-```
 
-```{r fig-supp-1}
-#Max nk to examine
+# Max nk to examine
 eigengap_nk_max <- 20
 
-#Get human cluster metrics
+# Get human cluster metrics
 df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:eigengap_nk_max)
 df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:eigengap_nk_max)
 df_cluster_metrics <- bind_rows(
@@ -255,8 +248,8 @@ df_cluster_metrics <- bind_rows(
     mutate(species = "Mouse")
 )
 
-#Plot of eigengap distributions
-fig_supp_1 <- ggplot(df_cluster_metrics,
+# Plot of eigengap distributions
+fig_supp_3 <- ggplot(df_cluster_metrics,
                      aes(x = nk, y = eigengap, col = species)) + 
   geom_line(size = 0.4) + 
   geom_point(size = 1) +
@@ -279,31 +272,30 @@ fig_supp_1 <- ggplot(df_cluster_metrics,
         panel.grid.minor.x = element_blank())
 
 # Figure dimensions
-fig_supp_1_width_pt <- fig_width_pt
-fig_supp_1_height_pt <- fig_width_pt/3
+fig_supp_3_width_pt <- fig_width_pt
+fig_supp_3_height_pt <- fig_width_pt/3
 
 # Export
 outfile <- paste(output_plot_prefix, 3, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
-export_pdf(x = ggplotGrob(fig_supp_1),
-           width = fig_supp_1_width_pt,
-           height = fig_supp_1_height_pt,
+export_pdf(x = ggplotGrob(fig_supp_3),
+           width = fig_supp_3_width_pt,
+           height = fig_supp_3_height_pt,
            units = "bigpts",
            file = outfile)
 ```
 
-# Supplementary Figure 4
 
-```{r fig-supp-2-ss-files}
+# Supplementary Figure 4: Human 2-cluster centroid slice series
+
+```{r fig-supp-4-files}
 # Human anatomy
 human_anat_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/model_0.8mm.mnc")
 human_anat <- mincGetVolume(human_anat_file)
 human_anat_vol <- mincArray(human_anat)
 
 # Cropped human images along sagittal and transverse planes
-# human_slices_dim_1 <- 25:200
-# human_slices_dim_3 <- 25:220
 human_slices_dim_1 <- 27:220
 human_slices_dim_2 <- 10:280
 human_slices_dim_3 <- 10:220
@@ -332,7 +324,7 @@ threshold_symmetric <- params %>%
 nk_human <- 2
 ```
 
-```{r fig2-ss-human-import}
+```{r fig-supp-4-import}
 # Iterate over jacobians  
 list_human_centroids <- vector(mode = "list", length = length(jacobians))
 names(list_human_centroids) <- jacobians
@@ -360,29 +352,11 @@ for (j in jacobians) {
 }
 ```
 
-```{r fig2-ss-human-thresholds}
-# Data frame to store human image thresholds
-df_human_thresholds <- tibble(nk = rep(nk_human, nk_human),
-                              k = 1:nk_human) %>% 
-  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
-  mutate(threshold_min = 0, 
-         threshold_max = 0)
-
-# Get min/max thresholds for each human image
-for (i in 1:nrow(df_human_thresholds)) {
-  human_img_abs <- abs(list_human_centroids[["relative"]][[i]])
-  human_img_abs <- human_img_abs[human_img_abs > 0]
-  df_human_thresholds[[i, "threshold_max"]] <- max(human_img_abs)
-  df_human_thresholds[[i, "threshold_min"]] <- min(human_img_abs)
-}
-```
-
-```{r fig2-ss-params}
+```{r fig-supp-4-ss}
 # Number of slices per ss
 ss_nslices <- 8
 
 # Human slices
-# human_slices <- c(61, 105, 127, 152, 214)
 human_slices <- floor(seq(60, 220, length.out = ss_nslices))
 
 # Human anatomy thresholds
@@ -392,12 +366,12 @@ human_anat_high <- 110
 # Overlay thresholds from previous code chunk
 overlay_low <- 0.2
 overlay_high <- 0.7
-```
 
-```{r}
+# Iterate over clusters
 for (k in 1:nk_human) {
   
-  fig_supp_2_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, begin = 60, end = 220) %>% 
+  # Generate slice series grob
+  fig_supp_4_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, begin = 60, end = 220) %>% 
     anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
     overlay(list_human_centroids[["absolute"]][[k]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
     sliceSeries() %>% anatomy() %>% 
@@ -405,26 +379,27 @@ for (k in 1:nk_human) {
     legend() %>% 
     grobify()
   
-  fig_supp_2_width_pt <- fig_width_pt/(3)
-  fig_supp_2_height_pt <- (fig_supp_2_width_pt/3)*ss_nslices
+  # Dimensions
+  fig_supp_4_width_pt <- fig_width_pt/(3)
+  fig_supp_4_height_pt <- (fig_supp_4_width_pt/3)*ss_nslices
   
+  # Export slice series
   outfile <- paste(output_plot_prefix, 4, nk_human, k, sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
-  export_pdf(x = fig_supp_2_grob,
+  export_pdf(x = fig_supp_4_grob,
              file = outfile,
-             width = fig_supp_2_width_pt,
-             height = fig_supp_2_height_pt,
+             width = fig_supp_4_width_pt,
+             height = fig_supp_4_height_pt,
              units = "bigpts")
   
 }
 ```
 
 
+# Supplementary Figure 5: Mouse 4-cluster centroid slice series
 
-# Supplementary Figure 5
-
-```{r fig2-ss-files}
+```{r fig-supp-5-files}
 # Mouse anatomy
 mouse_anat_file <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc")
 mouse_anat <- mincGetVolume(mouse_anat_file)
@@ -453,7 +428,7 @@ threshold_symmetric <- params %>%
 nk_mouse <- 4
 ```
 
-```{r fig2-ss-mouse-resample}
+```{r fig-supp-5-resample}
 # Mouse images need to be resampled to 50um
 run <- FALSE
 if (run) {
@@ -482,7 +457,7 @@ if (run) {
 }
 ```
 
-```{r fig2-ss-mouse-import}
+```{r fig-supp-5-import}
 # Iterate over jacobians  
 list_mouse_centroids <- vector(mode = "list", length = length(jacobians))
 names(list_mouse_centroids) <- jacobians
@@ -507,24 +482,7 @@ for (j in jacobians) {
 }
 ```
 
-```{r fig2-ss-mouse-thresholds}
-# Data frame to store mouse image thresholds
-df_mouse_thresholds <- tibble(nk = rep(nk_mouse, nk_mouse),
-                              k = 1:nk_mouse) %>% 
-  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
-  mutate(threshold_min = 0, 
-         threshold_max = 0)
-
-# Get min/max thresholds for each mouse image
-for (i in 1:nrow(df_mouse_thresholds)) {
-  mouse_img_abs <- abs(list_mouse_centroids[["relative"]][[i]])
-  mouse_img_abs <- mouse_img_abs[mouse_img_abs > 0]
-  df_mouse_thresholds[[i, "threshold_max"]] <- max(mouse_img_abs)
-  df_mouse_thresholds[[i, "threshold_min"]] <- min(mouse_img_abs)
-}
-```
-
-```{r fig2-ss-params}
+```{r fig-supp-5-ss}
 # Mouse anatomy thresholds
 mouse_anat_low <- 800
 mouse_anat_high <- 2000
@@ -532,12 +490,12 @@ mouse_anat_high <- 2000
 # Overlay thresholds from previous code chunk
 overlay_low <- 0.19
 overlay_high <- 1.0
-```
 
-```{r}
+# Iterate over clusters
 for (k in 1:nk_mouse) {
   
-  fig_supp_3_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, begin = 20, end = 200) %>% 
+  # Slice series grob
+  fig_supp_5_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, begin = 20, end = 200) %>% 
     anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
     overlay(list_mouse_centroids[["absolute"]][[k]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
     sliceSeries() %>% anatomy() %>% 
@@ -545,24 +503,27 @@ for (k in 1:nk_mouse) {
     legend() %>% 
     grobify()
   
-  fig_supp_3_width_pt <- fig_width_pt/(2)
-  fig_supp_3_height_pt <- (fig_supp_3_width_pt/4)*ss_nslices
+  # Dimensions
+  fig_supp_5_width_pt <- fig_width_pt/(2)
+  fig_supp_5_height_pt <- (fig_supp_5_width_pt/4)*ss_nslices
   
+  # Export
   outfile <- paste(output_plot_prefix, 5, nk_mouse, k, sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
-  export_pdf(x = fig_supp_3_grob,
+  export_pdf(x = fig_supp_5_grob,
              file = outfile,
-             width = fig_supp_3_width_pt,
-             height = fig_supp_3_height_pt,
+             width = fig_supp_5_width_pt,
+             height = fig_supp_5_height_pt,
              units = "bigpts")
   
 }
 ```
 
-# Supplementary Figure 6
 
-```{r fig2-pathways-mouse-import}
+# Supplementary Figure 6: Molecular pathways Sankey diagrams
+
+```{r fig-supp-6-import}
 # Enrichment database versions
 stringdb_version <- "12.0"
 bader_version <- "2023"
@@ -667,26 +628,12 @@ df_mouse_pathways_all <- list_mouse_pathways %>%
   filter(ID %in% pathway_ids)
 ```
 
-```{r fig2-pathways-info}
+```{r fig-supp-6-pathways-info}
 # Extract pathway ID and name
 df_pathway_info <- df_mouse_pathways_all %>% 
   select(ID, pathway) %>% 
   distinct() %>% 
   arrange(pathway)
-
-# # Create pathway acronyms
-# df_pathway_info[["acronym"]] <- c(
-#   "Adherens junction", "Axon guid.",
-#   "Ca2+", "Chromatin",
-#   "Gap junction", "Gene expr.",
-#   "Transcription", "LTP",
-#   "Mapk", "Mtor",
-#   "Prot-prot int.", "erbb2",
-#   "erbb4", "gpcr",
-#   "hedgehog", "notch",
-#   "vegf", "wnt", 
-#   "Tight junction", "Trans. synapses"
-# )
 
 # Create pathway acronyms
 df_pathway_info[["acronym"]] <- c(
@@ -698,7 +645,7 @@ df_pathway_info[["acronym"]] <- c(
 )
 ```
 
-```{r fig2-pathways-mouse-clust}
+```{r fig-supp-6-clustering}
 # Filter for cluster solutions with nk >= 4
 df_pathways_nk_gt4 <- df_mouse_pathways_all %>% 
   filter(nk >= 4)
@@ -737,17 +684,17 @@ pathway_label_lvls_clustered <- df_pathway_info %>%
   pull(acronym)
 ```
 
-```{r}
+```{r fig-supp-6-plot}
 # Convert mouse clusters to long format
 df_mouse_clusters_long <- df_mouse_clusters %>% 
   pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
   mutate(nk = str_remove(nk_name, "nk"),
          nk = as.numeric(nk))
-```
 
-```{r}
+# Clamping threshold 
 NLQ_threshold <- 30
 
+# Create data frame for plotting
 df_mouse_pathways_alluvial <- df_mouse_pathways_all %>% 
   select(-ID) %>% 
   right_join(df_mouse_clusters_long, by = c("nk", "k")) %>% 
@@ -757,7 +704,8 @@ df_mouse_pathways_alluvial <- df_mouse_pathways_all %>%
          NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ),
          E = ifelse(E > 30, 30, E))
 
-fig_supp_4 <- ggplot(df_mouse_pathways_alluvial, 
+# Plot Sankey diagrams
+fig_supp_6 <- ggplot(df_mouse_pathways_alluvial, 
                      aes(x = nk, 
                          stratum = k,
                          fill = NLQ,
@@ -788,25 +736,26 @@ fig_supp_4 <- ggplot(df_mouse_pathways_alluvial,
         plot.margin = margin())
 
 # Figure dimensions
-fig_supp_4_width_pt <- fig_width_pt
-fig_supp_4_height_pt <- fig_height_pt
+fig_supp_6_width_pt <- fig_width_pt
+fig_supp_6_height_pt <- fig_height_pt
 
 # Export
 outfile <- paste(output_plot_prefix, 6, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
-export_pdf(x = ggplotGrob(fig_supp_4),
-           width = fig_supp_4_width_pt,
-           height = fig_supp_4_height_pt,
+export_pdf(x = ggplotGrob(fig_supp_6),
+           width = fig_supp_6_width_pt,
+           height = fig_supp_6_height_pt,
            units = "bigpts",
            file = outfile)
 ```
 
-# Supplementary Figure 7
 
-```{r fig3-heatmap-pathway-clust-scree-plot}
+# Supplementary Figure 7: Molecular pathway motifs scree plot
+
+```{r fig-supp-7}
 # Generate pathway cluster scree plot
-fig_supp_5 <- mat_pathways_nk_gt4_subset %>% 
+fig_supp_7 <- mat_pathways_nk_gt4_subset %>% 
   t() %>% 
   hclust_wcss() %>% 
   as_tibble() %>% 
@@ -830,26 +779,27 @@ fig_supp_5 <- mat_pathways_nk_gt4_subset %>%
         panel.grid.minor.x = element_blank())
 
 # Figure dimensions
-fig_supp_5_width_pt <- fig_width_pt
-fig_supp_5_height_pt <- fig_width_pt/3
+fig_supp_7_width_pt <- fig_width_pt
+fig_supp_7_height_pt <- fig_width_pt/3
 
 # Export
 outfile <- paste(output_plot_prefix, 7, sep = "_")
 outfile <- paste0(outfile, ".jpeg")
 outfile <- file.path(output_dir, outfile)
 jpeg(filename = outfile,
-     width = fig_supp_5_width_pt/pt_per_in,
-     height = fig_supp_5_height_pt/pt_per_in,
+     width = fig_supp_7_width_pt/pt_per_in,
+     height = fig_supp_7_height_pt/pt_per_in,
      units = "in",
      res = 600,
      quality = 100)
-print(fig_supp_5)
+print(fig_supp_7)
 dev.off()
 ```
 
-# Supplementary Figure 8-10
 
-```{r}
+# Supplementary Figures 8-11: Centroid slice series for mouse and human matches
+
+```{r fig-supp-8-11-import}
 # Directory for mouse-human cluster similarity 
 similarity_dir <- file.path(pipeline_dir, "similarity")
 
@@ -956,7 +906,7 @@ df_permutations <- list_permutations %>%
   summarise(similarity = mean(similarity), .groups = "drop")
 ```
 
-```{r fig3-similarity-compute-pvals}
+```{r fig-supp-8-11-pvals}
 # Mouse and human max nk
 human_nk_max <- max(df_similarity[["human_nk"]])
 mouse_nk_max <- max(df_similarity[["mouse_nk"]])
@@ -999,32 +949,23 @@ df_sim_pvals <- df_sim_pvals %>%
   mutate(significant = ifelse(pval < sim_alpha, 1, 0))
 ```
 
-
-
-```{r}
-df_sig_nk <- df_sim_pvals %>% 
+```{r fig-supp-8-11-matches}
+# Determine mouse clusters with human matches
+df_mouse_matches <- df_sim_pvals %>% 
   group_by(mouse_nk, mouse_k) %>% 
-  summarise(p = min(pval),
-            nsignificant = sum(significant),
-            .groups = "drop") %>% 
-  mutate(plab = case_when(p < 0.05 ~ "**",
-                          p >= 0.05 & p < 0.1 ~ "*",
-                          p >= 0.1 ~ ""),
-         has_match = ifelse(nsignificant > 0, TRUE, FALSE)) %>% 
-  select(nk = mouse_nk, k = mouse_k, p, plab, has_match) %>% 
+  summarise(nsignificant = sum(significant), .groups = "drop") %>% 
+  mutate(has_match = nsignificant > 0) %>% 
+  select(nk = mouse_nk, k = mouse_k, has_match) %>% 
   filter(nk >= 4) %>% 
   unite(col = "cluster_id", "nk", "k", 
-        sep = "-", remove = FALSE) 
-
-# Determine mouse clusters with human matches
-df_mouse_matches <- df_sig_nk %>% 
+        sep = "-", remove = FALSE) %>% 
   filter(has_match) %>% 
   select(cluster_id, nk, k) %>% 
   mutate(nk = as.numeric(as.character(nk)),
+         
          k = as.numeric(as.character(k)))
-```
 
-```{r}
+# Filter mouse clusters for >= 4
 df_mouse_clusters_long <- df_mouse_clusters_long %>% 
   filter(nk >= 4) %>% 
   unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)  
@@ -1079,168 +1020,132 @@ df_cluster_grid <- df_cluster_grid %>%
            sep = "-", remove = FALSE) %>% 
   mutate(nk = as.numeric(nk),
          k = as.numeric(k))
-# %>% 
-# filter(nk %in% nk_subset)
+
 df_cluster_grid
 ```
 
-```{r}
-clusters <- paste(4, 1:4, sep = "-")
-for (clust in clusters) {
-  
-  nk <- str_split(clust, pattern = "-", simplify = TRUE)[1]
-  k <- str_split(clust, pattern = "-", simplify = TRUE)[2]
-  
-  img_abs <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["absolute"]],
-                                mask = mouse_mask_file,
-                                nk = nk, k = k,
-                                threshold = threshold,
-                                threshold_value = threshold_value,
-                                threshold_symmetric = threshold_symmetric)
-  
-  img_rel <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["relative"]],
-                                mask = mouse_mask_file,
-                                nk = nk, k = k,
-                                threshold = threshold,
-                                threshold_value = threshold_value,
-                                threshold_symmetric = threshold_symmetric)
-  
-  img_abs <- mincArray(img_abs)
-  img_rel <- mincArray(img_rel)
-  
-  fig_supp_6_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 20, end = 200) %>% 
-    anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-    overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>% 
-    sliceSeries() %>% anatomy() %>% 
-    overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%   
-    grobify()
-  
-  fig_supp_6_width_pt <- fig_width_pt/(2)
-  fig_supp_6_height_pt <- (fig_supp_6_width_pt/3)*6
-  
-  outfile <- paste(output_plot_prefix, 8, clust, clust, sep = "_")
-  outfile <- paste0(outfile, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  export_pdf(x = fig_supp_6_grob,
-             file = outfile,
-             width = fig_supp_6_width_pt,
-             height = fig_supp_6_height_pt,
-             units = "bigpts")
-}
-```
+```{r fig-supp-8-11-ss}
+list_mouse_clusters <- list(c("4-1", "6-5", "8-6", "10-4"),
+                            c("4-4", "6-1", "8-1"),
+                            c("4-4", "6-4", "8-2", "10-5"),
+                            c("4-3", "8-5", "10-3"))
 
-```{r}
-run <- FALSE
-if (run) {
-  for (i in 1:nrow(df_cluster_grid)) {
+fig_supp_nums <- 8:11
+
+# Iterate over cluster streams
+for (l in 1:length(list_mouse_clusters)) {
+
+  # Iterate over clusters
+  clusters <- list_mouse_clusters[[l]]
+  for (mouse_clust in clusters) {
     
-    nk <- df_cluster_grid[[i, "nk"]]
-    k <- df_cluster_grid[[i, "k"]]
+    print(paste("Mouse cluster:", mouse_clust))
     
+    # Extract cluster IDs
+    nk <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[1]
+    k <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[2]
+
+      # Import absolute centroid
     img_abs <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["absolute"]],
                                   mask = mouse_mask_file,
                                   nk = nk, k = k,
                                   threshold = threshold,
                                   threshold_value = threshold_value,
                                   threshold_symmetric = threshold_symmetric)
-    
+
+    # Import relative centroid
     img_rel <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["relative"]],
                                   mask = mouse_mask_file,
                                   nk = nk, k = k,
                                   threshold = threshold,
                                   threshold_value = threshold_value,
                                   threshold_symmetric = threshold_symmetric)
-    
-    img_abs <- mincArray(img_abs)
-    img_rel <- mincArray(img_rel)
-    
-    fig_supp_6_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 20, end = 200) %>% 
-      anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-      overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>% 
-      sliceSeries() %>% anatomy() %>% 
-      overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%   
-      grobify()
-    
-    fig_supp_6_width_pt <- fig_width_pt/(2)
-    fig_supp_6_height_pt <- (fig_supp_6_width_pt/3)*6
-    
-    id4 <- as.character(df_cluster_grid[[i, "cluster_id_nk4"]])
-    id <- as.character(df_cluster_grid[[i, "cluster_id"]])
-    
-    outfile <- paste(output_plot_prefix, 8, id4, id, sep = "_")
-    outfile <- paste0(outfile, ".pdf")
-    outfile <- file.path(output_dir, outfile)
-    export_pdf(x = fig_supp_6_grob,
-               file = outfile,
-               width = fig_supp_6_width_pt,
-               height = fig_supp_6_height_pt,
-               units = "bigpts")
-    
-    
-  }
-}
-```
 
-```{r}
-run <- FALSE
-if (run) {
-  nk_subset <- c(4, 6, 8, 10)
-  
-  df_sig_gt4 <- df_sim_pvals %>% 
-    filter(mouse_nk >= 4, significant == 1) %>% 
-    select(-significant) %>% 
-    arrange(mouse_nk, mouse_k) 
-  
-  for (i in 1:nrow(df_sig_gt4)) {
-    
-    nk <- df_sig_gt4[[i, "human_nk"]]
-    k <- df_sig_gt4[[i, "human_k"]]
-    
-    # Import centroid image for specific cluster using threshold
-    img_abs <- import_cluster_map(imgdir = human_centroid_dirs[["absolute"]],
-                                  mask = human_mask_file,
-                                  nk = nk, k = k,
-                                  threshold = threshold,
-                                  threshold_value = threshold_value,
-                                  threshold_symmetric = threshold_symmetric)
-    
-    # Import centroid image for specific cluster using threshold
-    img_rel <- import_cluster_map(imgdir = human_centroid_dirs[["relative"]],
-                                  mask = human_mask_file,
-                                  nk = nk, k = k,
-                                  threshold = threshold,
-                                  threshold_value = threshold_value,
-                                  threshold_symmetric = threshold_symmetric)
-    
-    # Crop image to remove black space
     img_abs <- mincArray(img_abs)
-    img_abs <- img_abs[human_slices_dim_1,,human_slices_dim_3]
-    
-    # Crop image to remove black space
     img_rel <- mincArray(img_rel)
-    img_rel <- img_rel[human_slices_dim_1,,human_slices_dim_3]
-    
-    fig_supp_6_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 60, end = 220) %>% 
-      anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-      overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>% 
-      sliceSeries() %>% anatomy() %>% 
-      overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%   
+
+    # Generate slice series
+    fig_supp_8_10_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 20, end = 200) %>%
+      anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>%
+      overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>%
+      sliceSeries() %>% anatomy() %>%
+      overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%
       grobify()
+
+    # Dimensions
+    fig_supp_8_10_width_pt <- fig_width_pt/(2)
+    fig_supp_8_10_height_pt <- (fig_supp_8_10_width_pt/3)*6
     
-    fig_supp_6_width_pt <- 130
-    fig_supp_6_height_pt <- (fig_supp_6_width_pt/2)*6
-    
-    mouse_clust <- df_sig_gt4[[i, "mouse_cluster_id"]]
-    human_clust <- df_sig_gt4[[i, "human_cluster_id"]]
-    
-    outfile <- paste(output_plot_prefix, 8, "mouse", mouse_clust, "human", human_clust, sep = "_")
+    # Export
+    outfile <- paste(output_plot_prefix, fig_supp_nums[[l]], "mouse", mouse_clust, sep = "_")
     outfile <- paste0(outfile, ".pdf")
     outfile <- file.path(output_dir, outfile)
-    export_pdf(x = fig_supp_6_grob,
+    export_pdf(x = fig_supp_8_10_grob,
                file = outfile,
-               width = fig_supp_6_width_pt,
-               height = fig_supp_6_height_pt,
+               width = fig_supp_8_10_width_pt,
+               height = fig_supp_8_10_height_pt,
                units = "bigpts")
+    
+    human_matches <- df_sim_pvals %>% 
+      filter(mouse_cluster_id == mouse_clust, significant == 1) %>% 
+      pull(human_cluster_id)
+    
+    for (human_clust in human_matches) {
+      
+      print(paste("Human cluster:", human_clust))
+      
+      # Extract cluster IDs
+      nk_human <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[1]
+      k_human <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[2]
+
+
+      # Import centroid image for specific cluster using threshold
+      img_abs <- import_cluster_map(imgdir = human_centroid_dirs[["absolute"]],
+                                    mask = human_mask_file,
+                                    nk = nk_human, k = k_human,
+                                    threshold = threshold,
+                                    threshold_value = threshold_value,
+                                    threshold_symmetric = threshold_symmetric)
+
+      # Import centroid image for specific cluster using threshold
+      img_rel <- import_cluster_map(imgdir = human_centroid_dirs[["relative"]],
+                                    mask = human_mask_file,
+                                    nk = nk_human, k = k_human,
+                                    threshold = threshold,
+                                    threshold_value = threshold_value,
+                                    threshold_symmetric = threshold_symmetric)
+
+      # Crop image to remove black space
+      img_abs <- mincArray(img_abs)
+      img_abs <- img_abs[human_slices_dim_1,,human_slices_dim_3]
+
+      # Crop image to remove black space
+      img_rel <- mincArray(img_rel)
+      img_rel <- img_rel[human_slices_dim_1,,human_slices_dim_3]
+
+      # Generate slice series
+      fig_supp_8_10_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 60, end = 220) %>%
+        anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>%
+        overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>%
+        sliceSeries() %>% anatomy() %>%
+        overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%
+        grobify()
+
+      # Dimensions
+      fig_supp_8_10_width_pt <- 130
+      fig_supp_8_10_height_pt <- (fig_supp_8_10_width_pt/2)*6
+      
+      # Export
+      outfile <- paste(output_plot_prefix, fig_supp_nums[[l]], "mouse", mouse_clust, "human", human_clust, sep = "_")
+      outfile <- paste0(outfile, ".pdf")
+      outfile <- file.path(output_dir, outfile)
+      export_pdf(x = fig_supp_8_10_grob,
+                 file = outfile,
+                 width = fig_supp_8_10_width_pt,
+                 height = fig_supp_8_10_height_pt,
+                 units = "bigpts")
+  
+    }    
   }
 }
 ```
@@ -1265,11 +1170,6 @@ df_sim_pvals %>%
 ```
 
 ```{r}
-df_cluster_grid
-```
-
-
-```{r}
 mouse_clusters <- c("4-3", "8-5", "10-3")
 df_sim_pvals %>% 
   filter(mouse_cluster_id %in% mouse_clusters,
@@ -1277,6 +1177,7 @@ df_sim_pvals %>%
   arrange(mouse_nk, mouse_k) %>%   
   select(mouse_cluster_id, human_cluster_id, pval)  
 ```
+
 
 
 # Supplementary Figure 11
@@ -3282,7 +3183,7 @@ patchwork_design <- '12
 '
 
 for (i in 1:length(list_scores)) {
-# for (i in 1:2) {
+  # for (i in 1:2) {
   # i <- 2
   
   df_scores <- list_scores[[i]]
@@ -3290,20 +3191,20 @@ for (i in 1:length(list_scores)) {
   
   list_plots_scatter[[i]] <- ggplot(df_scores, mapping = aes(x = x, y = y, col = cluster)) + 
     geom_point() + 
-  annotate("segment",
-           x = 0, y = 0,
-           xend = df_loadings$x,
-           yend = df_loadings$y,
-           arrow = arrow(type = "closed", length = unit(0.02, "npc")),
-           size = 0.1,
-           col = "grey30") +
-  annotate("text",
-           x = df_loadings$x,
-           y = df_loadings$y,
-           label = df_loadings$features,
-           size = (font_size-1)*0.36) +
-  coord_cartesian(xlim = list_xlims[[i]],
-                  ylim = list_ylims[[i]]) +
+    annotate("segment",
+             x = 0, y = 0,
+             xend = df_loadings$x,
+             yend = df_loadings$y,
+             arrow = arrow(type = "closed", length = unit(0.02, "npc")),
+             size = 0.1,
+             col = "grey30") +
+    annotate("text",
+             x = df_loadings$x,
+             y = df_loadings$y,
+             label = df_loadings$features,
+             size = (font_size-1)*0.36) +
+    coord_cartesian(xlim = list_xlims[[i]],
+                    ylim = list_ylims[[i]]) +
     scale_x_continuous(breaks = xbreaks) + 
     scale_y_continuous(breaks = ybreaks) + 
     scale_colour_manual(values = palette) + 
