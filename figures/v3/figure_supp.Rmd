@@ -191,16 +191,6 @@ font_size <- 6
 # Empty rectangle grob
 empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
 
-# Black rectangle grob
-# black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
-
-# Rectangle with number in it
-# rect_w_num <- function(n) {
-#   out <- gTree(children = gList(empty_rect_grob,
-#                                 textGrob(label = n)))
-#   return(out)
-# }
-
 # Maximal figure dimensions in bigpts
 fig_width_pt <- 510
 fig_height_pt <- 481
@@ -912,7 +902,7 @@ human_nk_max <- max(df_similarity[["human_nk"]])
 mouse_nk_max <- max(df_similarity[["mouse_nk"]])
 
 # Iterate along nk diagonal +/- 1
-df_sim_pvals <- tibble()
+df_sim_pvals_POND <- tibble()
 for (h_nk in 2:human_nk_max) {
   for (m_nk in (h_nk-1):(h_nk+1)){
     
@@ -937,7 +927,7 @@ for (h_nk in 2:human_nk_max) {
         df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
       }
       
-      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      df_sim_pvals_POND <- bind_rows(df_sim_pvals_POND, df_sim_nk)
       
     }
   }
@@ -945,13 +935,13 @@ for (h_nk in 2:human_nk_max) {
 
 # Evaluate significance
 sim_alpha <- 0.05
-df_sim_pvals <- df_sim_pvals %>% 
+df_sim_pvals_POND <- df_sim_pvals_POND %>% 
   mutate(significant = ifelse(pval < sim_alpha, 1, 0))
 ```
 
 ```{r fig-supp-8-11-matches}
 # Determine mouse clusters with human matches
-df_mouse_matches <- df_sim_pvals %>% 
+df_mouse_matches <- df_sim_pvals_POND %>% 
   group_by(mouse_nk, mouse_k) %>% 
   summarise(nsignificant = sum(significant), .groups = "drop") %>% 
   mutate(has_match = nsignificant > 0) %>% 
@@ -1025,118 +1015,64 @@ df_cluster_grid
 ```
 
 ```{r fig-supp-8-11-ss}
-list_mouse_clusters <- list(c("4-1", "6-5", "8-6", "10-4"),
-                            c("4-4", "6-1", "8-1"),
-                            c("4-4", "6-4", "8-2", "10-5"),
-                            c("4-3", "8-5", "10-3"))
+# List of mouse cluster streams
+mouse_cluster_streams <- list(c("4-1", "6-5", "8-6", "10-4"),
+                              c("4-4", "6-1", "8-1", "10-1"),
+                              c("4-4", "6-4", "8-2", "10-5"),
+                              c("4-3", "6-3", "8-5", "10-3"))
 
+# Supplementary figure numbers
 fig_supp_nums <- 8:11
 
-# Iterate over cluster streams
-for (l in 1:length(list_mouse_clusters)) {
-
-  # Iterate over clusters
-  clusters <- list_mouse_clusters[[l]]
-  for (mouse_clust in clusters) {
+run <- FALSE
+if (run) {
+  # Iterate over cluster streams
+  for (l in 1:length(mouse_cluster_streams)) {
     
-    print(paste("Mouse cluster:", mouse_clust))
-    
-    # Extract cluster IDs
-    nk <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[1]
-    k <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[2]
-
-      # Import absolute centroid
-    img_abs <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["absolute"]],
-                                  mask = mouse_mask_file,
-                                  nk = nk, k = k,
-                                  threshold = threshold,
-                                  threshold_value = threshold_value,
-                                  threshold_symmetric = threshold_symmetric)
-
-    # Import relative centroid
-    img_rel <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["relative"]],
-                                  mask = mouse_mask_file,
-                                  nk = nk, k = k,
-                                  threshold = threshold,
-                                  threshold_value = threshold_value,
-                                  threshold_symmetric = threshold_symmetric)
-
-    img_abs <- mincArray(img_abs)
-    img_rel <- mincArray(img_rel)
-
-    # Generate slice series
-    fig_supp_8_10_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 20, end = 200) %>%
-      anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>%
-      overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>%
-      sliceSeries() %>% anatomy() %>%
-      overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%
-      grobify()
-
-    # Dimensions
-    fig_supp_8_10_width_pt <- fig_width_pt/(2)
-    fig_supp_8_10_height_pt <- (fig_supp_8_10_width_pt/3)*6
-    
-    # Export
-    outfile <- paste(output_plot_prefix, fig_supp_nums[[l]], "mouse", mouse_clust, sep = "_")
-    outfile <- paste0(outfile, ".pdf")
-    outfile <- file.path(output_dir, outfile)
-    export_pdf(x = fig_supp_8_10_grob,
-               file = outfile,
-               width = fig_supp_8_10_width_pt,
-               height = fig_supp_8_10_height_pt,
-               units = "bigpts")
-    
-    human_matches <- df_sim_pvals %>% 
-      filter(mouse_cluster_id == mouse_clust, significant == 1) %>% 
-      pull(human_cluster_id)
-    
-    for (human_clust in human_matches) {
+    # Iterate over clusters
+    clusters <- mouse_cluster_streams[[l]]
+    for (mouse_clust in clusters) {
       
-      print(paste("Human cluster:", human_clust))
+      message(paste("Mouse cluster:", mouse_clust))
       
       # Extract cluster IDs
-      nk_human <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[1]
-      k_human <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[2]
-
-
-      # Import centroid image for specific cluster using threshold
-      img_abs <- import_cluster_map(imgdir = human_centroid_dirs[["absolute"]],
-                                    mask = human_mask_file,
-                                    nk = nk_human, k = k_human,
+      nk <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[1]
+      k <- str_split(mouse_clust, pattern = "-", simplify = TRUE)[2]
+      
+      # Import absolute centroid
+      img_abs <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["absolute"]],
+                                    mask = mouse_mask_file,
+                                    nk = nk, k = k,
                                     threshold = threshold,
                                     threshold_value = threshold_value,
                                     threshold_symmetric = threshold_symmetric)
-
-      # Import centroid image for specific cluster using threshold
-      img_rel <- import_cluster_map(imgdir = human_centroid_dirs[["relative"]],
-                                    mask = human_mask_file,
-                                    nk = nk_human, k = k_human,
+      
+      # Import relative centroid
+      img_rel <- import_cluster_map(imgdir = mouse_centroid_dirs_50um[["relative"]],
+                                    mask = mouse_mask_file,
+                                    nk = nk, k = k,
                                     threshold = threshold,
                                     threshold_value = threshold_value,
                                     threshold_symmetric = threshold_symmetric)
-
-      # Crop image to remove black space
+      
+      # Convert to MINC array
       img_abs <- mincArray(img_abs)
-      img_abs <- img_abs[human_slices_dim_1,,human_slices_dim_3]
-
-      # Crop image to remove black space
       img_rel <- mincArray(img_rel)
-      img_rel <- img_rel[human_slices_dim_1,,human_slices_dim_3]
-
+      
       # Generate slice series
-      fig_supp_8_10_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 60, end = 220) %>%
-        anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>%
+      fig_supp_8_10_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 20, end = 200) %>%
+        anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>%
         overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>%
         sliceSeries() %>% anatomy() %>%
         overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%
         grobify()
-
+      
       # Dimensions
-      fig_supp_8_10_width_pt <- 130
-      fig_supp_8_10_height_pt <- (fig_supp_8_10_width_pt/2)*6
+      fig_supp_8_10_width_pt <- fig_width_pt/(2)
+      fig_supp_8_10_height_pt <- (fig_supp_8_10_width_pt/3)*6
       
       # Export
-      outfile <- paste(output_plot_prefix, fig_supp_nums[[l]], "mouse", mouse_clust, "human", human_clust, sep = "_")
+      outfile <- paste(output_plot_prefix, fig_supp_nums[[l]], "mouse", mouse_clust, sep = "_")
       outfile <- paste0(outfile, ".pdf")
       outfile <- file.path(output_dir, outfile)
       export_pdf(x = fig_supp_8_10_grob,
@@ -1144,113 +1080,112 @@ for (l in 1:length(list_mouse_clusters)) {
                  width = fig_supp_8_10_width_pt,
                  height = fig_supp_8_10_height_pt,
                  units = "bigpts")
-  
-    }    
+      
+      # Get human matches for current mouse cluster
+      human_matches <- df_sim_pvals_POND %>% 
+        filter(mouse_cluster_id == mouse_clust, significant == 1) %>% 
+        pull(human_cluster_id)
+      
+      # Iterate over human clusters
+      for (human_clust in human_matches) {
+        
+        message(paste("\tHuman cluster:", human_clust))
+        
+        # Extract cluster IDs
+        nk_human <- str_split(human_clust, pattern = "-", simplify = TRUE)[1]
+        k_human <- str_split(human_clust, pattern = "-", simplify = TRUE)[2]
+        
+        # Import centroid image for specific cluster using threshold
+        img_abs <- import_cluster_map(imgdir = human_centroid_dirs[["absolute"]],
+                                      mask = human_mask_file,
+                                      nk = nk_human, k = k_human,
+                                      threshold = threshold,
+                                      threshold_value = threshold_value,
+                                      threshold_symmetric = threshold_symmetric)
+        
+        # Import centroid image for specific cluster using threshold
+        img_rel <- import_cluster_map(imgdir = human_centroid_dirs[["relative"]],
+                                      mask = human_mask_file,
+                                      nk = nk_human, k = k_human,
+                                      threshold = threshold,
+                                      threshold_value = threshold_value,
+                                      threshold_symmetric = threshold_symmetric)
+        
+        # Crop image to remove black space
+        img_abs <- mincArray(img_abs)
+        img_abs <- img_abs[human_slices_dim_1,,human_slices_dim_3]
+        
+        # Crop image to remove black space
+        img_rel <- mincArray(img_rel)
+        img_rel <- img_rel[human_slices_dim_1,,human_slices_dim_3]
+        
+        # Generate slice series
+        fig_supp_8_10_grob <- sliceSeries(nrow = 6, ncol = 1, begin = 60, end = 220) %>%
+          anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>%
+          overlay(img_abs, low = 0.2, high = 1.0, symmetric = TRUE) %>%
+          sliceSeries() %>% anatomy() %>%
+          overlay(img_rel, low = 0.2, high = 1.0, symmetric = TRUE) %>%
+          grobify()
+        
+        # Dimensions
+        fig_supp_8_10_width_pt <- 130
+        fig_supp_8_10_height_pt <- (fig_supp_8_10_width_pt/2)*6
+        
+        # Export
+        outfile <- paste(output_plot_prefix, fig_supp_nums[[l]], "mouse", mouse_clust, "human", human_clust, sep = "_")
+        outfile <- paste0(outfile, ".pdf")
+        outfile <- file.path(output_dir, outfile)
+        export_pdf(x = fig_supp_8_10_grob,
+                   file = outfile,
+                   width = fig_supp_8_10_width_pt,
+                   height = fig_supp_8_10_height_pt,
+                   units = "bigpts")
+        
+      }    
+    }
   }
 }
 ```
 
-```{r}
-mouse_clusters <- c("4-1", "6-5", "8-6", "10-4")
-df_sim_pvals %>% 
-  filter(mouse_cluster_id %in% mouse_clusters,
+```{r fig-supp-8-pvals}
+df_sim_pvals_POND %>% 
+  filter(mouse_cluster_id %in% mouse_cluster_streams[[1]],
          significant == 1) %>% 
   arrange(mouse_nk, mouse_k) %>%   
   select(mouse_cluster_id, human_cluster_id, pval) %>% 
   mutate(pval = round(pval, 4))  
 ```
 
-```{r}
-mouse_clusters <- c("4-4", "6-4", "8-2", "10-5")
-df_sim_pvals %>% 
-  filter(mouse_cluster_id %in% mouse_clusters,
+```{r fig-supp-9-pvals}
+df_sim_pvals_POND %>% 
+  filter(mouse_cluster_id %in% mouse_cluster_streams[[2]],
          significant == 1) %>% 
   arrange(mouse_nk, mouse_k) %>%   
-  select(mouse_cluster_id, human_cluster_id, pval)  
+  select(mouse_cluster_id, human_cluster_id, pval) %>% 
+  mutate(pval = round(pval, 4))  
 ```
-
-```{r}
-mouse_clusters <- c("4-3", "8-5", "10-3")
-df_sim_pvals %>% 
-  filter(mouse_cluster_id %in% mouse_clusters,
+```{r fig-supp-10-pvals}
+df_sim_pvals_POND %>% 
+  filter(mouse_cluster_id %in% mouse_cluster_streams[[3]],
          significant == 1) %>% 
   arrange(mouse_nk, mouse_k) %>%   
-  select(mouse_cluster_id, human_cluster_id, pval)  
+  select(mouse_cluster_id, human_cluster_id, pval) %>% 
+  mutate(pval = round(pval, 4))  
+```
+
+```{r fig-supp-11-pvals}
+df_sim_pvals_POND %>% 
+  filter(mouse_cluster_id %in% mouse_cluster_streams[[4]],
+         significant == 1) %>% 
+  arrange(mouse_nk, mouse_k) %>%   
+  select(mouse_cluster_id, human_cluster_id, pval) %>% 
+  mutate(pval = round(pval, 4))  
 ```
 
 
+# Supplementary Figure 12: Extended molecular pathway enrichment analysis
 
-# Supplementary Figure 11
-
-```{r fig2-pathways-mouse-import}
-# Enrichment database versions
-stringdb_version <- "12.0"
-bader_version <- "2023"
-stringdb_score <- 950
-
-# Base directory for pathway data files
-mouse_pathways_dir <- file.path(PROJECTPATH, "data/mouse/enrichment/")
-mouse_pathways_dir <- file.path(mouse_pathways_dir, 
-                                paste("StringDB", stringdb_version, 
-                                      "Bader", bader_version, 
-                                      sep = "_"))
-mouse_pathways_dir <- file.path(mouse_pathways_dir, "NeighbourhoodEnrichment")
-mouse_pathways_dir <- file.path(mouse_pathways_dir, stringdb_score)
-
-if (length(list.files(mouse_pathways_dir)) == 0) {
-  stop("No files in specified directory")
-}
-
-# Prefix for pathway data files
-mouse_pathways_file_prefix <- "NewBader_enrichment_clusterneighbourhood_vs_brain_all"
-
-# Pathway IDs for a prior pathway set
-if (bader_version == "2020") {
-  pathway_ids <- c("ADHERENS JUNCTIONS INTERACTIONS%REACTOME%R-HSA-418990.2",
-                   "AXON GUIDANCE%REACTOME DATABASE ID RELEASE 71%422475",
-                   "CA2+ PATHWAY%REACTOME DATABASE ID RELEASE 71%4086398",
-                   "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 71%4839726",
-                   "GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.1",
-                   "GENE EXPRESSION (TRANSCRIPTION)%REACTOME DATABASE ID RELEASE 71%74160",
-                   "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.9",
-                   "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 71%9620244",
-                   "MAPK FAMILY SIGNALING CASCADES%REACTOME DATABASE ID RELEASE 71%5683057",
-                   "MTOR SIGNALLING%REACTOME%R-HSA-165159.5",
-                   "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 71%6794362",
-                   "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 71%1227986",
-                   "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 71%1236394",
-                   "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 71%5358351",
-                   "SIGNALING BY GPCR%REACTOME%R-HSA-372790.4",
-                   "SIGNALING BY NOTCH%REACTOME DATABASE ID RELEASE 71%157118",
-                   "SIGNALING BY VEGF%REACTOME DATABASE ID RELEASE 71%194138",
-                   "SIGNALING BY WNT%REACTOME%R-HSA-195721.5",
-                   "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 71%420029",
-                   "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.5")
-} else if (bader_version == "2023") {
-  pathway_ids <- c("ADHERENS JUNCTIONS INTERACTIONS%REACTOME DATABASE ID RELEASE 38%418990",
-                   "AXON GUIDANCE%REACTOME%R-HSA-422475.7",
-                   "CA2+ PATHWAY%REACTOME%R-HSA-4086398.4",
-                   "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 38%4839726",
-                   "GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.2",
-                   "GENE EXPRESSION (TRANSCRIPTION)%REACTOME%R-HSA-74160.8",
-                   "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.12",
-                   "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 38%9620244",
-                   "MAPK FAMILY SIGNALING CASCADES%REACTOME%R-HSA-5683057.4",
-                   "MTOR SIGNALLING%REACTOME%R-HSA-165159.7",
-                   "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 38%6794362",
-                   "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 38%1227986",
-                   "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 38%1236394",
-                   "SIGNALING BY GPCR%REACTOME DATABASE ID RELEASE 38%372790",
-                   "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 38%5358351",
-                   "SIGNALING BY NOTCH%REACTOME%R-HSA-157118.6",
-                   "SIGNALING BY VEGF%REACTOME%R-HSA-194138.3",
-                   "SIGNALING BY WNT%REACTOME DATABASE ID RELEASE 38%195721",
-                   "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 38%420029",
-                   "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.7")
-} else {
-  stop()
-}
-
+```{r fig-supp-12-pathways-import}
 # Iterate over cluster solutions and import mouse pathway enrichment files
 list_mouse_pathways <- vector(mode = "list", length = nk_max-1)
 names(list_mouse_pathways) <- 2:nk_max
@@ -1285,18 +1220,22 @@ df_pathways_all <- list_mouse_pathways %>%
   bind_rows() 
 ```
 
-```{r}
+```{r fig-supp-12-pathways-scree}
+# Get enrichment for nk >= 4
 df_pathways_all_nk_geq4 <- df_pathways_all %>% 
   filter(nk >= 4)
 
+# Get cluster levels
 cluster_lvls <- df_pathways_all_nk_geq4 %>% 
   select(nk, k, cluster_id) %>% 
   distinct() %>% 
   arrange(nk, k) %>% 
   pull(cluster_id)
 
+# Number of most enriched pathways for each cluster
 nhighest <- 10
 
+# Filter for top pathways
 list_pathways_all_topn <- vector(mode = "list", length = length(cluster_lvls))
 for (i in 1:length(list_pathways_all_topn)) {
   list_pathways_all_topn[[i]] <-
@@ -1307,9 +1246,11 @@ for (i in 1:length(list_pathways_all_topn)) {
     pull(pathway)
 }
 
+# Get the full set of top pathways
 pathways_topn <- reduce(.x = list_pathways_all_topn, .f = c)
 pathways_topn <- unique(pathways_topn)
 
+# Filter for top pathways and normalize enrichment 
 df_pathways_topn <- df_pathways_all_nk_geq4 %>% 
   filter(pathway %in% pathways_topn) %>% 
   group_by(pathway) %>% 
@@ -1317,6 +1258,7 @@ df_pathways_topn <- df_pathways_all_nk_geq4 %>%
   ungroup() %>% 
   mutate(NLQ_norm = ifelse(is.nan(NLQ_norm), 0, NLQ_norm))
 
+# Convert to matrix
 mat_pathways_topn <- df_pathways_topn %>% 
   select(pathway, cluster_id, NLQ_norm) %>% 
   pivot_wider(id_cols = pathway, 
@@ -1324,9 +1266,8 @@ mat_pathways_topn <- df_pathways_topn %>%
               values_from = NLQ_norm) %>% 
   column_to_rownames("pathway") %>% 
   as.matrix()
-```
 
-```{r}
+# Pathway motif scree plot
 mat_pathways_topn %>% 
   t() %>% 
   hclust_wcss() %>% 
@@ -1344,7 +1285,8 @@ mat_pathways_topn %>%
   theme(panel.grid.minor.x = element_blank())
 ```
 
-```{r}
+```{r fig-supp-12-pathways-dendrogram}
+# Dendrogram cut
 hclust_kcut <- 20
 
 # Hierarchical clustering of the pathways
@@ -1371,11 +1313,9 @@ df_pathways_topn_cluster_lvls <- df_pathways_topn_hclust %>%
 df_pathways_topn_hclust <- df_pathways_topn_hclust %>% 
   left_join(df_pathways_topn_cluster_lvls, by = "pathway_cluster") %>% 
   select(-pathway_cluster, pathway_cluster = pathway_cluster_new)
-```
 
-```{r}
 # Generate clustered heatmap
-fig_supp_9_pheatmap <- pheatmap(mat = mat_pathways_topn,
+fig_supp_12_pheatmap <- pheatmap(mat = mat_pathways_topn,
                                 cluster_col = FALSE,
                                 cluster_rows = TRUE,
                                 clustering_distance_rows = "euclidean",
@@ -1383,17 +1323,12 @@ fig_supp_9_pheatmap <- pheatmap(mat = mat_pathways_topn,
                                 silent = TRUE)
 
 # Extract dendrogram from pheatmap object
-fig_supp_9_dendrogram_grob <- fig_supp_9_pheatmap[["gtable"]][["grobs"]][[1]]
-fig_supp_9_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
+fig_supp_12_dendrogram_grob <- fig_supp_12_pheatmap[["gtable"]][["grobs"]][[1]]
+fig_supp_12_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
 ```
 
-```{r}
-df_sim_pvals_POND <- df_sim_pvals
-```
-
-
-```{r fig3-similarity-import}
-
+```{r fig-supp-12-sim-HBN-import}
+# Similarity directory
 similarity_dir <- file.path(PROJECTPATH, "/data/cross_species//v3/", "861", "similarity")
 
 # Directory for mouse-human cluster similarity permutations
@@ -1498,13 +1433,13 @@ df_permutations <- list_permutations %>%
   summarise(similarity = mean(similarity), .groups = "drop")
 ```
 
-```{r fig3-similarity-compute-pvals}
+```{r fig-supp-12-sim-HBN-pvals}
 # Mouse and human max nk
 human_nk_max <- max(df_similarity[["human_nk"]])
 mouse_nk_max <- max(df_similarity[["mouse_nk"]])
 
 # Iterate along nk diagonal +/- 1
-df_sim_pvals <- tibble()
+df_sim_pvals_HBN <- tibble()
 for (h_nk in 2:human_nk_max) {
   for (m_nk in (h_nk-1):(h_nk+1)){
     
@@ -1529,7 +1464,7 @@ for (h_nk in 2:human_nk_max) {
         df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
       }
       
-      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
+      df_sim_pvals_HBN <- bind_rows(df_sim_pvals_HBN, df_sim_nk)
       
     }
   }
@@ -1537,23 +1472,17 @@ for (h_nk in 2:human_nk_max) {
 
 # Evaluate significance
 sim_alpha <- 0.05
-df_sim_pvals <- df_sim_pvals %>% 
+df_sim_pvals_HBN <- df_sim_pvals_HBN %>% 
   mutate(significant = ifelse(pval < sim_alpha, 1, 0))
-
-df_sim_pvals %>% 
-  filter(significant == 1) %>% 
-  arrange(mouse_nk, mouse_k) %>% 
-  select(mouse_cluster_id, human_cluster_id, similarity, pval) 
-
-df_sim_pvals_HBN <- df_sim_pvals
 ```
 
-
-```{r}
+```{r fig-supp-12-heatmaps}
+# Get pathway motifs
 df_pathways_topn_heatmap <- df_pathways_topn %>% 
   left_join(df_pathways_topn_hclust, by = "pathway") %>% 
   mutate(pathway = factor(pathway, levels = pathways_topn_lvls_clustered))
 
+# Create data frame for significant POND matches
 df_sig_nk_POND <- df_sim_pvals_POND %>% 
   group_by(mouse_nk, mouse_k) %>% 
   summarise(p = min(pval),
@@ -1569,6 +1498,7 @@ df_sig_nk_POND <- df_sim_pvals_POND %>%
   unite(col = "cluster_id", "nk", "k", 
         sep = "-", remove = FALSE) 
 
+# Create data frame for significant HBN matches
 df_sig_nk_HBN <- df_sim_pvals_HBN %>% 
   group_by(mouse_nk, mouse_k) %>% 
   summarise(p = min(pval),
@@ -1584,6 +1514,7 @@ df_sig_nk_HBN <- df_sim_pvals_HBN %>%
   unite(col = "cluster_id", "nk", "k", 
         sep = "-", remove = FALSE) 
 
+# Combine POND and HBN data
 df_sig_nk <- bind_rows(df_sig_nk_POND,
                        df_sig_nk_HBN)
 
@@ -1605,10 +1536,10 @@ heatmap_fill_lab <- "Enrichment (-log10(q))"
 heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")
 heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
 
-fig_supp_9_pathways_legend_width_pt <- 50
+fig_supp_12_pathways_legend_width_pt <- 50
 
 # Generate heatmap of enrichment significance
-fig_supp_9_pathways <- ggplot(df_pathways_topn_heatmap, 
+fig_supp_12_pathways <- ggplot(df_pathways_topn_heatmap, 
                               aes(x = factor(k), 
                                   y = fct_rev(pathway), 
                                   fill = intensity)) + 
@@ -1622,7 +1553,7 @@ fig_supp_9_pathways <- ggplot(df_pathways_topn_heatmap,
                        na.value = "grey85",
                        guide = guide_colourbar(title.position = "top",
                                                title.hjust = 0.5,
-                                               barwidth = unit(fig_supp_9_pathways_legend_width_pt, "bigpts"),
+                                               barwidth = unit(fig_supp_12_pathways_legend_width_pt, "bigpts"),
                                                barheight = unit(10, "bigpts"))) +
   labs(x = "Mouse cluster",
        y = "Biological pathway module",
@@ -1644,19 +1575,19 @@ fig_supp_9_pathways <- ggplot(df_pathways_topn_heatmap,
         plot.margin = margin(l = 0))
 
 # Extract legend grob
-fig_supp_9_pathways_legend_grob <- fig_supp_9_pathways %>%
+fig_supp_12_pathways_legend_grob <- fig_supp_12_pathways %>%
   ggplotGrob() %>%
   grid.force() %>%
   getGrob("guides.3-3-3-3")
 
 # Remove legend from ggplot object
-fig_supp_9_pathways <- fig_supp_9_pathways +
+fig_supp_12_pathways <- fig_supp_12_pathways +
   theme(legend.position = "none")
 
 # Match ####
 
 # Generate heatmap of mouse clusters with human matches
-fig_supp_9_match <- ggplot(df_sig_nk,
+fig_supp_12_match <- ggplot(df_sig_nk,
                            mapping = aes(x = factor(k), 
                                          y = y, 
                                          fill = p,
@@ -1698,126 +1629,103 @@ fig_supp_9_match <- ggplot(df_sig_nk,
         plot.margin = margin(l = 0))
 
 # Extract heatmap legend
-fig_supp_9_match_legend_grob <- fig_supp_9_match %>%
+fig_supp_12_match_legend_grob <- fig_supp_12_match %>%
   ggplotGrob() %>%
   grid.force() %>%
   getGrob("guides.3-3-3-3")
 
 # Remove legend from ggplot object
-fig_supp_9_match <- fig_supp_9_match +
+fig_supp_12_match <- fig_supp_12_match +
   theme(legend.position = "none")
 ```
 
-
-```{r}
+```{r fig-supp-12-patchwork}
 # Patchwork #### 
-
-fig_supp_9_patchwork <- (fig_supp_9_match / plot_spacer() / fig_supp_9_pathways) +
+fig_supp_12_patchwork <- (fig_supp_12_match / plot_spacer() / fig_supp_12_pathways) +
   plot_layout(heights = c(0.020, 0.005, 0.975)) &
   theme(plot.margin = margin(l = 0))
-fig_supp_9_patchwork_grob <- patchworkGrob(fig_supp_9_patchwork)
+fig_supp_12_patchwork_grob <- patchworkGrob(fig_supp_12_patchwork)
 
 
 # Grob ####
 
 # Width of dendrogram panel in bigpts
-fig_supp_9_dendrogram_width_pt <- 26
+fig_supp_12_dendrogram_width_pt <- 26
 
 # Dimensions of heatmap patchwork in bigpts
-fig_supp_9_patchwork_width_pt <- fig_width_pt - fig_supp_9_dendrogram_width_pt
+fig_supp_12_patchwork_width_pt <- fig_width_pt - fig_supp_12_dendrogram_width_pt
 
 # Heights of padding elements in bigpts
-fig_supp_9_padding_height_1_pt <- 21
-fig_supp_9_padding_height_2_pt <- 17
+fig_supp_12_padding_height_1_pt <- 21
+fig_supp_12_padding_height_2_pt <- 17
 
-fig_supp_9_patchwork_height_pt <- fig_height_pt - fig_supp_9_padding_height_1_pt - fig_supp_9_padding_height_2_pt
+fig_supp_12_patchwork_height_pt <- fig_height_pt - fig_supp_12_padding_height_1_pt - fig_supp_12_padding_height_2_pt
 
 # Dimensions of heatmap plot
-fig_supp_9_widths <- c(fig_supp_9_dendrogram_width_pt, fig_supp_9_patchwork_width_pt)
-fig_supp_9_heights <- c(fig_supp_9_padding_height_1_pt, 
-                        fig_supp_9_patchwork_height_pt,
-                        fig_supp_9_padding_height_2_pt)
+fig_supp_12_widths <- c(fig_supp_12_dendrogram_width_pt, fig_supp_12_patchwork_width_pt)
+fig_supp_12_heights <- c(fig_supp_12_padding_height_1_pt, 
+                        fig_supp_12_patchwork_height_pt,
+                        fig_supp_12_padding_height_2_pt)
 
 # Layout of heatmap plot
-fig_supp_9_layout <- rbind(c(01, 02),
+fig_supp_12_layout <- rbind(c(01, 02),
                            c(03, 02),
                            c(04, 02))
 
 # Grob grid for heatmap plot
-fig_supp_9_grob <- arrangeGrob(zeroGrob(),
-                               fig_supp_9_patchwork_grob,
-                               fig_supp_9_dendrogram_grob,
+fig_supp_12_grob <- arrangeGrob(zeroGrob(),
+                               fig_supp_12_patchwork_grob,
+                               fig_supp_12_dendrogram_grob,
                                zeroGrob(),
-                               layout_matrix = fig_supp_9_layout,
-                               widths = unit(fig_supp_9_widths, "bigpts"),
-                               heights = unit(fig_supp_9_heights, "bigpts"))
+                               layout_matrix = fig_supp_12_layout,
+                               widths = unit(fig_supp_12_widths, "bigpts"),
+                               heights = unit(fig_supp_12_heights, "bigpts"))
 
 
-fig_supp_9_width_pt <- fig_width_pt
-fig_supp_9_height_pt <- fig_height_pt
+fig_supp_12_width_pt <- fig_width_pt
+fig_supp_12_height_pt <- fig_height_pt
 
 # Viewport for pathways heatmap legend
-fig_supp_9_pathways_legend_vp <- viewport(x = unit(fig_width_pt-12, "bigpts"),
+fig_supp_12_pathways_legend_vp <- viewport(x = unit(fig_width_pt-12, "bigpts"),
                                           y = unit(35, "bigpts"),
-                                          width = unit(fig_supp_9_pathways_legend_width_pt, "bigpts"),
+                                          width = unit(fig_supp_12_pathways_legend_width_pt, "bigpts"),
                                           height = unit(22, "bigpts"),
                                           just = c("right", "bottom"))
 
 # Viewport for human match heatmap legend
-fig_supp_9_match_legend_vp_width <- 105
-fig_supp_9_match_legend_vp_x <- fig_width_pt - fig_supp_9_match_legend_vp_width
-fig_supp_9_match_legend_vp <- viewport(x = unit(fig_supp_9_match_legend_vp_x, "bigpts"),
-                                       y = unit(fig_supp_9_height_pt-3, "bigpts"),
-                                       width = unit(fig_supp_9_match_legend_vp_width, "bigpts"),
+fig_supp_12_match_legend_vp_width <- 105
+fig_supp_12_match_legend_vp_x <- fig_width_pt - fig_supp_12_match_legend_vp_width
+fig_supp_12_match_legend_vp <- viewport(x = unit(fig_supp_12_match_legend_vp_x, "bigpts"),
+                                       y = unit(fig_supp_12_height_pt-3, "bigpts"),
+                                       width = unit(fig_supp_12_match_legend_vp_width, "bigpts"),
                                        height = unit(27, "bigpts"),
                                        just = c("left", "top"))
 
-fig_supp_9_width_in <- fig_supp_9_width_pt/pt_per_in
-fig_supp_9_height_in <- fig_supp_9_height_pt/pt_per_in
+fig_supp_12_width_in <- fig_supp_12_width_pt/pt_per_in
+fig_supp_12_height_in <- fig_supp_12_height_pt/pt_per_in
 
 # Export
-outfile <- paste(output_plot_prefix, 11, sep = "_")
+outfile <- paste(output_plot_prefix, 12, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
-    width = unit(fig_supp_9_width_in, "in"),
-    height = unit(fig_supp_9_height_in, "in"))
-grid.draw(fig_supp_9_grob)
-pushViewport(fig_supp_9_pathways_legend_vp)
-grid.draw(fig_supp_9_pathways_legend_grob)
+    width = unit(fig_supp_12_width_in, "in"),
+    height = unit(fig_supp_12_height_in, "in"))
+grid.draw(fig_supp_12_grob)
+pushViewport(fig_supp_12_pathways_legend_vp)
+grid.draw(fig_supp_12_pathways_legend_grob)
 popViewport()
-pushViewport(fig_supp_9_match_legend_vp)
-grid.draw(fig_supp_9_match_legend_grob)
+pushViewport(fig_supp_12_match_legend_vp)
+grid.draw(fig_supp_12_match_legend_grob)
 popViewport()
 dev.off()
 ```
 
 
-```{r}
-# Export
-outfile <- paste(output_plot_prefix, 11, sep = "_")
-outfile <- paste0(outfile, ".jpeg")
-outfile <- file.path(output_dir, outfile)
-jpeg(filename = outfile,
-     width = fig_supp_9_width_in,
-     height = fig_supp_9_height_in,
-     units = "in",
-     res = 600,
-     quality = 100)
-print(fig_supp_9_patchwork)
-dev.off()
-```
-```{r}
-pathways_in_topn <- df_pathway_info$pathway[df_pathway_info$pathway %in% pathways_topn]
-print(length(pathways_in_topn))
-pathways_in_topn
-```
+# Supplementary Figures 13-14: POND and HBN diagnosis Sankey diagrams
 
-
-
-# Supplementary Figure 12-13
-
-```{r}
+```{r fig-supp-13-14}
+figure_id <- c(13, 14)
 param_ids <- c("700", "013")
 pipeline_dirs <- file.path(PROJECTPATH, "data/human/derivatives/v3/", param_ids)
 demographics_files <- file.path(pipeline_dirs, "demographics.csv")
@@ -1846,8 +1754,8 @@ df_diagnoses <- tibble(DX = c("ASD",
 
 diagnoses <- c("ASD", "ADHD", "OCD")
 
-figure_id <- c(12, 13)
 list_clusters_long <- vector(mode = "list", length = length(figure_id))
+list_chi2 <- vector(mode = "list", length = length(figure_id))
 for (i in 1:length(figure_id)) {
   
   demographics <- read_csv(demographics_files[i], show_col_types = FALSE)
@@ -1947,6 +1855,7 @@ for (i in 1:length(figure_id)) {
     df_chi2[[r, "chi2"]] <- chi2[["statistic"]]
     df_chi2[[r, "pval"]] <- chi2[["p.value"]]
   }
+  list_chi2[[i]] <- df_chi2
   
   # Data frame containing cluster DX proportions with patient IDs
   df_alluvial_all <- df_cluster_dx_freq %>%
@@ -2026,43 +1935,66 @@ for (i in 1:length(figure_id)) {
           legend.text = element_text(size = font_size, family = font_family),
           plot.title = element_text(size = font_size+1, family = font_family))
   
-  
   # Plot dimensions in bigpts
-  fig4_alluvial_width_pt <- 510
-  fig4_alluvial_height_pt <- 430
+  fig_alluvial_width_pt <- 510
+  fig_alluvial_height_pt <- 430
   
   # Plot dimensions in inches
-  fig4_alluvial_width_in <- fig4_alluvial_width_pt/pt_per_in
-  fig4_alluvial_height_in <- fig4_alluvial_height_pt/pt_per_in
+  fig_alluvial_width_in <- fig_alluvial_width_pt/pt_per_in
+  fig_alluvial_height_in <- fig_alluvial_height_pt/pt_per_in
   
   # Export plot
   outfile <- paste(output_plot_prefix, figure_id[i], sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile,
-      width = unit(fig4_alluvial_width_in, "in"),
-      height = unit(fig4_alluvial_height_in, "in"))
+      width = unit(fig_alluvial_width_in, "in"),
+      height = unit(fig_alluvial_height_in, "in"))
   print(plot_alluvials)
   dev.off()
   
 }
-
 ```
 
-```{r}
-# df_chi2 %>% 
-#   group_by(DX) %>% 
-#   mutate(qval = p.adjust(pval, method = "fdr")) %>% 
-#   summarise(fdr5 = sum(qval < 0.05),
-#             fdr10 = sum(qval < 0.10),
-#             fdr20 = sum(qval < 0.20))
+```{r fig-supp-13-fdr}
+list_chi2[[1]] %>% 
+  group_by(DX) %>% 
+  mutate(qval = p.adjust(pval, method = "fdr")) %>%
+  summarise(fdr5 = sum(qval < 0.05),
+            fdr10 = sum(qval < 0.10),
+            fdr20 = sum(qval < 0.20))
+```
+
+```{r fig-supp-14-fdr}
+list_chi2[[2]] %>% 
+  group_by(DX) %>% 
+  mutate(qval = p.adjust(pval, method = "fdr")) %>%
+  summarise(fdr5 = sum(qval < 0.05),
+            fdr10 = sum(qval < 0.10),
+            fdr20 = sum(qval < 0.20))
+```
+
+```{r fig-supp-14-ASD-pvals}
+list_chi2[[2]] %>% 
+  filter(DX == "ASD") %>% 
+  mutate(qval = p.adjust(pval, method = "fdr")) %>% 
+  filter(qval < 0.05)
+```
+
+```{r fig-supp-14-ASD-props}
+list_clusters_long[[2]] %>% 
+  filter(DX == "ASD") %>% 
+  group_by(nk, k, n_per_k) %>% 
+  summarise(n_ASD = n(), 
+            .groups = "drop") %>% 
+  mutate(prop_ASD = n_ASD/n_per_k)  
 ```
 
 
-# Supplementary Figure 14
+# Supplementary Figures 15-16: Diagnostic proportion cluster numbers
 
-```{r fig4-dx-chi2-large}
-figure_id <- c(14, 15)
+```{r fig-supp-15-16}
+figure_id <- c(15, 16)
 for (i in 1:length(list_clusters_long)) {
   
   nmin <- seq(10, 50, by = 10)
@@ -2071,7 +2003,7 @@ for (i in 1:length(list_clusters_long)) {
     
     # Generate a grid of clusters and diagnoses
     df_chi2 <- expand_grid(nk = 2:nk_max,
-                           DX = diagnoses) %>% 
+                           DX = diagnoses) %>%  
       mutate(chi2 = 0, pval = 0, nmin = nmin[l])
     
     # Iterate over cluster-dx combinations
@@ -2105,7 +2037,7 @@ for (i in 1:length(list_clusters_long)) {
   
   df_chi2_large <- bind_rows(list_chi2)
   
-  fig4_chi2_cluster_size <- df_chi2_large %>% 
+  fig_chi2_cluster_size <- df_chi2_large %>% 
     filter(DX != "Other") %>%
     mutate(nk = factor(nk),
            DX = factor(DX, levels = c("ASD", "ADHD", "OCD"))) %>% 
@@ -2129,28 +2061,552 @@ for (i in 1:length(list_clusters_long)) {
           strip.text = element_text(size = font_size, family = font_family))
   
   # Plot dimensions in bigpts
-  fig4_chi2_cluster_size_width_pt <- fig4_width_pt
-  fig4_chi2_cluster_size_height_pt <- 200
+  fig_chi2_cluster_size_width_pt <- fig_width_pt
+  fig_chi2_cluster_size_height_pt <- 200
   
   # Plot dimensions in inches
-  fig4_chi2_cluster_size_width_in <- fig4_chi2_cluster_size_width_pt/pt_per_in
-  fig4_chi2_cluster_size_height_in <- fig4_chi2_cluster_size_height_pt/pt_per_in
+  fig_chi2_cluster_size_width_in <- fig_chi2_cluster_size_width_pt/pt_per_in
+  fig_chi2_cluster_size_height_in <- fig_chi2_cluster_size_height_pt/pt_per_in
   
   # Export plot
   outfile <- paste(output_plot_prefix, figure_id[i], sep = "_")
   outfile <- paste0(outfile, ".pdf")
   outfile <- file.path(output_dir, outfile)
   pdf(file = outfile,
-      width = unit(fig4_chi2_cluster_size_width_in, "in"),
-      height = unit(fig4_chi2_cluster_size_height_in, "in"))
-  print(fig4_chi2_cluster_size)
+      width = unit(fig_chi2_cluster_size_width_in, "in"),
+      height = unit(fig_chi2_cluster_size_height_in, "in"))
+  print(fig_chi2_cluster_size)
   dev.off()
   
 }
 ```
 
+# Supplementary Figure 17: PLS-DA loadings 
 
-# Supplementary Figure ??
+```{r fig-supp-17-import}
+# List of cluster comparisons used for PLS-DA
+plsda_comparisons <- list(c("7-4", "7-7"),
+                          c("8-7", "8-4"),
+                          c("9-4", "9-5"),
+                          c("10-4", "10-6"))
+
+# Import PLSDA scores
+plsda_scores <- map_chr(plsda_comparisons, str_flatten, collapse = "_")
+plsda_scores <- paste("plsda", plsda_scores, "scores", sep = "_")
+plsda_scores <- paste0(plsda_scores, ".csv")
+plsda_scores <- file.path(output_dir, plsda_scores)
+list_scores <- map(plsda_scores, read_csv, show_col_types = FALSE)
+
+# Import PLSDA loadings
+plsda_loadings <- map_chr(plsda_comparisons, str_flatten, collapse = "_")
+plsda_loadings <- paste("plsda", plsda_loadings, "loadings", sep = "_")
+plsda_loadings <- paste0(plsda_loadings, ".csv")
+plsda_loadings <- file.path(output_dir, plsda_loadings)
+list_loadings <- map(plsda_loadings, read_csv, show_col_types = FALSE)
+```
+
+```{r fig-supp-17}
+# Palette based on Figure 4
+palette <- c("seagreen2", "sienna2")
+
+# Lists for different figure components
+list_plots_scatter <- vector(mode = "list", length = length(list_scores))
+list_plots_histx <- vector(mode = "list", length = length(list_scores))
+list_plots_histy <- vector(mode = "list", length = length(list_scores))
+list_patchworks <- vector(mode = "list", length = length(list_scores))
+
+# List of x limits
+list_xlims <- list(c(-4.5, 3.5),
+                   c(-4, 4),
+                   c(-4.5, 4.5),
+                   c(-4.5, 4.5))
+
+# List of y limits
+list_ylims <- list(c(-3, 4),
+                   c(-3, 3.5),
+                   c(-3.5, 4),
+                   c(-3.5, 4))
+
+# Plot breaks
+xbreaks <- seq(-10, 10, by = 1)
+ybreaks <- xbreaks
+
+# Theme for scatter plots
+theme_scatter <- theme_bw() +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        axis.title = element_text(size = font_size),
+        axis.text = element_text(size = font_size),
+        legend.title = element_blank(),
+        legend.text = element_text(size = font_size,
+                                   margin = margin()),
+        legend.background = element_rect(colour = "black"),
+        legend.margin = margin(),
+        plot.background = element_rect(colour = "black"),
+        plot.margin = margin())
+
+# Theme for histograms
+theme_hist <- theme_bw() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.background = element_rect(colour = "black"),
+        panel.border = element_rect(colour = "red"),
+        plot.margin = margin())
+
+# Patchwork layout
+patchwork_design <- '12
+34
+'
+
+# Iterate over PLSDA comparisons
+for (i in 1:length(list_scores)) {
+  # for (i in 1:2) {
+  # i <- 2
+  
+  # Get scores and loadings
+  df_scores <- list_scores[[i]]
+  df_loadings <- list_loadings[[i]]
+  
+  # Create scatter plot
+  list_plots_scatter[[i]] <- ggplot(df_scores, mapping = aes(x = x, y = y, col = cluster)) + 
+    geom_point() + 
+    annotate("segment",
+             x = 0, y = 0,
+             xend = df_loadings$x,
+             yend = df_loadings$y,
+             arrow = arrow(type = "closed", length = unit(0.02, "npc")),
+             size = 0.1,
+             col = "grey30") +
+    annotate("text",
+             x = df_loadings$x,
+             y = df_loadings$y,
+             label = df_loadings$features,
+             size = (font_size-1)*0.36) +
+    coord_cartesian(xlim = list_xlims[[i]],
+                    ylim = list_ylims[[i]]) +
+    scale_x_continuous(breaks = xbreaks) + 
+    scale_y_continuous(breaks = ybreaks) + 
+    scale_colour_manual(values = palette) + 
+    labs(x = "Latent variable 1",
+         y = "Latent variable 2") + 
+    theme_scatter
+  
+  # Create x marginal histogram
+  list_plots_histx[[i]] <- ggplot(df_scores, aes(x = x, col = cluster, fill = cluster)) + 
+    geom_histogram(position = "dodge", binwidth = 0.5) +
+    coord_cartesian(xlim = list_xlims[[i]]) + 
+    scale_x_continuous(breaks = xbreaks, labels = NULL, guide = "none") + 
+    scale_colour_manual(values = palette, guide = "none") + 
+    scale_fill_manual(values = palette, guide = "none") + 
+    theme_hist +
+    theme(plot.margin = margin(b = -5))
+  
+  # Create y marginal histogram
+  list_plots_histy[[i]] <- ggplot(df_scores, aes(x = y, col = cluster, fill = cluster)) + 
+    geom_histogram(position = "dodge", binwidth = 0.5) +
+    coord_flip(xlim = list_ylims[[i]]) +
+    scale_x_continuous(breaks = ybreaks) + 
+    scale_colour_manual(values = palette, guide = "none") + 
+    scale_fill_manual(values = palette, guide = "none") +
+    theme_hist +
+    theme(plot.margin = margin(l = -10),
+          panel.spacing = unit(-5, "pt"))
+  
+  # Generate patchwork for current comparison
+  list_patchworks[[i]] <- (list_plots_histx[[i]] + plot_spacer()+ list_plots_scatter[[i]] + list_plots_histy[[i]]) +
+    plot_layout(widths = c(4, 1), heights = c(1,4), design = patchwork_design)
+}
+
+# p_plsda_loadings <- (list_plots_histx[[1]] | plot_spacer() | list_plots_histx[[2]] | plot_spacer()) / 
+#   (list_plots_scatter[[1]] | list_plots_histy[[1]] | list_plots_scatter[[2]] | list_plots_histy[[2]]) / 
+#   (list_plots_histx[[3]] | plot_spacer() | list_plots_histx[[4]] | plot_spacer()) / 
+#   (list_plots_scatter[[3]] | list_plots_histy[[3]] | list_plots_scatter[[4]] | list_plots_histy[[4]]) +
+#   plot_layout(widths = c(3,1,3,1))
+
+# Generate external patchwork
+p_plsda_loadings <- ((list_patchworks[[1]]) | (list_patchworks[[2]])) / (list_patchworks[[3]] | list_patchworks[[4]]) 
+
+# Plot dimensions in bigpts
+width_pt <- fig_width_pt
+height_pt <- fig_height_pt
+
+# Plot dimensions in inches
+width_in <- width_pt/pt_per_in
+height_in <- height_pt/pt_per_in
+
+# Export
+outfile <- paste(output_plot_prefix, 17, sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+print(p_plsda_loadings)
+dev.off()
+```
+
+
+# Supplementary Figure 18: PLS-DA results 
+
+Execute 'figure_supp.ipynb'
+
+```{r fig-supp-18-prep}
+# Import PLS-DA results
+plsda_results <- "figure_supplementary/plsda_results.csv"
+df_plsda_results <- read_csv(plsda_results, show_col_types = FALSE)
+
+# Identify which POND clusters have mouse matches
+df_cluster_matches <- df_sim_pvals_POND %>% 
+  group_by(human_nk, human_k) %>% 
+  summarise(nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(has_match = nsignificant > 0) %>% 
+  unite(col = "cluster_id", human_nk, human_k, sep = "-", remove = FALSE)
+
+# Cluster levels
+cluster_lvls <- df_cluster_matches %>% 
+  select(cluster_id, human_nk, human_k) %>% 
+  distinct() %>% 
+  arrange(human_nk, human_k) %>% 
+  pull(cluster_id) 
+
+# Clusters with mouse match
+clusters_w_match <- df_cluster_matches %>% 
+  filter(has_match) %>% 
+  pull(cluster_id)
+
+# Update PLSDA data frame with cross-species information
+df_plsda_results <- df_plsda_results %>% 
+  mutate(has_match_1 = cluster_id_1 %in% clusters_w_match,
+         has_match_2 = cluster_id_2 %in% clusters_w_match,
+         matches = case_when((has_match_1 & has_match_2) ~ "Both",
+                             (has_match_1 | has_match_2) ~ "One",
+                             (!has_match_1 & !has_match_2) ~ "Neither"),
+         small_group = (participants_1 < 20 | participants_2 < 20)) %>% 
+  unite(col = "comparison", cluster_id_1, cluster_id_2, sep = " vs. ", remove = FALSE)  
+
+# Get PLSDA comparison levels
+comparison_lvls <- df_plsda_results %>% 
+  select(cluster_id_1, cluster_id_2) %>% 
+  separate(cluster_id_1, into = c("nk_1", "k_1"), remove = FALSE) %>% 
+  separate(cluster_id_2, into = c("nk_2", "k_2"), remove = FALSE) %>% 
+  mutate(nk_1 = as.numeric(nk_1),
+         nk_2 = as.numeric(nk_2),
+         k_1 = as.numeric(k_1),
+         k_2 = as.numeric(k_2)) %>% 
+  unite(col = "comparison", cluster_id_1, cluster_id_2, sep = " vs. ") %>% 
+  distinct() %>% 
+  arrange(nk_1, k_1, nk_2, k_2) %>% 
+  pull(comparison)
+
+# Summarize AUC values
+df_plsda_summary <- df_plsda_results %>% 
+  group_by(nk, comparison, cluster_id_1, cluster_id_2, threshold, small_group, matches, has_match_1, has_match_2) %>% 
+  summarise(auc_mean = mean(auc), 
+            auc_min = min(auc),
+            auc_max = max(auc),
+            .groups = "drop") %>% 
+  mutate(comparison = factor(comparison, levels = comparison_lvls))
+```
+
+```{r fig-supp-18-colours}
+df_sig_matches <- df_sim_pvals_POND %>% 
+  filter(significant == 1)
+
+mouse_colours <- c("4-1", "darkorchid1",
+                   "4-3", "sienna2",
+                   "4-4", "springgreen4",
+                   "5-1", "springgreen4",
+                   "5-4", "darkorchid1",
+                   "5-5", "seagreen2",
+                   "6-1", "springgreen4",
+                   "6-4", "seagreen2",
+                   "6-5", "darkorchid1",
+                   "7-1", "springgreen4",
+                   "7-4", "seagreen2",
+                   "7-7", "darkorchid1",
+                   "8-1", "springgreen4",
+                   "8-2", "seagreen2",
+                   "8-5", "sienna2",
+                   "8-6", "darkorchid1",
+                   "9-4", "sienna2",
+                   "9-5", "seagreen2",
+                   "10-3", "sienna2",
+                   "10-4", "darkorchid1",
+                   "10-5", "seagreen2")
+
+mouse_colours <- matrix(mouse_colours, ncol = 2, byrow = TRUE)
+colnames(mouse_colours) <- c("mouse_cluster_id", "colour")
+
+df_mouse_colours <- as_tibble(mouse_colours)
+
+df_sig_matches <- df_sig_matches %>% 
+  left_join(df_mouse_colours, by = "mouse_cluster_id")
+
+df_human_colours <- df_sim_pvals_POND %>%  
+  select(human_cluster_id) %>% 
+  distinct() %>% 
+  mutate(colour = "")
+
+for (i in 1:nrow(df_human_colours)) {
+  
+  cluster_id <- df_human_colours[[i, "human_cluster_id"]]
+  
+  colours <- df_sig_matches %>% 
+    filter(human_cluster_id == cluster_id) %>% 
+    pull(colour)
+  
+  colours <- colours[!is.na(colours)] 
+  colours <- unique(colours)
+  
+  if (length(colours) == 0) {
+    df_human_colours[[i, "colour"]] <- "black"
+  } else if (length(colours) > 1) {
+    if (i == 21) {
+      df_human_colours[[i, "colour"]] <- "darkorchid1"
+    } else if (i == 28) {
+      df_human_colours[[i, "colour"]] <- "darkorchid1"
+    } else if (i == 40) {
+      df_human_colours[[i, "colour"]] <- "sienna2"
+    } else {
+      print(i)
+      stop()
+    }
+  } else {
+    df_human_colours[[i, "colour"]] <- colours
+  }
+  
+}
+
+# "darkorchid1"
+# "seashell4"
+# "sienna2"
+# "springgreen4"
+# "seagreen2"
+```
+
+```{r fig-supp-18}
+# Range of cluster solutions
+nk_range <- df_plsda_summary %>% 
+  pull(nk) %>% 
+  unique() %>% 
+  sort()
+
+# Iterate over cluster solutions
+list_plots <- vector(mode = "list", length = length(nk_range))
+for (i in 1:length(list_plots)) {
+  
+  # Data frame of axis parameters
+  axis_params <- df_plsda_summary %>% 
+    select(nk, comparison, cluster_id_1, cluster_id_2, 
+           matches, has_match_1, has_match_2) %>% 
+    distinct() %>% 
+    filter(nk == nk_range[i]) %>% 
+    arrange(desc(comparison)) %>% 
+    left_join(df_human_colours, by = c("cluster_id_1" = "human_cluster_id")) %>% 
+    rename(fontcolour_1 = colour) %>% 
+    left_join(df_human_colours, by = c("cluster_id_2" = "human_cluster_id")) %>% 
+    rename(fontcolour_2 = colour) %>% 
+    mutate(fontface = ifelse(matches == "Both", "bold", "plain"),
+           fontcolour = ifelse(matches == "Both", "black", "grey30"),
+           fontface_1 = ifelse(has_match_1, "bold", "plain"),
+           fontface_2 = ifelse(has_match_2, "bold", "plain"),
+           ybreaks = as.numeric(fct_rev(comparison)))
+  
+  if (nk_range[i] %in% 2:4) {
+    yexpansion <- expansion(add = 1)
+  } else if (nk_range[i] %in% 5:7) {
+    yexpansion <- expansion(add = 1)
+  } else {
+    yexpansion <- expansion(add = 1)
+  }
+  
+  # Generate plot for current nk
+  plt <- df_plsda_summary %>% 
+    filter(nk %in% nk_range[i]) %>% 
+    ggplot(aes(x = as.numeric(fct_rev(comparison)), 
+               y = auc_mean, 
+               ymin = auc_min, 
+               ymax = auc_max,
+               col = factor(threshold),
+               alpha = small_group,
+               size = small_group)) + 
+    geom_linerange(size = 0.30) + 
+    geom_point() + 
+    facet_wrap(~nk, ncol = 1, scales = "free_y") +
+    coord_flip(ylim = c(0.5, 1.0)) +
+    scale_x_continuous(breaks = axis_params$ybreaks,
+                       labels = axis_params$cluster_id_1,
+                       sec.axis = dup_axis(labels = axis_params$cluster_id_2),
+                       expand = yexpansion) + 
+    scale_alpha_manual(values = c(1.0, 0.4), guide = "none") + 
+    scale_size_manual(values = c(1.2, 0.8), guide = "none") + 
+    labs(y = "AUC",
+         x = "Cluster comparison",
+         col = "Completion threshold") + 
+    theme_bw() +
+    theme(axis.text.y.left  = element_text(size = font_size-2, 
+                                           family = font_family,
+                                           face = axis_params$fontface_1,
+                                           color = axis_params$fontcolour_1),
+          axis.text.y.right  = element_text(size = font_size-2, 
+                                            family = font_family,
+                                            face = axis_params$fontface_2,
+                                            color = axis_params$fontcolour_2),
+          axis.text.x = element_text(size = font_size-2,
+                                     family = font_family),
+          axis.title.x = element_text(size = font_size),
+          axis.title.y = element_blank(),
+          axis.ticks = element_line(size = 0.3),
+          panel.grid.minor.y = element_blank(),
+          strip.text = element_text(size = font_size, 
+                                    margin = margin(t = 2, b = 2)),
+          plot.margin = margin(t = 1, b = 1, l = 5, r = 5))
+  
+  # Options for specific nk
+  if (!(nk_range[i] %in% 8:10)) {
+    plt <- plt +
+      theme(axis.title.x = element_blank())
+  }
+  
+  if (i != 8) {
+    list_plots[[i]] <- plt +
+      theme(legend.position = "none")
+    
+  } else {
+    list_plots[[i]] <- plt +
+      theme(legend.position = "bottom",
+            legend.direction = "horizontal",
+            legend.title = element_text(size = font_size, margin = margin()),
+            legend.text = element_text(size = font_size, margin = margin()),
+            legend.margin = margin(),
+            legend.box.margin = margin(t = -10))
+  }
+}
+
+# Generate patchwork
+p_plsda_summary <- ((list_plots[[1]] | list_plots[[2]] | list_plots[[3]]) /
+                      (list_plots[[4]] | list_plots[[5]] | list_plots[[6]]) /
+                      (list_plots[[7]] | list_plots[[8]] | list_plots[[9]])) +
+  plot_layout(heights = c(0.15,0.60,1.20))
+
+# Plot dimensions in bigpts
+width_pt <- fig_width_pt
+height_pt <- fig_height_pt
+
+# Plot dimensions in inches
+width_in <- width_pt/pt_per_in
+height_in <- height_pt/pt_per_in
+
+# Export
+outfile <- paste(output_plot_prefix, 18, sep = "_")
+outfile <- paste0(outfile, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+print(p_plsda_summary)
+dev.off()
+```
+
+```{r eval = FALSE}
+nk_range <- df_plsda_summary %>% 
+  pull(nk) %>% 
+  unique() %>% 
+  sort()
+
+list_plots <- vector(mode = "list", length = length(nk_range))
+for (i in 1:length(list_plots)) {
+  axis_params <- df_plsda_summary %>% 
+    select(nk, comparison, matches) %>% 
+    distinct() %>% 
+    filter(nk == nk_range[i]) %>% 
+    arrange(desc(comparison)) %>% 
+    mutate(fontface = ifelse(matches == "Both", "bold", "plain"),
+           fontcolour = ifelse(matches == "Both", "black", "grey30"))
+  
+  plt <- df_plsda_summary %>% 
+    filter(nk %in% nk_range[i]) %>% 
+    ggplot(aes(x = fct_rev(comparison), 
+               y = auc_mean, 
+               ymin = auc_min, 
+               ymax = auc_max,
+               col = factor(threshold),
+               alpha = small_group,
+               size = small_group)) + 
+    geom_linerange(size = 0.30) + 
+    geom_point() + 
+    facet_wrap(~nk, ncol = 1, scales = "free_y") +
+    coord_flip(ylim = c(0.5, 1.0)) +
+    scale_alpha_manual(values = c(1.0, 0.4), guide = "none") + 
+    scale_size_manual(values = c(1.2, 0.8), guide = "none") + 
+    labs(y = "AUC",
+         x = "Cluster comparison",
+         col = "Completion threshold") + 
+    theme_bw() +
+    theme(axis.text.y = element_text(size = font_size-2, 
+                                     family = font_family,
+                                     face = axis_params$fontface,
+                                     color = axis_params$fontcolour),
+          axis.text.x = element_text(size = font_size-2,
+                                     family = font_family),
+          axis.title = element_text(size = font_size),
+          axis.ticks = element_line(size = 0.3),
+          strip.text = element_text(size = font_size, 
+                                    margin = margin(t = 2, b = 2)),
+          plot.margin = margin(t = 1, b = 1, l = 3, r = 2))
+  
+  if (!(nk_range[i] %in% c(2, 5, 8))) {
+    plt <- plt +
+      theme(axis.title.y = element_blank())
+  }
+  
+  if (!(nk_range[i] %in% 8:10)) {
+    plt <- plt +
+      theme(axis.title.x = element_blank())
+  }
+  
+  if (i != 8) {
+    list_plots[[i]] <- plt +
+      theme(legend.position = "none")
+    
+  } else {
+    list_plots[[i]] <- plt +
+      theme(legend.position = "bottom",
+            legend.direction = "horizontal",
+            legend.title = element_text(size = font_size, margin = margin()),
+            legend.text = element_text(size = font_size, margin = margin()),
+            legend.margin = margin(),
+            legend.box.margin = margin(t = -10))
+  }
+}
+
+p_plsda_summary <- ((list_plots[[1]] | list_plots[[2]] | list_plots[[3]]) /
+                      (list_plots[[4]] | list_plots[[5]] | list_plots[[6]]) /
+                      (list_plots[[7]] | list_plots[[8]] | list_plots[[9]])) +
+  plot_layout(heights = c(0.15,0.60,1.20))
+
+# Plot dimensions in bigpts
+width_pt <- fig_width_pt
+height_pt <- fig_height_pt
+
+# Plot dimensions in inches
+width_in <- width_pt/pt_per_in
+height_in <- height_pt/pt_per_in
+
+outfile <- "plsda_summary_1.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+print(p_plsda_summary)
+dev.off()
+```
+
+
+
+# Supplementary Figure ??: Univariate clinical scores analysis
 
 ```{r}
 # Demogrpahics information
@@ -2455,890 +2911,4 @@ print(p_kw_pvals)
 dev.off()
 ```
 
-# Supplementary Figure ?? 
-
-```{r}
-plsda_results <- "figure_supplementary/plsda_results.csv"
-df_plsda_results <- read_csv(plsda_results, show_col_types = FALSE)
-```
-
-```{r}
-# Directory for mouse-human cluster similarity 
-similarity_dir <- file.path(pipeline_dir, "similarity")
-
-# Directory for mouse-human cluster similarity permutations
-permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
-
-# Set of similarity files
-similarity_file <- file.path(similarity_dir, "similarity.csv")
-
-# Jacobians to use
-jacobians <- c("absolute", "relative")
-
-# Import the similarity data and extract cluster information
-similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
-  rename(human_img = img1,
-         mouse_img = img2) %>% 
-  mutate(human_nk = human_img %>% 
-           basename() %>% 
-           str_extract("_nk_[0-9]+") %>% 
-           str_extract("[0-9]+") %>% 
-           as.numeric(),
-         human_k = human_img %>% 
-           basename() %>% 
-           str_extract("_k_[0-9]+") %>% 
-           str_extract("[0-9]+") %>% 
-           as.numeric(),
-         human_jacobians = human_img %>% 
-           str_extract("absolute|relative"),
-         mouse_nk = mouse_img %>% 
-           basename() %>% 
-           str_extract("_nk_[0-9]+") %>% 
-           str_extract("[0-9]+") %>% 
-           as.numeric(),
-         mouse_k = mouse_img %>% 
-           basename() %>% 
-           str_extract("_k_[0-9]+") %>% 
-           str_extract("[0-9]+") %>% 
-           as.numeric(),
-         mouse_jacobians = mouse_img %>% 
-           str_extract("absolute|relative"),) %>% 
-  unite(col = "human_cluster_id", human_nk, human_k, 
-        sep = "-", remove = FALSE) %>% 
-  unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
-        sep = "-", remove = FALSE)
-
-# Compute average similarity values across jacobians for each permutation
-df_similarity <- similarity %>% 
-  group_by(human_cluster_id, human_nk, human_k, 
-           mouse_cluster_id, mouse_nk, mouse_k) %>% 
-  summarise(similarity = mean(similarity), .groups = "drop")
-
-
-# Permutation file names
-permutation_files <- list.files(permutation_dir)
-
-# Number of permutations
-np <- length(permutation_files)
-list_permutations <- vector(mode = "list", length = np)  
-for (p in 1:np) {
-  
-  # Permutation data to import
-  permutation_file <- permutation_files %>% 
-    str_subset(str_c("similarity_permutation_", p, ".csv"))
-  permutation_file <- file.path(permutation_dir, permutation_file)
-  
-  # Import permutation data
-  list_permutations[[p]] <- read_csv(permutation_file, 
-                                     show_col_types = FALSE) %>% 
-    rename(human_img = img1,
-           mouse_img = img2) %>% 
-    mutate(human_nk = human_img %>% 
-             basename() %>% 
-             str_extract("_nk_[0-9]+") %>% 
-             str_extract("[0-9]+") %>% 
-             as.numeric(),
-           human_k = human_img %>% 
-             basename() %>% 
-             str_extract("_k_[0-9]+") %>% 
-             str_extract("[0-9]+") %>% 
-             as.numeric(),
-           mouse_nk = mouse_img %>% 
-             basename() %>% 
-             str_extract("_nk_[0-9]+") %>% 
-             str_extract("[0-9]+") %>% 
-             as.numeric(),
-           mouse_k = mouse_img %>% 
-             basename() %>% 
-             str_extract("_k_[0-9]+") %>% 
-             str_extract("[0-9]+") %>% 
-             as.numeric()) %>% 
-    unite(col = "human_cluster_id", human_nk, human_k, 
-          sep = "-", remove = FALSE) %>% 
-    unite(col = "mouse_cluster_id", mouse_nk, mouse_k, 
-          sep = "-", remove = FALSE) %>% 
-    mutate(permutation = p)
-  
-}
-
-# Filter permutations data for desired cluster numbers
-# and combine Jacobians
-df_permutations <- list_permutations %>% 
-  bind_rows() %>% 
-  group_by(permutation, human_nk, mouse_nk, human_cluster_id, mouse_cluster_id) %>% 
-  summarise(similarity = mean(similarity), .groups = "drop")
-```
-
-```{r fig3-similarity-compute-pvals}
-# Mouse and human max nk
-human_nk_max <- max(df_similarity[["human_nk"]])
-mouse_nk_max <- max(df_similarity[["mouse_nk"]])
-
-# Iterate along nk diagonal +/- 1
-df_sim_pvals <- tibble()
-for (h_nk in 2:human_nk_max) {
-  for (m_nk in (h_nk-1):(h_nk+1)){
-    
-    if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
-      
-      df_sim_nk <- df_similarity %>% 
-        select(human_cluster_id, human_nk, human_k,
-               mouse_cluster_id, mouse_nk, mouse_k,
-               similarity) %>% 
-        filter(human_nk == h_nk,
-               mouse_nk == m_nk) %>% 
-        mutate(pval = 0)
-      
-      sim_perm_nk <- df_permutations %>% 
-        filter(human_nk == h_nk,
-               mouse_nk == m_nk) %>% 
-        pull(similarity) %>% 
-        sort()
-      
-      for (i in 1:nrow(df_sim_nk)) {
-        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
-        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
-      }
-      
-      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
-      
-    }
-  }
-}
-
-# Evaluate significance
-sim_alpha <- 0.05
-df_sim_pvals <- df_sim_pvals %>% 
-  mutate(significant = pval < sim_alpha)
-```
-
-```{r}
-df_cluster_matches <- df_sim_pvals %>% 
-  group_by(human_nk, human_k) %>% 
-  summarise(nsignificant = sum(significant),
-            .groups = "drop") %>% 
-  mutate(has_match = nsignificant > 0) %>% 
-  unite(col = "cluster_id", human_nk, human_k, sep = "-", remove = FALSE)
-
-cluster_lvls <- df_cluster_matches %>% 
-  select(cluster_id, human_nk, human_k) %>% 
-  distinct() %>% 
-  arrange(human_nk, human_k) %>% 
-  pull(cluster_id) 
-
-clusters_w_match <- df_cluster_matches %>% 
-  filter(has_match) %>% 
-  pull(cluster_id)
-```
-
-```{r}
-df_plsda_results <- df_plsda_results %>% 
-  mutate(has_match_1 = cluster_id_1 %in% clusters_w_match,
-         has_match_2 = cluster_id_2 %in% clusters_w_match,
-         matches = case_when((has_match_1 & has_match_2) ~ "Both",
-                             (has_match_1 | has_match_2) ~ "One",
-                             (!has_match_1 & !has_match_2) ~ "Neither"),
-         small_group = (participants_1 < 20 | participants_2 < 20)) %>% 
-  unite(col = "comparison", cluster_id_1, cluster_id_2, sep = " vs. ", remove = FALSE)  
-
-comparison_lvls <- df_plsda_results %>% 
-  select(cluster_id_1, cluster_id_2) %>% 
-  separate(cluster_id_1, into = c("nk_1", "k_1"), remove = FALSE) %>% 
-  separate(cluster_id_2, into = c("nk_2", "k_2"), remove = FALSE) %>% 
-  mutate(nk_1 = as.numeric(nk_1),
-         nk_2 = as.numeric(nk_2),
-         k_1 = as.numeric(k_1),
-         k_2 = as.numeric(k_2)) %>% 
-  unite(col = "comparison", cluster_id_1, cluster_id_2, sep = " vs. ") %>% 
-  distinct() %>% 
-  arrange(nk_1, k_1, nk_2, k_2) %>% 
-  pull(comparison)
-
-
-df_plsda_results 
-```
-
-```{r}
-df_plsda_summary <- df_plsda_results %>% 
-  group_by(nk, comparison, cluster_id_1, cluster_id_2, threshold, small_group, matches, has_match_1, has_match_2) %>% 
-  summarise(auc_mean = mean(auc), 
-            auc_min = min(auc),
-            auc_max = max(auc),
-            .groups = "drop") %>% 
-  mutate(comparison = factor(comparison, levels = comparison_lvls))
-```
-
-
-```{r}
-nk_range <- df_plsda_summary %>% 
-  pull(nk) %>% 
-  unique() %>% 
-  sort()
-
-list_plots <- vector(mode = "list", length = length(nk_range))
-for (i in 1:length(list_plots)) {
-  axis_params <- df_plsda_summary %>% 
-    select(nk, comparison, matches) %>% 
-    distinct() %>% 
-    filter(nk == nk_range[i]) %>% 
-    arrange(desc(comparison)) %>% 
-    mutate(fontface = ifelse(matches == "Both", "bold", "plain"),
-           fontcolour = ifelse(matches == "Both", "black", "grey30"))
-  
-  plt <- df_plsda_summary %>% 
-    filter(nk %in% nk_range[i]) %>% 
-    ggplot(aes(x = fct_rev(comparison), 
-               y = auc_mean, 
-               ymin = auc_min, 
-               ymax = auc_max,
-               col = factor(threshold),
-               alpha = small_group,
-               size = small_group)) + 
-    geom_linerange(size = 0.30) + 
-    geom_point() + 
-    facet_wrap(~nk, ncol = 1, scales = "free_y") +
-    coord_flip(ylim = c(0.5, 1.0)) +
-    scale_alpha_manual(values = c(1.0, 0.4), guide = "none") + 
-    scale_size_manual(values = c(1.2, 0.8), guide = "none") + 
-    labs(y = "AUC",
-         x = "Cluster comparison",
-         col = "Completion threshold") + 
-    theme_bw() +
-    theme(axis.text.y = element_text(size = font_size-2, 
-                                     family = font_family,
-                                     face = axis_params$fontface,
-                                     color = axis_params$fontcolour),
-          axis.text.x = element_text(size = font_size-2,
-                                     family = font_family),
-          axis.title = element_text(size = font_size),
-          axis.ticks = element_line(size = 0.3),
-          strip.text = element_text(size = font_size, 
-                                    margin = margin(t = 2, b = 2)),
-          plot.margin = margin(t = 1, b = 1, l = 3, r = 2))
-  
-  if (!(nk_range[i] %in% c(2, 5, 8))) {
-    plt <- plt +
-      theme(axis.title.y = element_blank())
-  }
-  
-  if (!(nk_range[i] %in% 8:10)) {
-    plt <- plt +
-      theme(axis.title.x = element_blank())
-  }
-  
-  if (i != 8) {
-    list_plots[[i]] <- plt +
-      theme(legend.position = "none")
-    
-  } else {
-    list_plots[[i]] <- plt +
-      theme(legend.position = "bottom",
-            legend.direction = "horizontal",
-            legend.title = element_text(size = font_size, margin = margin()),
-            legend.text = element_text(size = font_size, margin = margin()),
-            legend.margin = margin(),
-            legend.box.margin = margin(t = -10))
-  }
-}
-
-p_plsda_summary <- ((list_plots[[1]] | list_plots[[2]] | list_plots[[3]]) /
-                      (list_plots[[4]] | list_plots[[5]] | list_plots[[6]]) /
-                      (list_plots[[7]] | list_plots[[8]] | list_plots[[9]])) +
-  plot_layout(heights = c(0.15,0.60,1.20))
-
-# Plot dimensions in bigpts
-width_pt <- fig_width_pt
-height_pt <- fig_height_pt
-
-# Plot dimensions in inches
-width_in <- width_pt/pt_per_in
-height_in <- height_pt/pt_per_in
-
-outfile <- "plsda_summary_1.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-print(p_plsda_summary)
-dev.off()
-```
-
-```{r}
-nk_range <- df_plsda_summary %>% 
-  pull(nk) %>% 
-  unique() %>% 
-  sort()
-
-list_plots <- vector(mode = "list", length = length(nk_range))
-for (i in 1:length(list_plots)) {
-  
-  axis_params <- df_plsda_summary %>% 
-    select(nk, comparison, cluster_id_1, cluster_id_2, 
-           matches, has_match_1, has_match_2) %>% 
-    distinct() %>% 
-    filter(nk == nk_range[i]) %>% 
-    arrange(desc(comparison)) %>% 
-    mutate(fontface = ifelse(matches == "Both", "bold", "plain"),
-           fontcolour = ifelse(matches == "Both", "black", "grey30"),
-           fontface_1 = ifelse(has_match_1, "bold", "plain"),
-           fontface_2 = ifelse(has_match_2, "bold", "plain"),
-           fontcolour_1 = ifelse(has_match_1, "black", "grey30"),
-           fontcolour_2 = ifelse(has_match_2, "black", "grey30"),
-           ybreaks = as.numeric(fct_rev(comparison)))
-  
-  if (nk_range[i] %in% 2:4) {
-    yexpansion <- expansion(add = 1)
-  } else if (nk_range[i] %in% 5:7) {
-    yexpansion <- expansion(add = 1)
-  } else {
-    yexpansion <- expansion(add = 1)
-  }
-  
-  plt <- df_plsda_summary %>% 
-    filter(nk %in% nk_range[i]) %>% 
-    ggplot(aes(x = as.numeric(fct_rev(comparison)), 
-               y = auc_mean, 
-               ymin = auc_min, 
-               ymax = auc_max,
-               col = factor(threshold),
-               alpha = small_group,
-               size = small_group)) + 
-    geom_linerange(size = 0.30) + 
-    geom_point() + 
-    facet_wrap(~nk, ncol = 1, scales = "free_y") +
-    coord_flip(ylim = c(0.5, 1.0)) +
-    scale_x_continuous(breaks = axis_params$ybreaks,
-                       labels = axis_params$cluster_id_1,
-                       sec.axis = dup_axis(labels = axis_params$cluster_id_2),
-                       expand = yexpansion) + 
-    scale_alpha_manual(values = c(1.0, 0.4), guide = "none") + 
-    scale_size_manual(values = c(1.2, 0.8), guide = "none") + 
-    labs(y = "AUC",
-         x = "Cluster comparison",
-         col = "Completion threshold") + 
-    theme_bw() +
-    theme(axis.text.y.left  = element_text(size = font_size-2, 
-                                           family = font_family,
-                                           face = axis_params$fontface_1,
-                                           color = axis_params$fontcolour_1),
-          axis.text.y.right  = element_text(size = font_size-2, 
-                                            family = font_family,
-                                            face = axis_params$fontface_2,
-                                            color = axis_params$fontcolour_2),
-          axis.text.x = element_text(size = font_size-2,
-                                     family = font_family),
-          axis.title.x = element_text(size = font_size),
-          axis.title.y = element_blank(),
-          axis.ticks = element_line(size = 0.3),
-          panel.grid.minor.y = element_blank(),
-          strip.text = element_text(size = font_size, 
-                                    margin = margin(t = 2, b = 2)),
-          plot.margin = margin(t = 1, b = 1, l = 5, r = 5))
-  
-  if (!(nk_range[i] %in% 8:10)) {
-    plt <- plt +
-      theme(axis.title.x = element_blank())
-  }
-  
-  if (i != 8) {
-    list_plots[[i]] <- plt +
-      theme(legend.position = "none")
-    
-  } else {
-    list_plots[[i]] <- plt +
-      theme(legend.position = "bottom",
-            legend.direction = "horizontal",
-            legend.title = element_text(size = font_size, margin = margin()),
-            legend.text = element_text(size = font_size, margin = margin()),
-            legend.margin = margin(),
-            legend.box.margin = margin(t = -10))
-  }
-}
-
-p_plsda_summary <- ((list_plots[[1]] | list_plots[[2]] | list_plots[[3]]) /
-                      (list_plots[[4]] | list_plots[[5]] | list_plots[[6]]) /
-                      (list_plots[[7]] | list_plots[[8]] | list_plots[[9]])) +
-  plot_layout(heights = c(0.15,0.60,1.20))
-
-# Plot dimensions in bigpts
-width_pt <- fig_width_pt
-height_pt <- fig_height_pt
-
-# Plot dimensions in inches
-width_in <- width_pt/pt_per_in
-height_in <- height_pt/pt_per_in
-
-outfile <- "plsda_summary_2.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-print(p_plsda_summary)
-dev.off()
-```
-
-```{r}
-df_sig_nk <- df_sim_pvals %>% 
-  group_by(mouse_nk, mouse_k) %>% 
-  summarise(p = min(pval),
-            nsignificant = sum(significant),
-            .groups = "drop") %>% 
-  mutate(plab = case_when(p < 0.05 ~ "**",
-                          p >= 0.05 & p < 0.1 ~ "*",
-                          p >= 0.1 ~ ""),
-         has_match = ifelse(nsignificant > 0, TRUE, FALSE)) %>% 
-  select(nk = mouse_nk, k = mouse_k, p, plab, has_match) %>% 
-  filter(nk >= 4) %>% 
-  unite(col = "cluster_id", "nk", "k", 
-        sep = "-", remove = FALSE) 
-
-# Determine mouse clusters with human matches
-df_mouse_matches <- df_sig_nk %>% 
-  filter(has_match) %>% 
-  select(cluster_id, nk, k) %>% 
-  mutate(nk = as.numeric(as.character(nk)),
-         k = as.numeric(as.character(k)))
-```
-
-```{r}
-df_cluster_matches
-```
-
-```{r}
-df_sig_matches <- df_sim_pvals %>% 
-  filter(significant)
-
-mouse_colours <- c("4-1", "darkorchid1",
-                   "4-3", "sienna2",
-                   "4-4", "springgreen4",
-                   "5-1", "springgreen4",
-                   "5-4", "darkorchid1",
-                   "5-5", "seagreen2",
-                   "6-1", "springgreen4",
-                   "6-4", "seagreen2",
-                   "6-5", "darkorchid1",
-                   "7-1", "springgreen4",
-                   "7-4", "seagreen2",
-                   "7-7", "darkorchid1",
-                   "8-1", "springgreen4",
-                   "8-2", "seagreen2",
-                   "8-5", "sienna2",
-                   "8-6", "darkorchid1",
-                   "9-4", "sienna2",
-                   "9-5", "seagreen2",
-                   "10-3", "sienna2",
-                   "10-4", "darkorchid1",
-                   "10-5", "seagreen2")
-
-mouse_colours <- matrix(mouse_colours, ncol = 2, byrow = TRUE)
-colnames(mouse_colours) <- c("mouse_cluster_id", "colour")
-
-df_mouse_colours <- as_tibble(mouse_colours)
-
-df_sig_matches <- df_sig_matches %>% 
-  left_join(df_mouse_colours, by = "mouse_cluster_id")
-
-df_human_colours <- df_sim_pvals %>%  
-  select(human_cluster_id) %>% 
-  distinct() %>% 
-  mutate(colour = "")
-
-for (i in 1:nrow(df_human_colours)) {
-  
-  cluster_id <- df_human_colours[[i, "human_cluster_id"]]
-  
-  colours <- df_sig_matches %>% 
-    filter(human_cluster_id == cluster_id) %>% 
-    pull(colour)
-  
-  colours <- colours[!is.na(colours)] 
-  colours <- unique(colours)
-  
-  if (length(colours) == 0) {
-    df_human_colours[[i, "colour"]] <- "black"
-  } else if (length(colours) > 1) {
-    if (i == 21) {
-      df_human_colours[[i, "colour"]] <- "darkorchid1"
-    } else if (i == 28) {
-      df_human_colours[[i, "colour"]] <- "darkorchid1"
-    } else if (i == 40) {
-      df_human_colours[[i, "colour"]] <- "sienna2"
-    } else {
-      print(i)
-      stop()
-    }
-  } else {
-    df_human_colours[[i, "colour"]] <- colours
-  }
-  
-}
-
-# "darkorchid1"
-# "seashell4"
-# "sienna2"
-# "springgreen4"
-# "seagreen2"
-```
-
-```{r}
-nk_range <- df_plsda_summary %>% 
-  pull(nk) %>% 
-  unique() %>% 
-  sort()
-
-list_plots <- vector(mode = "list", length = length(nk_range))
-for (i in 1:length(list_plots)) {
-  
-  axis_params <- df_plsda_summary %>% 
-    select(nk, comparison, cluster_id_1, cluster_id_2, 
-           matches, has_match_1, has_match_2) %>% 
-    distinct() %>% 
-    filter(nk == nk_range[i]) %>% 
-    arrange(desc(comparison)) %>% 
-    left_join(df_human_colours, by = c("cluster_id_1" = "human_cluster_id")) %>% 
-    rename(fontcolour_1 = colour) %>% 
-    left_join(df_human_colours, by = c("cluster_id_2" = "human_cluster_id")) %>% 
-    rename(fontcolour_2 = colour) %>% 
-    mutate(fontface = ifelse(matches == "Both", "bold", "plain"),
-           fontcolour = ifelse(matches == "Both", "black", "grey30"),
-           fontface_1 = ifelse(has_match_1, "bold", "plain"),
-           fontface_2 = ifelse(has_match_2, "bold", "plain"),
-           ybreaks = as.numeric(fct_rev(comparison)))
-  
-  if (nk_range[i] %in% 2:4) {
-    yexpansion <- expansion(add = 1)
-  } else if (nk_range[i] %in% 5:7) {
-    yexpansion <- expansion(add = 1)
-  } else {
-    yexpansion <- expansion(add = 1)
-  }
-  
-  plt <- df_plsda_summary %>% 
-    filter(nk %in% nk_range[i]) %>% 
-    ggplot(aes(x = as.numeric(fct_rev(comparison)), 
-               y = auc_mean, 
-               ymin = auc_min, 
-               ymax = auc_max,
-               col = factor(threshold),
-               alpha = small_group,
-               size = small_group)) + 
-    geom_linerange(size = 0.30) + 
-    geom_point() + 
-    facet_wrap(~nk, ncol = 1, scales = "free_y") +
-    coord_flip(ylim = c(0.5, 1.0)) +
-    scale_x_continuous(breaks = axis_params$ybreaks,
-                       labels = axis_params$cluster_id_1,
-                       sec.axis = dup_axis(labels = axis_params$cluster_id_2),
-                       expand = yexpansion) + 
-    scale_alpha_manual(values = c(1.0, 0.4), guide = "none") + 
-    scale_size_manual(values = c(1.2, 0.8), guide = "none") + 
-    labs(y = "AUC",
-         x = "Cluster comparison",
-         col = "Completion threshold") + 
-    theme_bw() +
-    theme(axis.text.y.left  = element_text(size = font_size-2, 
-                                           family = font_family,
-                                           face = axis_params$fontface_1,
-                                           color = axis_params$fontcolour_1),
-          axis.text.y.right  = element_text(size = font_size-2, 
-                                            family = font_family,
-                                            face = axis_params$fontface_2,
-                                            color = axis_params$fontcolour_2),
-          axis.text.x = element_text(size = font_size-2,
-                                     family = font_family),
-          axis.title.x = element_text(size = font_size),
-          axis.title.y = element_blank(),
-          axis.ticks = element_line(size = 0.3),
-          panel.grid.minor.y = element_blank(),
-          strip.text = element_text(size = font_size, 
-                                    margin = margin(t = 2, b = 2)),
-          plot.margin = margin(t = 1, b = 1, l = 5, r = 5))
-  
-  if (!(nk_range[i] %in% 8:10)) {
-    plt <- plt +
-      theme(axis.title.x = element_blank())
-  }
-  
-  if (i != 8) {
-    list_plots[[i]] <- plt +
-      theme(legend.position = "none")
-    
-  } else {
-    list_plots[[i]] <- plt +
-      theme(legend.position = "bottom",
-            legend.direction = "horizontal",
-            legend.title = element_text(size = font_size, margin = margin()),
-            legend.text = element_text(size = font_size, margin = margin()),
-            legend.margin = margin(),
-            legend.box.margin = margin(t = -10))
-  }
-}
-
-p_plsda_summary <- ((list_plots[[1]] | list_plots[[2]] | list_plots[[3]]) /
-                      (list_plots[[4]] | list_plots[[5]] | list_plots[[6]]) /
-                      (list_plots[[7]] | list_plots[[8]] | list_plots[[9]])) +
-  plot_layout(heights = c(0.15,0.60,1.20))
-
-# Plot dimensions in bigpts
-width_pt <- fig_width_pt
-height_pt <- fig_height_pt
-
-# Plot dimensions in inches
-width_in <- width_pt/pt_per_in
-height_in <- height_pt/pt_per_in
-
-outfile <- "plsda_summary_2.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-print(p_plsda_summary)
-dev.off()
-```
-
-
-# Supplementary Figure ?? 
-
-```{r}
-plsda_comparisons <- list(c("7-4", "7-7"),
-                          c("8-7", "8-4"),
-                          c("9-4", "9-5"),
-                          c("10-4", "10-6"))
-
-plsda_scores <- map_chr(plsda_comparisons, str_flatten, collapse = "_")
-plsda_scores <- paste("plsda", plsda_scores, "scores", sep = "_")
-plsda_scores <- paste0(plsda_scores, ".csv")
-plsda_scores <- file.path(output_dir, plsda_scores)
-
-list_scores <- map(plsda_scores, read_csv, show_col_types = FALSE)
-
-plsda_loadings <- map_chr(plsda_comparisons, str_flatten, collapse = "_")
-plsda_loadings <- paste("plsda", plsda_loadings, "loadings", sep = "_")
-plsda_loadings <- paste0(plsda_loadings, ".csv")
-plsda_loadings <- file.path(output_dir, plsda_loadings)
-
-list_loadings <- map(plsda_loadings, read_csv, show_col_types = FALSE)
-```
-
-```{r}
-library(ggExtra)
-
-legend_labels_1 <- character(length(plsda_comparisons))
-legend_labels_2 <- character(length(plsda_comparisons))
-for (i in 1:length(plsda_comparisons)) {
-  legend_labels_1[i] <- plsda_comparisons[[i]][1]
-  legend_labels_2[i] <- plsda_comparisons[[i]][2]
-  
-}
-
-legend_labels_1 <- str_flatten(legend_labels_1, collapse = ", ")
-legend_labels_2 <- str_flatten(legend_labels_2, collapse = ", ")
-
-legend_labels <- c(legend_labels_1, legend_labels_2)
-```
-
-```{r}
-palette <- c("seagreen2", "sienna2")
-
-list_plots_scatter <- vector(mode = "list", length = length(list_scores))
-list_plots_histx <- vector(mode = "list", length = length(list_scores))
-list_plots_histy <- vector(mode = "list", length = length(list_scores))
-list_patchworks <- vector(mode = "list", length = length(list_scores))
-
-list_xlims <- list(c(-4.5, 3.5),
-                   c(-4, 4),
-                   c(-4.5, 4.5),
-                   c(-4.5, 4.5))
-list_ylims <- list(c(-3, 4),
-                   c(-3, 3.5),
-                   c(-3.5, 4),
-                   c(-3.5, 4))
-
-xbreaks <- seq(-10, 10, by = 1)
-ybreaks <- xbreaks
-
-theme_scatter <- theme_bw() +
-  theme(legend.position = "bottom",
-        legend.direction = "horizontal",
-        axis.title = element_text(size = font_size),
-        axis.text = element_text(size = font_size),
-        legend.title = element_blank(),
-        legend.text = element_text(size = font_size,
-                                   margin = margin()),
-        legend.background = element_rect(colour = "black"),
-        legend.margin = margin(),
-        plot.background = element_rect(colour = "black"),
-        plot.margin = margin())
-
-theme_hist <- theme_bw() +
-  theme(axis.title = element_blank(),
-        axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        plot.background = element_rect(colour = "black"),
-        panel.border = element_rect(colour = "red"),
-        plot.margin = margin())
-
-patchwork_design <- '12
-34
-'
-
-for (i in 1:length(list_scores)) {
-  # for (i in 1:2) {
-  # i <- 2
-  
-  df_scores <- list_scores[[i]]
-  df_loadings <- list_loadings[[i]]
-  
-  list_plots_scatter[[i]] <- ggplot(df_scores, mapping = aes(x = x, y = y, col = cluster)) + 
-    geom_point() + 
-    annotate("segment",
-             x = 0, y = 0,
-             xend = df_loadings$x,
-             yend = df_loadings$y,
-             arrow = arrow(type = "closed", length = unit(0.02, "npc")),
-             size = 0.1,
-             col = "grey30") +
-    annotate("text",
-             x = df_loadings$x,
-             y = df_loadings$y,
-             label = df_loadings$features,
-             size = (font_size-1)*0.36) +
-    coord_cartesian(xlim = list_xlims[[i]],
-                    ylim = list_ylims[[i]]) +
-    scale_x_continuous(breaks = xbreaks) + 
-    scale_y_continuous(breaks = ybreaks) + 
-    scale_colour_manual(values = palette) + 
-    labs(x = "Latent variable 1",
-         y = "Latent variable 2") + 
-    theme_scatter
-  
-  list_plots_histx[[i]] <- ggplot(df_scores, aes(x = x, col = cluster, fill = cluster)) + 
-    geom_histogram(position = "dodge", binwidth = 0.5) +
-    coord_cartesian(xlim = list_xlims[[i]]) + 
-    scale_x_continuous(breaks = xbreaks, labels = NULL, guide = "none") + 
-    scale_colour_manual(values = palette, guide = "none") + 
-    scale_fill_manual(values = palette, guide = "none") + 
-    theme_hist +
-    theme(plot.margin = margin(b = -5))
-  
-  list_plots_histy[[i]] <- ggplot(df_scores, aes(x = y, col = cluster, fill = cluster)) + 
-    geom_histogram(position = "dodge", binwidth = 0.5) +
-    coord_flip(xlim = list_ylims[[i]]) +
-    scale_x_continuous(breaks = ybreaks) + 
-    scale_colour_manual(values = palette, guide = "none") + 
-    scale_fill_manual(values = palette, guide = "none") +
-    theme_hist +
-    theme(plot.margin = margin(l = -10),
-          panel.spacing = unit(-5, "pt"))
-  
-  list_patchworks[[i]] <- (list_plots_histx[[i]] + plot_spacer()+ list_plots_scatter[[i]] + list_plots_histy[[i]]) +
-    plot_layout(widths = c(4, 1), heights = c(1,4), design = patchwork_design)
-}
-
-# p_plsda_loadings <- (list_plots_histx[[1]] | plot_spacer() | list_plots_histx[[2]] | plot_spacer()) / 
-#   (list_plots_scatter[[1]] | list_plots_histy[[1]] | list_plots_scatter[[2]] | list_plots_histy[[2]]) / 
-#   (list_plots_histx[[3]] | plot_spacer() | list_plots_histx[[4]] | plot_spacer()) / 
-#   (list_plots_scatter[[3]] | list_plots_histy[[3]] | list_plots_scatter[[4]] | list_plots_histy[[4]]) +
-#   plot_layout(widths = c(3,1,3,1))
-
-p_plsda_loadings <- ((list_patchworks[[1]]) | (list_patchworks[[2]])) / (list_patchworks[[3]] | list_patchworks[[4]]) 
-
-# Plot dimensions in bigpts
-width_pt <- fig_width_pt
-height_pt <- fig_height_pt
-
-# Plot dimensions in inches
-width_in <- width_pt/pt_per_in
-height_in <- height_pt/pt_per_in
-
-outfile <- "plsda_loadings.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-print(p_plsda_loadings)
-dev.off()
-```
-
-
-
-```{r}
-palette <- c("seagreen2", "sienna2")
-
-params_marginals <- list(position = "dodge",
-                         binwidth = 0.5)
-
-list_plots <- vector(mode = "list", length = length(list_scores)) 
-for (i in 1:length(list_plots)) {
-  
-  df_scores <- list_scores[[i]] %>% 
-    # mutate(cluster = ifelse(cluster == plsda_comparisons[[i]][1], "k1", "k2"))
-    mutate(cluster = factor(cluster, levels = plsda_comparisons[[i]]))
-  df_loadings <- list_loadings[[i]]
-  
-  p_i <- ggplot(df_scores, mapping = aes(x = x, y = y, col = cluster)) + 
-    geom_point() + 
-    annotate("segment", 
-             x = 0, y = 0, 
-             xend = df_loadings$x, 
-             yend = df_loadings$y,
-             arrow = arrow(type = "closed", length = unit(0.02, "npc")),
-             size = 0.1,
-             col = "grey30") +
-    annotate("text", 
-             x = df_loadings$x, 
-             y = df_loadings$y, 
-             label = df_loadings$features,
-             size = (font_size-1)*0.36) +
-    scale_colour_manual(values = palette) + 
-    labs(x = "Latent variable 1",
-         y = "Latent variable 2") + 
-    theme_bw() +
-    theme(legend.position = "bottom",
-          legend.direction = "horizontal",
-          axis.title = element_text(size = font_size),
-          axis.text = element_text(size = font_size),
-          legend.title = element_blank(),
-          legend.text = element_text(margin = margin()),
-          # legend.background = element_rect(colour = "black"),
-          legend.margin = margin(),
-          # plot.background = element_rect(colour = "black"),
-          plot.margin = margin(b = 10))
-  
-  list_plots[[i]] <- patchwork::wrap_elements(ggMarginal(p_i, type = "histogram", 
-                                                         groupColour = TRUE, 
-                                                         groupFill = TRUE, 
-                                                         xparams = params_marginals,
-                                                         yparams = params_marginals))
-}
-
-p_plsda_loadings <- ((list_plots[[1]] + list_plots[[2]]) / (list_plots[[3]] + list_plots[[4]]))
-
-# Plot dimensions in bigpts
-width_pt <- fig_width_pt
-height_pt <- fig_height_pt
-
-# Plot dimensions in inches
-width_in <- width_pt/pt_per_in
-height_in <- height_pt/pt_per_in
-
-outfile <- "plsda_loadings.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-print(p_plsda_loadings)
-dev.off()
-
-```
-
-```{r}
-library(patchwork)
-
-(list_plots[[1]] + list_plots[[2]]) / (list_plots[[3]] + list_plots[[4]])
-```
-
-```{r}
-list_plots[[1]]
-```
 
