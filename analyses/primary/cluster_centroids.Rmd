@@ -81,8 +81,8 @@ human_params
 mouse_params_id <- 107
 
 # Human parameter set ID
-# human_params_id <- "700"
-human_params_id <- "013"
+human_params_id <- "700"
+# human_params_id <- "013"
 
 # Jacobians
 jacobians <- c("absolute", "relative")
