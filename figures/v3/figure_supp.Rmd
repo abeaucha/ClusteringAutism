@@ -2087,6 +2087,8 @@ for (i in 1:length(list_clusters_long)) {
 
 # Supplementary Figure 17: PLS-DA loadings 
 
+Execute 'figure_supp.ipynb'
+
 ```{r fig-supp-17-import}
 # List of cluster comparisons used for PLS-DA
 plsda_comparisons <- list(c("7-4", "7-7"),
@@ -2107,6 +2109,45 @@ plsda_loadings <- paste("plsda", plsda_loadings, "loadings", sep = "_")
 plsda_loadings <- paste0(plsda_loadings, ".csv")
 plsda_loadings <- file.path(output_dir, plsda_loadings)
 list_loadings <- map(plsda_loadings, read_csv, show_col_types = FALSE)
+
+# New names for features
+df_features <- tibble(features = c("CB68IPTS", "CB68EPTS", 
+                                    "AB21GCCS", 
+                                    "OWL2LCSS", "OWL2OESS", "OWL2OLCSS", 
+                                    "RBSALLT", "SCQTOT",
+                                    "ADHD_I_SUB", "ADHD_HI_SUB",
+                                    "TPOCS_TOT", "FSIQ"),
+                       features_new = c("CBCL-IP", "CBCL-EP", 
+                                        "ABAS-II", 
+                                        "OWL2-LC", "OWL2-OE", "OWL2-OLC", 
+                                        "RBS-R", "SCQ",
+                                        "SWAN-I", "SWAN-HI",
+                                        "TOCS", "FSIQ"))
+
+# Rename features
+list_loadings <- map(list_loadings, function(x){
+  x %>% 
+    inner_join(df_features, by = "features") %>% 
+    select(-features) %>% 
+    rename(features = features_new)  
+})
+
+# Flip x-axis for first plot
+list_loadings[[1]][["x"]] <- -1*list_loadings[[1]][["x"]]
+
+# Import PLS-DA results
+plsda_results <- "figure_supplementary/plsda_results.csv"
+df_plsda_results <- read_csv(plsda_results, show_col_types = FALSE)
+
+# Get AUC values for comparisons
+plsda_auc <- numeric(length(plsda_comparisons))
+for (i in 1:length(plsda_comparisons)) {
+  plsda_auc[i] <- df_plsda_results %>% 
+    filter(cluster_id_1 == sort(plsda_comparisons[[i]])[[1]],
+           cluster_id_2 == sort(plsda_comparisons[[i]])[[2]],
+           components == 2, threshold == 0.6) %>% 
+    pull(auc)
+}
 ```
 
 ```{r fig-supp-17}
@@ -2120,33 +2161,51 @@ list_plots_histy <- vector(mode = "list", length = length(list_scores))
 list_patchworks <- vector(mode = "list", length = length(list_scores))
 
 # List of x limits
-list_xlims <- list(c(-4.5, 3.5),
-                   c(-4, 4),
+list_xlims <- list(c(-4.5, 3.8),
+                   c(-4.2, 4.0),
                    c(-4.5, 4.5),
                    c(-4.5, 4.5))
 
 # List of y limits
-list_ylims <- list(c(-3, 4),
-                   c(-3, 3.5),
-                   c(-3.5, 4),
-                   c(-3.5, 4))
+list_ylims <- list(c(-3.0, 4.0),
+                   c(-3.0, 3.5),
+                   c(-3.5, 4.0),
+                   c(-3.5, 4.0))
 
-# Plot breaks
+# AUC labels
+auc_labels <- paste("AUC", "=", sprintf("%.2f", plsda_auc))
+
+# AUC positions
+auc_positions = list(c(-3.5, -2.5),
+                     c(-3.0, -2.5),
+                     c(-3.5, -3.0),
+                     c(-3.5, -3.0))
+
+# List of nudge values for loading vectors
+# 1: CB68IPTS, 2: CB68EPTS, 3: AB21GCCS, 4: OWL2LCSS, 5: OWL2OESS, 6: OWL2OLCSS, 7: RBSALLT, 8: SCQTOT, 9: ADHD_I_SUB, 10: ADHD_HI_SUB, 11: TPOCS_TOT, 12: FSIQ
+list_loadings_nudge <- list(tibble(x = c( 0.8,  0.0, 0.0, -0.8, -0.8, -0.8,  0.3,  0.0, 0.6, 0.0, -0.20, -0.5),
+                                   y = c( 0.1,  0.2, 0.2,  0.2,  0.0, -0.1, -0.2, -0.2, 0.0, 0.2,  0.20,  0.0)),
+                            tibble(x = c(-0.2,  0.7, 0.0, -0.8, -0.8,  0.0,  0.2,  0.0, 0.7, 0.7, -0.55, -0.5),
+                                   y = c(-0.1,  0.2, 0.2,  0.1, -0.1,  0.2, -0.2, -0.2, 0.0, 0.2,  0.00,  0.0)),
+                            tibble(x = c( 0.0,  0.8, 0.0, -0.8, -0.8,  0.0,  0.2,  0.0, 0.7, 0.7, -0.40, -0.5),
+                                   y = c(-0.2,  0.0, 0.2,  0.1, -0.1,  0.2, -0.2, -0.2, 0.0, 0.2,  0.20,  0.0)),
+                            tibble(x = c(-0.8, -0.2, 0.0, -0.8, -0.8, -0.6,  0.3,  0.0, 0.4, 0.4, -0.50, -0.5),
+                                   y = c( 0.0,  0.3, 0.2,  0.1, -0.2,  0.2, -0.2, -0.2, 0.2, 0.2,  0.00,  0.0)))
+
+# Axis breaks
 xbreaks <- seq(-10, 10, by = 1)
 ybreaks <- xbreaks
 
 # Theme for scatter plots
 theme_scatter <- theme_bw() +
-  theme(legend.position = "bottom",
-        legend.direction = "horizontal",
+  theme(legend.position = c(1.15, 1.16),
         axis.title = element_text(size = font_size),
         axis.text = element_text(size = font_size),
-        legend.title = element_blank(),
+        legend.title = element_text(size = font_size+1,
+                                    margin = margin()),
         legend.text = element_text(size = font_size,
                                    margin = margin()),
-        legend.background = element_rect(colour = "black"),
         legend.margin = margin(),
-        plot.background = element_rect(colour = "black"),
         plot.margin = margin())
 
 # Theme for histograms
@@ -2154,8 +2213,7 @@ theme_hist <- theme_bw() +
   theme(axis.title = element_blank(),
         axis.text = element_blank(),
         axis.ticks = element_blank(),
-        plot.background = element_rect(colour = "black"),
-        panel.border = element_rect(colour = "red"),
+        panel.spacing = unit(0, "pt"),
         plot.margin = margin())
 
 # Patchwork layout
@@ -2165,12 +2223,15 @@ patchwork_design <- '12
 
 # Iterate over PLSDA comparisons
 for (i in 1:length(list_scores)) {
-  # for (i in 1:2) {
-  # i <- 2
   
   # Get scores and loadings
   df_scores <- list_scores[[i]]
   df_loadings <- list_loadings[[i]]
+  df_loadings_nudge <- list_loadings_nudge[[i]]
+  
+  # Set cluster factor levels
+  df_scores <- df_scores %>% 
+    mutate(cluster = factor(cluster, levels = plsda_comparisons[[i]]))
   
   # Create scatter plot
   list_plots_scatter[[i]] <- ggplot(df_scores, mapping = aes(x = x, y = y, col = cluster)) + 
@@ -2183,17 +2244,23 @@ for (i in 1:length(list_scores)) {
              size = 0.1,
              col = "grey30") +
     annotate("text",
-             x = df_loadings$x,
-             y = df_loadings$y,
+             x = df_loadings$x + df_loadings_nudge$x,
+             y = df_loadings$y + df_loadings_nudge$y,
              label = df_loadings$features,
              size = (font_size-1)*0.36) +
+    annotate("label",
+             x = auc_positions[[i]][[1]],
+             y = auc_positions[[i]][[2]],
+             label = auc_labels[[i]],
+             size = (font_size)*0.36) + 
     coord_cartesian(xlim = list_xlims[[i]],
                     ylim = list_ylims[[i]]) +
     scale_x_continuous(breaks = xbreaks) + 
     scale_y_continuous(breaks = ybreaks) + 
     scale_colour_manual(values = palette) + 
     labs(x = "Latent variable 1",
-         y = "Latent variable 2") + 
+         y = "Latent variable 2", 
+         col = "Cluster") + 
     theme_scatter
   
   # Create x marginal histogram
@@ -2222,31 +2289,78 @@ for (i in 1:length(list_scores)) {
     plot_layout(widths = c(4, 1), heights = c(1,4), design = patchwork_design)
 }
 
-# p_plsda_loadings <- (list_plots_histx[[1]] | plot_spacer() | list_plots_histx[[2]] | plot_spacer()) / 
-#   (list_plots_scatter[[1]] | list_plots_histy[[1]] | list_plots_scatter[[2]] | list_plots_histy[[2]]) / 
-#   (list_plots_histx[[3]] | plot_spacer() | list_plots_histx[[4]] | plot_spacer()) / 
-#   (list_plots_scatter[[3]] | list_plots_histy[[3]] | list_plots_scatter[[4]] | list_plots_histy[[4]]) +
-#   plot_layout(widths = c(3,1,3,1))
 
-# Generate external patchwork
-p_plsda_loadings <- ((list_patchworks[[1]]) | (list_patchworks[[2]])) / (list_patchworks[[3]] | list_patchworks[[4]]) 
+# Padding width
+fig_supp_17_padding_width <- 0.010
+
+# Individual plot width
+fig_supp_17_plot_width <- (1 - fig_supp_17_padding_width)/2
+
+# Plot title height
+fig_supp_17_title_height <- 0.04
+
+# Individual plot height
+fig_supp_17_plot_height <- fig_supp_17_plot_width - fig_supp_17_title_height
+
+# Grid panel widths
+fig_supp_17_widths <- c(fig_supp_17_plot_width, fig_supp_17_padding_width, fig_supp_17_plot_width)
+
+# Grid panel heights
+fig_supp_17_heights <- c(fig_supp_17_title_height, fig_supp_17_plot_height, 
+                         fig_supp_17_padding_width, 
+                         fig_supp_17_title_height, fig_supp_17_plot_height)
+
+# Grid panel titles
+nk_labels <- paste("K", "=", 7:10)
+list_label_grobs <- map(.x = nk_labels, .f = function(x) {
+  gTree(children = gList(rectGrob(gp = gpar(fill = "grey85",
+                                            col = "grey30",
+                                            lwd = 1)),
+                         textGrob(label = x, gp = gpar(fontsize = font_size+1,
+                                                       fontfamily = font_family))))
+})
+
+# Grid grob
+fig_supp_17_grob <- arrangeGrob(list_label_grobs[[1]],
+                                zeroGrob(),
+                                list_label_grobs[[2]],
+                                patchworkGrob(list_patchworks[[1]]), 
+                                # rectGrob(),
+                                zeroGrob(),
+                                patchworkGrob(list_patchworks[[2]]),
+                                # rectGrob(),
+                                zeroGrob(),
+                                list_label_grobs[[3]],
+                                zeroGrob(),
+                                list_label_grobs[[4]],
+                                patchworkGrob(list_patchworks[[3]]), 
+                                zeroGrob(),
+                                # rectGrob(),
+                                patchworkGrob(list_patchworks[[4]]), 
+                                layout_matrix = rbind(c(01, 02, 03),
+                                                      c(04, 05, 06),
+                                                      c(07, 07, 07),
+                                                      c(08, 09, 10),
+                                                      c(11, 12, 13)),
+                                widths = fig_supp_17_widths,
+                                heights = fig_supp_17_heights)
 
 # Plot dimensions in bigpts
-width_pt <- fig_width_pt
-height_pt <- fig_height_pt
+fig_supp_17_width_pt <- fig_width_pt
+fig_supp_17_height_pt <- fig_height_pt
 
 # Plot dimensions in inches
-width_in <- width_pt/pt_per_in
-height_in <- height_pt/pt_per_in
+fig_supp_17_width_in <- fig_supp_17_width_pt/pt_per_in
+fig_supp_17_height_in <- fig_supp_17_height_pt/pt_per_in
 
 # Export
 outfile <- paste(output_plot_prefix, 17, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-print(p_plsda_loadings)
+    width = unit(fig_supp_17_width_in, "in"),
+    height = unit(fig_supp_17_height_in, "in"))
+grid.draw(fig_supp_17_grob)
 dev.off()
 ```
 
