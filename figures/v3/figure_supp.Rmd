@@ -1152,8 +1152,9 @@ df_sim_pvals_POND %>%
   filter(mouse_cluster_id %in% mouse_cluster_streams[[1]],
          significant == 1) %>% 
   arrange(mouse_nk, mouse_k) %>%   
-  select(mouse_cluster_id, human_cluster_id, pval) %>% 
-  mutate(pval = round(pval, 4))  
+  select(mouse_cluster_id, human_cluster_id, similarity, pval) %>% 
+  mutate(similarity = round(similarity, 3),
+         pval = round(pval, 3))  
 ```
 
 ```{r fig-supp-9-pvals}
@@ -1161,16 +1162,18 @@ df_sim_pvals_POND %>%
   filter(mouse_cluster_id %in% mouse_cluster_streams[[2]],
          significant == 1) %>% 
   arrange(mouse_nk, mouse_k) %>%   
-  select(mouse_cluster_id, human_cluster_id, pval) %>% 
-  mutate(pval = round(pval, 4))  
+  select(mouse_cluster_id, human_cluster_id, similarity, pval) %>% 
+  mutate(similarity = round(similarity, 3),
+         pval = round(pval, 3))  
 ```
 ```{r fig-supp-10-pvals}
 df_sim_pvals_POND %>% 
   filter(mouse_cluster_id %in% mouse_cluster_streams[[3]],
          significant == 1) %>% 
   arrange(mouse_nk, mouse_k) %>%   
-  select(mouse_cluster_id, human_cluster_id, pval) %>% 
-  mutate(pval = round(pval, 4))  
+  select(mouse_cluster_id, human_cluster_id, similarity, pval) %>% 
+  mutate(similarity = round(similarity, 3),
+         pval = round(pval, 3))    
 ```
 
 ```{r fig-supp-11-pvals}
@@ -1178,8 +1181,9 @@ df_sim_pvals_POND %>%
   filter(mouse_cluster_id %in% mouse_cluster_streams[[4]],
          significant == 1) %>% 
   arrange(mouse_nk, mouse_k) %>%   
-  select(mouse_cluster_id, human_cluster_id, pval) %>% 
-  mutate(pval = round(pval, 4))  
+  select(mouse_cluster_id, human_cluster_id, similarity, pval) %>% 
+  mutate(similarity = round(similarity, 3),
+         pval = round(pval, 3))   
 ```
 
 
@@ -1316,11 +1320,11 @@ df_pathways_topn_hclust <- df_pathways_topn_hclust %>%
 
 # Generate clustered heatmap
 fig_supp_12_pheatmap <- pheatmap(mat = mat_pathways_topn,
-                                cluster_col = FALSE,
-                                cluster_rows = TRUE,
-                                clustering_distance_rows = "euclidean",
-                                cutree_rows = hclust_kcut,
-                                silent = TRUE)
+                                 cluster_col = FALSE,
+                                 cluster_rows = TRUE,
+                                 clustering_distance_rows = "euclidean",
+                                 cutree_rows = hclust_kcut,
+                                 silent = TRUE)
 
 # Extract dendrogram from pheatmap object
 fig_supp_12_dendrogram_grob <- fig_supp_12_pheatmap[["gtable"]][["grobs"]][[1]]
@@ -1540,9 +1544,9 @@ fig_supp_12_pathways_legend_width_pt <- 50
 
 # Generate heatmap of enrichment significance
 fig_supp_12_pathways <- ggplot(df_pathways_topn_heatmap, 
-                              aes(x = factor(k), 
-                                  y = fct_rev(pathway), 
-                                  fill = intensity)) + 
+                               aes(x = factor(k), 
+                                   y = fct_rev(pathway), 
+                                   fill = intensity)) + 
   geom_tile(col = "grey60") +
   facet_grid(pathway_cluster~nk, scales = "free", space = "free") + 
   scale_x_discrete(expand = expansion()) + 
@@ -1588,10 +1592,10 @@ fig_supp_12_pathways <- fig_supp_12_pathways +
 
 # Generate heatmap of mouse clusters with human matches
 fig_supp_12_match <- ggplot(df_sig_nk,
-                           mapping = aes(x = factor(k), 
-                                         y = y, 
-                                         fill = p,
-                                         label = plab)) + 
+                            mapping = aes(x = factor(k), 
+                                          y = y, 
+                                          fill = p,
+                                          label = plab)) + 
   geom_tile(col = "grey50") +
   geom_text(col = "white",
             angle = 90,
@@ -1664,22 +1668,22 @@ fig_supp_12_patchwork_height_pt <- fig_height_pt - fig_supp_12_padding_height_1_
 # Dimensions of heatmap plot
 fig_supp_12_widths <- c(fig_supp_12_dendrogram_width_pt, fig_supp_12_patchwork_width_pt)
 fig_supp_12_heights <- c(fig_supp_12_padding_height_1_pt, 
-                        fig_supp_12_patchwork_height_pt,
-                        fig_supp_12_padding_height_2_pt)
+                         fig_supp_12_patchwork_height_pt,
+                         fig_supp_12_padding_height_2_pt)
 
 # Layout of heatmap plot
 fig_supp_12_layout <- rbind(c(01, 02),
-                           c(03, 02),
-                           c(04, 02))
+                            c(03, 02),
+                            c(04, 02))
 
 # Grob grid for heatmap plot
 fig_supp_12_grob <- arrangeGrob(zeroGrob(),
-                               fig_supp_12_patchwork_grob,
-                               fig_supp_12_dendrogram_grob,
-                               zeroGrob(),
-                               layout_matrix = fig_supp_12_layout,
-                               widths = unit(fig_supp_12_widths, "bigpts"),
-                               heights = unit(fig_supp_12_heights, "bigpts"))
+                                fig_supp_12_patchwork_grob,
+                                fig_supp_12_dendrogram_grob,
+                                zeroGrob(),
+                                layout_matrix = fig_supp_12_layout,
+                                widths = unit(fig_supp_12_widths, "bigpts"),
+                                heights = unit(fig_supp_12_heights, "bigpts"))
 
 
 fig_supp_12_width_pt <- fig_width_pt
@@ -1687,19 +1691,19 @@ fig_supp_12_height_pt <- fig_height_pt
 
 # Viewport for pathways heatmap legend
 fig_supp_12_pathways_legend_vp <- viewport(x = unit(fig_width_pt-12, "bigpts"),
-                                          y = unit(35, "bigpts"),
-                                          width = unit(fig_supp_12_pathways_legend_width_pt, "bigpts"),
-                                          height = unit(22, "bigpts"),
-                                          just = c("right", "bottom"))
+                                           y = unit(35, "bigpts"),
+                                           width = unit(fig_supp_12_pathways_legend_width_pt, "bigpts"),
+                                           height = unit(22, "bigpts"),
+                                           just = c("right", "bottom"))
 
 # Viewport for human match heatmap legend
 fig_supp_12_match_legend_vp_width <- 105
 fig_supp_12_match_legend_vp_x <- fig_width_pt - fig_supp_12_match_legend_vp_width
 fig_supp_12_match_legend_vp <- viewport(x = unit(fig_supp_12_match_legend_vp_x, "bigpts"),
-                                       y = unit(fig_supp_12_height_pt-3, "bigpts"),
-                                       width = unit(fig_supp_12_match_legend_vp_width, "bigpts"),
-                                       height = unit(27, "bigpts"),
-                                       just = c("left", "top"))
+                                        y = unit(fig_supp_12_height_pt-3, "bigpts"),
+                                        width = unit(fig_supp_12_match_legend_vp_width, "bigpts"),
+                                        height = unit(27, "bigpts"),
+                                        just = c("left", "top"))
 
 fig_supp_12_width_in <- fig_supp_12_width_pt/pt_per_in
 fig_supp_12_height_in <- fig_supp_12_height_pt/pt_per_in
