@@ -3029,4 +3029,25 @@ print(p_kw_pvals)
 dev.off()
 ```
 
+```{r}
+df_kw %>% 
+  group_by(nk) %>% 
+  mutate(qval = p.adjust(pval, method = "fdr")) %>% 
+  ungroup() %>% 
+  summarise(fdr5 = sum(qval < 0.05),
+            fdr10 = sum(qval < 0.10),
+            fdr20 = sum(qval < 0.20))
+```
+```{r}
+for (K in 2:10) {
+  nsig <- df_kw %>% 
+    filter(nk == K) %>% 
+    mutate(qval = p.adjust(pval, method = "fdr"),
+           significant = qval < 0.05) %>% 
+    pull(significant) %>% 
+    sum()
+  print(nsig)
+}
+```
+
 
