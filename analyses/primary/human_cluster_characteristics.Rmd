@@ -521,14 +521,14 @@ colnames(pond_clinical)
 
 What are these scales? 
 
+- AB21GCCS: ABAS-II (5-21 years) GAC composite score
+- BOT2_BAL_SS: BOT 2 balance - scale score
+- BOT2_BDYC_STDS: BOT 2 body coordinate - standard score
+- BOT2_BLTC_SS: BOT 2 bilateral coordination - scale score
 - CB68IPTS: CBCL (6-18 years) internalizing problems T-score
 - CB68EPTS: CBCL (6-18 years) externalizing problems T-score
 - CBIPTS: CBCL (1.5-5 years) internalizing problems T-score
 - CBEPTS: CBCL (1.5-5 years) externalizing problems T-score
-- AB21GCCS: ABAS-II (5-21 years) GAC composite score
-- BOT2_BLTC_SS: BOT 2 bilateral coordination - scale score
-- BOT2_BAL_SS: BOT 2 balance - scale score
-- BOT2_BDYC_STDS: BOT 2 body coordinate - standard score
 - KKID_TOT: Kid-KINDL interview total quality of life score
 - KKDO_TOT: Kiddo-KINDL interview total quality of life score
 - KKDY_TOT: Kiddy-KINDL interview total quality of life score
