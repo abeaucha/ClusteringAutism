@@ -208,6 +208,9 @@ fig_height_pt <- 481
 human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
 df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
 
+hbn_cluster_file <- file.path(PROJECTPATH, "/data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv")
+df_hbn_clusters <- read_csv(hbn_cluster_file, show_col_types = FALSE)
+
 # Mouse cluster assignments
 mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
 df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
@@ -218,6 +221,11 @@ human_affinity_file <- file.path(human_cluster_dir, "affinity.csv")
 df_human_affinity <- read_csv(human_affinity_file, show_col_types = FALSE)
 mat_human_affinity <- as.matrix(df_human_affinity)
 rownames(mat_human_affinity) <- colnames(mat_human_affinity)
+
+hbn_affinity_file <- file.path(PROJECTPATH, "/data/human/derivatives/v3/013/clusters/resolution_3.0/affinity.csv")
+df_hbn_affinity <- read_csv(hbn_affinity_file, show_col_types = FALSE)
+mat_hbn_affinity <- as.matrix(df_hbn_affinity)
+rownames(mat_hbn_affinity) <- colnames(mat_hbn_affinity)
 
 # Mouse affinity matrix
 mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
@@ -230,13 +238,20 @@ eigengap_nk_max <- 20
 
 # Get human cluster metrics
 df_human_cluster_metrics <- estimate_cluster_metrics(W = mat_human_affinity, NUMC = 2:eigengap_nk_max)
+df_hbn_cluster_metrics <- estimate_cluster_metrics(W = mat_hbn_affinity, NUMC = 2:eigengap_nk_max)
 df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:eigengap_nk_max)
+
 df_cluster_metrics <- bind_rows(
   df_human_cluster_metrics %>% 
-    mutate(species = "Human"),
+    mutate(species = "POND + Taylor"),
+  df_hbn_cluster_metrics %>% 
+    mutate(species = "HBN"),
   df_mouse_cluster_metrics %>% 
-    mutate(species = "Mouse")
+    mutate(species = "MICe")
 )
+
+df_cluster_metrics <- df_cluster_metrics %>% 
+  mutate(species = factor(species, levels = c("POND + Taylor", "HBN", "MICe")))
 
 # Plot of eigengap distributions
 fig_supp_3 <- ggplot(df_cluster_metrics,
@@ -249,7 +264,7 @@ fig_supp_3 <- ggplot(df_cluster_metrics,
   scale_y_continuous(breaks = seq(0, 0.1, by = 0.01)) + 
   labs(x = "Number of clusters (K)",
        y = "Eigengap",
-       col = "Species") +
+       col = "Dataset") +
   theme_bw() + 
   theme(axis.title = element_text(size = font_size+1,
                                   family = font_family),
