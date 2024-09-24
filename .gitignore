@@ -4,6 +4,7 @@
 .ipynb_checkpoints/
 .venv/
 .venv_hpc/
+.venv_macbook/
 __pycache__/
 analyses/auxiliary/centroids
 analyses/auxiliary/gene_space_decomposition
@@ -34,8 +35,11 @@ figures/v3/figure_supp_human/
 figures/v3/figure_supplementary/
 src/legacy/
 templates/
+.python-version
 .Rhistory
 .Rprofile
+activate_venv_macbook.sh
+python_reqs_macbook.txt
 permutations_registry_*
 pMincMask*
 count_rows.R
