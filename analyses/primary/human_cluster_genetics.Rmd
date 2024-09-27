@@ -52,13 +52,15 @@ params
 
 ```{r}
 #Parameter set ID
-params_id <- 700
+params_id <- "700"
 
 #Pipeline directory
 pipeline_dir <- file.path(pipeline_dir, params_id)
 
 #Cluster resolution
-cluster_resolution <- params[["cluster_resolution"]]
+cluster_resolution <- params %>% 
+  filter(id == params_id) %>% 
+  pull(cluster_resolution)
 cluster_resolution <- sprintf("%.1f", cluster_resolution)
 
 #Cluster directory
@@ -74,13 +76,34 @@ genetics <- file.path(registration_dir, "subject_info", "POND_variants.xlsx")
 genetics <- read_excel(genetics)
 genetics <- genetics %>% 
   filter(!(SUBJECT_ID_INT %in% c("SK0664-003", "SK1016-003", "QAM-22961A2"))) %>% 
-  select(POND_ID, DATE_RECEIVED,
+  select(POND_ID, 
          `SIGNIFICANT VARIANT TYPE`,
          `SIGNIFICANT VARIANT`,
          `CLASSIFICATION`) %>%
   filter(str_detect(POND_ID, "POND-[a-zA-Z]+.*", negate = TRUE),
          str_detect(POND_ID, ";", negate = TRUE)) %>% 
-  mutate(POND_ID = str_remove(POND_ID, "-"))
+  mutate(POND_ID = str_remove(POND_ID, "-")) %>% 
+  distinct()
+
+ids_multiple <- genetics %>% 
+  group_by(POND_ID) %>% 
+  count() %>% 
+  filter(n > 1) %>% 
+  pull(POND_ID)
+
+genetics_repeats <- genetics %>% 
+  filter(POND_ID %in% ids_multiple) %>% 
+  arrange(POND_ID)
+
+genetics_unique <- genetics %>% 
+  filter(!(POND_ID %in% ids_multiple)) %>% 
+  arrange(POND_ID)
+
+genetics_repeats_unique <- genetics_repeats %>% 
+  filter(!is.na(CLASSIFICATION))
+
+genetics <- bind_rows(genetics_unique, 
+                      genetics_repeats_unique)
 
 demographics <- file.path(registration_dir, "subject_info", "demographics.csv")
 demographics <- read_csv(demographics, show_col_types = FALSE)
@@ -96,9 +119,14 @@ clusters <- clusters %>%
 
 clusters_genetics <- clusters %>% 
   left_join(genetics, by = c("Subject_ID" = "POND_ID")) %>% 
-  mutate(gene_identified = ifelse(is.na(CLASSIFICATION), 0, 1)) %>% 
+  mutate(gene_identified = !is.na(CLASSIFICATION)) %>% 
   distinct()
 ```
+
+```{r}
+sum(clusters_genetics$gene_identified)
+```
+
 
 ```{r eval = FALSE}
 df_clusters_long <- clusters_genetics %>% 
@@ -119,29 +147,40 @@ df_clusters_long <- df_clusters_long %>%
 df_clusters_long <- df_clusters_long %>% 
   mutate(ngenes = ifelse(ngenes == 0, NA, ngenes))
 
-# p_sankey_genes <- ggplot(df_clusters_long, 
-#                          aes(x = nk, stratum = k,
-#                              alluvium = ID,
-#                              fill = ngenes)) + 
-#   geom_flow(stat = "alluvium", aes.flow = "forward") + 
-#   geom_stratum() + 
-#   scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9], 
-#                        breaks = seq(0, 12, 2)) + 
-#   labs(x = "Number of clusters",
-#        y = "Number of patients",
-#        fill = "Identified variants",
-#        title = "Human clusters with identified genetic variants") + 
-#   theme_bw() + 
-#   theme(panel.grid.major.x = element_blank())
-# 
-# outfile <- "sankey_gene_variants.pdf"
-# outfile <- file.path(output_dir, outfile)
-# pdf(file = outfile, 
-#     width = unit(10, "in"),
-#     height = unit(5, "in"))
-# print(p_sankey_genes)
-# dev.off()
+clusters_w_matches <- c("2-1", "2-2", 
+                        "3-1", "3-3", 
+                        "4-1", "4-2", "4-3", 
+                        "5-2", "5-5", 
+                        "6-2", "6-6",
+                        "7-1", "7-2", "7-4",
+                        "8-1", "8-2", "8-4", "8-6", "8-7",
+                        "9-4", "9-5", "9-7",
+                        "10-10")
+
+p_sankey_genes <- ggplot(df_clusters_long,
+                         aes(x = nk, stratum = k,
+                             alluvium = ID,
+                             fill = ngenes)) +
+  geom_flow(stat = "alluvium", aes.flow = "forward") +
+  geom_stratum() +
+  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9],
+                       breaks = seq(0, 12, 2)) +
+  labs(x = "Number of clusters",
+       y = "Number of patients",
+       fill = "Identified variants",
+       title = "Human clusters with identified genetic variants") +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())
+
+outfile <- "sankey_gene_variants.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_sankey_genes)
+dev.off()
 ```
+
 
 ```{r}
 df_variants_long <- df_clusters_long %>% 
@@ -183,6 +222,110 @@ outfile <- "cluster_variants.csv"
 outfile <- file.path(output_dir, outfile)
 write_csv(df_variants, outfile)
 ```
+
+
+```{r}
+library(ggbeeswarm)
+
+clusters_w_matches <- c("2-1", "2-2", 
+                        "3-1", "3-3", 
+                        "4-1", "4-2", "4-3", 
+                        "5-2", "5-5", 
+                        "6-2", "6-6",
+                        "7-1", "7-2", "7-4",
+                        "8-1", "8-2", "8-4", "8-6", "8-7",
+                        "9-4", "9-5", "9-7",
+                        "10-10")
+
+df_gene_counts_matches <- df_clusters_gene_counts %>% 
+  mutate(nk = as.numeric(as.character(nk)),
+         k = as.numeric(as.character(k))) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  mutate(has_match = cluster_id %in% clusters_w_matches)
+
+p_genes_and_matches <- ggplot(df_gene_counts_matches, 
+       aes(x = has_match, y = ngenes, col = factor(nk))) + 
+  geom_beeswarm(cex = 2.0) +
+  coord_cartesian(ylim = c(0, 15)) + 
+  scale_x_discrete(labels = c("No", "Yes")) + 
+  scale_y_continuous(breaks = seq(0, 20, 2)) + 
+  labs(x = "Mouse match",
+       y = "Patients with identified variants",
+       col = "Number of clusters") + 
+  theme_bw()
+
+outfile <- "gene_variants_and_matches.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(5, "in"))
+print(p_genes_and_matches)
+dev.off()
+```
+
+```{r}
+p_genes_and_matches_bar <- df_gene_counts_matches %>% 
+  ggplot(aes(x = factor(k), y = ngenes, fill = has_match)) + 
+  geom_col() + 
+  facet_wrap(~nk, ncol = 3) + 
+  scale_fill_discrete(labels = c("No", "Yes")) + 
+  labs(x = "Cluster",
+       y = "Patients with identified variants",
+       fill = "Mouse match") + 
+  theme_bw() 
+
+outfile <- "gene_variants_and_matches_bar.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_genes_and_matches_bar)
+dev.off()
+```
+
+```{r}
+p_genes_and_matches_bar_agg <- df_gene_counts_matches %>% 
+  group_by(nk, has_match) %>% 
+  summarise(ngenes = sum(ngenes), 
+            .groups = "drop") %>% 
+  ggplot(aes(x = factor(nk), y = ngenes, fill = has_match)) +
+  geom_col(position = "dodge") +
+  scale_fill_discrete(labels = c("No", "Yes")) + 
+  labs(x = "Number of clusters",
+       y = "Patients with identified variants",
+       fill = "Cluster matches mouse") + 
+  theme_bw()
+
+outfile <- "gene_variants_and_matches_bar_agg.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_genes_and_matches_bar_agg)
+dev.off()
+```
+
+
+```{r}
+p_genes_and_matches_bar <- df_gene_counts_matches %>% 
+  ggplot(aes(x = factor(k), y = ngenes, fill = has_match)) + 
+  geom_col() + 
+  facet_wrap(~nk, ncol = 3) + 
+  scale_fill_discrete(labels = c("No", "Yes")) + 
+  labs(x = "Cluster",
+       y = "Patients with identified variants",
+       fill = "Mouse match") + 
+  theme_bw() 
+
+outfile <- "gene_variants_and_matches_bar.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_genes_and_matches_bar)
+dev.off()
+```
+
 
 # Comparison with mouse models
 

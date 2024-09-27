@@ -2127,17 +2127,17 @@ list_loadings <- map(plsda_loadings, read_csv, show_col_types = FALSE)
 
 # New names for features
 df_features <- tibble(features = c("CB68IPTS", "CB68EPTS", 
-                                    "AB21GCCS", 
-                                    "OWL2LCSS", "OWL2OESS", "OWL2OLCSS", 
-                                    "RBSALLT", "SCQTOT",
-                                    "ADHD_I_SUB", "ADHD_HI_SUB",
-                                    "TPOCS_TOT", "FSIQ"),
-                       features_new = c("CBCL-IP", "CBCL-EP", 
-                                        "ABAS-II", 
-                                        "OWL2-LC", "OWL2-OE", "OWL2-OLC", 
-                                        "RBS-R", "SCQ",
-                                        "SWAN-I", "SWAN-HI",
-                                        "TOCS", "FSIQ"))
+                                   "AB21GCCS", 
+                                   "OWL2LCSS", "OWL2OESS", "OWL2OLCSS", 
+                                   "RBSALLT", "SCQTOT",
+                                   "ADHD_I_SUB", "ADHD_HI_SUB",
+                                   "TPOCS_TOT", "FSIQ"),
+                      features_new = c("CBCL-IP", "CBCL-EP", 
+                                       "ABAS-II", 
+                                       "OWL2-LC", "OWL2-OE", "OWL2-OLC", 
+                                       "RBS-R", "SCQ",
+                                       "SWAN-I", "SWAN-HI",
+                                       "TOCS", "FSIQ"))
 
 # Rename features
 list_loadings <- map(list_loadings, function(x){
@@ -2737,6 +2737,162 @@ print(p_plsda_summary)
 dev.off()
 ```
 
+# Supplementary Figure ??: Genetic variants and cross-species matches
+
+```{r}
+library(readxl)
+
+demographics <- "../../data/human/registration/v3/subject_info/demographics.csv"
+demographics <- read_csv(demographics, show_col_types = FALSE)
+
+genetics <- "../../data/human/registration/v3/subject_info/POND_variants.xlsx"
+genetics <- read_excel(genetics)
+genetics <- genetics %>% 
+  filter(!(SUBJECT_ID_INT %in% c("SK0664-003", "SK1016-003", "QAM-22961A2"))) %>% 
+  select(POND_ID, 
+         `SIGNIFICANT VARIANT TYPE`,
+         `SIGNIFICANT VARIANT`,
+         `CLASSIFICATION`) %>%
+  filter(str_detect(POND_ID, "POND-[a-zA-Z]+.*", negate = TRUE),
+         str_detect(POND_ID, ";", negate = TRUE)) %>% 
+  mutate(POND_ID = str_remove(POND_ID, "-")) %>% 
+  distinct()
+
+ids_multiple <- genetics %>% 
+  group_by(POND_ID) %>% 
+  count() %>% 
+  filter(n > 1) %>% 
+  pull(POND_ID)
+
+genetics_repeats <- genetics %>% 
+  filter(POND_ID %in% ids_multiple) %>% 
+  arrange(POND_ID)
+
+genetics_unique <- genetics %>% 
+  filter(!(POND_ID %in% ids_multiple)) %>% 
+  arrange(POND_ID)
+
+genetics_repeats_unique <- genetics_repeats %>% 
+  filter(!is.na(CLASSIFICATION))
+
+genetics <- bind_rows(genetics_unique, 
+                      genetics_repeats_unique)
+
+clusters <- "../../data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv"
+clusters <- read_csv(clusters, show_col_types = FALSE)
+clusters <- clusters %>% 
+  left_join(demographics %>% 
+              select(Subject_ID, file),
+            by = c("ID" = "file")) %>% 
+  mutate(Subject_ID = str_remove(Subject_ID, "POND_"),
+         Subject_ID = str_remove(Subject_ID, "sub-"))
+
+clusters_genetics <- clusters %>% 
+  left_join(genetics, by = c("Subject_ID" = "POND_ID")) %>% 
+  mutate(gene_identified = !is.na(CLASSIFICATION)) %>% 
+  distinct()
+
+df_clusters_long <- clusters_genetics %>% 
+  select(ID, contains("nk"), gene_identified) %>% 
+  pivot_longer(cols = c(-ID, -gene_identified),names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+df_clusters_gene_counts <- df_clusters_long %>% 
+  group_by(nk, k) %>% 
+  summarise(ngenes = sum(gene_identified), .groups = "drop")
+
+df_clusters_long <- df_clusters_long %>% 
+  left_join(df_clusters_gene_counts, by = c("nk", "k"))
+
+df_clusters_long <- df_clusters_long %>% 
+  mutate(ngenes = ifelse(ngenes == 0, NA, ngenes))
+
+clusters_w_matches <- c("2-1", "2-2", 
+                        "3-1", "3-3", 
+                        "4-1", "4-2", "4-3", 
+                        "5-2", "5-5", 
+                        "6-2", "6-6",
+                        "7-1", "7-2", "7-4",
+                        "8-1", "8-2", "8-4", "8-6", "8-7",
+                        "9-4", "9-5", "9-7",
+                        "10-10")
+
+df_gene_counts_matches <- df_clusters_gene_counts %>% 
+  mutate(nk = as.numeric(as.character(nk)),
+         k = as.numeric(as.character(k))) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  mutate(has_match = cluster_id %in% clusters_w_matches)
+
+p_genes_and_matches_bar_agg <- df_gene_counts_matches %>% 
+  group_by(nk, has_match) %>% 
+  summarise(ngenes = sum(ngenes), 
+            .groups = "drop") %>% 
+  ggplot(aes(x = factor(nk), y = ngenes, fill = has_match)) +
+  geom_col(position = "dodge") +
+  scale_fill_discrete(labels = c("No", "Yes")) + 
+  labs(x = "Number of clusters",
+       y = "Patients with identified variants",
+       fill = "Cluster matches mouse") + 
+  theme_bw()
+
+p_genes_and_matches_bar_agg
+```
+
+```{r}
+clusters_w_matches <- c("2-1", "2-2", 
+                        "3-1", "3-3", 
+                        "4-1", "4-2", "4-3", 
+                        "5-2", "5-5", 
+                        "6-2", "6-6",
+                        "7-1", "7-2", "7-4",
+                        "8-1", "8-2", "8-4", "8-6", "8-7",
+                        "9-4", "9-5", "9-7",
+                        "10-10")
+
+list_clusters_w_matches <- list("2" = c(1, 2),
+                                "3" = c(1, 3),
+                                "4" = c(1, 2, 3),
+                                "5" = c(2, 5),
+                                "6" = c(2, 6),
+                                "7" = c(1, 2, 4),
+                                "8" = c(1, 2, 4, 6, 7),
+                                "9" = c(4, 5, 7),
+                                "10" = 10)
+
+df_chi2 <- tibble(nk = nk_range,
+                  chi2 = 0, p = 0)
+for (i in 1:nrow(df_chi2)) {
+  
+  nk <- df_chi2[[i, "nk"]]
+  cols <- c("ID", paste0("nk", nk), "gene_identified")
+  new_cols <- c("ID", "k", "gene_identified")
+  
+  clusters_genetics_nk <- clusters_genetics[,cols]
+  colnames(clusters_genetics_nk) <- new_cols
+  clusters_genetics_nk <- clusters_genetics_nk %>% 
+    mutate(has_match = (k %in% list_clusters_w_matches[[as.character(nk)]]),
+           has_match = factor(has_match, levels = c("FALSE", "TRUE")),
+           gene_identified = factor(gene_identified, levels = c("FALSE", "TRUE")))
+  
+  chi2_results <- tryCatch({
+    chisq.test(x = clusters_genetics_nk[["has_match"]],
+               y = clusters_genetics_nk[["gene_identified"]],
+               simulate.p.value = TRUE, B = 1e6)
+  }, error = function(e) {
+    list("statistic" = NA,
+         "p.value" = 0) 
+  })
+  
+  df_chi2[[i, "chi2"]] <- chi2_results[["statistic"]][[1]]
+  df_chi2[[i, "p"]] <- chi2_results[["p.value"]]
+}
+
+df_chi2
+```
+
 
 # Supplementary Figure ??: Comparison of clusters with matches vs. those without
 
@@ -2755,17 +2911,17 @@ list_loadings <- map(plsda_loadings, read_csv, show_col_types = FALSE)
 
 # New names for features
 df_features <- tibble(features = c("CB68IPTS", "CB68EPTS", 
-                                    "AB21GCCS", 
-                                    "OWL2LCSS", "OWL2OESS", "OWL2OLCSS", 
-                                    "RBSALLT", "SCQTOT",
-                                    "ADHD_I_SUB", "ADHD_HI_SUB",
-                                    "TPOCS_TOT", "FSIQ"),
-                       features_new = c("CBCL-IP", "CBCL-EP", 
-                                        "ABAS-II", 
-                                        "OWL2-LC", "OWL2-OE", "OWL2-OLC", 
-                                        "RBS-R", "SCQ",
-                                        "SWAN-I", "SWAN-HI",
-                                        "TOCS", "FSIQ"))
+                                   "AB21GCCS", 
+                                   "OWL2LCSS", "OWL2OESS", "OWL2OLCSS", 
+                                   "RBSALLT", "SCQTOT",
+                                   "ADHD_I_SUB", "ADHD_HI_SUB",
+                                   "TPOCS_TOT", "FSIQ"),
+                      features_new = c("CBCL-IP", "CBCL-EP", 
+                                       "ABAS-II", 
+                                       "OWL2-LC", "OWL2-OE", "OWL2-OLC", 
+                                       "RBS-R", "SCQ",
+                                       "SWAN-I", "SWAN-HI",
+                                       "TOCS", "FSIQ"))
 
 # Rename features
 list_loadings <- map(list_loadings, function(x){
