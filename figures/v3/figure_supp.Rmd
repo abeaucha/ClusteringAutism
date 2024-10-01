@@ -3026,6 +3026,51 @@ ggplot(df_chi2_perms,
   geom_histogram()
 ```
 
+```{r}
+df_props <- tmp_summary %>% 
+  filter(gene_identified, nk > 2)
+
+ggplot(df_props, aes(x = has_match, y = prop_per_gene_group)) + 
+  geom_jitter(width = 0.1)
+
+summary(glm(prop_per_gene_group ~ has_match, data = df_props, family = "binomial"))
+```
+
+```{r}
+nvariants <- tmp %>% 
+  filter(gene_identified) %>% 
+  pull(ID) %>% 
+  unique() %>% 
+  length()
+  
+df_props <- tmp %>% 
+  filter(nk > 2, gene_identified)  %>% 
+  group_by(nk, has_match) %>% 
+  summarise(num = n(), 
+            prop = num/nvariants,
+            .groups = "drop")
+  
+df_props
+```
+
+```{r}
+ggplot(df_props, 
+       aes(x = has_match, y = prop)) + 
+  geom_jitter(width = 0.2)
+```
+```{r}
+df_props_test %>% 
+  arrange(desc(prop))
+
+df_props_test <- df_props %>% 
+  filter(!(nk == 10 & !has_match))
+```
+
+
+```{r}
+summary(glm(prop ~ has_match, data = df_props_test, family = "binomial"))
+```
+
 
 
 # Supplementary Figure ??: Comparison of clusters with matches vs. those without
