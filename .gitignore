@@ -43,3 +43,5 @@ python_reqs_macbook.txt
 permutations_registry_*
 pMincMask*
 count_rows.R
+.Rproj.user
+main.Rproj
