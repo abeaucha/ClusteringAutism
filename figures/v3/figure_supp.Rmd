@@ -2862,7 +2862,7 @@ list_clusters_w_matches <- list("2" = c(1, 2),
                                 "9" = c(4, 5, 7),
                                 "10" = 10)
 
-df_chi2 <- tibble(nk = nk_range,
+df_chi2 <- tibble(nk = 2:10,
                   chi2 = 0, p = 0)
 for (i in 1:nrow(df_chi2)) {
   
@@ -2892,6 +2892,140 @@ for (i in 1:nrow(df_chi2)) {
 
 df_chi2
 ```
+
+```{r}
+tmp <- df_clusters_long %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  mutate(has_match = (cluster_id %in% clusters_w_matches),
+         nk = as.numeric(as.character(nk))) %>% 
+  select(ID, nk, has_match, gene_identified)
+
+tmp_summary <- tmp %>% 
+  group_by(nk, has_match) %>% 
+  mutate(n_per_group = n()) %>% 
+  ungroup() %>% 
+  group_by(nk, has_match, gene_identified) %>% 
+  mutate(n_per_gene_group = n()) %>% 
+  ungroup() %>% 
+  select(-ID) %>% 
+  distinct() %>% 
+  mutate(prop_per_gene_group = n_per_gene_group/n_per_group) %>% 
+  arrange(nk)
+
+p <- tmp_summary %>%
+  # ggplot(aes(x = has_match, y = prop_per_gene_group, fill = gene_identified)) +
+  ggplot(aes(x = has_match, y = n_per_gene_group, fill = gene_identified)) +
+  geom_col() + 
+  facet_grid(.~nk) +
+  # coord_cartesian(ylim = c(0, 0.1)) + 
+  scale_x_discrete(labels = c("No", "Yes")) + 
+  scale_fill_discrete(labels = c("No", "Yes")) + 
+  labs(x = "Mouse match",
+       y = "Identified variant") + 
+  theme_bw() 
+
+outfile <- "genes_and_matches_num.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p)
+dev.off()
+```
+
+```{r}
+p <- tmp_summary %>%
+  ggplot(aes(x = has_match, y = prop_per_gene_group, fill = gene_identified)) +
+  geom_col() + 
+  facet_grid(.~nk) +
+  # coord_cartesian(ylim = c(0, 0.1)) + 
+  scale_x_discrete(labels = c("No", "Yes")) + 
+  scale_fill_discrete(labels = c("No", "Yes")) + 
+  labs(x = "Mouse match",
+       y = "Identified variant") + 
+  theme_bw() 
+
+outfile <- "genes_and_matches_prop.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p)
+dev.off()
+```
+
+```{r}
+p <- tmp_summary %>%
+  ggplot(aes(x = has_match, y = prop_per_gene_group, fill = gene_identified)) +
+  geom_col() + 
+  facet_grid(.~nk) +
+  coord_cartesian(ylim = c(0, 0.1)) +
+  scale_x_discrete(labels = c("No", "Yes")) + 
+  scale_fill_discrete(labels = c("No", "Yes")) + 
+  labs(x = "Mouse match",
+       y = "Identified variant") + 
+  theme_bw() 
+
+outfile <- "genes_and_matches_prop_zoomed.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p)
+dev.off()
+```
+
+
+```{r}
+tmp2 <- tmp %>% 
+  filter(gene_identified) %>% 
+  mutate(nk = factor(nk))
+
+chisq.test(x = tmp2$nk,
+           y = tmp2$has_match, 
+           simulate.p.value = TRUE,
+           B = 1e7)
+```
+
+```{r}
+chisq.test(x = tmp$has_match,
+           y = tmp$gene_identified,
+           simulate.p.value = TRUE,
+           B = 1e7)
+```
+
+
+```{r}
+nperms <- 1000
+df_chi2_perms <- tibble(permutation = 1:nperms,
+                        chi2 = 0, p = 0)
+for (i in 1:nrow(df_chi2_perms)) {
+  
+  set.seed(i)
+  tmp_sample <- tmp %>% 
+    group_by(ID) %>% 
+    sample_n(size = 1) %>% 
+    ungroup()
+ 
+  chi2_results <- chisq.test(x = tmp_sample$has_match,
+                             y = tmp_sample$gene_identified,
+                             simulate.p.value = TRUE,
+                             B = 1e5)
+  
+  df_chi2_perms[[i, "chi2"]] <- chi2_results$statistic
+  df_chi2_perms[[i, "p"]] <- chi2_results$p.value
+  
+}
+
+df_chi2_perms
+```
+
+```{r}
+ggplot(df_chi2_perms, 
+       aes(x = p)) + 
+  geom_histogram()
+```
+
 
 
 # Supplementary Figure ??: Comparison of clusters with matches vs. those without
