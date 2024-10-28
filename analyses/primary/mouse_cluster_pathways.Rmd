@@ -55,11 +55,9 @@ hclust_wcss <- function(x, method = "euclidean") {
 nk_max <- 10
 
 # Database versions
-# stringdb_version <- "11.5"
 stringdb_version <- "12.0"
-# bader_version <- "2020"
 bader_version <- "2023"
-stringdb_threshold <- 900
+stringdb_threshold <- 950
 
 # Output directory
 output_dir <- paste("StringDB", stringdb_version, "Bader", bader_version, stringdb_threshold, sep = "_")
@@ -1158,6 +1156,690 @@ print(pathways_heatmap_topn)
 dev.off()
 ```
 
+## Messing around
+
+N is the background set, i.e. the set of all genes we're testing against. 
+n is the number of genes in the cluster neighbourhood that are also in the background set. 
+B is the number of genes in the target set, i.e. the set of genes associated with the given molecular pathway. I think this is the value I'm looking for. 
+b is the number of genes in the cluster neighbourhood that are also in the target set. 
+
+
+```{r}
+# Reduce all pathway data frames into one
+df_pathways_all <- bind_rows(list_pathways)
+
+df_pathways_all
+```
+
+```{r}
+df_pathways_all %>% 
+  select(pathway, B) %>% 
+  filter(pathway == "Developmental biology")
+```
+
+Why are these values not identical?
+
+```{r}
+unique(df_pathways_all$N)
+```
+The background set is also not the same??
+
+The sets are changing size. Is this what we want? Why is this happening?
+
+```{r}
+suppressPackageStartupMessages(library(glue))
+
+# Directory containing mouse cluster files
+cluster_dir <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Outputs/Clusters_Paper/"
+
+GetValidGeneClusterList<-function(Cluster_Dir="Data/Outputs/Clusters",
+                                  boot="N",
+                                  boot_pick=nboot){
+  
+  if(boot=="Y"){
+    cl <- read.csv(glue("{Cluster_Dir}/Boot/Clusters_{boot_pick}.csv"))
+  } else {
+    cl <- read.csv(glue("{Cluster_Dir}/Clusters.csv"))
+  }
+  
+  cl <- cl %>% dplyr::mutate(Model=X)%>% dplyr::select(-X)
+  
+  # Get gene names
+  cl$Gene <- sapply(strsplit(as.character(cl$Model),"\\("), "[[", 1)
+  cl$Gene[cl$Gene=="Andr"] <- "Ar"
+  cl$Gene[cl$Gene=="Caspr2"] <- "Cntnap2"
+  cl$Gene[cl$Gene=="Dat"] <- "Slc6a3"
+  cl$Gene[cl$Gene=="Mor"] <- "Oprm1"
+  cl$Gene[cl$Gene=="Nl1"] <- "Nlgn1"
+  cl$Gene[cl$Gene=="Nl3"] <- "Nlgn3"
+  cl$Gene[cl$Gene=="Nrxn1a"] <- "Nrxn1"
+  cl$Gene[cl$Gene=="Sert"] <- "Slc6a4"
+  cl$Gene[cl$Gene=="Pcdh"] <- "Pcdhga3"
+  cl$Gene[cl$Gene=="Chd7;En1Cre"] <- "Chd7"
+  cl$Gene[cl$Gene=="Ube3a.2"] <- "Ube3a"
+  cl$Gene[cl$Gene=="FusDelta14"] <- "Fus"
+  cl$Gene[cl$Gene=="Nr1a"] <- "Nmdar1"
+  cl$Gene[cl$Model=="itsn1(+/+);itsn2(-/-)"]<- "itsn2"
+  cl$Gene[cl$Model=="Snf2H(+/+);Snf2L(-/-);emxcre"]<-"Snf2l"
+  cl$Gene[cl$Gene=="Snf2L"] <- "Smarca1"
+  cl$Gene[cl$Gene=="Snf2H"] <- "Smarca5"
+  cl$Gene[cl$Model=="Gsk3(a)"]<- "Gsk3A"
+  cl$Gene[cl$Model=="Gsk3(B)"]<- "Gsk3B"
+  
+  # Remove CNVs, chromosomal, and behavioural models
+  valid_indices <- (! (cl$Gene %in% c("15q11-13", "16p11.2", "22q11.2", "XO", "Btbr", "Balbc", "MAR","15q25","TCDD","VPA","BtbrTT")))
+  cl_filt <- cl[valid_indices, ]
+  return(cl_filt)
+}
+
+# Import mouse clusters and filter for models to use for enrichment
+cl_filt <- GetValidGeneClusterList(Cluster_Dir = cluster_dir,
+                                   boot = "N", boot_pick = "100")
+
+gene_score <- 950
+total_clusters <- 10
+
+all_df_list <- list()
+gx_data_list <- list()
+gscore <- gene_score
+
+if (stringdb_version == "11.5") {
+  stringdb_url <- "https://version-11-5.string-db.org/"
+} else if (stringdb_version == "12.0") {
+  stringdb_url <- "https://string-db.org/"
+} else {
+  stop()
+}
+
+# for (num_clusters in 2:total_clusters) {}
+num_clusters <- 2
+
+all_df <- cl_filt %>% 
+  select(Model, Gene, paste0("group", num_clusters)) %>%
+  rename(gene=Gene, cluster=paste0("group", num_clusters))
+```
+
+Start with 116 models total, from `cl_filt`
+
+```{r}
+all_df <- all_df[!duplicated(all_df %>% mutate(dup_select=paste(gene, cluster, sep = "-")) %>% .$dup_select),]
+table(all_df$cluster)
+```
+
+Extract unique genes from models, resulting in 81 genes total.
+
+```{r}
+# Zero based index
+all_df$queryIndex <- seq(from=0, to=(dim(all_df)[1]-1), by=1)
+
+# Get STRINGids and merge to all_df
+api_call <- paste(stringdb_url, "api/tsv/get_string_ids?identifiers=", paste(all_df$gene, collapse = "%0D"), "&species=10090&limit=1", sep="")
+string_ids <- read_tsv(api_call) %>% select(queryIndex, stringId, preferredName)
+all_df <- all_df %>% left_join(string_ids, by="queryIndex")
+
+all_df
+```
+Get String IDs corresponding to each gene. 
+
+
+```{r}
+# Remove organism ID
+all_df$fixed_id <- all_df$stringId %>% strsplit("\\.") %>% map_chr(`[`, 2)
+
+all_df
+```
+
+Remove the organism ID from the String ID
+
+```{r}
+# Get interaction data
+api_call <- paste(stringdb_url, "api/tsv/interaction_partners?identifiers=", paste(all_df$stringId, collapse = "%0D"), "&species=10090&required_score=",gscore, sep="")
+gx_data <- read_tsv(api_call)
+
+gx_data
+```
+
+Get the interaction partners for all the genes at the specified gene score (e.g. 950)
+
+```{r}
+gx_data <- gx_data %>% 
+  left_join(all_df %>% dplyr::select(cluster, stringId), by=c("stringId_A"="stringId")) %>% 
+  dplyr::rename(cluster_A=cluster)
+
+# Write out gene neighbourhoods for each cluster
+base_set <- unique(c(gx_data$preferredName_A, gx_data$preferredName_B))
+
+length(base_set)
+```
+Generates the base set. What is this? The set of all model genes and their interacting partners at the given score. This is saved in "base_set_full_neighbourhood_950.txt". There are 502 genes total at a score of 950.
+
+So the background set changing isn't happening here. 
+
+What's next? 
+
+```{r}
+background_set <- "../../data/mouse/enrichment/sagittal_gene_table_normalized_filtered.csv"
+Bader_List <- "../../data/mouse/enrichment/Human_Reactome_October_01_2023_symbol.gmt"
+Neighbour_dir <- "../../data/mouse/enrichment/StringDB_12.0_Bader_2023/NeighbourhoodInfo/"
+
+# Doing the same shit as above
+all_df <- cl_filt %>% dplyr::select(Model, Gene, paste0("group", total_clusters)) %>% dplyr::rename(gene=Gene, cluster=paste0("group", total_clusters))
+all_df <- all_df[!duplicated(all_df %>% mutate(dup_select=paste(gene, cluster, sep = "-")) %>% .$dup_select),]
+all_df$queryIndex <- seq(from=0, to=(dim(all_df)[1]-1), by=1)
+```
+
+Get the full background set
+
+```{r}
+base_brain <- read.csv(background_set, header = T)$msg.genes.acronym %>% as.character
+length(base_brain)
+```
+```{r}
+GeneScore <- 950
+base_models_neighbourhood <- read.csv(glue("{Neighbour_dir}/{GeneScore}/base_set_full_neighbourhood_{GeneScore}.txt"), header = F)$V1  %>% as.character
+length(base_models_neighbourhood)
+```
+
+This is the thing we generated above. The full set of genes in the protein-protein interaction network. 
+
+```{r}
+base_models_only <- all_df$gene
+```
+
+Get the gene set without PPI
+
+```{r}
+base <- list(brain=base_brain, models_neighbourhood=base_models_neighbourhood, models_only=base_models_only)
+```
+
+Combine all the sets into a list.
+
+```{r}
+library(tmod)
+gmt_file<-Bader_List
+MappingsGMT <- tmodImportMSigDB(gmt_file, format = "gmt")
+```
+
+Import the Bader gene to pathway mappings
+
+
+```{r}
+# for (num_clusters in 2:total_clusters) {}
+num_clusters <- 2
+
+target <- list(models_neighbourhood=list(), models_only=list())
+for (clust in 1:num_clusters) {
+  
+  if (file.size(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_neighbourhood.txt")) == 0) {
+    next
+  } else {
+    target_set_cl <- read.csv(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_neighbourhood.txt"), header = F)$V1 %>% as.character
+    target$models_neighbourhood[[clust]] <- target_set_cl
+    
+    target_set_cl <- read.csv(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_only_models.txt"), header = F)$V1 %>% as.character
+    target$models_only[[clust]] <- target_set_cl
+  }
+}
+
+length(target$models_neighbourhood)
+```
+```{r}
+map(target$models_neighbourhood, length)
+```
+
+This gets the gene sets for each cluster in each cluster solution. 
+
+```{r}
+# for (clust in 1:num_clusters) {}
+clust <- 1
+
+base_set <- base$brain
+target_set <- target$models_neighbourhood[[clust]]
+```
+
+Get the background set and gene set for the given cluster.
+
+```{r}
+enrichment_object <-  MappingsGMT
+
+
+get_homologs <- function(genes, species, ordered=T) {
+  if (!exists("hom", envir = globalenv())) {
+    hom <<- read_tsv("http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt")
+  }
+  species <- switch (species,
+                     mouse={"mouse, laboratory"},
+                     human={"human"}
+  )
+  
+  if (ordered) {
+    genes_human <- genes_mouse <- c()
+    prog <- txtProgressBar(max=length(genes), style = 3)
+    for (i in 1:length(genes)) {
+      g <- genes[i]
+      homologene_ids <- hom$`DB Class Key`[which((hom$Symbol==g) & hom$`Common Organism Name`==species)]
+      genes_mouse <- c(genes_mouse, hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="mouse, laboratory"))])
+      genes_human <- c(genes_human, hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="human"))])
+      setTxtProgressBar(prog, i)
+    }  
+    close(prog)
+  } else {
+    # Faster, but unordered
+    homologene_ids <- hom$`DB Class Key`[which((hom$Symbol %in% genes) & hom$`Common Organism Name`==species)]
+    genes_mouse <- hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="mouse, laboratory"))]
+    genes_human <- hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="human"))]
+  }
+  
+  return(list(input_genes=genes, mouse_genes=genes_mouse, human_genes=genes_human))  
+}
+
+fg <- get_homologs(as.character(target_set), "mouse", ordered = F)$human_genes
+bg <- get_homologs(as.character(base_set), "mouse", ordered = F)$human_genes
+```
+
+```{r}
+print(length(base_set))
+print(length(bg))
+```
+```{r}
+length(target_set)
+length(fg)
+```
+
+Okay so this is where weird things are happening? Somehow the target set has increased in size? The background set has reduced, but that might be expected since not all genes have homologs. 
+
+I think this is where the sets are changing size. 
+
+```{r}
+for (num_clusters in 2:total_clusters) {
+  
+  target <- list(models_neighbourhood=list(), models_only=list())
+  for (clust in 1:num_clusters) {
+    
+    if (file.size(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_neighbourhood.txt")) == 0) {
+      next
+    } else {
+      target_set_cl <- read.csv(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_neighbourhood.txt"), header = F)$V1 %>% as.character
+      target$models_neighbourhood[[clust]] <- target_set_cl
+      
+      target_set_cl <- read.csv(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_only_models.txt"), header = F)$V1 %>% as.character
+      target$models_only[[clust]] <- target_set_cl
+    }
+    
+    base_set <- base$brain
+    target_set <- target$models_neighbourhood[[clust]]
+    
+    fg <- get_homologs(as.character(target_set), "mouse", ordered = F)$human_genes
+    bg <- get_homologs(as.character(base_set), "mouse", ordered = F)$human_genes
+    
+    print(length(bg))
+    
+  }
+}
+```
+
+Okay so the background set still isn't changing here. The target sets change for the different clusters, which makes sense. 
+
+But then the next step is just to run the HG test?
+
+```{r}
+tmodObj <- tmodHGtest(fg, bg, qval = 1.1, mset = enrichment_object, filter = F, order.by = "pval")
+tmodObj <- tmodObj %>%  
+  rowwise() %>% 
+  mutate(P.Value = P.Value) %>% 
+  ungroup() %>% 
+  mutate(adj.P.Val=p.adjust(P.Value, method="fdr")) #tmod runs one-sided tests
+
+tmodObj
+```
+
+```{r}
+tmodObj %>% pull(N) %>% unique
+```
+The background set is the same for all tests, which makes sense. But it's now smaller than the set we started with. 
+
+```{r}
+for (num_clusters in 2:total_clusters) {
+  
+  target <- list(models_neighbourhood=list(), models_only=list())
+  for (clust in 1:num_clusters) {
+    
+    if (file.size(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_neighbourhood.txt")) == 0) {
+      next
+    } else {
+      target_set_cl <- read.csv(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_neighbourhood.txt"), header = F)$V1 %>% as.character
+      target$models_neighbourhood[[clust]] <- target_set_cl
+      
+      target_set_cl <- read.csv(glue("{Neighbour_dir}/{GeneScore}/target_set_cluster{num_clusters}_{clust}_{GeneScore}_only_models.txt"), header = F)$V1 %>% as.character
+      target$models_only[[clust]] <- target_set_cl
+    }
+    
+    base_set <- base$brain
+    target_set <- target$models_neighbourhood[[clust]]
+    
+    fg <- get_homologs(as.character(target_set), "mouse", ordered = F)$human_genes
+    bg <- get_homologs(as.character(base_set), "mouse", ordered = F)$human_genes
+    
+    tmodObj <- tmodHGtest(fg, bg, qval = 1.1, mset = enrichment_object, filter = F, order.by = "pval")
+    tmodObj <- tmodObj %>%  
+      rowwise() %>% 
+      mutate(P.Value = P.Value) %>% 
+      ungroup() %>% 
+      mutate(adj.P.Val=p.adjust(P.Value, method="fdr")) #tmod runs one-sided tests
+    
+    print(unique(tmodObj$N))
+    
+  }
+}
+```
+
+So the background set is actually changing behind the scenes when running the HG test. 
+
+```{r}
+bg_len <- length(bg)
+fg_len <- length(fg)
+
+tmod_N <- unique(tmodObj$N)
+```
+
+
+So the background set doesn't change based on the test set, but it changes based on the target set. 
+
+```{r}
+tmodObj
+```
+
+Maybe this doesn't matter. I thought the difference arose at the level of pre-processing, but everything is consistent up until the actual test is run. 
+
+```{r}
+print(length(bg))
+print(length(unique(bg)))
+```
+Looks like the background set is redundant. 
+
+```{r}
+length(unique(c(fg, bg)))
+```
+Ah there we go. The background set is the union of the input background set and the input target set. So genes in the different target sets aren't necessarily in the input background set. 
+
+Okay. 
+
+Well what to do with this anyway? 
+
+```{r}
+cluster_lvls <- df_pathways_all %>% 
+  select(cluster_id, nk, k) %>% 
+  distinct() %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)
+
+df_pathways_nsig <- df_pathways_all %>% 
+  mutate(significant = adj.P.Val < 0.05) %>% 
+  filter(significant) %>% 
+  group_by(cluster_id, nk) %>%
+  count() %>% 
+  ungroup() %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls))
+
+outfile <- "pathways_nsignificant.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 10,
+    height = 5)
+ggplot(df_pathways_nsig, aes(x = cluster_id, y = n)) + 
+  geom_col(alpha = 0.5,
+           fill = "grey50",
+           col = "grey30") + 
+  facet_wrap(~nk, scales = "free_x") +
+  labs(x = "Cluster", 
+       y = "Number of significant pathways") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 8))
+dev.off()
+```
+
+```{r}
+df_pathways_all %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  pull(n) %>% 
+  unique()
+```
+
+
+```{r}
+alpha <- c(0.05, 10^(-1*seq(2, 20)))
+df_pathways_roc <- tibble()
+for (q in alpha) {
+  
+  df_pathways_roc_i <- df_pathways_all %>% 
+    mutate(significant = adj.P.Val < q) %>% 
+    filter(significant) %>% 
+    group_by(cluster_id, nk) %>%
+    count() %>% 
+    ungroup() %>% 
+    mutate(alpha = q)
+  
+  df_pathways_roc <- bind_rows(df_pathways_roc, df_pathways_roc_i)
+  
+}
+
+outfile <- "pathways_nsignificant_roc.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 8,
+    height = 8)
+ggplot(df_pathways_roc, 
+       aes(x = -log10(alpha), y = n, group = cluster_id)) + 
+  geom_line(alpha = 0.5) + 
+  geom_point(size = 1, 
+             col = "grey30") +
+  geom_vline(xintercept = -log10(0.05),
+             col = "red", linetype = "dashed",
+             size = 0.3) + 
+  facet_wrap(~nk, scales = "free_y") +
+  coord_cartesian(xlim = c(0, 20),
+                  ylim = c(0, 600)) + 
+  scale_x_continuous(breaks = seq(0, 30, by = 5)) + 
+  scale_y_continuous(breaks = seq(0, 1000, by = 100)) + 
+  labs(x = "-log10(alpha)",
+       y = "Number of significant pathways",
+       col = "Cluster solution") + 
+  theme_bw()
+dev.off()
+```
+
+```{r}
+df_pathways_nk2 <- df_pathways_all %>% 
+  filter(nk == 2) %>%
+  mutate(significant = adj.P.Val < 0.05,
+         cluster_id = factor(cluster_id, levels = cluster_lvls)) 
+
+outfile <- "pathways_nk2_test_set_size.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 8,
+    height = 5)
+ggplot(df_pathways_nk2, aes(x = B, y = E, col = significant)) + 
+  geom_point(size = 0.5,
+             alpha = 0.5) +
+  facet_wrap(~cluster_id) +
+  labs(x = "Number of genes in pathway",
+       y = "Enrichment",
+       col = "Significant") + 
+  theme_bw()
+dev.off()
+```
+
+```{r}
+df_pathways_nk2 %>% 
+  filter(k == 1,
+         B > 400) %>% 
+  arrange(desc(B))
+```
+
+```{r}
+outfile <- "pathways_nk2_test_set_size_lt500.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 8,
+    height = 5)
+ggplot(filter(df_pathways_nk2, B < 500), aes(x = B, y = E, col = significant)) + 
+  geom_point(size = 0.5,
+             alpha = 0.5) +
+  facet_wrap(~cluster_id) +
+  labs(x = "Number of genes in pathway",
+       y = "Enrichment",
+       col = "Significant") + 
+  theme_bw()
+dev.off()
+```
+
+```{r}
+df_pathways_nk2 %>% 
+  filter(k == 1, B < 75, B != 0) %>% 
+  ggplot(aes(x = B)) + 
+  geom_histogram(binwidth = 2, fill = "grey70", col = "grey30")
+```
+
+```{r}
+df_pathways_nk2 %>% 
+  filter(k == 1, B != 0) %>% 
+  arrange(B) %>% 
+  select(pathway, B)
+```
+
+```{r}
+df_pathways_nk2 %>% 
+  filter(k == 1, B <= 10, B != 0) %>% 
+  group_by(B) %>% 
+  count() %>% 
+  ungroup() %>% 
+  ggplot(aes(x = B, y = n)) + 
+  geom_col()
+```
+
+```{r}
+npathways <- df_pathways_nk2 %>% 
+  filter(k == 1, B != 0) %>% 
+  nrow()
+
+npathways_leq10 <- df_pathways_nk2 %>% 
+  filter(k == 1, B != 0, B <= 10) %>% 
+  nrow()
+
+print(npathways_leq10)
+print(npathways_leq10/npathways)
+```
+
+```{r}
+B_max <- df_pathways_nk2 %>% 
+  pull(B) %>% 
+  max()
+
+ecdf <- tibble(x = floor(seq(1, B_max, by = 1)),
+               y = 0)
+for (i in 1:nrow(ecdf)) {
+  ni <- df_pathways_nk2 %>% 
+    filter(k == 1, B != 0, 
+           B < ecdf[[i, "x"]]) %>% 
+    nrow()
+  
+  ecdf[[i, "y"]] <- ni/npathways
+}
+```
+
+```{r}
+outfile <- "pathways_genes_ecdf.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 8,
+    height = 5)
+ggplot(ecdf, aes(x = x, y = y)) + 
+  geom_line() + 
+  geom_point(size = 0.5) +
+  scale_x_continuous(breaks = seq(0, 3000, by = 200)) + 
+  scale_y_continuous(breaks = seq(0, 1.0, by = 0.1)) + 
+  labs(x = "Number of genes in pathway",
+       y = "Proportion of pathways") +
+  theme_bw()
+dev.off()
+```
+
+```{r}
+df_pathways_nk2 %>% 
+  filter(k == 1,
+         pathway %in% df_pathway_info[["pathway"]]) %>% 
+  select(pathway, B) %>% 
+  arrange(desc(B))
+```
+
+```{r}
+pathways_threshold <- df_pathways_all %>% 
+  select(pathway, B) %>% 
+  group_by(pathway) %>% 
+  filter(B == min(B)) %>%
+  distinct() %>% 
+  ungroup() %>% 
+  filter(B >= 20, B < 400) %>% 
+  pull(pathway)
+
+df_pathways_all_threshold <- df_pathways_all %>%
+  filter(pathway %in% pathways_threshold) %>% 
+  group_by(cluster_id) %>% 
+  mutate(adj.P.Val = p.adjust(P.Value, method = "fdr"),
+         NLQ = -log10(adj.P.Val)) %>% 
+  ungroup()
+
+df_pathways_all_threshold
+```
+
+```{r}
+alpha <- c(0.05, 10^(-1*seq(2, 20)))
+df_pathways_roc <- tibble()
+for (q in alpha) {
+  
+  df_pathways_roc_i <- df_pathways_all_threshold %>% 
+    mutate(significant = adj.P.Val < q) %>% 
+    filter(significant) %>% 
+    group_by(cluster_id, nk) %>%
+    count() %>% 
+    ungroup() %>% 
+    mutate(alpha = q)
+  
+  df_pathways_roc <- bind_rows(df_pathways_roc, df_pathways_roc_i)
+  
+}
+
+outfile <- "pathways_nsignificant_roc_B_geq20_lt400.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = 8,
+    height = 8)
+ggplot(df_pathways_roc, 
+       aes(x = -log10(alpha), y = n, group = cluster_id)) + 
+  geom_line(alpha = 0.5) + 
+  geom_point(size = 1, 
+             col = "grey30") +
+  geom_vline(xintercept = -log10(0.05),
+             col = "red", linetype = "dashed",
+             size = 0.3) + 
+  facet_wrap(~nk, scales = "free_y") +
+  coord_cartesian(xlim = c(0, 20),
+                  ylim = c(0, 600)) + 
+  scale_x_continuous(breaks = seq(0, 30, by = 5)) + 
+  scale_y_continuous(breaks = seq(0, 1000, by = 100)) + 
+  labs(x = "-log10(alpha)",
+       y = "Number of significant pathways",
+       col = "Cluster solution") + 
+  theme_bw()
+dev.off()
+```
+
+
+
+
+
 # Gene ontology pathway hierarchy
 
 ```{r}
@@ -1299,3 +1981,6 @@ for (k in 1:nk) {
   
 }
 ```
+
+
+
