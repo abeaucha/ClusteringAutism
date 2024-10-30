@@ -203,6 +203,125 @@ import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, thres
 }
 
 
+import_similarity <- function(param_id, pipeline_dir = "data/cross_species/v3/", combine_jacobians = TRUE) {
+  
+  input_dir <- file.path(pipeline_dir, param_id, "similarity")
+  input_file <- file.path(input_dir, "similarity.csv")
+  
+  # Import similarity data
+  similarity <- read_csv(input_file, show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_jacobians = img1 %>% 
+             str_extract("absolute|relative"),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_jacobians = img2 %>% 
+             str_extract("absolute|relative"),) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE)
+  
+  # Filter similarity data for desired cluster numbers
+  # and combine Jacobians
+  if (combine_jacobians) {
+    similarity <- similarity %>% 
+      group_by(img1_cluster_id, img1_nk, img1_k, 
+               img2_cluster_id, img2_nk, img2_k) %>% 
+      summarise(similarity = mean(similarity),
+                .groups = "drop")
+  }
+  
+  return(similarity)
+  
+}
+
+
+import_similarity_permutations <- function(param_id, pipeline_dir, combine_jacobians = TRUE) {
+  
+  input_dir <- file.path(pipeline_dir, param_id, "permutations", "similarity")
+  input_files <- list.files(input_dir)
+  
+  np <- length(input_files)
+  list_permutations <- vector(mode = "list", length = np)
+  for (i in 1:length(list_permutations)) {
+    
+    # Input file  
+    input_file <- input_files[i]
+    
+    # Permutation number
+    p <- input_file %>% 
+      str_extract("[0-9]+") %>% 
+      as.numeric()
+    
+    input_file <- file.path(input_dir, input_file)
+    
+    # Import permutation i
+    list_permutations[[i]] <- read_csv(input_file, show_col_types = FALSE) %>% 
+      mutate(img1_nk = img1 %>% 
+               basename() %>% 
+               str_extract("_nk_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img1_k = img1 %>% 
+               basename() %>% 
+               str_extract("_k_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img1_jacobians = img1 %>% 
+               str_extract("absolute|relative"),
+             img2_nk = img2 %>% 
+               basename() %>% 
+               str_extract("_nk_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img2_k = img2 %>% 
+               basename() %>% 
+               str_extract("_k_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img2_jacobians = img2 %>% 
+               str_extract("absolute|relative")) %>% 
+      unite(col = "img1_cluster_id", img1_nk, img1_k, 
+            sep = "-", remove = FALSE) %>% 
+      unite(col = "img2_cluster_id", img2_nk, img2_k, 
+            sep = "-", remove = FALSE) %>% 
+      mutate(permutation = p)
+    
+  }
+  
+  df_permutations <- bind_rows(list_permutations)
+  
+  if (combine_jacobians) {
+    df_permutations <- df_permutations %>% 
+      group_by(permutation,
+               img1_cluster_id, img1_nk, img1_k, 
+               img2_cluster_id, img2_nk, img2_k) %>% 
+      summarise(similarity = mean(similarity),
+                .groups = "drop")
+  }
+  
+  return(df_permutations)
+}
+
+
 #' Intersect data with neuroanatomical homologues
 #'
 #' @param x (list) A list containing the data to intersect. 
