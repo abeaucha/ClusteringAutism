@@ -388,12 +388,12 @@ for (i in 1:length(pathway_ids)) {
 
 ## Pathway enrichment heatmaps
 
-### Cluster significance by permutation testing
-
+### Mouse-human cluster similarity
 
 ```{r}
 # POND-MICe and HBN-MICe pipeline outputs
 param_ids <- c("375", "861")
+names(param_ids) <- param_ids
 
 # Similarity pipeline directory
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/")
@@ -407,70 +407,19 @@ list_similarity <- map(.x = param_ids,
 list_permutations <- map(.x = param_ids, 
                          .f = import_similarity_permutations,
                          pipeline_dir = pipeline_dir)
-```
-
-```{r}
-similarity <- list_similarity[[1]]
-permutations <- list_permutations[[1]]
-
-
-# compute_similarity_significance <- function(similarity, permutations) {}
-
-
-
-nk_max_1 <- max(similarity[["img1_nk"]])
-nk_max_2 <- max(similarity[["img2_nk"]])
-
-significance <- tibble()
-# for (nk_1 in 2:)
-```
-
-
-```{r compute-pvals}
-# Mouse and human max nk
-human_nk_max <- max(df_similarity[["human_nk"]])
-mouse_nk_max <- max(df_similarity[["mouse_nk"]])
-
-# Iterate along nk diagonal +/- 1
-df_sim_pvals <- tibble()
-for (h_nk in 2:human_nk_max) {
-  for (m_nk in (h_nk-1):(h_nk+1)){
-    
-    if ((m_nk > 1) & (m_nk <= mouse_nk_max)) {
-      
-      df_sim_nk <- df_similarity %>% 
-        select(human_cluster_id, human_nk, human_k,
-               mouse_cluster_id, mouse_nk, mouse_k,
-               similarity) %>% 
-        filter(human_nk == h_nk,
-               mouse_nk == m_nk) %>% 
-        mutate(pval = 0)
-      
-      sim_perm_nk <- df_permutations %>% 
-        filter(human_nk == h_nk,
-               mouse_nk == m_nk) %>% 
-        pull(similarity) %>% 
-        sort()
-      
-      for (i in 1:nrow(df_sim_nk)) {
-        ntail <- sum(sim_perm_nk >= df_sim_nk[[i, "similarity"]])
-        df_sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
-      }
-      
-      df_sim_pvals <- bind_rows(df_sim_pvals, df_sim_nk)
-      
-    }
-  }
-}
 
 # Evaluate significance
-alpha <- 0.05
-df_sim_pvals <- df_sim_pvals %>% 
-  mutate(significant = ifelse(pval < 0.05, 1, 0))
+list_significance <- map2(.x = list_similarity, 
+                          .y = list_permutations, 
+                          .f = compute_similarity_significance, 
+                          off_diag = 1)
+
+list_significance <- map(.x = list_significance,
+                         .f = function(x) {mutate(x, significant = pval < 0.05)})
 ```
 
 
-## Enrichment heatmaps
+### Enrichment heatmaps
 
 ```{r pathways-heatmap-E-proc}
 # Reduce all pathway data frames into one
@@ -539,7 +488,7 @@ pathway_scree_plot <- ggplot(df_pathway_hclust,
   theme_bw() +
   theme(panel.grid.minor.x = element_blank())
 
-outfile <- "pathways_cluster_E_scree_plot.pdf"
+outfile <- "pathways_preselected_cluster_E_scree_plot.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(8, "in"),
@@ -574,6 +523,14 @@ pathways_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
 ```
 
 ```{r pathways-heatmap-E-human-match}
+df_sim_pvals <- list_significance[[1]] %>% 
+  rename(human_cluster_id = img1_cluster_id,
+         human_nk = img1_nk,
+         human_k = img1_k,
+         mouse_cluster_id = img2_cluster_id,
+         mouse_nk = img2_nk,
+         mouse_k = img2_k)
+
 df_sig_nk <- df_sim_pvals %>%
   group_by(mouse_nk, mouse_k) %>% 
   summarise(nsignificant = sum(significant),
@@ -677,7 +634,7 @@ pathways_width_in <- unit(pathways_width_in, "in")
 pathways_height_in <- unit(pathways_height_in, "in")
 
 # Export plot
-outfile <- paste("pathways_cluster_heatmap_E_k", hclust_kcut, sep = "_")
+outfile <- paste("pathways_preselected_cluster_heatmap_E_motifs", hclust_kcut, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -722,7 +679,7 @@ pathways_norm_grob <- arrangeGrob(zeroGrob(),
                                   widths = unit(pathways_widths, "npc"),
                                   heights = unit(pathways_heights, "npc"))
 
-outfile <- paste("pathways_cluster_heatmap_E_norm_k", hclust_kcut, sep = "_")
+outfile <- paste("pathways_preselected_cluster_heatmap_E_norm_motifs", hclust_kcut, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -732,8 +689,7 @@ grid.draw(pathways_norm_grob)
 dev.off()
 ```
 
-
-## Significance heatmaps
+### Significance heatmaps
 
 ```{r pathways-heatmap-q-proc}
 # Convert pathway data frame into matrix 
@@ -760,7 +716,7 @@ pathway_scree_plot <- ggplot(df_pathway_hclust,
   theme_bw() +
   theme(panel.grid.minor.x = element_blank())
 
-outfile <- "pathways_cluster_NLQ_scree_plot.pdf"
+outfile <- "pathways_preselected_cluster_NLQ_scree_plot.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(8, "in"),
@@ -886,7 +842,7 @@ pathways_width_in <- unit(pathways_width_in, "in")
 pathways_height_in <- unit(pathways_height_in, "in")
 
 # Export plot
-outfile <- paste("pathways_cluster_heatmap_NLQ_k", hclust_kcut, sep = "_")
+outfile <- paste("pathways_preselected_cluster_heatmap_NLQ_motifs", hclust_kcut, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -931,7 +887,7 @@ pathways_norm_grob <- arrangeGrob(zeroGrob(),
                                   widths = unit(pathways_widths, "npc"),
                                   heights = unit(pathways_heights, "npc"))
 
-outfile <- paste("pathways_cluster_heatmap_NLQ_norm_k", hclust_kcut, sep = "_")
+outfile <- paste("pathways_preselected_cluster_heatmap_NLQ_norm_motifs", hclust_kcut, sep = "_")
 outfile <- paste0(outfile, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -940,6 +896,7 @@ pdf(file = outfile,
 grid.draw(pathways_norm_grob)
 dev.off()
 ```
+
 
 # All pathways
 
@@ -1079,7 +1036,8 @@ print(pathways_heatmap_topn)
 dev.off()
 ```
 
-## Messing around
+
+## Analyzing gene set sizes
 
 N is the background set, i.e. the set of all genes we're testing against. 
 n is the number of genes in the cluster neighbourhood that are also in the background set. 
@@ -1105,6 +1063,7 @@ Why are these values not identical?
 ```{r}
 unique(df_pathways_all$N)
 ```
+
 The background set is also not the same??
 
 The sets are changing size. Is this what we want? Why is this happening?
@@ -1419,6 +1378,7 @@ tmodObj
 ```{r}
 tmodObj %>% pull(N) %>% unique
 ```
+
 The background set is the same for all tests, which makes sense. But it's now smaller than the set we started with. 
 
 ```{r}
@@ -1478,14 +1438,19 @@ Maybe this doesn't matter. I thought the difference arose at the level of pre-pr
 print(length(bg))
 print(length(unique(bg)))
 ```
+
 Looks like the background set is redundant. 
 
 ```{r}
 length(unique(c(fg, bg)))
 ```
+
 Ah there we go. The background set is the union of the input background set and the input target set. So genes in the different target sets aren't necessarily in the input background set. 
 
 Okay. 
+
+
+## Pathway significance
 
 Well what to do with this anyway? 
 
@@ -1504,7 +1469,7 @@ df_pathways_nsig <- df_pathways_all %>%
   ungroup() %>% 
   mutate(cluster_id = factor(cluster_id, levels = cluster_lvls))
 
-outfile <- "pathways_nsignificant.pdf"
+outfile <- "pathways_all_nsignificant.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = 10,
@@ -1547,7 +1512,7 @@ for (q in alpha) {
   
 }
 
-outfile <- "pathways_nsignificant_roc.pdf"
+outfile <- "pathways_all_nsignificant_roc.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = 8,
@@ -1578,7 +1543,7 @@ df_pathways_nk2 <- df_pathways_all %>%
   mutate(significant = adj.P.Val < 0.05,
          cluster_id = factor(cluster_id, levels = cluster_lvls)) 
 
-outfile <- "pathways_nk2_test_set_size.pdf"
+outfile <- "pathways_all_nk2_test_set_size.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = 8,
@@ -1602,7 +1567,7 @@ df_pathways_nk2 %>%
 ```
 
 ```{r}
-outfile <- "pathways_nk2_test_set_size_lt500.pdf"
+outfile <- "pathways_all_nk2_test_set_size_lt500.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = 8,
@@ -1670,10 +1635,8 @@ for (i in 1:nrow(ecdf)) {
   
   ecdf[[i, "y"]] <- ni/npathways
 }
-```
 
-```{r}
-outfile <- "pathways_genes_ecdf.pdf"
+outfile <- "pathways_all_genes_ecdf.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = 8,
@@ -1734,7 +1697,7 @@ for (q in alpha) {
   
 }
 
-outfile <- "pathways_nsignificant_roc_B_geq20_lt400.pdf"
+outfile <- "pathways_all_B_geq20_lt400_nsignificant_roc.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = 8,
@@ -1807,7 +1770,7 @@ mat_pathways_topn <- df_pathways_topn %>%
   as.matrix()
 
 # Pathway motif scree plot
-mat_pathways_topn %>% 
+pathway_scree_plot <- mat_pathways_topn %>% 
   t() %>% 
   hclust_wcss() %>% 
   as_tibble() %>% 
@@ -1822,6 +1785,14 @@ mat_pathways_topn %>%
        y = "Within-cluster sum of squared distance") + 
   theme_bw() +
   theme(panel.grid.minor.x = element_blank())
+
+outfile <- "pathways_all_B_geq20_lt400_cluster_NLQ_scree_plot.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(pathway_scree_plot)
+dev.off()
 ```
 
 ```{r fig-supp-12-pathways-dendrogram}
@@ -1864,14 +1835,60 @@ fig_supp_12_pheatmap <- pheatmap(mat = mat_pathways_topn,
 # Extract dendrogram from pheatmap object
 fig_supp_12_dendrogram_grob <- fig_supp_12_pheatmap[["gtable"]][["grobs"]][[1]]
 fig_supp_12_dendrogram_grob[["gp"]] <- gpar(lwd = 0.75)
-```
 
-```{r}
+
 # Get pathway motifs
 df_pathways_topn_heatmap <- df_pathways_topn %>% 
   left_join(df_pathways_topn_hclust, by = "pathway") %>% 
   mutate(pathway = factor(pathway, levels = pathways_topn_lvls_clustered))
 
+# Create data frame for significant POND matches
+df_sig_nk_POND <- list_significance[["375"]] %>% 
+  rename(human_cluster_id = img1_cluster_id,
+         human_nk = img1_nk,
+         human_k = img1_k,
+         mouse_cluster_id = img2_cluster_id,
+         mouse_nk = img2_nk,
+         mouse_k = img2_k) %>% 
+  group_by(mouse_nk, mouse_k) %>% 
+  summarise(p = min(pval),
+            nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(plab = case_when(p < 0.05 ~ "**",
+                          p >= 0.05 & p < 0.1 ~ "*",
+                          p >= 0.1 ~ ""),
+         has_match = ifelse(nsignificant > 0, TRUE, FALSE),
+         y = "y") %>% 
+  select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", "nk", "k", 
+        sep = "-", remove = FALSE) 
+
+# Create data frame for significant HBN matches
+df_sig_nk_HBN <- list_significance[["861"]] %>% 
+  rename(human_cluster_id = img1_cluster_id,
+         human_nk = img1_nk,
+         human_k = img1_k,
+         mouse_cluster_id = img2_cluster_id,
+         mouse_nk = img2_nk,
+         mouse_k = img2_k) %>%  
+  group_by(mouse_nk, mouse_k) %>% 
+  summarise(p = min(pval),
+            nsignificant = sum(significant),
+            .groups = "drop") %>% 
+  mutate(plab = case_when(p < 0.05 ~ "**",
+                          p >= 0.05 & p < 0.1 ~ "*",
+                          p >= 0.1 ~ ""),
+         has_match = ifelse(nsignificant > 0, TRUE, FALSE),
+         y = "HBN") %>% 
+  select(nk = mouse_nk, k = mouse_k, p, plab, has_match, y) %>% 
+  filter(nk >= 4) %>% 
+  unite(col = "cluster_id", "nk", "k", 
+        sep = "-", remove = FALSE) 
+
+# Combine POND and HBN data
+df_sig_nk <- bind_rows(df_sig_nk_POND,
+                       df_sig_nk_HBN)
 
 # Clamped enrichment statistic
 NLQ_threshold <- 30
@@ -1930,10 +1947,152 @@ fig_supp_12_pathways <- ggplot(df_pathways_topn_heatmap,
         legend.margin = margin(),
         plot.margin = margin(l = 0))
 
-fig_supp_12_pathways
+# Extract legend grob
+fig_supp_12_pathways_legend_grob <- fig_supp_12_pathways %>%
+  ggplotGrob() %>%
+  grid.force() %>%
+  getGrob("guides.3-3-3-3")
+
+# Remove legend from ggplot object
+fig_supp_12_pathways <- fig_supp_12_pathways +
+  theme(legend.position = "none")
+
+# Generate heatmap of mouse clusters with human matches
+fig_supp_12_match <- ggplot(df_sig_nk,
+                            mapping = aes(x = factor(k), 
+                                          y = y, 
+                                          fill = p,
+                                          label = plab)) + 
+  geom_tile(col = "grey50") +
+  geom_text(col = "white",
+            angle = 90,
+            vjust = "middle",
+            nudge_x = 0.1,
+            family = font_family,
+            size = font_size*0.36) + 
+  facet_grid(.~nk, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) +
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[c(1:4, 8)]),
+                       guide = guide_colourbar(title.position = "top", 
+                                               barwidth = unit(80, "bigpts"))) +
+  labs(x = "Mouse cluster",
+       fill = "Human-mouse equivalence (p-value)") +
+  theme_bw() +
+  theme(panel.spacing = unit(4, "bigpts"),
+        strip.background.x = element_rect(fill = "grey90"),
+        strip.text.x = element_text(size = font_size-1, family = font_family,
+                                    margin = margin(b = 1, t = 1)),
+        strip.background.y = element_blank(),
+        strip.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        legend.direction = "horizontal",
+        legend.position = "bottom",
+        legend.key.size = unit(10, "bigpts"),
+        legend.title = element_text(size = font_size-1,
+                                    family = font_family,
+                                    hjust = 0.5),
+        legend.text = element_text(size = font_size-1,
+                                   family = font_family),
+        legend.margin = margin(),
+        plot.margin = margin(l = 0))
+
+# Extract heatmap legend
+fig_supp_12_match_legend_grob <- fig_supp_12_match %>%
+  ggplotGrob() %>%
+  grid.force() %>%
+  getGrob("guides.3-3-3-3")
+
+# Remove legend from ggplot object
+fig_supp_12_match <- fig_supp_12_match +
+  theme(legend.position = "none")
+
+# Patchwork #### 
+fig_supp_12_patchwork <- (fig_supp_12_match / plot_spacer() / fig_supp_12_pathways) +
+  plot_layout(heights = c(0.020, 0.005, 0.975)) &
+  theme(plot.margin = margin(l = 0))
+fig_supp_12_patchwork_grob <- patchworkGrob(fig_supp_12_patchwork)
+
+
+# Grob ####
+
+# Width of dendrogram panel in bigpts
+fig_supp_12_dendrogram_width_pt <- 26
+
+# Maximal figure dimensions in bigpts
+fig_width_pt <- 510
+fig_height_pt <- 500
+pt_per_in <- 72
+
+# Dimensions of heatmap patchwork in bigpts
+fig_supp_12_patchwork_width_pt <- fig_width_pt - fig_supp_12_dendrogram_width_pt
+
+# Heights of padding elements in bigpts
+fig_supp_12_padding_height_1_pt <- 21
+fig_supp_12_padding_height_2_pt <- 17
+
+fig_supp_12_patchwork_height_pt <- fig_height_pt - fig_supp_12_padding_height_1_pt - fig_supp_12_padding_height_2_pt
+
+# Dimensions of heatmap plot
+fig_supp_12_widths <- c(fig_supp_12_dendrogram_width_pt, fig_supp_12_patchwork_width_pt)
+fig_supp_12_heights <- c(fig_supp_12_padding_height_1_pt, 
+                         fig_supp_12_patchwork_height_pt,
+                         fig_supp_12_padding_height_2_pt)
+
+# Layout of heatmap plot
+fig_supp_12_layout <- rbind(c(01, 02),
+                            c(03, 02),
+                            c(04, 02))
+
+# Grob grid for heatmap plot
+fig_supp_12_grob <- arrangeGrob(zeroGrob(),
+                                fig_supp_12_patchwork_grob,
+                                fig_supp_12_dendrogram_grob,
+                                zeroGrob(),
+                                layout_matrix = fig_supp_12_layout,
+                                widths = unit(fig_supp_12_widths, "bigpts"),
+                                heights = unit(fig_supp_12_heights, "bigpts"))
+
+
+fig_supp_12_width_pt <- fig_width_pt
+fig_supp_12_height_pt <- fig_height_pt
+
+# Viewport for pathways heatmap legend
+fig_supp_12_pathways_legend_vp <- viewport(x = unit(fig_width_pt-12, "bigpts"),
+                                           y = unit(35, "bigpts"),
+                                           width = unit(fig_supp_12_pathways_legend_width_pt, "bigpts"),
+                                           height = unit(22, "bigpts"),
+                                           just = c("right", "bottom"))
+
+# Viewport for human match heatmap legend
+fig_supp_12_match_legend_vp_width <- 105
+fig_supp_12_match_legend_vp_x <- fig_width_pt - fig_supp_12_match_legend_vp_width
+fig_supp_12_match_legend_vp <- viewport(x = unit(fig_supp_12_match_legend_vp_x, "bigpts"),
+                                        y = unit(fig_supp_12_height_pt-3, "bigpts"),
+                                        width = unit(fig_supp_12_match_legend_vp_width, "bigpts"),
+                                        height = unit(27, "bigpts"),
+                                        just = c("left", "top"))
+
+fig_supp_12_width_in <- fig_supp_12_width_pt/pt_per_in
+fig_supp_12_height_in <- fig_supp_12_height_pt/pt_per_in
+
+# Export
+outfile <- "pathways_all_B_geq20_lt400_cluster_heatmap_NLQ_motifs_20.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_supp_12_width_in, "in"),
+    height = unit(fig_supp_12_height_in, "in"))
+grid.draw(fig_supp_12_grob)
+pushViewport(fig_supp_12_pathways_legend_vp)
+grid.draw(fig_supp_12_pathways_legend_grob)
+popViewport()
+pushViewport(fig_supp_12_match_legend_vp)
+grid.draw(fig_supp_12_match_legend_grob)
+popViewport()
+dev.off()
 ```
-
-
 
 # Gene ontology pathway hierarchy
 
