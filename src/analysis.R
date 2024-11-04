@@ -109,6 +109,48 @@ compute_cluster_fractions <- function(cluster_dir, nk, k, labels, defs, mask,
 }
 
 
+
+compute_similarity_significance <- function(similarity, permutations, off_diag = 1) {
+  
+  nk_max_1 <- max(similarity[["img1_nk"]])
+  nk_max_2 <- max(similarity[["img2_nk"]])
+  
+  significance <- tibble()
+  for (nk_1 in 2:nk_max_1) {
+    for (nk_2 in (nk_1 - off_diag):(nk_1 + off_diag)) {
+      
+      if ((nk_2 > 1) & (nk_2 <= nk_max_2)) {
+        
+        sim_nk <- similarity %>% 
+          select(img1_cluster_id, img1_nk, img1_k,
+                 img2_cluster_id, img2_nk, img2_k,
+                 similarity) %>% 
+          filter(img1_nk == nk_1,
+                 img2_nk == nk_2) %>% 
+          mutate(pval = 0)
+        
+        sim_perm_nk <- permutations %>% 
+          filter(img1_nk == nk_1,
+                 img2_nk == nk_2) %>% 
+          pull(similarity) %>% 
+          sort()
+        
+        for (i in 1:nrow(sim_nk)) {
+          ntail <- sum(sim_perm_nk >= sim_nk[[i, "similarity"]])
+          sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+        }
+        
+        significance <- bind_rows(significance, sim_nk)
+        
+      }
+    } 
+  }
+  
+  return(significance)
+  
+}
+
+
 #' Export grid grob to PDF
 #'
 #' @param x (grob) Grob to export
