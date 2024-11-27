@@ -871,7 +871,7 @@ fig2_dx <- ggplot(df_dx_nk_freq,
                     guide = guide_legend(title.position = "top",
                                          hjust = 0)) +
   labs(x = "Human clusters",
-       y = "Proportion per cluster",
+       y = "Proportion of each diagnosis per cluster",
        fill = "Diagnosis",
        col = "Diagnosis") + 
   theme_bw() +
