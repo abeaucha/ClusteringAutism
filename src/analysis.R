@@ -109,6 +109,48 @@ compute_cluster_fractions <- function(cluster_dir, nk, k, labels, defs, mask,
 }
 
 
+
+compute_similarity_significance <- function(similarity, permutations, off_diag = 1) {
+  
+  nk_max_1 <- max(similarity[["img1_nk"]])
+  nk_max_2 <- max(similarity[["img2_nk"]])
+  
+  significance <- tibble()
+  for (nk_1 in 2:nk_max_1) {
+    for (nk_2 in (nk_1 - off_diag):(nk_1 + off_diag)) {
+      
+      if ((nk_2 > 1) & (nk_2 <= nk_max_2)) {
+        
+        sim_nk <- similarity %>% 
+          select(img1_cluster_id, img1_nk, img1_k,
+                 img2_cluster_id, img2_nk, img2_k,
+                 similarity) %>% 
+          filter(img1_nk == nk_1,
+                 img2_nk == nk_2) %>% 
+          mutate(pval = 0)
+        
+        sim_perm_nk <- permutations %>% 
+          filter(img1_nk == nk_1,
+                 img2_nk == nk_2) %>% 
+          pull(similarity) %>% 
+          sort()
+        
+        for (i in 1:nrow(sim_nk)) {
+          ntail <- sum(sim_perm_nk >= sim_nk[[i, "similarity"]])
+          sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+        }
+        
+        significance <- bind_rows(significance, sim_nk)
+        
+      }
+    } 
+  }
+  
+  return(significance)
+  
+}
+
+
 #' Export grid grob to PDF
 #'
 #' @param x (grob) Grob to export
@@ -200,6 +242,125 @@ import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, thres
   }
   
   return(img)
+}
+
+
+import_similarity <- function(param_id, pipeline_dir = "data/cross_species/v3/", combine_jacobians = TRUE) {
+  
+  input_dir <- file.path(pipeline_dir, param_id, "similarity")
+  input_file <- file.path(input_dir, "similarity.csv")
+  
+  # Import similarity data
+  similarity <- read_csv(input_file, show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_jacobians = img1 %>% 
+             str_extract("absolute|relative"),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_jacobians = img2 %>% 
+             str_extract("absolute|relative"),) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE)
+  
+  # Filter similarity data for desired cluster numbers
+  # and combine Jacobians
+  if (combine_jacobians) {
+    similarity <- similarity %>% 
+      group_by(img1_cluster_id, img1_nk, img1_k, 
+               img2_cluster_id, img2_nk, img2_k) %>% 
+      summarise(similarity = mean(similarity),
+                .groups = "drop")
+  }
+  
+  return(similarity)
+  
+}
+
+
+import_similarity_permutations <- function(param_id, pipeline_dir, combine_jacobians = TRUE) {
+  
+  input_dir <- file.path(pipeline_dir, param_id, "permutations", "similarity")
+  input_files <- list.files(input_dir)
+  
+  np <- length(input_files)
+  list_permutations <- vector(mode = "list", length = np)
+  for (i in 1:length(list_permutations)) {
+    
+    # Input file  
+    input_file <- input_files[i]
+    
+    # Permutation number
+    p <- input_file %>% 
+      str_extract("[0-9]+") %>% 
+      as.numeric()
+    
+    input_file <- file.path(input_dir, input_file)
+    
+    # Import permutation i
+    list_permutations[[i]] <- read_csv(input_file, show_col_types = FALSE) %>% 
+      mutate(img1_nk = img1 %>% 
+               basename() %>% 
+               str_extract("_nk_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img1_k = img1 %>% 
+               basename() %>% 
+               str_extract("_k_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img1_jacobians = img1 %>% 
+               str_extract("absolute|relative"),
+             img2_nk = img2 %>% 
+               basename() %>% 
+               str_extract("_nk_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img2_k = img2 %>% 
+               basename() %>% 
+               str_extract("_k_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img2_jacobians = img2 %>% 
+               str_extract("absolute|relative")) %>% 
+      unite(col = "img1_cluster_id", img1_nk, img1_k, 
+            sep = "-", remove = FALSE) %>% 
+      unite(col = "img2_cluster_id", img2_nk, img2_k, 
+            sep = "-", remove = FALSE) %>% 
+      mutate(permutation = p)
+    
+  }
+  
+  df_permutations <- bind_rows(list_permutations)
+  
+  if (combine_jacobians) {
+    df_permutations <- df_permutations %>% 
+      group_by(permutation,
+               img1_cluster_id, img1_nk, img1_k, 
+               img2_cluster_id, img2_nk, img2_k) %>% 
+      summarise(similarity = mean(similarity),
+                .groups = "drop")
+  }
+  
+  return(df_permutations)
 }
 
 
