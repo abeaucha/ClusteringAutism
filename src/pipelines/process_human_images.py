@@ -407,7 +407,7 @@ def initialize(**kwargs):
 
 
 # @utils.timing
-def effect_sizes(imgdir, demographics, mask, outdir,
+def effect_sizes(imgdir, demographics, mask, outdir, cv_seed = None,
                  method = 'normative-growth', group = 'patients',
                  df = 3, batch = ('Site', 'Scanner'), ncontrols = None,
                  matrix_file = 'effect_sizes.csv', matrix_resolution = 3.0,
@@ -474,7 +474,7 @@ def effect_sizes(imgdir, demographics, mask, outdir,
     kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
     kwargs['batch'] = (None if kwargs['batch'] is None
                        else '-'.join(kwargs['batch']))
-                       
+    
     # Driver script
     script = 'compute_effect_sizes.R'
 
