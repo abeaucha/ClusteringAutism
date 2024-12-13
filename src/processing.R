@@ -18,15 +18,15 @@ SRCPATH <- Sys.getenv("SRCPATH")
 source(file.path(SRCPATH, "minc_parallel.R"))
 
 import_image <- function(img, mask = NULL, flatten = TRUE, version = "v1") {
-
+  
   # Import image
   img <- mincGetVolume(img)
-
+  
   # Convert to 3D if specified
   if (!flatten) {
     img <- mincArray(img)
   }
-
+  
   # Apply mask if specified
   if (!is.null(mask)) {
     mask <- mincGetVolume(mask)
@@ -54,7 +54,7 @@ import_image <- function(img, mask = NULL, flatten = TRUE, version = "v1") {
 import_images <- function(imgfiles, mask = NULL, output_format = "list",
                           flatten = TRUE, margin = 1, version = "v1",
                           nproc = 1) {
-
+  
   # Check output format
   format_opts <- c("list", "matrix", "tibble")
   if (!(output_format %in% format_opts)) {
@@ -63,7 +63,7 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
                         "): ", output_format)
     stop(format_err)
   }
-
+  
   # Warning when flatten FALSE
   if (!flatten) {
     if (output_format != "list") {
@@ -72,7 +72,7 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
       flatten <- TRUE
     }
   }
-
+  
   # Import images
   pb <- txtProgressBar(max = length(imgfiles), style = 3)
   progress <- function(n) {setTxtProgressBar(pb = pb, value = n)}
@@ -84,31 +84,31 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
                     .packages = "RMINC",
                     .export = c("import_image"),
                     .options.snow = opts) %dopar% {
-      import_image(img = imgfiles[i],
-                   mask = mask,
-                   flatten = flatten,
-                   version = version)
-    }
+                      import_image(img = imgfiles[i],
+                                   mask = mask,
+                                   flatten = flatten,
+                                   version = version)
+                    }
     close(pb)
     stopCluster(cl)
   } else {
     imgs <- foreach(i = 1:length(imgfiles),
                     .packages = "RMINC") %do% {
-      progress(n = i)
-      import_image(img = imgfiles[i],
-                   mask = mask,
-                   flatten = flatten,
-                   version = version)
-    }
+                      progress(n = i)
+                      import_image(img = imgfiles[i],
+                                   mask = mask,
+                                   flatten = flatten,
+                                   version = version)
+                    }
   }
-
+  
   # Check image sizes
   imgsize <- unique(map_dbl(imgs, length))
   imgsize_test <- length(imgsize)
   if (imgsize_test != 1) {
     stop("Images provided contain different numbers of voxels.")
   }
-
+  
   # Convert to output format
   if (output_format != "list") {
     if (margin == 1) {
@@ -135,9 +135,9 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
   } else {
     out <- imgs
   }
-
+  
   return(out)
-
+  
 }
 
 
@@ -145,7 +145,7 @@ build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE,
                                sort = FALSE, save = FALSE,
                                outfile = "voxel_matrix.csv", version = "v1",
                                nproc = 1) {
-
+  
   # Import images as tibble
   df_imgs <- import_images(imgfiles = imgfiles,
                            mask = mask,
@@ -153,51 +153,51 @@ build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE,
                            flatten = TRUE,
                            version = version,
                            nproc = nproc)
-
+  
   # Save input files in a column
   df_imgs[["file"]] <- imgfiles
-
+  
   # Sort if desired
   if (sort) {df_imgs <- arrange(df_imgs, file)}
-
+  
   # Remove input file column if desired
   if (!file_col) {df_imgs <- select(df_imgs, -file)}
-
+  
   # Save data frame to file if desired
   if (save) {data.table::fwrite(x = df_imgs, file = outfile)}
-
+  
   return(df_imgs)
-
+  
 }
 
 
 vector_to_image <- function(x, outfile, mask, version = "v1") {
-
+  
   # Check output file
   if (is.null(outfile)) {
     stop("Specify output file.")
   }
-
+  
   # Check mask
   if (is.null(mask)) {
     stop("Specify mask file.")
   }
-
+  
   # Import mask
   mask <- mincGetVolume(mask)
-
+  
   if (version == "v2") {
     ind_mask <- mask > 0.5
   } else {
     ind_mask <- mask == 1
   }
-
+  
   # Check that x and mask match
   if (length(x) != sum(ind_mask)) {
     stop(paste("Number of elements in x does not match the number of non-zero",
                "voxels in the mask."))
   }
-
+  
   # Export vector as image
   img <- numeric(length(mask))
   img[ind_mask] <- x
@@ -208,37 +208,37 @@ vector_to_image <- function(x, outfile, mask, version = "v1") {
                   clobber = TRUE,
                   like.filename = attr(mask, "likeVolume"))
   sink(NULL)
-
+  
 }
 
 
 matrix_to_images <- function(x, outfiles, mask, margin = 1, version = "v1",
                              nproc = 1) {
-
+  
   # Check output files
   if (is.null(outfiles)) {
     stop("Specify output files.")
   }
-
+  
   # Check mask
   if (is.null(mask)) {
     stop("Specify mask file.")
   }
-
+  
   # Check that x is a matrix
   if (!is.matrix(x)) {
     stop("x must be a matrix.")
   }
-
+  
   # Split matrix into array along margin
   x <- asplit(x, MARGIN = margin)
-
+  
   # Check that number of output files matches the number of images
   if (length(x) != length(outfiles)) {
     stop("Number of entries in x along margin ", margin,
          " must be equal to the number of entries in outfiles")
   }
-
+  
   # Export to images
   if (nproc > 1) {
     cl <- makeCluster(nproc)
@@ -254,13 +254,13 @@ matrix_to_images <- function(x, outfiles, mask, margin = 1, version = "v1",
                                   version = version),
                   SIMPLIFY = TRUE)
   }
-
+  
 }
 
 
 threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE,
                                 comparison = "gt") {
-
+  
   out <- img
   if (symmetric) {
     if (comparison == "gt") {
@@ -279,40 +279,40 @@ threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE,
       stop(paste("Argument comparison must be one of ['gt', 'lt']:", comparison))
     }
   }
-
+  
   if (sum(ind) == 0) {
     stop("No voxels survive the threshold. Select another threshold.")
   }
-
+  
   out[!ind] <- 0
-
+  
   return(out)
-
+  
 }
 
 threshold_top_n <- function(img, n = 0.2, symmetric = TRUE, tolerance = 1e-5) {
-
+  
   # Raise error if symmetric is True and n < 0
   if (symmetric & (n < 0)) {
     stop(paste("Setting n < 0 while symmetric = True",
                "will return an empty mask."))
   }
-
+  
   # Flatten image
   values <- as.numeric(img)
-
+  
   # If symmetric, use absolute values
   if (symmetric) {
     values <- abs(values)
   }
-
+  
   # Sort values and corresponding indices
   sorted_index <- order(values)
   sorted_values <- values[sorted_index]
-
+  
   # Tolerance filter
   tolerance_filter <- abs(sorted_values) > tolerance
-
+  
   # Compute top n values
   if (n > 0) {
     positive_filter <- sorted_values > 0
@@ -330,22 +330,22 @@ threshold_top_n <- function(img, n = 0.2, symmetric = TRUE, tolerance = 1e-5) {
   } else {
     stop("Argument n cannot be 0.")
   }
-
+  
   # Threshold the image
   out <- as.numeric(img)
   index <- 1:length(out)
   out[!(index %in% top_n_index)] <- 0
   attributes(out) <- attributes(img)
   out <- mincArray(out)
-
+  
   return(out)
-
+  
 }
 
 
 threshold_image <- function(img, method = "top_n", threshold = 0.2,
                             symmetric = TRUE, comparison = "gt") {
-
+  
   if (method == "intensity") {
     img <- threshold_intensity(img = img,
                                threshold = threshold,
@@ -359,9 +359,9 @@ threshold_image <- function(img, method = "top_n", threshold = 0.2,
     stop(paste("Argument method must be one of ",
                "['intensity', 'top_n']"))
   }
-
+  
   return(img)
-
+  
 }
 
 
@@ -390,10 +390,10 @@ mask_from_image <- function(img, signed = FALSE) {
 #'
 #' @return (data.frame) Model predictions for test participants.
 fit_predict_model <- function(y, demographics, group = "patients",
-                              batch = NULL, df = 3) {
-
+                              cv_seed = NULL, batch = NULL, df = 3) {
+  
   if (length(y) != nrow(demographics)) {stop()}
-
+  
   # Residualize using batch variable if specified
   if (!is.null(batch)) {
     batch <- demographics %>%
@@ -403,7 +403,7 @@ fit_predict_model <- function(y, demographics, group = "patients",
     y <- residuals(lm(y ~ batch))
     names(y) <- NULL
   }
-
+  
   # Filters for train and test sets
   ind_fit <- demographics[["DX"]] == "Control"
   if (group == "patients") {
@@ -413,31 +413,31 @@ fit_predict_model <- function(y, demographics, group = "patients",
   } else if (group == "all") {
     ind_pred <- !logical(nrow(demographics))
   }
-
+  
   # Training data frame
   df_fit <- demographics[ind_fit, c("Age", "Sex")]
   df_fit[["y"]] <- y[ind_fit]
-
+  
   # Test data frame
   df_pred <- demographics[ind_pred, c("Age", "Sex")]
   df_pred[["y"]] <- y[ind_pred]
-
+  
   # Fit model and predict on test set
   model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
   model_pred <- predict(model_fit,
                         newdata = df_pred,
                         interval = "prediction",
                         level = pnorm(q = 1) - pnorm(q = -1))
-
+  
   # Extract model parameters of interest
   df_pred <- df_pred %>%
     mutate(y_pred = model_pred[,"fit"],
            y_lwr = model_pred[,"lwr"],
            y_upr = model_pred[,"upr"],
            y_sd = y_pred - y_lwr)
-
+  
   return(df_pred)
-
+  
 }
 
 
@@ -468,15 +468,55 @@ zscore <- function(x){
 #' model.
 #'
 #' @return (numeric vector) Voxel normative z-scores
-compute_normative_zscore <- function(y, demographics, group = "patients",
-                                     batch = NULL, df = 3) {
-  y_pred <- fit_predict_model(y = y, demographics = demographics,
-                              group = group, batch = batch, df = df)
-  z <- pull(zscore(y_pred), "z")
+# compute_normative_zscore <- function(y, demographics, group = "patients",
+#                                      cv_seed = NULL, batch = NULL, df = 3) {
+#   y_pred <- fit_predict_model(y = y, demographics = demographics,
+#                               cv_seed = NULL, group = group,
+#                               batch = batch, df = df)
+#   z <- pull(zscore(y_pred), "z")
+#   return(z)
+# }
+
+#' Compute normative z-score for a voxel
+#'
+#' @param y (numeric vector) Voxel values across study participants.
+#' @param idx (list) Train and test indices
+#' @param demographics (data.frame) Demographics information for study
+#' participants.
+#' @param df (numeric scalar) Degrees of freedom in natural spline
+#' model.
+#'
+#' @return (numeric vector) Voxel normative z-scores
+compute_normative_zscore <- function(y, idx, demographics, df = 3) {
+  
+  if ("batch" %in% colnames(demographics)) {
+    y <- residuals(lm(y ~ batch, data = demographics))
+    names(y) <- NULL
+  }
+  
+  # Training data frame
+  df_fit <- demographics[idx[[1]], c("Age", "Sex")]
+  df_fit[["y"]] <- y[idx[[1]]]
+  
+  # Test data frame
+  df_pred <- demographics[idx[[2]], c("Age", "Sex")]
+  df_pred[["y"]] <- y[idx[[2]]]
+  
+  # Fit model and predict on test set
+  model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
+  model_pred <- predict(model_fit,
+                        newdata = df_pred,
+                        interval = "prediction",
+                        level = pnorm(q = 1) - pnorm(q = -1))
+  
+  # Compute z-score
+  y_pred <- model_pred[,"fit"]
+  y_sd <- y_pred - model_pred[,"lwr"]
+  z <- (df_pred[["y"]] - y_pred)/y_sd
+  
   return(z)
+  
 }
-
-
 
 #' Calculate human effect sizes using normative growth modelling.
 #'
@@ -508,22 +548,24 @@ compute_normative_zscore <- function(y, demographics, group = "patients",
 #'
 #' @return (character vector) Paths to the effect size images.
 normative_growth_norm <- function(imgdir, demographics, mask, outdir,
+                                  cv_seed = cv_seed,
                                   key = "file", group = "patients",
                                   df = 3, batch = NULL,
                                   execution = "local", nproc = 1,
                                   registry_name = NULL,
                                   registry_cleanup = TRUE,
                                   njobs = NULL, resources = list()) {
-
-  # imgdir <- "data/human/derivatives/v3/013/jacobians/absolute/"
+  
+  # imgdir <- "data/human/derivatives/v3/577/jacobians/absolute/"
   # demographics <- "data/human/registration/v3/subject_info/demographics.csv"
-  # mask <- "data/human/registration/v3/reference_files/mask_0.8mm.mnc"
-  # outdir <- "data/human/derivatives/v3/013/effect_sizes/resolution_0.8/absolute/"
+  # mask <- "data/human/registration/v3/reference_files/mask_3.0mm.mnc"
+  # outdir <- "data/human/derivatives/v3/577/cross_validation/sample_1//effect_sizes/resolution_3.0/absolute/"
   # key <- "file"
-  # group <- "patients"
+  # cv_seed <- 1
+  # group <- "controls"
   # df <- 3
-  # batch <- "Site"
-  # execution <- "slurm"
+  # batch <- "Site-Scanner"
+  # execution <- "local"
   # nproc <- 8
   # registry_name <- "test"
   # registry_cleanup <- FALSE
@@ -531,22 +573,27 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # resources <- list(memory="16G",
   #                   walltime=60*60)
   # verbose <- TRUE
-
+  
+  # Raise cross-validation error if group not controls
+  if (!is.null(cv_seed) & group != "controls") {
+    stop("Cross-validation only possible for controls.")
+  }
+  
   # Import demographics data
   if (verbose) {message("Importing demographics information...")}
   demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
-
+  
   # Check existence of key column in demographics
   if (!(key %in% colnames(demographics))) {
     stop(paste("demographics data is missing key column:", key))
   }
-
+  
   # Remove entries with missing diagnosis, age, or sex
   demographics <- demographics %>%
     filter(!is.na(DX),
            !is.na(Age),
            !is.na(Sex))
-
+  
   # TODO: Remove rows where batch columns are NA
   # Check existence of batch columns
   if (!is.null(batch)) {
@@ -557,17 +604,229 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
            str_flatten(batch, collapse = "\n"))
     }
   }
-
+  
   # Image files
   imgfiles <- list.files(imgdir, full.names = TRUE)
-
+  
   # Match image files to demographics
   if (verbose) {message("Matching image files to demographics...")}
   imgs_in_demographics <- basename(imgfiles) %in% demographics[[key]]
   imgfiles <- imgfiles[imgs_in_demographics]
   row_match <- match(basename(imgfiles), demographics[[key]])
   demographics <- demographics[row_match,]
+  
+  
+  ind_ctrl <- demographics[["DX"]] == "Control"
+  ind_dx <- !ind_ctrl
+  if (group == "controls") {
+    demographics <- demographics[ind_ctrl,]
+    imgfiles <- imgfiles[ind_ctrl]
+    
+    # If cross-validation, sample train-test split
+    if (!is.null(cv_seed)) {
+      ind_fit <- logical(nrow(demographics))
+      set.seed(cv_seed)
+      ind_sample <- sample(1:nrow(demographics), size = nrow(demographics), replace = FALSE)
+      ind_fit[ind_sample[1:(floor(0.8*nrow(demographics)))]] <- TRUE
+      ind_pred <- !ind_fit
+    } else {
+      ind_fit <- !logical(nrow(demographics))
+      ind_pred <- ind_fit
+    }
+  } else if (group == "patients") {
+    ind_fit <- ind_ctrl
+    ind_pred <- ind_dx
+  } else if (group == "all") {
+    ind_fit <- ind_ctrl
+    ind_pred <- ind_ctrl | ind_dx
+  }
+  
+  # 
+  idx <- list(ind_fit, ind_pred)
+  
+  if (!is.null(batch)) {
+    demographics <- demographics %>% 
+      unite(col = "batch", all_of(batch)) %>% 
+      select(all_of(key), Age, Sex, batch)
+  } else {
+    demographics <- demographics %>% 
+      select(all_of(key), Age, Sex)
+  }
+  
+  ti <- Sys.time()
+  # Run normative growth modelling
+  if (verbose) {message("Evaluating normative growth models...")}
+  if (execution == "local") {
+    voxels <- mcMincApply(filenames = imgfiles,
+                          fun = compute_normative_zscore,
+                          idx = idx,
+                          demographics = demographics,
+                          df = df,
+                          mask = mask,
+                          cores = nproc,
+                          return_raw = TRUE)
+  } else if (execution == "slurm") {
+    voxels <- qMincApply(filenames = imgfiles,
+                         fun = compute_normative_zscore,
+                         idx = idx,
+                         demographics = demographics,
+                         df = df,
+                         mask = mask,
+                         batches = njobs,
+                         source = file.path(SRCPATH, "processing.R"),
+                         registry_name = ifelse(is.null(registry_name),
+                                                "registry_normative_growth",
+                                                registry_name),
+                         cleanup = registry_cleanup,
+                         return_raw = TRUE,
+                         resources = resources)
+  } else {
+    stop()
+  }
+  
+  # Convert voxel list into matrix
+  # This matrix has number of voxels consistent with mask > 0.5
+  voxels <- simplify_masked(voxels[["vals"]])
+  
+  tf <- Sys.time()
+  print(tf-ti)
+  
+  # Export images
+  if (verbose) {message("Exporting normalized images...")}
+  if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
+  outfiles <- demographics[idx[[2]], key][[1]]
+  outfiles <- file.path(outdir, outfiles)
+  matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
+                   margin = 2, version = "v2", nproc = nproc)
+  
+  
+  return(outfiles)
+}
 
+normative_growth_norm_old <- function(imgdir, demographics, mask, outdir,
+                                      cv_seed = cv_seed,
+                                      key = "file", group = "patients",
+                                      df = 3, batch = NULL,
+                                      execution = "local", nproc = 1,
+                                      registry_name = NULL,
+                                      registry_cleanup = TRUE,
+                                      njobs = NULL, resources = list()) {
+  
+  imgdir <- "data/human/derivatives/v3/577/jacobians/absolute/"
+  demographics <- "data/human/registration/v3/subject_info/demographics.csv"
+  mask <- "data/human/registration/v3/reference_files/mask_3.0mm.mnc"
+  outdir <- "data/human/derivatives/v3/577/cross_validation/sample_1//effect_sizes/resolution_3.0/absolute/"
+  key <- "file"
+  cv_seed <- 1
+  group <- "controls"
+  df <- 3
+  batch <- "Site-Scanner"
+  execution <- "local"
+  nproc <- 8
+  registry_name <- "test"
+  registry_cleanup <- FALSE
+  njobs <- 300
+  resources <- list(memory="16G",
+                    walltime=60*60)
+  verbose <- TRUE
+  
+  # Raise cross-validation error
+  if (!is.null(cv_seed) & group != "controls") {
+    stop("Cross-validation only possible for controls.")
+  }
+  
+  # Import demographics data
+  if (verbose) {message("Importing demographics information...")}
+  demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
+  
+  # Check existence of key column in demographics
+  if (!(key %in% colnames(demographics))) {
+    stop(paste("demographics data is missing key column:", key))
+  }
+  
+  # Remove entries with missing diagnosis, age, or sex
+  demographics <- demographics %>%
+    filter(!is.na(DX),
+           !is.na(Age),
+           !is.na(Sex))
+  
+  # TODO: Remove rows where batch columns are NA
+  # Check existence of batch columns
+  if (!is.null(batch)) {
+    batch <- str_split(batch, pattern = "-")[[1]]
+    batch_check <- batch %in% colnames(demographics)
+    if (!all(batch_check)) {
+      stop("Batch columns not found in demographics:\n",
+           str_flatten(batch, collapse = "\n"))
+    }
+  }
+  
+  # Image files
+  imgfiles <- list.files(imgdir, full.names = TRUE)
+  
+  # Match image files to demographics
+  if (verbose) {message("Matching image files to demographics...")}
+  imgs_in_demographics <- basename(imgfiles) %in% demographics[[key]]
+  imgfiles <- imgfiles[imgs_in_demographics]
+  row_match <- match(basename(imgfiles), demographics[[key]])
+  demographics <- demographics[row_match,]
+  
+  
+  
+  
+  if (length(y) != nrow(demographics)) {stop()}
+  
+  # Residualize using batch variable if specified
+  if (!is.null(batch)) {
+    batch <- demographics %>%
+      select(all_of(batch)) %>%
+      unite(col = batch) %>%
+      pull(batch)
+    y <- residuals(lm(y ~ batch))
+    names(y) <- NULL
+  }
+  
+  # Filters for train and test sets
+  ind_fit <- demographics[["DX"]] == "Control"
+  if (group == "patients") {
+    ind_pred <- !ind_fit
+  } else if (group == "controls") {
+    ind_pred <- ind_fit
+  } else if (group == "all") {
+    ind_pred <- !logical(nrow(demographics))
+  }
+  
+  # Training data frame
+  df_fit <- demographics[ind_fit, c("Age", "Sex")]
+  df_fit[["y"]] <- y[ind_fit]
+  
+  # Test data frame
+  df_pred <- demographics[ind_pred, c("Age", "Sex")]
+  df_pred[["y"]] <- y[ind_pred]
+  
+  # Fit model and predict on test set
+  model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
+  model_pred <- predict(model_fit,
+                        newdata = df_pred,
+                        interval = "prediction",
+                        level = pnorm(q = 1) - pnorm(q = -1))
+  
+  # Extract model parameters of interest
+  df_pred <- df_pred %>%
+    mutate(y_pred = model_pred[,"fit"],
+           y_lwr = model_pred[,"lwr"],
+           y_upr = model_pred[,"upr"],
+           y_sd = y_pred - y_lwr)
+  
+  
+  
+  y_pred <- fit_predict_model(y = y, demographics = demographics,
+                              cv_seed = NULL, group = group,
+                              batch = batch, df = df)
+  z <- pull(zscore(y_pred), "z")
+  
+  quit()
+  
   ti <- Sys.time()
   # Run normative growth modelling
   if (verbose) {message("Evaluating normative growth models...")}
@@ -575,6 +834,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
     voxels <- mcMincApply(filenames = imgfiles,
                           fun = compute_normative_zscore,
                           demographics = demographics,
+                          cv_seed = cv_seed,
                           group = group,
                           batch = batch,
                           df = df,
@@ -585,6 +845,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
     voxels <- qMincApply(filenames = imgfiles,
                          fun = compute_normative_zscore,
                          demographics = demographics,
+                         cv_seed = cv_seed,
                          group = group,
                          batch = batch,
                          df = df,
@@ -592,7 +853,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                          batches = njobs,
                          source = file.path(SRCPATH, "processing.R"),
                          registry_name = ifelse(is.null(registry_name),
-                                                 "registry_normative_growth",
+                                                "registry_normative_growth",
                                                 registry_name),
                          cleanup = registry_cleanup,
                          return_raw = TRUE,
@@ -600,14 +861,14 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   } else {
     stop()
   }
-
+  
   # Convert voxel list into matrix
   # This matrix has number of voxels consistent with mask > 0.5
   voxels <- simplify_masked(voxels[["vals"]])
-
+  
   tf <- Sys.time()
   print(tf-ti)
-
+  
   # Export images
   if (verbose) {message("Exporting normalized images...")}
   if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
@@ -621,7 +882,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   outfiles <- file.path(outdir, outfiles)
   matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
                    margin = 2, version = "v2", nproc = nproc)
-
+  
   return(outfiles)
 }
 
@@ -665,7 +926,7 @@ propensity_matching_norm <- function(imgdir, demographics, mask, outdir,
 #' @return (matrix) SNF affinity matrix.
 similarity_network <- function(x1, x2, metric = "correlation", K = 10,
                                sigma = 0.5, t = 20, outfile = NULL){
-
+  
   if (metric == "correlation") {
     d1 <- (1-cor(t(x1)))
     d2 <- (1-cor(t(x2)))
@@ -675,18 +936,18 @@ similarity_network <- function(x1, x2, metric = "correlation", K = 10,
   } else {
     stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
   }
-
+  
   W1 <- affinityMatrix(d1, K = K, sigma = sigma)
   W2 <- affinityMatrix(d2, K = K, sigma = sigma)
-
+  
   W <- SNF(list(W1, W2), K = K, t = t)
-
+  
   if (!is.null(outfile)){
     data.table::fwrite(x = as_tibble(W), file = outfile)
   }
-
+  
   return(W)
-
+  
 }
 
 
@@ -700,7 +961,7 @@ similarity_network <- function(x1, x2, metric = "correlation", K = 10,
 #'
 #' @return (data.frame) Cluster assignments.
 create_clusters <- function(W, nk = 10, outfile = NULL) {
-
+  
   for(k in 2:nk) {
     group <- spectralClustering(affinity = W, K = k)
     group_name <- paste0("nk", k)
@@ -719,13 +980,13 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
       all_clusters <- cbind(all_clusters, group)
     }
   }
-
+  
   if (!is.null(outfile)) {
     write.csv(x = all_clusters, file = outfile, row.names = FALSE)
   }
-
+  
   return(all_clusters)
-
+  
 }
 
 
@@ -748,19 +1009,19 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
 compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean",
                                       execution = "local", nproc = 1,
                                       njobs = NULL, resources = list()){
-
+  
   ti <- Sys.time()
-
+  
   labels <- clusters[,i]
   files <- rownames(clusters)
-
+  
   # Iterate over clusters
   krange <- sort(unique(labels))
   centroids <- character(length(krange))
   for (k in krange) {
-
+    
     message(paste("Cluster", k, "of", max(krange)))
-
+    
     # Centroid function
     if (method == "mean") {
       centroid_fun <- mean
@@ -769,64 +1030,64 @@ compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean"
     } else {
       stop("method must be one of {mean, median}.")
     }
-
+    
     # Images for cluster k
     files_k <- files[labels == k]
-
+    
     # Create centroid image
     centroid <- mcMincApply(filenames = files_k,
                             fun = centroid_fun,
                             mask = mask,
                             cores = nproc)
-
+    
     # Export image
     outfile <- paste0("centroid_nk_", max(krange), "_k_", k, ".mnc")
     outfile <- file.path(outdir, outfile)
     mincWriteVolume(centroid,
                     output.filename = outfile,
                     clobber = TRUE)
-
+    
     centroids[[k]] <- outfile
-
+    
   }
-
+  
   tf <- Sys.time()
   print(tf-ti)
-
+  
   return(centroids)
-
+  
 }
 
 
 scaler <- function(data, scale = TRUE, axis = "columns"){
-
+  
   if (axis == "columns"){
-
+    
     colMeansMat <- matrix(colMeans(data), nrow = nrow(data), ncol = ncol(data), byrow = T)
     out <- data - colMeansMat
-
+    
     if (scale == TRUE){
-
+      
       sigma <- sqrt(colSums(out^2)/(nrow(data)-1))
       sigmaMat <- matrix(sigma, nrow = nrow(data), ncol = ncol(data), byrow = T)
       out <- out/sigmaMat
-
+      
     }
-
+    
   } else if (axis == "rows") {
-
+    
     rowMeansMat <- matrix(rowMeans(data), nrow = nrow(data), ncol = ncol(data), byrow = F)
     out <- data - rowMeansMat
-
+    
     if (scale == TRUE){
-
+      
       sigma <- sqrt(rowSums(out^2)/(ncol(data)-1))
       sigmaMat <- matrix(sigma, nrow = nrow(data), ncol = ncol(data), byrow = F)
       out <- out/sigmaMat
-
+      
     }
   }
-
+  
   return(out)
-
+  
 }

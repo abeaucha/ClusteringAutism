@@ -31,6 +31,9 @@ option_list <- list(
               type = "character",
               help = paste("Path to directory in which to save the effect",
                            "size images.")),
+  make_option("--cv-seed",
+              type = "numeric",
+              help = "Random seed for cross-validation."),
   make_option("--method",
               type = "character",
               default = "normative-growth",
@@ -126,6 +129,7 @@ imgdir <- args[["imgdir"]]
 demographics <- args[["demographics"]]
 mask <- args[["mask"]]
 outdir <- args[["outdir"]]
+cv_seed <- args[["cv-seed"]]
 method <- args[["method"]]
 key <- args[["key"]]
 group <- args[["group"]]
@@ -173,6 +177,7 @@ if (method == "normative-growth") {
                                    demographics = demographics,
                                    mask = mask,
                                    outdir = outdir,
+                                   cv_seed = cv_seed,
                                    key = key,
                                    group = group,
                                    df = df,
