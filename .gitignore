@@ -45,3 +45,5 @@ pMincMask*
 count_rows.R
 .Rproj.user
 main.Rproj
+renv.lock
+renv/
