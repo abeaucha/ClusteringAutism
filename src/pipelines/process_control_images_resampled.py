@@ -427,9 +427,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
             if not os.path.exists(path):
                 os.makedirs(path)
 
+        # Registry name for CV sample
         registry_name_sample = '{}_{}'.format(registry_name, sample)
-        print(registry_name_sample)
-        sys.exit()
     
         # Compute effect size images
         if stages['effect-sizes']:
@@ -442,7 +441,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
                     cv_seed = sample,
                     matrix_resolution = cluster_resolution,
                     execution = execution, nproc = nproc,
-                    registry_name = registry_name,
+                    registry_name = registry_name_sample,
                     registry_cleanup = registry_cleanup,
                     slurm_njobs = slurm_njobs, slurm_mem = slurm_mem,
                     slurm_time = slurm_time)
@@ -469,7 +468,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
                 outdir = cv_sample_paths['centroids'], mask = mask,
                 method = centroid_method,
                 execution = execution, nproc = nproc,
-                registry_name = registry_name,
+                registry_name = registry_name_sample,
                 registry_cleanup = registry_cleanup,
                 slurm_mem = slurm_mem,
                 slurm_time = slurm_time
