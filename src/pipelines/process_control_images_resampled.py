@@ -29,6 +29,7 @@ import processing
 import pandas as pd
 from glob import glob
 from pyminc.volumes.factory import volumeFromFile
+from shutil import rmtree
 from process_human_images import initialize, effect_sizes, clustering, centroids
 
 
@@ -474,6 +475,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
                 slurm_time = slurm_time
             )
             centroid_outputs = centroids(**centroid_kwargs)
+
+        rmtree(cv_sample_paths['effect_sizes'])
 
     print("Pipeline complete.", flush = True)
 
