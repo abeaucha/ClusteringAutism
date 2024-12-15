@@ -554,7 +554,7 @@ for (k in 1:nk) {
                               mask = mask_POND_SK,
                               threshold = "top_n",
                               threshold_value = 0.2,
-                              threshold_symmetric = TRUE)sq
+                              threshold_symmetric = TRUE)
     img <- mincArray(img)
     img <- img[slices_crop[[1]][[1]],,slices_crop[[1]][[2]]]
     list_centroids_POND_SK[[k]][[j]] <- img

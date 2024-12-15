@@ -216,4 +216,3 @@ es_dirs_abs <- file.path(es_dirs, "absolute")
 
 list.files(es_files_abs)
 ```
-
