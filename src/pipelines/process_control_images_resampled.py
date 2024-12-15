@@ -426,6 +426,10 @@ def main(pipeline_dir, input_dir, demographics, mask,
         for path in cv_sample_paths.values():
             if not os.path.exists(path):
                 os.makedirs(path)
+
+        registry_name_sample = '{}_{}'.format(registry_name, sample)
+        print(registry_name_sample)
+        sys.exit()
     
         # Compute effect size images
         if stages['effect-sizes']:

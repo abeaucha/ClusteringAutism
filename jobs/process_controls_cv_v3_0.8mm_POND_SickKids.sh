@@ -36,7 +36,6 @@ process_control_images_resampled.py \
 --execution slurm \
 --nproc 8 \
 --registry-name $REGISTRY \
---registry-cleanup false \
 --slurm-njobs 300 \
 --slurm-time 120 \
 --slurm-mem 16G
