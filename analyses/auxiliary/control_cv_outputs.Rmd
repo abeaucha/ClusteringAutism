@@ -1,0 +1,175 @@
+---
+title: ""
+author: "Antoine Beauchamp"
+date: '`r Sys.Date()`'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r functions}
+SRCPATH <- Sys.getenv("SRCPATH")
+
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r directories}
+# Output directory
+output_dir <- "outputs/control_cv/"
+
+# Human pipeline
+human_version <- "v3"
+human_pipeline_dir <- "../../data/human/derivatives/"
+human_pipeline_dir <- file.path(human_pipeline_dir, human_version)
+```
+
+```{r human-params}
+dataset <- "POND-SickKids"
+human_es_group <- "controls"
+
+#Identify human parameter set ID
+human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
+human_params <- fetch_params_metadata(metadata = human_metadata,
+                                      dataset = dataset,
+                                      es_group = human_es_group)
+human_params
+```
+
+```{r directories-2}
+# Human parameter set ID
+human_params_id <- "916"
+
+# Jacobians
+jacobians <- c("absolute", "relative")
+
+# Human resolution
+human_resolution <- human_params %>% 
+  filter(id == human_params_id) %>% 
+  pull(resolution)
+
+# Human registration directory
+human_registration_dir <- "../../data/human/registration/"
+human_registration_dir <- file.path(human_registration_dir, human_version)
+
+# Human pipeline directory
+human_pipeline_dir <- "../../data/human/derivatives/"
+human_pipeline_dir <- file.path(human_pipeline_dir, human_version, human_params_id)
+
+# Output directory
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+```
+
+```{r images-params}
+# Human anatomy
+human_anat_file <- paste0("model_", sprintf("%.1f", human_resolution), "mm.mnc")
+human_anat_file <- file.path(human_registration_dir, "reference_files", human_anat_file)
+human_anat <- mincGetVolume(human_anat_file)
+human_anat_vol <- mincArray(human_anat)
+
+# Cropped human images along sagittal and transverse planes
+human_slices_dim_1 <- 25:230
+human_slices_dim_3 <- 25:220
+human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
+human_anat_vol_cropped <- human_anat_vol
+
+# Human mask
+human_mask <- paste0("mask_", sprintf("%.1f", human_resolution), "mm.mnc")
+human_mask <- file.path(human_registration_dir, "reference_files", human_mask)
+
+# Image thresholding options
+threshold <- "top_n"
+threshold_value <- 0.2
+threshold_symmetric <- TRUE
+```
+
+```{r}
+cv_dir <- file.path(human_pipeline_dir, "cross_validation")
+cv_dirs <- list.files(cv_dir)
+# cv_dirs <- paste0("sample_", 1:10)
+list_centroid_dirs <- vector(mode = "list", length = length(cv_dirs))
+for (i in 1:length(list_centroid_dirs)) {
+  list_centroid_dirs[[i]] <- file.path(cv_dir, cv_dirs[i], "centroids", str_c("resolution_", sprintf("%.1f", human_resolution)), jacobians)
+  names(list_centroid_dirs[[i]]) <- jacobians
+}
+```
+
+
+```{r human-centroids}
+# Iterate over cluster solutions
+nk_max <- 2
+for (i in 1:length(list_centroid_dirs)) {
+  
+  message(paste0("Cross-validation sample ", i))
+  
+  for (nk in 2:nk_max) {
+    for (k in 1:nk) {
+      
+      print(paste0(nk, "-", k))
+      
+      # Iterate over jacobians
+      list_human_centroids <- vector(mode = "list", length = length(jacobians))
+      list_human_overlay <- vector(mode = "list", length = length(jacobians))
+      names(list_human_centroids) <- jacobians
+      names(list_human_overlay) <- jacobians
+      for (j in jacobians) {
+        
+        # Import centroid image for specific cluster using threshold
+        img <- import_cluster_map(imgdir = list_centroid_dirs[[i]][[j]],
+                                  mask = human_mask,
+                                  nk = nk, k = k,
+                                  threshold = threshold,
+                                  threshold_value = threshold_value,
+                                  threshold_symmetric = threshold_symmetric)
+        
+        # Compute slice series overlay thresholds
+        list_human_overlay[[j]] <- numeric(2)
+        list_human_overlay[[j]][1] <- min(abs(img[img != 0]))
+        list_human_overlay[[j]][2] <- 0.8*max(abs(img[img != 0]))
+        list_human_overlay[[j]] <- round(list_human_overlay[[j]], 2)
+        
+        # Crop image
+        img <- mincArray(img)
+        # img <- img[human_slices_dim_1,,human_slices_dim_3]
+        
+        list_human_centroids[[j]] <- img
+      }
+      
+      # Slice series for absolute and relative centroid
+      ss <- sliceSeries(nrow = 6, ncol = 2, begin = 50, end = 250) %>% 
+        anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+        overlay(list_human_centroids[["absolute"]], 
+                low = list_human_overlay[["absolute"]][1],
+                high = list_human_overlay[["absolute"]][2],
+                symmetric = TRUE) %>% 
+        legend("Effect size") %>% addtitle("Absolute") %>% 
+        sliceSeries() %>% anatomy() %>% 
+        overlay(list_human_centroids[["relative"]], 
+                low = list_human_overlay[["relative"]][1],
+                high = list_human_overlay[["relative"]][2],
+                symmetric = TRUE) %>% 
+        legend("Effect size") %>% addtitle("Relative")
+      
+      # Export plot
+      outfile <- paste0("cv_", i, "_centroid_", nk, "-", k, ".pdf")
+      outfile <- file.path(output_dir, outfile)
+      pdf(file = outfile,
+          width = unit(10, "in"),
+          height = unit(10, "in"))
+      draw(ss)
+      dev.off()
+      
+    }
+  }
+}
+```
+
