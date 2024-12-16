@@ -101,9 +101,9 @@ mouse_params
 ```{r human-params}
 dataset <- "POND-SickKids"
 # dataset <- "HBN"
-human_resolution <- 0.8
+human_resolution <- 3.0
 human_es_method <- "normative-growth"
-human_es_group <- "patients"
+human_es_group <- "controls"
 human_es_df <- 3
 human_es_ncontrols <- NA
 human_centroid_method <- mouse_centroid_method
@@ -129,7 +129,7 @@ human_params
 mouse_params_id <- 107
 
 # Human parameter set ID
-human_params_id <- "700"
+human_params_id <- "577"
 # human_params_id <- "013"
 # human_params_id <- 256
 # human_params_id <- "547"
