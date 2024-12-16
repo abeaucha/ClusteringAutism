@@ -454,7 +454,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
             print("Generating clusters...", flush = True)
             cluster_kwargs = dict(
                 infiles = [es_outputs[key]['matrix'] for key in es_outputs.keys()],
-                nk_max = 3, metric = cluster_metric, K = cluster_K,
+                nk_max = cluster_nk_max, metric = cluster_metric, K = cluster_K,
                 sigma = cluster_sigma, t = cluster_t,
                 cluster_file = os.path.join(cv_sample_paths['clusters'], cluster_file),
                 affinity_file = os.path.join(cv_sample_paths['clusters'], cluster_affinity_file)
