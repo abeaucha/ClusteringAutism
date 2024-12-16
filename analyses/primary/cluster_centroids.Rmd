@@ -53,9 +53,9 @@ mouse_params
 ```{r human-params}
 dataset <- "POND-SickKids"
 # dataset <- "HBN"
-human_resolution <- 0.8
+human_resolution <- 3.0
 human_es_method <- "normative-growth"
-human_es_group <- "patients"
+human_es_group <- "controls"
 human_es_df <- 3
 human_es_ncontrols <- NA
 human_centroid_method <- mouse_centroid_method
@@ -81,7 +81,7 @@ human_params
 mouse_params_id <- 107
 
 # Human parameter set ID
-human_params_id <- "700"
+human_params_id <- "916"
 # human_params_id <- "013"
 
 # Jacobians
@@ -110,7 +110,7 @@ human_pipeline_dir <- file.path(human_pipeline_dir, human_version, human_params_
 
 # Human centroid directories
 human_centroid_dirs <- file.path(human_pipeline_dir, "centroids")
-human_centroid_dirs <- file.path(human_centroid_dirs, str_c("resolution_", human_resolution))
+human_centroid_dirs <- file.path(human_centroid_dirs, str_c("resolution_", sprintf("%.1f", human_resolution)))
 human_centroid_dirs <- file.path(human_centroid_dirs, jacobians)
 names(human_centroid_dirs) <- jacobians
 
@@ -139,21 +139,21 @@ mouse_anat <- mincGetVolume(mouse_anat_file)
 mouse_anat_vol <- mincArray(mouse_anat)
 
 # Human anatomy
-human_anat_file <- paste0("model_", human_resolution, "mm.mnc")
+human_anat_file <- paste0("model_", sprintf("%.1f", human_resolution), "mm.mnc")
 human_anat_file <- file.path(human_registration_dir, "reference_files", human_anat_file)
 human_anat <- mincGetVolume(human_anat_file)
 human_anat_vol <- mincArray(human_anat)
 
 # Cropped human images along sagittal and transverse planes
-human_slices_dim_1 <- 25:230
-human_slices_dim_3 <- 25:220
-# human_slices_dim_1 <- 1:66
-# human_slices_dim_3 <- 1:63
+# human_slices_dim_1 <- 25:230
+# human_slices_dim_3 <- 25:220
+human_slices_dim_1 <- 1:66
+human_slices_dim_3 <- 1:63
 human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
 human_anat_vol_cropped <- human_anat_vol
 
 # Human mask
-human_mask <- paste0("mask_", human_resolution, "mm.mnc")
+human_mask <- paste0("mask_", sprintf("%.1f", human_resolution), "mm.mnc")
 human_mask <- file.path(human_registration_dir, "reference_files", human_mask)
 
 # Mouse mask
