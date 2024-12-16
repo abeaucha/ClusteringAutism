@@ -554,7 +554,8 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   execution = "local", nproc = 1,
                                   registry_name = NULL,
                                   registry_cleanup = TRUE,
-                                  njobs = NULL, resources = list()) {
+                                  njobs = NULL, resources = list(), 
+                                  verbose = TRUE) {
   
   # imgdir <- "data/human/derivatives/v3/577/jacobians/absolute/"
   # demographics <- "data/human/registration/v3/subject_info/demographics.csv"
@@ -961,7 +962,7 @@ similarity_network <- function(x1, x2, metric = "correlation", K = 10,
 #'
 #' @return (data.frame) Cluster assignments.
 create_clusters <- function(W, nk = 10, outfile = NULL) {
-  
+
   for(k in 2:nk) {
     group <- spectralClustering(affinity = W, K = k)
     group_name <- paste0("nk", k)
