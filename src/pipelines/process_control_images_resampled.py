@@ -404,7 +404,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
     print("Initializing pipeline...", flush = True)
     paths = initialize(**kwargs)
 
-    # Create cross-validation sub-directory
+    # Create cross-validation subdirectory
     cv_dir = os.path.join(paths['pipeline'], 'cross_validation')
     if not os.path.exists(cv_dir):
         os.makedirs(cv_dir)
