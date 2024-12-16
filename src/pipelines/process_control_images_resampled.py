@@ -476,7 +476,7 @@ def main(pipeline_dir, input_dir, demographics, mask,
             )
             centroid_outputs = centroids(**centroid_kwargs)
 
-        rmtree(cv_sample_paths['effect_sizes'])
+        rmtree(os.path.join(cv_sample_dir, 'effect_sizes'))
 
     print("Pipeline complete.", flush = True)
 
