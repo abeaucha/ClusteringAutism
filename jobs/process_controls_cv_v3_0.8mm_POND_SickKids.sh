@@ -27,8 +27,8 @@ process_control_images_resampled.py \
 --demographics data/human/registration/v3/subject_info/demographics.csv \
 --mask data/human/registration/v3/reference_files/mask_0.8mm.mnc \
 --datasets POND SickKids \
---cv-n 50 \
---cv-start 1 \
+--cv-n 20 \
+--cv-start 23 \
 --es-method normative-growth \
 --es-group controls \
 --es-df 3 \
