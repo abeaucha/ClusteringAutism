@@ -70,21 +70,22 @@ if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
 ```
 
 ```{r images-params}
+# Human mask
+human_mask_file <- paste0("mask_", sprintf("%.1f", human_resolution), "mm.mnc")
+human_mask_file <- file.path(human_registration_dir, "reference_files", human_mask_file)
+human_mask <- mincGetVolume(human_mask_file)
+
 # Human anatomy
 human_anat_file <- paste0("model_", sprintf("%.1f", human_resolution), "mm.mnc")
 human_anat_file <- file.path(human_registration_dir, "reference_files", human_anat_file)
 human_anat <- mincGetVolume(human_anat_file)
+human_anat[human_mask != 1] <- 0
 human_anat_vol <- mincArray(human_anat)
 
 # Cropped human images along sagittal and transverse planes
 human_slices_dim_1 <- 25:230
 human_slices_dim_3 <- 25:220
 human_anat_vol_cropped <- human_anat_vol[human_slices_dim_1,,human_slices_dim_3]
-human_anat_vol_cropped <- human_anat_vol
-
-# Human mask
-human_mask <- paste0("mask_", sprintf("%.1f", human_resolution), "mm.mnc")
-human_mask <- file.path(human_registration_dir, "reference_files", human_mask)
 
 # Image thresholding options
 threshold <- "top_n"
@@ -97,6 +98,7 @@ cv_dir <- file.path(human_pipeline_dir, "cross_validation")
 cv_dirs <- list.files(cv_dir)
 # cv_dirs <- paste0("sample_", 1:10)
 list_centroid_dirs <- vector(mode = "list", length = length(cv_dirs))
+names(list_centroid_dirs) <- cv_dirs
 for (i in 1:length(list_centroid_dirs)) {
   list_centroid_dirs[[i]] <- file.path(cv_dir, cv_dirs[i], "centroids", str_c("resolution_", sprintf("%.1f", human_resolution)), jacobians)
   names(list_centroid_dirs[[i]]) <- jacobians
@@ -109,7 +111,7 @@ for (i in 1:length(list_centroid_dirs)) {
 nk_max <- 2
 for (i in 1:length(list_centroid_dirs)) {
   
-  message(paste0("Cross-validation sample ", i))
+  print(paste0("Cross-validation sample ", names(list_centroid_dirs)[i]))
   
   for (nk in 2:nk_max) {
     for (k in 1:nk) {
@@ -125,7 +127,7 @@ for (i in 1:length(list_centroid_dirs)) {
         
         # Import centroid image for specific cluster using threshold
         img <- import_cluster_map(imgdir = list_centroid_dirs[[i]][[j]],
-                                  mask = human_mask,
+                                  mask = human_mask_file,
                                   nk = nk, k = k,
                                   threshold = threshold,
                                   threshold_value = threshold_value,
@@ -160,7 +162,7 @@ for (i in 1:length(list_centroid_dirs)) {
         legend("Effect size") %>% addtitle("Relative")
       
       # Export plot
-      outfile <- paste0("cv_", i, "_centroid_", nk, "-", k, ".pdf")
+      outfile <- paste0("cv_", names(list_centroid_dirs)[i], "_centroid_", nk, "-", k, ".pdf")
       outfile <- file.path(output_dir, outfile)
       pdf(file = outfile,
           width = unit(10, "in"),
@@ -172,4 +174,201 @@ for (i in 1:length(list_centroid_dirs)) {
   }
 }
 ```
+
+```{r}
+slices_dim_1 <- 27:220
+slices_dim_2 <- 10:280
+slices_dim_3 <- 10:220
+human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
+
+nk <- 2
+list_ss <- vector(mode = "list", length = length(list_centroid_dirs))
+names(list_ss) <- paste0("sample_", 1:length(list_ss))
+for (i in 1:length(list_ss)) {
+  
+  message(paste0("Cross-validation sample ", i))
+  
+  imgdir <- list_centroid_dirs[[names(list_ss)[i]]][["relative"]]
+  
+  list_ss[[i]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    
+    print(k)
+     
+    # Import centroid image and threshold
+    img <- import_cluster_map(imgdir = imgdir,
+                              mask = human_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    # Convert mincSingleDim to mincArray and crop
+    img <- mincArray(img)
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+    list_ss[[i]][[k]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                     dimension = 1, 
+                                     slices = 82) %>% 
+      anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], 
+              high = overlay_threshold[2], 
+              symmetric = TRUE) %>% 
+      grobify()
+     
+  }
+}
+```
+
+```{r}
+library(grid)
+library(gridExtra)
+
+human_width_px <- dim(human_anat_vol_cropped)[2]
+human_height_px <- dim(human_anat_vol_cropped)[3]
+
+padding_width_pt <- 6
+
+ss_width_pt <- 100
+ss_height_pt <- ss_width_pt*(human_height_px/human_width_px)
+
+ss_widths_pt <- c(ss_width_pt, padding_width_pt)
+ss_heights_pt <- c(rep(ss_height_pt, 2), padding_width_pt)
+
+
+list_ss_samples <- vector(mode = "list", length = length(list_ss))
+names(list_ss_samples) <- names(list_ss)
+for (i in 1:length(list_ss_samples)) {
+  list_ss_samples[[i]] <- arrangeGrob(list_ss[[i]][[1]],
+                                      list_ss[[i]][[2]],
+                                      zeroGrob(),
+                                      zeroGrob(),
+                                      layout_matrix = rbind(c(1, 3),
+                                                            c(2, 3),
+                                                            c(4, 4)),
+                                      widths = unit(ss_widths_pt, unit = "bigpts"),
+                                      heights = unit(ss_heights_pt, unit = "bigpts"))
+}
+```
+
+
+```{r}
+ngrobs <- length(list_ss_samples)
+ncols <- 4
+nrows <- 4
+
+layout_matrix <- matrix(1:ngrobs, nrow = nrows, ncol = ncols, byrow = TRUE)
+
+widths_pt <- rep(sum(ss_widths_pt), ncols)
+heights_pt <- rep(sum(ss_heights_pt), nrows)
+
+ss_grid <- arrangeGrob(grobs = list_ss_samples,
+                       layout_matrix = layout_matrix,
+                       widths = unit(widths_pt, unit = "bigpts"),
+                       heights = unit(heights_pt, unit = "bigpts"))
+
+out_width_pt <- sum(widths_pt)
+out_height_pt <- sum(heights_pt)
+
+out_width_in <- out_width_pt/72
+out_height_in <- out_height_pt/72
+
+# Export plot
+outfile <- "control_cv_centroids.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(out_width_in, "in"),
+    height = unit(out_height_in, "in"))
+grid.draw(ss_grid)
+dev.off()
+```
+
+```{r}
+slices_dim_1 <- 27:220
+slices_dim_2 <- 10:280
+slices_dim_3 <- 10:220
+human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
+
+centroid_dir <- "../../data/human/derivatives/v3/700/centroids/resolution_0.8/relative/"
+nk <- 2
+list_ss <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  
+  print(k)
+  
+  # Import centroid image and threshold
+  img <- import_cluster_map(imgdir = centroid_dir,
+                            mask = human_mask_file,
+                            nk = nk, k = k,
+                            threshold = threshold,
+                            threshold_value = threshold_value,
+                            threshold_symmetric = threshold_symmetric)
+  
+  # Compute overlay thresholds
+  overlay_threshold <- numeric(2)
+  overlay_threshold[1] <- min(abs(img[img != 0]))
+  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+  overlay_threshold <- round(overlay_threshold, 2)
+  
+  # Convert mincSingleDim to mincArray and crop
+  img <- mincArray(img)
+  img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+  
+  list_ss[[k]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                   dimension = 1, 
+                                   slices = 82) %>% 
+    anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+    overlay(img, 
+            low = overlay_threshold[1], 
+            high = overlay_threshold[2], 
+            symmetric = TRUE) %>% 
+    grobify()
+  
+}
+```
+
+
+```{r}
+human_width_px <- dim(human_anat_vol_cropped)[2]
+human_height_px <- dim(human_anat_vol_cropped)[3]
+
+padding_width_pt <- 6
+
+ss_width_pt <- 100
+ss_height_pt <- ss_width_pt*(human_height_px/human_width_px)
+
+ss_heights_pt <- rep(ss_height_pt, 2)
+
+ss_grid <- arrangeGrob(list_ss[[1]],
+                       list_ss[[2]],
+                       layout_matrix = rbind(c(1),
+                                             c(2)),
+                       widths = unit(ss_width_pt, unit = "bigpts"),
+                       heights = unit(ss_heights_pt, unit = "bigpts"))
+
+
+out_width_pt <- ss_width_pt
+out_height_pt <- sum(ss_heights_pt)
+
+out_width_in <- out_width_pt/72
+out_height_in <- out_height_pt/72
+
+# Export plot
+outfile <- "POND_nk_2_centroids.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(out_width_in, "in"),
+    height = unit(out_height_in, "in"))
+grid.draw(ss_grid)
+dev.off()
+```
+
+
 
