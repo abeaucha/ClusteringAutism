@@ -105,8 +105,8 @@ kwargs = dict(
 
 resources = dict(
     nodes = 1,
-    mem = slurm_mem,
-    time = slurm_time
+    mem = '16G',
+    time = '8:00:00'
 )
 
 # Create the registry
@@ -115,7 +115,7 @@ registry = utils.Registry(resources = resources,
 
 # Create data batches
 registry.create_batches(x = cluster_pairs,
-                        nbatches = slurm_njobs,
+                        nbatches = 300,
                         prefix = 'centroid_pairs_batch')
 
 # Create jobs for batches
