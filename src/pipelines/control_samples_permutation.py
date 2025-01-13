@@ -2,6 +2,7 @@
 
 print("Packages...")
 import os
+import utils
 import pandas as pd
 from permute_cluster_similarity import permute_cluster_labels
 from process_human_images import centroids
