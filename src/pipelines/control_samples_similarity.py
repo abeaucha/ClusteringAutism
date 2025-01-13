@@ -54,79 +54,80 @@ def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
 
 
 
+if __name__ == '__main__':
 
-centroid_dir = 'data/human/derivatives/v3/700/centroids/resolution_0.8/'
-sample_dir = 'data/human/derivatives/v3/916/cross_validation/'
+    centroid_dir = 'data/human/derivatives/v3/700/centroids/resolution_0.8/'
+    sample_dir = 'data/human/derivatives/v3/916/cross_validation/'
 
-output_dir = 'data/cross_species/v3/control_cv/similarity/'
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
+    output_dir = 'data/cross_species/v3/control_cv/similarity/'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-# nsamples = len(os.listdir(sample_dir))
-nsamples = 50
+    # nsamples = len(os.listdir(sample_dir))
+    nsamples = 50
 
-for i in range(1, nsamples+1):
-    sample_centroid_dir = 'data/human/derivatives/v3/916/cross_validation/sample_{}/centroids/resolution_0.8'.format(i)
-    cluster_pairs_i = generate_cluster_pairs(centroid_dirs = [centroid_dir, sample_centroid_dir])
-    if i == 1:
-        cluster_pairs = cluster_pairs_i
-    else:
-        cluster_pairs = cluster_pairs + cluster_pairs_i
+    for i in range(1, nsamples+1):
+        sample_centroid_dir = 'data/human/derivatives/v3/916/cross_validation/sample_{}/centroids/resolution_0.8'.format(i)
+        cluster_pairs_i = generate_cluster_pairs(centroid_dirs = [centroid_dir, sample_centroid_dir])
+        if i == 1:
+            cluster_pairs = cluster_pairs_i
+        else:
+            cluster_pairs = cluster_pairs + cluster_pairs_i
 
-cluster_pairs = pd.DataFrame(cluster_pairs)
+    cluster_pairs = pd.DataFrame(cluster_pairs)
 
-# Driver script
-driver = 'transcriptomic_similarity.py'
+    # Driver script
+    driver = 'transcriptomic_similarity.py'
 
-kwargs = dict(
-    species = ('human', 'human'),
-    expr = ('data/human/expression', 'data/human/expression'),
-    masks = ('data/human/registration/v3/reference_files/mask_0.8mm.mnc',
-             'data/human/registration/v3/reference_files/mask_0.8mm.mnc'),
-    microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
-    gene_space = 'average-latent-space',
-    n_latent_spaces = 50,
-    metric = 'correlation',
-    signed = 'true',
-    threshold = 'top_n',
-    threshold_value = 0.2,
-    threshold_symmetric = 'true'
-)
+    kwargs = dict(
+        species = ('human', 'human'),
+        expr = ('data/human/expression', 'data/human/expression'),
+        masks = ('data/human/registration/v3/reference_files/mask_0.8mm.mnc',
+                 'data/human/registration/v3/reference_files/mask_0.8mm.mnc'),
+        microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
+        gene_space = 'average-latent-space',
+        n_latent_spaces = 50,
+        metric = 'correlation',
+        signed = 'true',
+        threshold = 'top_n',
+        threshold_value = 0.2,
+        threshold_symmetric = 'true'
+    )
 
-# outfile = os.path.join(output_dir, 'centroid_pairs.csv')
-# cluster_pairs.to_csv(outfile, index = False)
-#
-# kwargs['input-file'] = outfile
-# kwargs['output-file'] = os.path.join(output_dir, 'similarity.csv')
-# kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
-#
-# # Execute the driver
-# utils.execute_local(script = driver, kwargs = kwargs)
+    # outfile = os.path.join(output_dir, 'centroid_pairs.csv')
+    # cluster_pairs.to_csv(outfile, index = False)
+    #
+    # kwargs['input-file'] = outfile
+    # kwargs['output-file'] = os.path.join(output_dir, 'similarity.csv')
+    # kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
+    #
+    # # Execute the driver
+    # utils.execute_local(script = driver, kwargs = kwargs)
 
-resources = dict(
-    nodes = 1,
-    mem = '16G',
-    time = '8:00:00'
-)
+    resources = dict(
+        nodes = 1,
+        mem = '16G',
+        time = '8:00:00'
+    )
 
-# Create the registry
-registry = utils.Registry(resources = resources,
-                          name = 'control_samples_similarity_registry')
+    # Create the registry
+    registry = utils.Registry(resources = resources,
+                              name = 'control_samples_similarity_registry')
 
-# Create data batches
-registry.create_batches(x = cluster_pairs,
-                        nbatches = 300,
-                        prefix = 'centroid_pairs_batch')
+    # Create data batches
+    registry.create_batches(x = cluster_pairs,
+                            nbatches = 300,
+                            prefix = 'centroid_pairs_batch')
 
-# Create jobs for batches
-kwargs['nproc'] = 1
-registry.create_jobs(script = driver,
-                     kwargs = kwargs)
+    # Create jobs for batches
+    kwargs['nproc'] = 1
+    registry.create_jobs(script = driver,
+                         kwargs = kwargs)
 
-# Submit the jobs
-out = registry.submit_jobs(wait = True, cleanup = True)
+    # Submit the jobs
+    out = registry.submit_jobs(wait = True, cleanup = True)
 
-# Export the results
-print("Exporting results...", flush = True)
-output_file = os.path.join(output_dir, 'similarity.csv')
-out.to_csv(output_file, index = False)
+    # Export the results
+    print("Exporting results...", flush = True)
+    output_file = os.path.join(output_dir, 'similarity.csv')
+    out.to_csv(output_file, index = False)
