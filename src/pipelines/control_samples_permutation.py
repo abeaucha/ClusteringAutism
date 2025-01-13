@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+print("Packages...")
 import os
 import pandas as pd
 from permute_cluster_similarity import permute_cluster_labels
 from process_human_images import centroids
 from control_samples_similarity import generate_cluster_pairs
+import sys
 
 permutations_start = 1
 permutations_n = 2
@@ -15,6 +17,7 @@ inputs_cluster_dir = 'data/human/derivatives/v3/700/clusters/resolution_3.0/'
 
 inputs_sample_dir = 'data/human/derivatives/v3/916/cross_validation/'
 
+print("Initializing...")
 
 pipeline_dir = 'data/cross_species/v3/control_cv/permutations/'
 if not os.path.exists(pipeline_dir):
@@ -33,6 +36,7 @@ for path in paths.values():
         os.makedirs(path)
 
 
+print("Permuting labels...")
 clusters = os.path.join(inputs_cluster_dir, 'clusters.csv')
 permutations = permute_cluster_labels(clusters = clusters,
                                       outdir = paths['clusters'],
@@ -41,6 +45,8 @@ permutations = permute_cluster_labels(clusters = clusters,
 
 for file in permutations:
     pd.read_csv(file).iloc[:, :2].to_csv(file, index = False)
+
+sys.exit()
 
 # Driver script
 driver = 'transcriptomic_similarity.py'
