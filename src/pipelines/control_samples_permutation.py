@@ -68,6 +68,8 @@ permutations_ids = list(permutations_range)
 
 for p, f in zip(permutations_ids, permutations):
 
+    print("Permutation {}".format(p), flush = True)
+
     registry_name_p = 'control_samples_permutation_registry_{}'.format(p)
 
     print("Generating permuted centroids...", flush = True)
