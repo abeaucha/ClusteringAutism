@@ -7,15 +7,12 @@ import pandas as pd
 from permute_cluster_similarity import permute_cluster_labels
 from process_human_images import centroids
 from control_samples_similarity import generate_cluster_pairs
-import sys
 
 permutations_start = 1
-permutations_n = 2
+permutations_n = 10
 nsamples = 50
-
 inputs_es_dir = 'data/human/derivatives/v3/700/effect_sizes/resolution_0.8/'
 inputs_cluster_dir = 'data/human/derivatives/v3/700/clusters/resolution_3.0/'
-
 inputs_sample_dir = 'data/human/derivatives/v3/916/cross_validation/'
 
 print("Initializing...")
@@ -132,5 +129,3 @@ for p, f in zip(permutations_ids, permutations):
     output_file = 'similarity_permutation_{}.csv'.format(p)
     output_file = os.path.join(paths['similarity'], output_file)
     out.to_csv(output_file, index = False)
-
-    print()
