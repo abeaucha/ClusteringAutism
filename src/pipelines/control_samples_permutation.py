@@ -46,8 +46,6 @@ permutations = permute_cluster_labels(clusters = clusters,
 for file in permutations:
     pd.read_csv(file).iloc[:, :2].to_csv(file, index = False)
 
-sys.exit()
-
 # Driver script
 driver = 'transcriptomic_similarity.py'
 
@@ -91,6 +89,7 @@ for p, f in zip(permutations_ids, permutations):
     )
     centroid_outputs = centroids(**centroid_kwargs)
 
+    print("Creating cluster pairs...")
     for i in range(1, nsamples+1):
         sample_centroid_dir = os.path.join(inputs_sample_dir, 'sample_{}'.format(i), 'centroids', 'resolution_0.8')
         cluster_pairs_i = generate_cluster_pairs(centroid_dirs = [outdir, sample_centroid_dir])
