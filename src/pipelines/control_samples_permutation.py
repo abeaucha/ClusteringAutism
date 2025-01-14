@@ -7,6 +7,7 @@ import pandas as pd
 from permute_cluster_similarity import permute_cluster_labels
 from process_human_images import centroids
 from control_samples_similarity import generate_cluster_pairs
+from shutil import rmtree
 
 permutations_start = 11
 permutations_n = 20
@@ -131,3 +132,6 @@ for p, f in zip(permutations_ids, permutations):
     output_file = 'similarity_permutation_{}.csv'.format(p)
     output_file = os.path.join(paths['similarity'], output_file)
     out.to_csv(output_file, index = False)
+
+    # Remove permutation centroid directory
+    rmtree(outdir)
