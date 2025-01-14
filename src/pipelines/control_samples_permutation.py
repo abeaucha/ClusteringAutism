@@ -8,8 +8,8 @@ from permute_cluster_similarity import permute_cluster_labels
 from process_human_images import centroids
 from control_samples_similarity import generate_cluster_pairs
 
-permutations_start = 1
-permutations_n = 10
+permutations_start = 11
+permutations_n = 20
 nsamples = 50
 inputs_es_dir = 'data/human/derivatives/v3/700/effect_sizes/resolution_0.8/'
 inputs_cluster_dir = 'data/human/derivatives/v3/700/clusters/resolution_3.0/'
