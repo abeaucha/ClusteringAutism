@@ -9,8 +9,8 @@ from process_human_images import centroids
 from control_samples_similarity import generate_cluster_pairs
 from shutil import rmtree
 
-permutations_start = 11
-permutations_n = 20
+permutations_start = 31
+permutations_n = 50
 nsamples = 50
 inputs_es_dir = 'data/human/derivatives/v3/700/effect_sizes/resolution_0.8/'
 inputs_cluster_dir = 'data/human/derivatives/v3/700/clusters/resolution_3.0/'
