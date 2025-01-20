@@ -275,7 +275,7 @@ import_similarity <- function(param_id, pipeline_dir = "data/cross_species/v3/",
              str_extract("[0-9]+") %>% 
              as.numeric(),
            img2_jacobians = img2 %>% 
-             str_extract("absolute|relative"),) %>% 
+             str_extract("absolute|relative")) %>% 
     unite(col = "img1_cluster_id", img1_nk, img1_k, 
           sep = "-", remove = FALSE) %>% 
     unite(col = "img2_cluster_id", img2_nk, img2_k, 
