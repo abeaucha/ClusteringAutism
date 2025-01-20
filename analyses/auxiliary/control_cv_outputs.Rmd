@@ -194,7 +194,7 @@ for (i in 1:length(list_ss)) {
   for (k in 1:nk) {
     
     print(k)
-     
+    
     # Import centroid image and threshold
     img <- import_cluster_map(imgdir = imgdir,
                               mask = human_mask_file,
@@ -222,7 +222,7 @@ for (i in 1:length(list_ss)) {
               high = overlay_threshold[2], 
               symmetric = TRUE) %>% 
       grobify()
-     
+    
   }
 }
 ```
@@ -322,8 +322,8 @@ for (k in 1:nk) {
   img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
   
   list_ss[[k]] <- sliceSeries(nrow = 1, ncol = 1, 
-                                   dimension = 1, 
-                                   slices = 82) %>% 
+                              dimension = 1, 
+                              slices = 82) %>% 
     anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
     overlay(img, 
             low = overlay_threshold[1], 
@@ -370,5 +370,277 @@ grid.draw(ss_grid)
 dev.off()
 ```
 
+# Similarity 
 
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r functions}
+SRCPATH <- Sys.getenv("SRCPATH")
+
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r}
+# Output directory
+output_dir <- "outputs/control_cv/"
+
+pipeline_dir <- "../../data/cross_species/v3/control_cv"
+
+similarity_dir <- file.path(pipeline_dir, "similarity")
+
+permutations_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+
+```
+
+```{r}
+input_file <- file.path(similarity_dir, "similarity.csv")
+
+# Import similarity
+df_similarity <- read_csv(input_file, show_col_types = FALSE)
+
+# Extract sample and cluster information
+df_similarity <- df_similarity %>% 
+  mutate(img1_k = img1 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_jacobians = img1 %>% 
+           str_extract("absolute|relative"),
+         img2_k = img2 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_jacobians = img2 %>% 
+           str_extract("absolute|relative"),
+         img2_sample = img2 %>% 
+           str_extract("sample_[0-9]+") %>% 
+           str_remove("sample_") %>% 
+           as.numeric())  
+
+# Aggregate Jacobians
+df_similarity <- df_similarity %>% 
+  group_by(img2_sample, img1_k, img2_k) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+# Define the mapping to relabel the clusters based on maximal similarity
+df_relabelling <-
+  df_similarity %>% 
+  group_by(img2_sample, img1_k) %>% 
+  filter(similarity == max(similarity)) %>% 
+  ungroup() %>% 
+  select(-similarity) %>% 
+  rename(img2_k_new = img1_k)
+
+# Relabel the clusters
+df_similarity <- df_similarity %>% 
+  left_join(df_relabelling, by = c("img2_sample", "img2_k")) %>% 
+  select(-img2_k) %>% 
+  rename(img2_k = img2_k_new)
+
+```
+
+```{r}
+permutation_files <- list.files(permutations_dir)
+
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)
+for (i in 1:length(list_permutations)) {
+  
+  permutation_file <- permutation_files[i]
+  
+  # Permutation number
+  p <- permutation_file %>% 
+    str_extract("[0-9]+") %>% 
+    as.numeric()
+  
+  permutation_file <- file.path(permutations_dir, permutation_file)
+  
+  df_permutation_i <- read_csv(permutation_file, show_col_types = FALSE) %>% 
+    mutate(img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_jacobians = img1 %>% 
+             str_extract("absolute|relative"),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_jacobians = img2 %>% 
+             str_extract("absolute|relative"),
+           img2_sample = img2 %>% 
+             str_extract("sample_[0-9]+") %>% 
+             str_remove("sample_") %>% 
+             as.numeric())
+  
+  # Aggregate Jacobians
+  df_permutation_i <- df_permutation_i %>% 
+    group_by(img2_sample, img1_k, img2_k) %>% 
+    summarise(similarity = mean(similarity),
+              .groups = "drop")
+  
+  # Relabel the clusters
+  df_permutation_i <- df_permutation_i %>% 
+    left_join(df_relabelling, by = c("img2_sample", "img2_k")) %>% 
+    select(-img2_k) %>% 
+    rename(img2_k = img2_k_new)
+  
+  df_permutation_i <- df_permutation_i %>% 
+    mutate(permutation = p)
+  
+  list_permutations[[i]] <- df_permutation_i
+  
+}
+
+df_permutations <- bind_rows(list_permutations)
+```
+
+```{r}
+sample_ids <- df_similarity %>% 
+  pull(img2_sample) %>% 
+  unique() %>% 
+  sort()
+
+list_sample_pvals <- vector(mode = "list", length = length(sample_ids))
+for (s in 1:length(sample_ids)) {
+  
+  df_similarity_s <- df_similarity %>% 
+    filter(img2_sample == sample_ids[s])
+  
+  df_permutations_s <- df_permutations %>% 
+    filter(img2_sample == sample_ids[s])
+  
+  df_similarity_s[["pval"]] <- 0
+  
+  for (i in 1:nrow(df_similarity_s)) {
+    df_similarity_s[[i, "pval"]] <- sum(df_permutations_s[["similarity"]] >= df_similarity_s[[i, "similarity"]])/nrow(df_permutations_s)
+  }
+  
+  list_sample_pvals[[s]] <- df_similarity_s 
+  
+}
+
+df_similarity_pvals <- bind_rows(list_sample_pvals)
+```
+
+```{r}
+df_plot <- df_similarity_pvals %>% 
+  mutate(img1_label = paste0("POND k = ", img1_k),
+         img2_label = paste0("CV sample k = ", img2_k))
+
+p <- ggplot(df_plot, aes(x = pval)) + 
+  geom_histogram() +
+  facet_grid(img1_label ~ img2_label) +
+  labs(x = "p-value",
+       y = "Number of samples") + 
+  theme_bw()
+
+outfile <- "control_cv_pval_dist.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(p)
+dev.off()
+```
+
+```{r}
+df_diagonal <- df_similarity_pvals %>% 
+  filter(img1_k == img2_k) %>% 
+  mutate(k = img1_k) %>% 
+  select(-img1_k, -img2_k) 
+
+alpha_seq <- seq(0, 1, by = 0.01)
+list_diagonal_alpha <- vector(mode = "list", length = length(alpha_seq))
+for (i in 1:length(list_diagonal_alpha)) {
+  list_diagonal_alpha[[i]] <- df_diagonal %>% 
+    mutate(sig = pval <= alpha_seq[i]) %>% 
+    group_by(k) %>% 
+    summarise(prop = sum(sig)/length(sample_ids)) %>% 
+    ungroup() %>% 
+    mutate(alpha = alpha_seq[i])
+}
+
+df_diagonal_alpha <- bind_rows(list_diagonal_alpha)
+
+p <- ggplot(df_diagonal_alpha, aes(x = alpha, y = prop, col = factor(k))) + 
+  geom_line() + 
+  geom_point(size = 1) + 
+  coord_equal() + 
+  scale_x_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  labs(x = "p-value",
+       y = "Proportion of samples",
+       col = "k") +
+  theme_bw()
+
+outfile <- "control_cv_pval_prop.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(p)
+dev.off()
+```
+
+```{r}
+p <- ggplot(df_diagonal_alpha, aes(x = alpha, y = prop, col = factor(k))) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(xlim = c(0, 0.15),
+                  ylim = c(0, 0.40)) + 
+  scale_x_continuous(breaks = seq(0, 1, by = 0.05)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.05)) + 
+  labs(x = "p-value",
+       y = "Proportion of samples",
+       col = "k") +
+  theme_bw()
+
+outfile <- "control_cv_pval_prop_zoom.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(p)
+dev.off()
+```
+
+```{r}
+df_plot <- df_diagonal %>% 
+  mutate(sig = pval < 0.05,
+         label = paste("k =", k))
+
+p <- ggplot(df_plot, aes(x = img2_sample, y = similarity, col = sig)) + 
+  geom_segment(aes(xend = img2_sample, yend = 0)) + 
+  geom_point() +
+  facet_grid(.~label) +
+  coord_flip(ylim = c(0.5, 1.0)) + 
+  scale_x_reverse(breaks = seq(0, 100, 5)) + 
+  scale_color_manual(values = c("grey40", "red")) + 
+  labs(x = "Cross-validation sample",
+       y = "Similarity",
+       col = "p < 0.05") + 
+  theme_bw()
+
+outfile <- "control_cv_diag_similarity.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(p)
+dev.off()
+```
 
