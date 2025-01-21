@@ -624,22 +624,102 @@ df_plot <- df_diagonal %>%
          label = paste("k =", k))
 
 p <- ggplot(df_plot, aes(x = img2_sample, y = similarity, col = sig)) + 
-  geom_segment(aes(xend = img2_sample, yend = 0)) + 
+  geom_segment(aes(xend = img2_sample, yend = 0), alpha = 0.5) + 
   geom_point() +
   facet_grid(.~label) +
   coord_flip(ylim = c(0.5, 1.0)) + 
-  scale_x_reverse(breaks = seq(0, 100, 5)) + 
+  scale_x_reverse(breaks = c(1, seq(5, 100, 5))) + 
   scale_color_manual(values = c("grey40", "red")) + 
   labs(x = "Cross-validation sample",
        y = "Similarity",
        col = "p < 0.05") + 
-  theme_bw()
+  theme_bw() +
+  theme(panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank())
 
 outfile <- "control_cv_diag_similarity.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(6, "in"),
     height = unit(6, "in"))
+print(p)
+dev.off()
+```
+```{r}
+df_permutations_1 <- df_permutations %>% 
+  filter(img2_sample == 1)
+
+ggplot(df_permutations_1, aes(x = similarity)) + 
+  geom_histogram(fill = "grey80", col = "grey20") + 
+  theme_bw()
+```
+
+```{r}
+p <- df_permutations %>% 
+  filter(img2_sample %in% 1:10) %>% 
+  ggplot(aes(x = similarity, fill = factor(img2_sample), col = factor(img2_sample))) +
+  geom_density(alpha = 0.1) + 
+  coord_cartesian(xlim = c(0.2, 1.0)) + 
+  scale_x_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "Similarity",
+       y = "Density",
+       fill = "Sample",
+       col = "Sample") + 
+  theme_bw()
+
+outfile <- "control_cv_perm_dist.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(4, "in"))
+print(p)
+dev.off()
+```
+```{r}
+
+df_permutations_POND_MICe <- import_similarity_permutations(param_id = "375",
+                                                            pipeline_dir = "../../data/cross_species/v3/",
+                                                            combine_jacobians = TRUE)
+df_permutations_POND_MICe <- df_permutations_POND_MICe %>% 
+  filter(img1_nk == 2, img2_nk == 2)
+
+df_permutations_HBN_MICe <- import_similarity_permutations(param_id = "861",
+                                                            pipeline_dir = "../../data/cross_species/v3/",
+                                                            combine_jacobians = TRUE)
+df_permutations_HBN_MICe <- df_permutations_HBN_MICe %>% 
+  filter(img1_nk == 2, img2_nk == 2)
+
+df_permutations_POND_HBN <- import_similarity_permutations(param_id = "779",
+                                                            pipeline_dir = "../../data/cross_species/v3/",
+                                                            combine_jacobians = TRUE)
+df_permutations_POND_HBN <- df_permutations_POND_HBN %>% 
+  filter(img1_nk == 2, img2_nk == 2)
+```
+
+
+```{r}
+df_permutations_NDDs <- bind_rows(df_permutations_POND_MICe %>% 
+                                    mutate(data = "POND-MICe"),
+                                  df_permutations_HBN_MICe %>% 
+                                    mutate(data = "HBN-MICe"),
+                                  df_permutations_POND_HBN %>% 
+                                    mutate(data = "POND-HBN"))
+
+p <- ggplot(df_permutations_NDDs, aes(x = similarity, fill = data, col = data)) + 
+  geom_density(alpha = 0.2) + 
+  coord_cartesian(xlim = c(0.2, 1.0)) + 
+  scale_x_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "Similarity",
+       y = "Density",
+       fill = "Dataset",
+       col = "Dataset") + 
+  theme_bw()
+
+outfile <- "NDDs_perm_dist.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(4, "in"))
 print(p)
 dev.off()
 ```
