@@ -42,7 +42,7 @@ source(file.path(SRCPATH, "analysis.R"))
 output_dir <- "figure4/"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-}
+} 
 
 # Plot file prefix
 output_plot_prefix <- "figure4"
@@ -896,11 +896,13 @@ export_pdf(x = fig4_heatmap_grob,
 
 ```{r fig4-pathways-cluster-subset}
 # Select cluster solutions
-nk_subset <- c(4, 6, 8, 10)
+nk_subset <- c(4, 7, 10)
 
 # Determine mouse clusters with human matches
-df_mouse_matches <- df_sig_nk_POND %>% 
-  filter(has_match) %>% 
+df_mouse_matches <- df_sig_nk %>% 
+  select(cluster_id, nk, k, p, y) %>% 
+  pivot_wider(id_cols = c("cluster_id", "nk", "k"), names_from = "y", values_from = "p") %>% 
+  filter((POND < 0.05 & HBN < 0.1) | (POND < 0.1 & HBN < 0.05)) %>% 
   select(cluster_id, nk, k) %>% 
   mutate(nk = as.numeric(as.character(nk)),
          k = as.numeric(as.character(k)))
@@ -1001,7 +1003,7 @@ df_cluster_palette_nk4 <- tibble(nk = 4, k = 1:4,
 df_polar_palette <- df_cluster_grid %>% 
   left_join(df_cluster_palette_nk4, 
             by = c("cluster_id_nk4" = "cluster_id")) %>% 
-  mutate(colour = ifelse(cluster_id %in% c("6-4", "8-2", "10-5"), "seagreen2", colour))
+  mutate(colour = ifelse(cluster_id %in% c("7-4", "10-5"), "seagreen2", colour))
 
 # Stack nk = 4 and other solutions
 df_polar_palette <- bind_rows(df_polar_palette %>% 
@@ -1377,7 +1379,8 @@ for(l in 1:length(list_human_slices_POND)) {
     df_match_i <- df_sim_pvals_POND %>% 
       filter(mouse_nk == nk_mouse,
              mouse_k == k_mouse,
-             significant == 1)
+             pval < 0.1)
+             # significant == 1)
     
     # If only one match, select that one
     if (nrow(df_match_i) == 1) {
@@ -1416,8 +1419,14 @@ for(l in 1:length(list_human_slices_POND)) {
     }
     
     # Extract matching human cluster ID
-    nk <- df_match_i[["nk"]]
-    k <- df_match_i[["k"]]
+    if (nk_mouse == 10 & k_mouse == 3) {
+      nk <- 9; k <- 5
+    } else if (nk_mouse == 10 & k_mouse == 4) {
+      nk <- 9; k <- 7
+    } else {
+      nk <- df_match_i[["nk"]]
+      k <- df_match_i[["k"]]
+    }
     
     print(paste(nk, k, sep = "-"))
     
@@ -1530,6 +1539,10 @@ for(l in 1:length(list_human_slices_HBN)) {
     # Extract matching human cluster ID
     if (nk_mouse == 6 & k_mouse == 5) {
       nk <- 6; k <- 2
+    } else if (nk_mouse == 7 & k_mouse == 1) {
+      nk <- 8; k <- 5
+    } else if (nk_mouse == 7 & k_mouse == 4) {
+      nk <- 7; k <- 7
     } else if (nk_mouse == 8 & k_mouse == 2) {
       nk <- 8; k <- 3
     } else if (nk_mouse == 10 & k_mouse == 4) {
