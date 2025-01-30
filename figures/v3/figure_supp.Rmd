@@ -1031,15 +1031,15 @@ df_cluster_grid
 
 ```{r fig-supp-8-11-ss}
 # List of mouse cluster streams
-mouse_cluster_streams <- list(c("4-1", "6-5", "8-6", "10-4"),
-                              c("4-4", "6-1", "8-1", "10-1"),
-                              c("4-4", "6-4", "8-2", "10-5"),
-                              c("4-3", "6-3", "8-5", "10-3"))
+mouse_cluster_streams <- list(c("4-1", "6-5", "7-7", "8-6", "10-4"),
+                              c("4-4", "6-1", "7-1", "8-1", "10-1"),
+                              c("4-4", "6-4", "7-4", "8-2", "10-5"),
+                              c("4-3", "6-3", "7-3", "8-5", "10-3"))
 
 # Supplementary figure numbers
 fig_supp_nums <- 8:11
 
-run <- FALSE
+run <- TRUE
 if (run) {
   # Iterate over cluster streams
   for (l in 1:length(mouse_cluster_streams)) {
@@ -1169,7 +1169,7 @@ df_sim_pvals_POND %>%
   arrange(mouse_nk, mouse_k) %>%   
   select(mouse_cluster_id, human_cluster_id, similarity, pval) %>% 
   mutate(similarity = round(similarity, 3),
-         pval = round(pval, 3))  
+         pval = round(pval, 4))  
 ```
 
 ```{r fig-supp-9-pvals}
