@@ -397,7 +397,6 @@ similarity_dir <- file.path(pipeline_dir, "similarity")
 
 permutations_dir <- file.path(pipeline_dir, "permutations", "similarity")
 
-
 ```
 
 ```{r}
@@ -625,23 +624,30 @@ df_plot <- df_diagonal %>%
 
 p <- ggplot(df_plot, aes(x = img2_sample, y = similarity, col = sig)) + 
   geom_segment(aes(xend = img2_sample, yend = 0), alpha = 0.5) + 
-  geom_point() +
+  geom_point(size = 0.8) +
   facet_grid(.~label) +
   coord_flip(ylim = c(0.5, 1.0)) + 
   scale_x_reverse(breaks = c(1, seq(5, 100, 5))) + 
-  scale_color_manual(values = c("grey40", "red")) + 
+  scale_color_manual(values = c("grey40", "red"), labels = c("p >= 0.05", "p < 0.05")) + 
   labs(x = "Cross-validation sample",
-       y = "Similarity",
-       col = "p < 0.05") + 
+       y = "Correlation",
+       col = NULL) + 
   theme_bw() +
   theme(panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank())
+        panel.grid.minor.y = element_blank(),
+        axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7),
+        strip.text = element_text(size = 7),
+        legend.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.position = "bottom",
+        legend.direction = "horizontal")
 
 outfile <- "control_cv_diag_similarity.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
-    width = unit(6, "in"),
-    height = unit(6, "in"))
+    width = unit(263/72, "in"),
+    height = unit(346/72, "in"))
 print(p)
 dev.off()
 ```
@@ -684,14 +690,14 @@ df_permutations_POND_MICe <- df_permutations_POND_MICe %>%
   filter(img1_nk == 2, img2_nk == 2)
 
 df_permutations_HBN_MICe <- import_similarity_permutations(param_id = "861",
-                                                            pipeline_dir = "../../data/cross_species/v3/",
-                                                            combine_jacobians = TRUE)
+                                                           pipeline_dir = "../../data/cross_species/v3/",
+                                                           combine_jacobians = TRUE)
 df_permutations_HBN_MICe <- df_permutations_HBN_MICe %>% 
   filter(img1_nk == 2, img2_nk == 2)
 
 df_permutations_POND_HBN <- import_similarity_permutations(param_id = "779",
-                                                            pipeline_dir = "../../data/cross_species/v3/",
-                                                            combine_jacobians = TRUE)
+                                                           pipeline_dir = "../../data/cross_species/v3/",
+                                                           combine_jacobians = TRUE)
 df_permutations_POND_HBN <- df_permutations_POND_HBN %>% 
   filter(img1_nk == 2, img2_nk == 2)
 ```
@@ -721,6 +727,121 @@ pdf(file = outfile,
     width = unit(6, "in"),
     height = unit(4, "in"))
 print(p)
+dev.off()
+```
+```{r}
+human_pipeline_dir <- "../../data/human/derivatives/v3/916/"
+
+cv_dir <- file.path(human_pipeline_dir, "cross_validation")
+cv_dirs <- list.files(cv_dir)
+# cv_dirs <- paste0("sample_", 1:10)
+list_centroid_dirs <- vector(mode = "list", length = length(cv_dirs))
+names(list_centroid_dirs) <- cv_dirs
+for (i in 1:length(list_centroid_dirs)) {
+  list_centroid_dirs[[i]] <- file.path(cv_dir, cv_dirs[i], "centroids", "resolution_0.8", "relative")
+}
+```
+
+```{r}
+library(RMINC)
+
+human_registration_dir <- "../../data/human/registration/v3/"
+human_resolution <- 0.8
+human_mask_file <- paste0("mask_", sprintf("%.1f", human_resolution), "mm.mnc")
+human_mask_file <- file.path(human_registration_dir, "refere nce_files", human_mask_file)
+
+df_centroid_paths <- df_relabelling %>% 
+  rename(img1_k = img2_k_new) %>% 
+  mutate(path = file.path(cv_dir, paste0("sample_", img2_sample), 
+                          "centroids", "resolution_0.8", "relative",
+                          paste0("centroid_nk_2_k_", img2_k, ".mnc"))) 
+
+list_centroids_mean <- vector(mode = "list", length = 2)
+for (k1 in 1:2) {
+  df_centroid_paths_k1 <- filter(df_centroid_paths, img1_k == k1)
+  
+  img <- mincMean(filenames = df_centroid_paths_k1$path, 
+                  mask = human_mask_file)
+  
+  img <- mincArray(img)
+  
+  img <- threshold_image(img)
+  
+  list_centroids_mean[[k1]] <- img
+}
+```
+
+
+```{r}
+slices_dim_1 <- 27:220
+slices_dim_2 <- 10:280
+slices_dim_3 <- 10:220
+human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
+
+nk <- 2
+list_ss_centroid_means <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  
+  img <- list_centroids_mean[[k]]
+  
+  # Compute overlay thresholds
+  overlay_threshold <- numeric(2)
+  overlay_threshold[1] <- min(abs(img[img != 0]))
+  overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+  overlay_threshold <- round(overlay_threshold, 2)
+  
+  # Convert mincSingleDim to mincArray and crop
+  img <- mincArray(img)
+  img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+  
+  list_ss_centroid_means[[k]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                             dimension = 1, 
+                                             slices = 82) %>% 
+    anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+    overlay(img, 
+            low = overlay_threshold[1], 
+            high = overlay_threshold[2], 
+            symmetric = TRUE) %>% 
+    grobify()
+  
+}
+```
+
+```{r}
+library(grid)
+library(gridExtra)
+
+human_width_px <- dim(human_anat_vol_cropped)[2]
+human_height_px <- dim(human_anat_vol_cropped)[3]
+
+padding_width_pt <- 6
+
+ss_width_pt <- 100
+ss_height_pt <- ss_width_pt*(human_height_px/human_width_px)
+
+ss_heights_pt <- rep(ss_height_pt, 2)
+
+ss_grid <- arrangeGrob(list_ss_centroid_means[[1]],
+                       list_ss_centroid_means[[2]],
+                       layout_matrix = rbind(c(1),
+                                             c(2)),
+                       widths = unit(ss_width_pt, unit = "bigpts"),
+                       heights = unit(ss_heights_pt, unit = "bigpts"))
+
+
+out_width_pt <- ss_width_pt
+out_height_pt <- sum(ss_heights_pt)
+
+out_width_in <- out_width_pt/72
+out_height_in <- out_height_pt/72
+
+# Export plot
+outfile <- "control_cv_average_centroids.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(out_width_in, "in"),
+    height = unit(out_height_in, "in"))
+grid.draw(ss_grid)
 dev.off()
 ```
 
