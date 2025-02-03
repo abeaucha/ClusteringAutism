@@ -557,6 +557,37 @@ dev.off()
 ```
 
 ```{r}
+df_plot <- df_similarity_pvals %>% 
+  filter(img1_k == img2_k) %>% 
+  rename(k = img1_k) %>% 
+  mutate(label = paste0("k = ", k)) %>% 
+  select(-img2_k)
+
+p <- ggplot(df_plot, aes(x = pval)) + 
+  geom_histogram(fill = "grey70",
+                 col = "grey20") +
+  facet_wrap(~label, nrow = 2) + 
+  scale_x_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  scale_y_continuous(breaks = seq(0, 10, by = 1)) + 
+                     # , sec.axis = sec_axis(~./50)) + 
+  labs(x = "p-value",
+       y = "Number of samples") +
+  theme_bw() + 
+  theme(panel.grid.minor.y = element_blank(),
+        axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7),
+        strip.text = element_text(size = 7))
+
+outfile <- "control_cv_pval_dist_diagonal.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(263/72, "in"),
+    height = unit(320/72, "in"))
+print(p)
+dev.off()
+```
+
+```{r}
 df_diagonal <- df_similarity_pvals %>% 
   filter(img1_k == img2_k) %>% 
   mutate(k = img1_k) %>% 
@@ -748,7 +779,7 @@ library(RMINC)
 human_registration_dir <- "../../data/human/registration/v3/"
 human_resolution <- 0.8
 human_mask_file <- paste0("mask_", sprintf("%.1f", human_resolution), "mm.mnc")
-human_mask_file <- file.path(human_registration_dir, "refere nce_files", human_mask_file)
+human_mask_file <- file.path(human_registration_dir, "reference_files", human_mask_file)
 
 df_centroid_paths <- df_relabelling %>% 
   rename(img1_k = img2_k_new) %>% 
