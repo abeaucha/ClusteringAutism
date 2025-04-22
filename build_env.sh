@@ -52,11 +52,11 @@ EOF
 # Activate conda environment
 conda activate $ENV_NAME
 
-# Install RMINC
+# Install RMINC from Github
 echo "\nInstalling RMINC..."
-#Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
+Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
 
-# 
-#pip3 install datatable==1.1.0 pyminc==0.57
+# Install Python datatable and pyminc using pip 
+pip3 install datatable==1.1.0 pyminc==0.57
 
 #export PATH="\${MINC_TOOLKIT}/pipeline:\${MINC_TOOLKIT}/bin:\$PATH"
