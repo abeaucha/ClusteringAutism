@@ -10,6 +10,10 @@ source ${CONDA_PATH}/etc/profile.d/conda.sh
 MINC_ENV_NAME="clustering-autism-minc-env"
 ENV_NAME="clustering-autism-env"
 
+# Environment paths
+MINC_ENV_PATH=${CONDA_PATH}/envs/${MINC_ENV_NAME}
+ENV_PATH=${CONDA_PATH}/envs/${ENV_NAME}
+
 # Create MINC environment and install minc-toolkit-v2
 echo "\nBuilding MINC environment..."
 conda create -n $MINC_ENV_NAME -c minc-forge minc-toolkit-v2 -y
@@ -18,9 +22,12 @@ conda create -n $MINC_ENV_NAME -c minc-forge minc-toolkit-v2 -y
 echo "\nBuilding R environment..."
 conda create -n $ENV_NAME -c conda-forge r-base=4.4.2 python=3.12.10 -y
 
-# Environment paths
-MINC_ENV_PATH=${CONDA_PATH}/envs/${MINC_ENV_NAME}
-ENV_PATH=${CONDA_PATH}/envs/${ENV_NAME}
+# Install compiled R packages via conda (faster)
+echo "\nInstalling R packages..."
+conda install -n $ENV_NAME -c conda-forge --file R_packages.txt -y
+
+echo "\nInstalling python packages..."
+conda install -n $ENV_NAME -c conda-forge --file python_packages.txt -y
 
 # Set $MINC_TOOLKIT upon activation 
 cat <<EOF > ${ENV_PATH}/etc/conda/activate.d/activate-minc-toolkit.sh
@@ -45,13 +52,11 @@ EOF
 # Activate conda environment
 conda activate $ENV_NAME
 
-# Install compiled R packages via conda (faster)
-echo "\nInstalling R packages..."
-conda install -c conda-forge --file R_packages.txt -y
-
 # Install RMINC
 echo "\nInstalling RMINC..."
-Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
+#Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
 
+# 
+#pip3 install datatable==1.1.0 pyminc==0.57
 
 #export PATH="\${MINC_TOOLKIT}/pipeline:\${MINC_TOOLKIT}/bin:\$PATH"
