@@ -11,11 +11,11 @@ MINC_ENV_NAME="clustering-autism-minc-env"
 ENV_NAME="clustering-autism-env"
 
 # Create MINC environment and install minc-toolkit-v2
-echo "Building MINC environment..."
+echo "\nBuilding MINC environment..."
 conda create -n $MINC_ENV_NAME -c minc-forge minc-toolkit-v2 -y
 
 # Create conda environment and install R
-echo "Building R environment..."
+echo "\nBuilding R environment..."
 conda create -n $ENV_NAME -c conda-forge r-base=4.4.2 python=3.12.10 -y
 
 # Environment paths
@@ -46,12 +46,12 @@ EOF
 conda activate $ENV_NAME
 
 # Install compiled R packages via conda (faster)
-#echo "Installing R packages from conda..."
+echo "\nInstalling R packages..."
 conda install -c conda-forge --file R_packages.txt -y
 
 # Install RMINC
-#echo "Installing RMINC..."
-#Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
+echo "\nInstalling RMINC..."
+Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
 
 
 #export PATH="\${MINC_TOOLKIT}/pipeline:\${MINC_TOOLKIT}/bin:\$PATH"
