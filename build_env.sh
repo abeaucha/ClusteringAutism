@@ -53,10 +53,28 @@ EOF
 conda activate $ENV_NAME
 
 # Install RMINC from Github
-echo "\nInstalling RMINC..."
+echo "\nInstalling RMINC from Github..."
 Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
 
 # Install Python datatable and pyminc using pip 
+echo "\nInstalling python packages using pip..."
 pip3 install datatable==1.1.0 pyminc==0.57
 
-#export PATH="\${MINC_TOOLKIT}/pipeline:\${MINC_TOOLKIT}/bin:\$PATH"
+# Deactivate conda environment
+conda deactivate
+
+# Build hook to set environment paths upon activation
+cat <<EOF > ${ENV_PATH}/etc/conda/activate.d/set-env-vars.sh
+export PROJECTPATH="$PWD"
+export SRCPATH="\$PROJECTPATH/src"
+export PATH_PREFIX="\${SRCPATH}:\${SRCPATH}/drivers:\${SRCPATH}/pipelines:\${MINC_TOOLKIT}/pipeline:\${MINC_TOOLKIT}/bin"
+export PATH="\${PATH_PREFIX}:\$PATH"
+EOF
+
+# Build hook to unset environment paths upon deactivation
+cat <<EOF > ${ENV_PATH}/etc/conda/deactivate.d/unset-env-vars.sh
+export PATH=\${PATH#"\${PATH_PREFIX}:"}
+unset PROJECTPATH
+unset SRCPATH
+unset PATH_PREFIX
+EOF
