@@ -58,21 +58,31 @@ Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef91
 
 # Install Python datatable and pyminc using pip 
 echo "\nInstalling python packages using pip..."
-pip3 install datatable==1.1.0 pyminc==0.57
+pip3 install utils==1.0.2 datatable==1.1.0 pyminc==0.57
 
 # Deactivate conda environment
 conda deactivate
 
 # Build hook to set environment paths upon activation
 cat <<EOF > ${ENV_PATH}/etc/conda/activate.d/set-env-vars.sh
+if [ -n "\${PYTHONPATH}" ]; then
+  export PYTHONPATH_PREV="\${PYTHONPATH}"
+fi
 export PROJECTPATH="$PWD"
 export SRCPATH="\$PROJECTPATH/src"
+export PYTHONPATH="\${SRCPATH}"
 export PATH_PREFIX="\${SRCPATH}:\${SRCPATH}/drivers:\${SRCPATH}/pipelines:\${MINC_TOOLKIT}/pipeline:\${MINC_TOOLKIT}/bin"
 export PATH="\${PATH_PREFIX}:\$PATH"
 EOF
 
 # Build hook to unset environment paths upon deactivation
 cat <<EOF > ${ENV_PATH}/etc/conda/deactivate.d/unset-env-vars.sh
+if [ -n "\${PYTHONPATH_PREV}" ]; then
+  export PYTHONPATH="\${PYTHONPATH_PREV}"
+  unset PYTHONPATH_PREV
+else
+  unset PYTHONPATH
+fi
 export PATH=\${PATH#"\${PATH_PREFIX}:"}
 unset PROJECTPATH
 unset SRCPATH
