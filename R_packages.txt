@@ -11,3 +11,7 @@ r-rspectra=0.16.2
 r-rcpp=1.0.14
 r-rcppeigen=0.3.4.0.2
 r-rcpparmadillo=14.4.1_1
+r-optparse=1.7.5
+r-snftool=2.3.1
+r-dosnow=1.0.20
+
