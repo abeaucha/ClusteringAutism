@@ -51,6 +51,12 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--params-id',
+        type = str,
+        help = ()
+    )
+
+    parser.add_argument(
         '--input-dir',
         type = str,
         default = 'data/human/registration/v3/jacobians_resampled/resolution_0.8/',
@@ -329,7 +335,10 @@ def initialize(**kwargs):
 
     # Create pipeline directory based on the pipeline parameters
     print("Creating pipeline directories...", flush = True)
-    params_id = utils.random_id(3)
+    if kwargs['params_id'] is None:
+        params_id = utils.random_id(3)
+    else:
+        params_id = kwargs['params_id']
     metadata = os.path.join(pipeline_dir, 'metadata.csv')
     pipeline_dir = utils.mkdir_from_params(params = params,
                                            outdir = pipeline_dir,
@@ -692,7 +701,7 @@ def centroids(clusters, imgdir, outdir, mask,
 
 @utils.timing
 def main(pipeline_dir, input_dir, demographics, mask,
-         datasets = ('POND', 'SickKids'),
+         params_id = None, datasets = ('POND', 'SickKids'),
          es_method = 'normative-growth', es_group = 'patients',
          es_df = 3, es_batch = ('Site', 'Scanner'), es_ncontrols = 10,
          es_matrix_file = 'effect_sizes.csv',
