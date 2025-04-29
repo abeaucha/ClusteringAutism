@@ -129,19 +129,19 @@ clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>%
   mutate(ID = file.path(imgdir, ID)) %>%
   column_to_rownames("ID")
 
+# Registry options
+registry_name <- args[["registry-name"]]
+registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
+                             TRUE, FALSE)
+
 # Execution options
 if (execution == "local") {
   resources <- list()
-  registry_name <- NULL
-  registry_cleanup <- NULL
   conf_file <- NA
 } else if (execution == "slurm") {
   resources <- list(memory = args[["slurm-mem"]],
                     walltime = args[["slurm-time"]] * 60,
                     ncpus = nproc)
-  registry_name <- args[["registry-name"]]
-  registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
-                             TRUE, FALSE)
   conf_file <- getOption("RMINC_BATCH_CONF")
 } else {
   stop()

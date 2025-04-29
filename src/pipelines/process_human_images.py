@@ -679,8 +679,10 @@ def centroids(clusters, imgdir, outdir, mask,
         kwargs['imgdir'] = os.path.join(imgdir, j, '')
         kwargs['outdir'] = os.path.join(outdir, j, '')
         if registry_name is not None:
-            registry_name_es = registry_name + '_centroids_' + j
-            kwargs['registry-name'] = registry_name_es
+            registry_name_centroids = registry_name + '_centroids_' + j
+        else:
+            registry_name_centroids = 'registry_centroids_' + j
+        kwargs['registry-name'] = registry_name_centroids
         kwargs['registry-cleanup'] = 'true' if registry_cleanup else 'false'
         utils.execute_local(script = script, kwargs = kwargs)
         out[j] = os.path.join(outdir, j, '')
