@@ -654,7 +654,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
       select(all_of(key), Age, Sex)
   }
   
-  ti <- Sys.time()
   # Run normative growth modelling
   if (verbose) {message("Evaluating normative growth models...")}
   if (execution == "local") {
@@ -688,9 +687,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   # Convert voxel list into matrix
   # This matrix has number of voxels consistent with mask > 0.5
   voxels <- simplify_masked(voxels[["vals"]])
-  
-  tf <- Sys.time()
-  print(tf-ti)
   
   # Export images
   if (verbose) {message("Exporting normalized images...")}
