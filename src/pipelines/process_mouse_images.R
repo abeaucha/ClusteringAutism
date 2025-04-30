@@ -7,19 +7,6 @@
 # Adapted from Clustering_Pipeline.R
 
 
-# Packages -------------------------------------------------------------------
-
-# library(tidyverse)
-# library(magrittr)
-# library(RMINC)
-# library(glue)
-# library(MRIcrotome)
-# library(grid)
-# library(SNFtool)
-# library(tmod)
-# library(Exact)
-
-
 # Environment variables ------------------------------------------------------
 
 SRCPATH <- Sys.getenv("SRCPATH")
@@ -33,7 +20,7 @@ source(file.path(SRCPATH, "Clustering_Functions_AB.R"))
 # Main -----------------------------------------------------------------------
 
 # Parameter set ID
-params_id <- "100"
+params_id <- "001"
 
 # Registration directory
 registration_dir <- "data/mouse/registration/"
@@ -45,6 +32,9 @@ pipeline_dir <- file.path(pipeline_dir, params_id)
 # Image resolution 
 resolution_um <- 200
 resolution_mm <- resolution_um/1000
+
+# Maximum number of clusters to find
+nk_max <- 2
 
 # List of scanbase files
 scanbase_files <- list(scans = "scanbase_40um - Scans_31Jan22.csv",
@@ -79,7 +69,9 @@ model_list <- MakeModelList(
 )
 
 
-# Effect sizes
+# Effect sizes ----------------------------------------------------------------
+
+message("Computing absolute effect size images...")
 
 effect_size_data_matrix_abs <- MakeEffectSizeMaps(
   jdtype = "Absolute", model_list = model_list, 
@@ -88,6 +80,8 @@ effect_size_data_matrix_abs <- MakeEffectSizeMaps(
   output_phenotype_dir = paths[["effect_sizes"]],
   base_directory = pipeline_dir, boot = "N"
 )
+
+message("Computing relative effect size images...")
 
 effect_size_data_matrix_rel <- MakeEffectSizeMaps(
   jdtype = "Relative", model_list = model_list,
@@ -102,8 +96,9 @@ effect_size_data_matrix_abs[is.nan(effect_size_data_matrix_abs)] <- 0
 effect_size_data_matrix_rel[is.nan(effect_size_data_matrix_rel)] <- 0
 
 
-# Clusters
+# Clustering ------------------------------------------------------------------
 
+message("Generating clusters...")
 
 W <- SNFCombine(Data1 = effect_size_data_matrix_abs,
                 Data2 = effect_size_data_matrix_rel,
@@ -111,37 +106,20 @@ W <- SNFCombine(Data1 = effect_size_data_matrix_abs,
                 output_dir = paths[["clusters"]])
 
 
-Clusters <- CreateClusters(num_clusters="10", cluster_method="spectral",
+Clusters <- CreateClusters(num_clusters = as.character(nk_max), cluster_method = "spectral",
                            output_dir = paths[["clusters"]],
                            NameFile = file.path(registration_dir, "Names_Paper.csv"))
 
 
-# Centroids
+# Centroids -------------------------------------------------------------------
 
+message("Generating cluster centroids...")
 jacobians <- c("absolute", "relative")
 for (jtype in jacobians) {
-  CreateClusterAnatomyMaps(num_clusters = "10", cluster_method = "spectral",
-                           average_kind = "mean", volume_type = jtype, 
-                           resolution = as.character(resolution_um), 
+  CreateClusterAnatomyMaps(num_clusters = as.character(nk_max),
+                           cluster_method = "spectral", average_kind = "mean",
+                           volume_type = jtype, resolution = as.character(resolution_um),
                            dir_determinants = paths[["jacobians"]],
                            output_dir = paths[["centroids"]])
 }
-
-
-
-# Organization
-
-# file.rename(file.path(paths[["clusters"]], "Clusters.csv"),
-#             file.path(paths[["clusters"]], "clusters.csv"))
-# 
-# file.rename(file.path(paths[["clusters"]], "WMatrix.RData"),
-#             file.path(paths[["clusters"]], "affinity.RData"))
-# 
-# 
-# 
-# jtype <- "absolute"
-# centroid_dir_j <- file.path(paths[["centroids"]], jtype)
-# if (!(dir.exists(centroid_dir_j))) {
-#   dir.create(centroid_dir_j, recursive = TRUE)
-# }
 
