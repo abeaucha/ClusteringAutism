@@ -803,8 +803,7 @@ def transform_image(infile, like, transform, outdir = None, suffix = None):
     return outfile
 
 
-def transform_images(infiles, like, transform, outdir = None, suffix = None,
-                     parallel = False, nproc = None):
+def transform_images(infiles, like, transform, outdir = None, suffix = None, nproc = 1):
     # Create output directory if needed
     if outdir is not None:
         outdir = os.path.join(outdir, '')
@@ -818,10 +817,7 @@ def transform_images(infiles, like, transform, outdir = None, suffix = None,
                           outdir = outdir,
                           suffix = suffix)
 
-    if parallel:
-        if nproc is None:
-            raise ValueError("Set the nproc argument to specify the "
-                             "number of processors to use in parallel.")
+    if nproc > 1:
         pool = mp.Pool(nproc)
         outfiles = []
         for outfile in tqdm(pool.imap(transformer, infiles),
