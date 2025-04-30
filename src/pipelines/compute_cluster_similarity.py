@@ -36,10 +36,16 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/cross_species/v3/',
+        default = 'data/cross_species/',
         help = ("Path to the directory in which to export pipeline "
                 "outputs. A uniquely identified sub-directory will be "
                 "created using the specified set of pipeline parameters.")
+    )
+
+    parser.add_argument(
+        '--params-id',
+        type = str,
+        help = ()
     )
 
     parser.add_argument(
@@ -55,14 +61,14 @@ def parse_args():
         '--input-dirs',
         nargs = 2,
         type = str,
-        default = ['data/human/derivatives/v3/', 'data/mouse/derivatives/v3/'],
+        default = ['data/human/derivatives/', 'data/mouse/derivatives/'],
         help = ("Paths to the processing pipeline directories containing "
                 "the centroid images to compare. Expects a sub-directory "
                 "'centroids'.")
     )
 
     parser.add_argument(
-        '--param-ids',
+        '--input-params-ids',
         nargs = 2,
         type = str,
         help = ("List of integer IDs specifying the processing pipeline "
@@ -73,7 +79,7 @@ def parse_args():
         '--expr-dirs',
         nargs = 2,
         type = str,
-        default = ['data/human/expression', 'data/mouse/expression'],
+        default = ['data/human/expression/', 'data/mouse/expression/'],
         help = ("Paths to the gene expression directories for the species "
                 "being compared.")
     )
@@ -82,7 +88,7 @@ def parse_args():
         '--masks',
         nargs = 2,
         type = str,
-        default = ['data/human/registration/v3/reference_files/mask_0.8mm.mnc',
+        default = ['data/human/registration/reference_files/mask_0.8mm.mnc',
                    'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc'],
         help = "Paths to the mask image files (.mnc)."
     )
@@ -90,7 +96,7 @@ def parse_args():
     parser.add_argument(
         '--microarray-coords',
         type = str,
-        default = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
+        default = 'data/human/expression/AHBA_microarray_coordinates_study.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
                 "the AHBA microarray samples in the human imaging study space.")
     )
@@ -252,7 +258,7 @@ def initialize(**kwargs):
 
     # Fetch the input pipeline parameters
     params = dict()
-    param_ids = kwargs['param_ids']
+    param_ids = kwargs['input_params_ids']
     metadata = [os.path.join(path, 'metadata.csv') for path in input_dirs]
     for i in range(len(metadata)):
         if not os.path.exists(metadata[i]):
@@ -280,8 +286,13 @@ def initialize(**kwargs):
     )
 
     # Create the pipeline directory
+    if kwargs['params_id'] is None:
+        params_id = utils.random_id(3)
+    else:
+        params_id = kwargs['params_id']
     pipeline_dir = utils.mkdir_from_params(params = params,
-                                           outdir = pipeline_dir)
+                                           outdir = pipeline_dir,
+                                           params_id = params_id)
     pipeline_dir = os.path.join(pipeline_dir, 'similarity', '')
     if not os.path.exists(pipeline_dir):
         os.makedirs(pipeline_dir)
@@ -351,7 +362,8 @@ def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
     return cluster_pairs
 
 
-def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
+def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
+         params_id = None,
          microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
          gene_space = 'average-latent-space',
          n_latent_spaces = 100, latent_space_id = 1,
@@ -474,8 +486,9 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
     kwargs['signed'] = 'true' if signed else 'false'
     kwargs['threshold_symmetric'] = 'true' if threshold_symmetric else 'false'
     del kwargs['pipeline_dir']
+    del kwargs['params_id']
     del kwargs['input_dirs']
-    del kwargs['param_ids']
+    del kwargs['input_params_ids']
     del kwargs['jacobians']
     del kwargs['execution']
     del kwargs['registry_name']
@@ -542,7 +555,7 @@ def main(pipeline_dir, species, input_dirs, param_ids, expr_dirs, masks,
 if __name__ == '__main__':
     args = parse_args()
     args['input_dirs'] = tuple(args['input_dirs'])
-    args['param_ids'] = tuple(args['param_ids'])
+    args['input_params_ids'] = tuple(args['input_params_ids'])
     args['species'] = tuple(args['species'])
     args['expr_dirs'] = tuple(args['expr_dirs'])
     args['masks'] = tuple(args['masks'])
