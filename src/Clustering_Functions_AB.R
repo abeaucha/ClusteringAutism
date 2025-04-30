@@ -346,8 +346,11 @@ CreateClusters<-function(num_clusters="10",cluster_method="spectral",
     }
   }
   NewNames<-read.csv(NameFile)
-  Clusters<-AllClusters[,2:num_clusters]
-  rownames(Clusters) <-NewNames$NewName
+  AllClusters <- as_tibble(AllClusters)
+  AllClusters$Model <- NewNames$NewName
+  Clusters <- column_to_rownames(AllClusters, "Model")
+  # Clusters<-AllClusters[,2:num_clusters]
+  # rownames(Clusters) <-NewNames$NewName
   write.csv(Clusters,file=glue("{output_dir}/Clusters.csv"))
   return(Clusters)
   
