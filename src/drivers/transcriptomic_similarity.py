@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument(
         '--output-file',
         type = str,
+        default = 'similarity.csv',
         help = ("Path to the file (.csv) in which to export the similarity "
                 "values.")
     )
@@ -161,6 +162,7 @@ if __name__ == '__main__':
                                      else False)
 
     # Import image pairs
+    if kwargs['input_file'] is None: raise ValueError("Must provide input file")
     df_imgs = pd.read_csv(kwargs['input_file'])
     imgs = df_imgs.values.tolist()
     imgs = [tuple(x) for x in imgs]
@@ -174,7 +176,7 @@ if __name__ == '__main__':
     kwargs['imgs'] = imgs
 
     # Compute pairwise similarity between cluster centroids
-    with utils.catchtime() as t:
-        results = transcriptomic_similarity(**kwargs)
-        results.to_csv(output_file, index = False)
-    print(f'Time: {t():.3f} seconds')
+    # with utils.catchtime() as t:
+    results = transcriptomic_similarity(**kwargs)
+    results.to_csv(output_file, index = False)
+    # print(f'Time: {t():.3f} seconds')
