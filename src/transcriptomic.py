@@ -6,7 +6,7 @@ import multiprocessing as mp
 import numpy as np
 import pandas as pd
 import processing
-from datatable import fread
+#from datatable import fread
 from functools import partial
 from io import StringIO
 from itertools import product
@@ -194,7 +194,8 @@ def mouse_signature(img: str, expr: str, mask: str, signed: bool = True,
 
     # Import transcriptomic data
     with silence():
-        expr = fread(expr, header = True).to_pandas()
+        # expr = fread(expr, header = True).to_pandas()
+        expr = pd.read_csv(expr)
     if np.sum(mask) != expr.shape[0]:
         raise Exception("The number of voxels in `mask` does not match the "
                         "number of rows in `expr`.")
@@ -238,7 +239,8 @@ def human_signature(img, expr, mask, coords, signed = True, threshold = 'top_n',
 
     # Import transcriptomic data
     with silence():
-        expr = fread(expr, header = True).to_pandas()
+        # expr = fread(expr, header = True).to_pandas()
+        expr = pd.read_csv(expr)
 
     # Import microarray coordinates
     coords = pd.read_csv(coords)
