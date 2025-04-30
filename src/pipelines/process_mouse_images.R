@@ -22,19 +22,42 @@ source(file.path(SRCPATH, "Clustering_Functions_AB.R"))
 # Parameter set ID
 params_id <- "001"
 
-# Registration directory
-registration_dir <- "data/mouse/registration/"
-
-# Pipeline directory
-pipeline_dir <- "data/mouse/derivatives/"
-pipeline_dir <- file.path(pipeline_dir, params_id)
-
 # Image resolution 
 resolution_um <- 200
 resolution_mm <- resolution_um/1000
 
-# Maximum number of clusters to find
-nk_max <- 2
+# Cluster parameters
+cluster_nk_max <- 2
+cluster_metric <- "correlation"
+cluster_K <- 10
+cluster_sigma <- 0.5
+cluster_t <- 20
+
+# Centroid parameters
+centroid_method <- "mean"
+
+# Pipeline directory
+pipeline_dir <- "data/mouse/derivatives/"
+
+# Export parameter set to metadata
+metadata <- file.path(pipeline_dir, "metadata.csv")
+df_metadata <- tibble(dataset = "MICe",
+                      resolution = resolution_mm,
+                      cluster_resolution = resolution_mm,
+                      cluster_nk_max = nk_max,
+                      cluster_metric = cluster_metric,
+                      cluster_K = cluster_K,
+                      cluster_sigma = cluster_sigma,
+                      cluster_t = cluster_t, 
+                      centroid_method = centroid_method,
+                      id = params_id)
+write_csv(x = df_metadata, file = metadata)
+
+# Update pipeline directory with parameter set ID
+pipeline_dir <- file.path(pipeline_dir, params_id)
+
+# Registration directory
+registration_dir <- "data/mouse/registration/"
 
 # List of scanbase files
 scanbase_files <- list(scans = "scanbase_40um - Scans_31Jan22.csv",
@@ -102,11 +125,13 @@ message("Generating clusters...")
 
 W <- SNFCombine(Data1 = effect_size_data_matrix_abs,
                 Data2 = effect_size_data_matrix_rel,
-                K = 10, alpha = 0.5, T = 20, distfunc = "cor",
+                K = cluster_K, alpha = cluster_sigma, 
+                T = cluster_t, distfunc = "cor",
                 output_dir = paths[["clusters"]])
 
 
-Clusters <- CreateClusters(num_clusters = as.character(nk_max), cluster_method = "spectral",
+Clusters <- CreateClusters(num_clusters = as.character(cluster_nk_max),
+                           cluster_method = "spectral",
                            output_dir = paths[["clusters"]],
                            NameFile = file.path(registration_dir, "Names_Paper.csv"))
 
@@ -116,9 +141,11 @@ Clusters <- CreateClusters(num_clusters = as.character(nk_max), cluster_method =
 message("Generating cluster centroids...")
 jacobians <- c("absolute", "relative")
 for (jtype in jacobians) {
-  CreateClusterAnatomyMaps(num_clusters = as.character(nk_max),
-                           cluster_method = "spectral", average_kind = "mean",
-                           volume_type = jtype, resolution = as.character(resolution_um),
+  CreateClusterAnatomyMaps(num_clusters = as.character(cluster_nk_max),
+                           cluster_method = "spectral", 
+                           average_kind = centroid_method,
+                           volume_type = jtype, 
+                           resolution = as.character(resolution_um),
                            dir_determinants = paths[["jacobians"]],
                            output_dir = paths[["centroids"]])
 }
