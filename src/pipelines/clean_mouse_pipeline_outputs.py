@@ -175,6 +175,10 @@ def main(pipeline_dir, resolution = 200,
             file_new = os.path.join(centroid_dir_j, file_new)
             os.rename(file, file_new)
 
+        # Delete input files
+        for file in input_files:
+            os.remove(file)
+
     return
 
 
