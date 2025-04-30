@@ -1,17 +1,9 @@
-library(tidyverse)
-library(magrittr)
-library(RMINC)
-library(glue)
-library(SNFtool)
-# library(MRIcrotome)
-# library(grid)
-# library(tmod)
-# 
-# source("Code/enrichment_functions.R")
-# 
-# library(Exact)
-# library(ggrepel)
-# library(dplyr)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(glue))
+suppressPackageStartupMessages(library(SNFtool))
+
 
 
 MakeModelList<-function(scanbase_scans_file="Data/Resources/scanbase_40um - Scans_22July19.csv",
