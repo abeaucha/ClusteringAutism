@@ -277,7 +277,7 @@ def parse_args():
 
 # Modules --------------------------------------------------------------------
 
-@utils.timing
+#@utils.timing
 def initialize(**kwargs):
     """
     Initialize the pipeline
@@ -699,7 +699,7 @@ def centroids(clusters, imgdir, outdir, mask,
     return out
 
 
-@utils.timing
+#@utils.timing
 def main(pipeline_dir, input_dir, demographics, mask,
          params_id = None, datasets = ('POND', 'SickKids'),
          es_method = 'normative-growth', es_group = 'patients',
