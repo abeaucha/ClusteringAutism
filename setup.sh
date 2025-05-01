@@ -61,8 +61,7 @@ Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/MRIcrotome", upgrade 
 
 # Install Python datatable and pyminc using pip 
 echo "\nInstalling python packages using pip..."
-pip3 install utils==1.0.2 pyminc==0.57
-# datatable==1.1.0 # Not working on arm64
+pip3 install -r python_packages_pip.txt
 
 # Deactivate conda environment
 conda deactivate
