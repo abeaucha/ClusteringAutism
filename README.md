@@ -65,8 +65,8 @@ Install the project (conda) environment by sourcing the setup script:
 ```
 
 This creates two conda environments:
-1. A support environment named `clustering-autism-minc-env` containing the minc-toolkit-v2 installation
-2. The main project environment named `clustering-autism-env` containing R and Python.  
+1. The main project environment named `clustering-autism-env` containing R and Python.  
+2. A support environment named `clustering-autism-minc-env` containing the minc-toolkit-v2 installation
 
 ## Activate the project environment
 
