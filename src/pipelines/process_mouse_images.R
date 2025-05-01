@@ -38,13 +38,16 @@ centroid_method <- "mean"
 
 # Pipeline directory
 pipeline_dir <- "data/mouse/derivatives/"
+if (!dir.exists(pipeline_dir)) {
+  dir.create(pipeline_dir, recursive = TRUE)
+}
 
 # Export parameter set to metadata
 metadata <- file.path(pipeline_dir, "metadata.csv")
 df_metadata <- tibble(dataset = "MICe",
                       resolution = resolution_mm,
                       cluster_resolution = resolution_mm,
-                      cluster_nk_max = nk_max,
+                      cluster_nk_max = cluster_nk_max,
                       cluster_metric = cluster_metric,
                       cluster_K = cluster_K,
                       cluster_sigma = cluster_sigma,
