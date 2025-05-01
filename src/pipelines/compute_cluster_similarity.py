@@ -567,6 +567,6 @@ if __name__ == '__main__':
                                    else False)
     args['registry_cleanup'] = (True if args['registry_cleanup'] == 'true'
                                 else False)
-    with utils.catchtime() as t:
-        main(**args)
-    print(f'Time: {t():.3f} seconds')
+    #with utils.catchtime() as t:
+    main(**args)
+    #print(f'Time: {t():.3f} seconds')
