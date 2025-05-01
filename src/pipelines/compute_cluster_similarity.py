@@ -18,7 +18,6 @@ based on the transcriptomic similarity of their centroid images.
 
 import argparse
 import os
-import sys
 import utils
 import pandas as pd
 from itertools import product
@@ -364,7 +363,7 @@ def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
 
 def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
          params_id = None,
-         microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
+         microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study.csv',
          gene_space = 'average-latent-space',
          n_latent_spaces = 100, latent_space_id = 1,
          metric = 'correlation', signed = True,

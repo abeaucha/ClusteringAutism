@@ -23,7 +23,6 @@ The pipeline can be deployed locally or on an HPC cluster that uses Slurm.
 
 import argparse
 import os
-import sys
 import utils
 import processing
 import pandas as pd
@@ -44,7 +43,7 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/human/derivatives/v3/',
+        default = 'data/human/derivatives/',
         help = ("Path to the directory in which to export pipeline "
                 "outputs. A uniquely identified sub-directory will be "
                 "created using the specified set of pipeline parameters.")
@@ -59,7 +58,7 @@ def parse_args():
     parser.add_argument(
         '--input-dir',
         type = str,
-        default = 'data/human/registration/v3/jacobians_resampled/resolution_0.8/',
+        default = 'data/human/registration/jacobians_resampled/resolution_0.8/',
         help = ("Path to the directory containing the input Jacobian "
                 "MINC images. Expects sub-directories 'absolute' and "
                 "'relative' containing the images.")
@@ -68,7 +67,7 @@ def parse_args():
     parser.add_argument(
         '--demographics',
         type = str,
-        default = 'data/human/registration/v3/subject_info/demographics.csv',
+        default = 'data/human/registration/subject_info/demographics.csv',
         help = ("Path to the file (.csv) containing participant "
                 "demographics information.")
     )
@@ -76,7 +75,7 @@ def parse_args():
     parser.add_argument(
         '--mask',
         type = str,
-        default = 'data/human/registration/v3/reference_files/mask_0.8mm.mnc',
+        default = 'data/human/registration/reference_files/mask_0.8mm.mnc',
         help = "Path to mask file (.mnc) associated with the study images."
     )
 

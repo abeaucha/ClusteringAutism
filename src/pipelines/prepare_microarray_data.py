@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/human/expression/v3/',
+        default = 'data/human/expression/',
         help = ("Path to the directory in which to export the microarray "
                 "coordinates data.")
     )
@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument(
         '--template',
         type = str,
-        default = 'data/human/registration/v3/reference_files/model_0.8mm.mnc',
+        default = 'data/human/registration/reference_files/model_0.8mm.mnc',
         help = "Path to the consensus average template image (.mnc)."
     )
 

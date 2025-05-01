@@ -15,7 +15,6 @@ Description
 import argparse
 import random
 import os
-import sys
 import utils
 import numpy as np
 import pandas as pd
@@ -36,7 +35,7 @@ def parse_args():
     parser.add_argument(
         '--pipeline-dir',
         type = str,
-        default = 'data/cross_species/v3/',
+        default = 'data/cross_species/',
         help = ("Path to the directory in which to export pipeline "
                 "outputs. A uniquely identified sub-directory will be "
                 "created using the specified set of pipeline parameters.")
@@ -53,7 +52,7 @@ def parse_args():
         '--input-dirs',
         nargs = 2,
         type = str,
-        default = ['data/human/derivatives/v3/', 'data/mouse/derivatives/v3/'],
+        default = ['data/human/derivatives/', 'data/mouse/derivatives/'],
         help = ("Paths to the processing pipeline directories containing "
                 "the images used to build the permutations. Expects "
                 "subdirectories 'effect_sizes', 'clusters', and 'centroids'.")
@@ -72,7 +71,7 @@ def parse_args():
         '--masks',
         nargs = 2,
         type = str,
-        default = ['data/human/registration/v3/reference_files/mask_0.8mm.mnc',
+        default = ['data/human/registration/reference_files/mask_0.8mm.mnc',
                    'data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc'],
         help = "Paths to the mask image files (.mnc)."
     )
@@ -80,7 +79,7 @@ def parse_args():
     parser.add_argument(
         '--microarray-coords',
         type = str,
-        default = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
+        default = 'data/human/expression/AHBA_microarray_coordinates_study.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
                 "the AHBA microarray samples in the human imaging study space.")
     )
@@ -374,7 +373,7 @@ def subset_cluster_pairs(centroid_pairs, off_diagonal = 1):
 
 @utils.timing
 def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
-         microarray_coords = 'data/human/expression/v3/AHBA_microarray_coordinates_study.csv',
+         microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study.csv',
          permutations_n = 100, permutations_start = 1, permutations_ids = None,
          off_diagonal = 1, keep_centroids = False,
          execution = 'local',
