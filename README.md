@@ -2,6 +2,8 @@
 
 # Installation
 
+Currently, this project can only be installed on ARM64 Apple Silicon computers. 
+
 ## Pre-requisite: conda
 
 This project requires a conda distribution for environment and package management. A minimal installation of conda can be obtained via [Miniforge](https://github.com/conda-forge/miniforge). 
@@ -75,7 +77,7 @@ conda activate clustering-autism-env
 ```
 
 In addition to specifying the versions of R and Python, this defines a number of environment variables
-- `PROJECTPATH`: The path to this local copy of the project repository.
-- `SRCPATH`: The path to project source files.
+- `PROJECTPATH`: The path to the local copy of the project repository.
+- `SRCPATH`: The path to the project source files (i.e. subdirectory `src`)
 - `MINC_TOOLKIT`: The path to the minc-toolkit-v2 installation in the `clustering-autism-minc-env` environment.
 
