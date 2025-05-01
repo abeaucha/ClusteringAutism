@@ -48,7 +48,6 @@ else
 fi
 EOF
 
-
 # Activate conda environment
 conda activate $ENV_NAME
 
@@ -56,11 +55,14 @@ conda activate $ENV_NAME
 echo "\nInstalling RMINC from Github..."
 Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
 
+# Install MRIcrotome from Github
+echo "\nInstalling MRIcrotome from Github..."
+Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/MRIcrotome", upgrade = "never")'
+
 # Install Python datatable and pyminc using pip 
 echo "\nInstalling python packages using pip..."
 pip3 install utils==1.0.2 pyminc==0.57
 # datatable==1.1.0 # Not working on arm64
-
 
 # Deactivate conda environment
 conda deactivate
