@@ -1,8 +1,9 @@
 #!/bin/bash
 
+# Increase limit on file descriptors
 ulimit -Sn 100000
 
-# Execute pipeline
+# Human image processing pipeline
 echo "Processing human images..."
 process_human_images.py \
 --params-id 001 \
@@ -17,9 +18,11 @@ process_human_images.py \
 --execution local \
 --nproc 8
 
+# Mouse image processing pipeline
 echo "Processing mouse images..."
 process_mouse_images.R
 
+# Clean mouse pipeline outputs
 echo "Organizing mouse pipeline outputs..."
 clean_mouse_pipeline_outputs.py \
   --pipeline-dir data/mouse/derivatives/001 \
@@ -29,6 +32,8 @@ clean_mouse_pipeline_outputs.py \
   --transform-like data/mouse/atlas/average_template_200um.mnc \
   --nproc 4
 
+# Mouse-human cluster similarity pipeline
+echo "Evaluating similarity of mouse and human clusters..."
 compute_cluster_similarity.py \
   --pipeline-dir data/cross_species/ \
   --params-id 001 \
