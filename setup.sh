@@ -24,10 +24,10 @@ conda create -n $ENV_NAME -c conda-forge r-base=4.4.2 python=3.12.10 -y
 
 # Install compiled R packages via conda (faster)
 echo "\nInstalling R packages..."
-conda install -n $ENV_NAME -c conda-forge --file R_packages.txt -y
+conda install -n $ENV_NAME -c conda-forge --file R_packages_conda.txt -y
 
 echo "\nInstalling python packages..."
-conda install -n $ENV_NAME -c conda-forge --file python_packages.txt -y
+conda install -n $ENV_NAME -c conda-forge --file python_packages_conda.txt -y
 
 # Set $MINC_TOOLKIT upon activation 
 cat <<EOF > ${ENV_PATH}/etc/conda/activate.d/activate-minc-toolkit.sh
