@@ -81,3 +81,6 @@ In addition to specifying the versions of R and Python, this defines a number of
 - `SRCPATH`: The path to the project source files (i.e. subdirectory `src`)
 - `MINC_TOOLKIT`: The path to the minc-toolkit-v2 installation in the `clustering-autism-minc-env` environment.
 
+
+# Demonstration
+

@@ -4,7 +4,7 @@
 CONDA_PATH=$(conda info --base)
 
 # Make conda tools visible
-source ${CONDA_PATH}/etc/profile.d/conda.sh
+source "${CONDA_PATH}"/etc/profile.d/conda.sh
 
 # Environment names 
 MINC_ENV_NAME="clustering-autism-minc-env"
@@ -30,7 +30,7 @@ echo "\nInstalling python packages..."
 conda install -n $ENV_NAME -c conda-forge --file python_packages_conda.txt -y
 
 # Set $MINC_TOOLKIT upon activation 
-cat <<EOF > ${ENV_PATH}/etc/conda/activate.d/activate-minc-toolkit.sh
+cat <<EOF > "${ENV_PATH}"/etc/conda/activate.d/activate-minc-toolkit.sh
 if [ -n "\${MINC_TOOLKIT}" ]; then
   export MINC_TOOLKIT_PREV="\${MINC_TOOLKIT}"
 fi
@@ -38,7 +38,7 @@ export MINC_TOOLKIT=$MINC_ENV_PATH
 EOF
 
 # Unset $MINC_TOOLKIT upon deactivation
-cat <<EOF > ${ENV_PATH}/etc/conda/deactivate.d/deactivate-minc-toolkit.sh
+cat <<EOF > "${ENV_PATH}"/etc/conda/deactivate.d/deactivate-minc-toolkit.sh
 # restore pre-existing MINC_TOOLKIT 
 if [ -n "\${MINC_TOOLKIT_PREV}" ]; then
   export MINC_TOOLKIT="\${MINC_TOOLKIT_PREV}"
@@ -67,7 +67,7 @@ pip3 install -r python_packages_pip.txt
 conda deactivate
 
 # Build hook to set environment paths upon activation
-cat <<EOF > ${ENV_PATH}/etc/conda/activate.d/set-env-vars.sh
+cat <<EOF > "${ENV_PATH}"/etc/conda/activate.d/set-env-vars.sh
 if [ -n "\${PYTHONPATH}" ]; then
   export PYTHONPATH_PREV="\${PYTHONPATH}"
 fi
@@ -79,7 +79,7 @@ export PATH="\${PATH_PREFIX}:\$PATH"
 EOF
 
 # Build hook to unset environment paths upon deactivation
-cat <<EOF > ${ENV_PATH}/etc/conda/deactivate.d/unset-env-vars.sh
+cat <<EOF > "${ENV_PATH}"/etc/conda/deactivate.d/unset-env-vars.sh
 if [ -n "\${PYTHONPATH_PREV}" ]; then
   export PYTHONPATH="\${PYTHONPATH_PREV}"
   unset PYTHONPATH_PREV
