@@ -870,7 +870,8 @@ def main(pipeline_dir, input_dir, demographics, mask,
 if __name__ == '__main__':
     args = parse_args()
     args['datasets'] = tuple(args['datasets'])
-    args['es_batch'] = tuple(args['es_batch'])
+    args['es_batch'] = None if args['es_batch'][0] == 'none' \
+        else tuple(args['es_batch'])
     args['stages'] = tuple(args['stages'])
     args['registry_cleanup'] = True if args['registry_cleanup'] == 'true' \
         else False
