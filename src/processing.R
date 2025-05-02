@@ -556,25 +556,7 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
                                   registry_cleanup = TRUE,
                                   njobs = NULL, resources = list(), 
                                   verbose = TRUE) {
-  
-  # imgdir <- "data/human/derivatives/v3/577/jacobians/absolute/"
-  # demographics <- "data/human/registration/v3/subject_info/demographics.csv"
-  # mask <- "data/human/registration/v3/reference_files/mask_3.0mm.mnc"
-  # outdir <- "data/human/derivatives/v3/577/cross_validation/sample_1//effect_sizes/resolution_3.0/absolute/"
-  # key <- "file"
-  # cv_seed <- 1
-  # group <- "controls"
-  # df <- 3
-  # batch <- "Site-Scanner"
-  # execution <- "local"
-  # nproc <- 8
-  # registry_name <- "test"
-  # registry_cleanup <- FALSE
-  # njobs <- 300
-  # resources <- list(memory="16G",
-  #                   walltime=60*60)
-  # verbose <- TRUE
-  
+
   # Raise cross-validation error if group not controls
   if (!is.null(cv_seed) & group != "controls") {
     stop("Cross-validation only possible for controls.")
