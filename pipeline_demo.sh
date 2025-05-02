@@ -13,7 +13,7 @@ process_human_images.py \
 --mask data/human/registration/reference_files/mask_3.0mm.mnc \
 --datasets POND SickKids \
 --es-method normative-growth \
---es-batch Site Scanner \
+--es-batch none \
 --cluster-nk-max 2 \
 --execution local \
 --nproc 8
