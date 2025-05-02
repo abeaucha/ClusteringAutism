@@ -6,17 +6,17 @@ ulimit -Sn 100000
 # Human image processing pipeline
 echo "Processing human images..."
 process_human_images.py \
---params-id 001 \
---pipeline-dir data/human/derivatives/ \
---input-dir data/human/registration/jacobians/ \
---demographics data/human/registration/subject_info/demographics.csv \
---mask data/human/registration/reference_files/mask_3.0mm.mnc \
---datasets POND SickKids \
---es-method normative-growth \
---es-batch none \
---cluster-nk-max 2 \
---execution local \
---nproc 8
+  --params-id 001 \
+  --pipeline-dir data/human/derivatives/ \
+  --input-dir data/human/registration/jacobians/ \
+  --demographics data/human/registration/subject_info/demographics.csv \
+  --mask data/human/registration/reference_files/mask_3.0mm.mnc \
+  --datasets POND SickKids \
+  --es-method normative-growth \
+  --es-batch none \
+  --cluster-nk-max 2 \
+  --execution local \
+  --nproc 8
 
 # Mouse image processing pipeline
 echo "Processing mouse images..."
