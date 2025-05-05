@@ -156,13 +156,13 @@ In addition to specifying the versions of R and Python, this defines a number of
 
 # Demo
 
-A demo pipeline is available in the shell script `pipeline_demo.sh`. Execute the demo by sourcing the script.
+A demo data set (~ 5GB) is available upon request. The pipeline demo can be found in the shell script `demo.sh`. Execute the demo by sourcing the script from the project root:
 
 ```shell
-./pipeline_demo.sh
+./demo.sh
 ```
 
-The expected output of the demo are the following pipeline output sub-directories and files:
+The expected output are the following pipeline output sub-directories and files:
 
 ```text
 data
@@ -226,4 +226,105 @@ Notes:
 - The human Jacobian and effect size MINC files run from "participant_1.mnc" to "participant_120.mnc". 
 - The mouse effect size MINC image files are prefixed by the study name and genotype code, and the directory should contain 50 images in total.
 - The human and mouse centroid sub-directories should contain two MINC files: "centroid_nk_2_k_1.mnc" and "centroid_nk_2_k_2.mnc".
+
+The demo pipeline should execute in approximately 150 seconds.
+
+---
+
+# Instructions for use
+
+This repository provides the pipelines and source code used to generate the results in our manuscript. There are four main pipelines in the processing workflow:
+1. `process_human_images.py`
+2. `process_mouse_images.py`
+3. `compute_cluster_similarity.py`
+4. `permute_cluster_similarity.py`
+
+All pipelines can be found in the sub-directory `src/pipelines`.
+
+## 1. Processing human images
+
+Human images are processed using the `process_human_images.py` pipeline, which implements the following:
+1. Generates absolute and relative effect size images for the participants
+2. Generates clusters of participants based on the effect size images
+3. Evaluates absolute and relative centroid images for each of the clusters
+
+```shell
+process_human_images.py \
+  --params-id 001 \
+  --pipeline-dir data/human/derivatives/ \
+  --input-dir data/human/registration/jacobians/ \
+  --demographics data/human/registration/subject_info/demographics.csv \
+  --mask data/human/registration/reference_files/mask_0.8mm.mnc \
+  --datasets POND SickKids \
+  --es-group patients \
+  --es-method normative-growth \
+  --es-batch Site Scanner \
+  --es-df 3 \
+  --cluster-nk-max 10 \
+  --cluster-metric correlation \
+  --cluster-K 10 \
+  --cluster-sigma 0.5 \
+  --cluster-t 20 \
+  --centroid-method mean \
+  --execution local \
+  --nproc 8
+```
+
+## 2. Processing mouse images
+
+Mouse images are processed using the `process_mouse_images.R` pipeline, which implements the same steps as the human processing pipeline on the mouse data:
+1. Generates absolute and relative effect size images for the mouse models
+2. Generates clusters of mouse models based on the effect size images
+3. Evaluates absolute and relative centroid images for each of the clusters
+
+```shell
+process_mouse_images.R
+```
+
+## 3. Evaluating the similarity of mouse and human clusters
+
+Once human and mouse clusters have been identified, the cross-species transcriptomic similarity between the clusters is evaluated using the `computer_cluster_similarity.py` pipeline.
+
+```shell
+compute_cluster_similarity.py \
+  --pipeline-dir data/cross_species/ \
+  --params-id 001 \
+  --species human mouse \
+  --input-dirs data/human/derivatives/ data/mouse/derivatives/ \
+  --input-params-ids 001 001 \
+  --expr-dirs data/human/expression data/mouse/expression \
+  --masks data/human/registration/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+  --microarray-coords data/human/expression/AHBA_microarray_coordinates_study.csv \
+  --gene-space average-latent-space \
+  --n-latent-spaces 100 \
+  --metric correlation \
+  --signed true \
+  --threshold top_n \
+  --threshold-value 0.2 \
+  --threshold-symmetric true \
+  --jacobians absolute relative \
+  --execution local \
+  --nproc 8
+```
+
+This pipeline can also be used to evalute the transcriptomic similarity between clusters within the same species (e.g. human-human).
+
+## 4. Evaluating permutation resampling of the cluster similarity for empiricial null distributions
+
+Once the true cluster similarities have been evaluated, permutation resampling can be applied to build up empirical null distributions for the similarity of cluster pairs. This is done using the `permute_cluster_similarity.py` pipeline.
+
+```shell
+permute_cluster_similarity.py \
+--pipeline-dir data/cross_species/ \
+--param-id 001 \
+--input-dirs data/human/derivatives/ data/mouse/derivatives/ \
+--expr-dirs data/human/expression data/mouse/expression \
+--masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+--microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
+--permutations-start 1 \
+--permutations-n 500 \
+--off-diagonal 1 \
+--execution local \
+--nproc 8
+```
 
