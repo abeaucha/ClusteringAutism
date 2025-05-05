@@ -9,7 +9,7 @@ This project is supported for ARM64 Apple Silicon computers.
 
 ### Operating systems
 
-The following operating systems are supported:
+The following operating systems are currently supported:
 - macOS Sequoia 15.4.1.
 
 ### Software
@@ -241,7 +241,7 @@ This repository provides the pipelines and source code used to generate the resu
 
 All pipelines can be found in the sub-directory `src/pipelines`.
 
-## 1. Processing human images
+### 1. Processing human images
 
 Human images are processed using the `process_human_images.py` pipeline, which implements the following:
 1. Generates absolute and relative effect size images for the participants
@@ -260,6 +260,7 @@ process_human_images.py \
   --es-method normative-growth \
   --es-batch Site Scanner \
   --es-df 3 \
+  --cluster-resolution 3.0 \
   --cluster-nk-max 10 \
   --cluster-metric correlation \
   --cluster-K 10 \
@@ -270,7 +271,7 @@ process_human_images.py \
   --nproc 8
 ```
 
-## 2. Processing mouse images
+### 2. Processing mouse images
 
 Mouse images are processed using the `process_mouse_images.R` pipeline, which implements the same steps as the human processing pipeline on the mouse data:
 1. Generates absolute and relative effect size images for the mouse models
@@ -281,7 +282,7 @@ Mouse images are processed using the `process_mouse_images.R` pipeline, which im
 process_mouse_images.R
 ```
 
-## 3. Evaluating the similarity of mouse and human clusters
+### 3. Evaluating the similarity of mouse and human clusters
 
 Once human and mouse clusters have been identified, the cross-species transcriptomic similarity between the clusters is evaluated using the `computer_cluster_similarity.py` pipeline.
 
@@ -307,9 +308,9 @@ compute_cluster_similarity.py \
   --nproc 8
 ```
 
-This pipeline can also be used to evalute the transcriptomic similarity between clusters within the same species (e.g. human-human).
+This pipeline can also be used to evaluate the transcriptomic similarity between clusters within the same species (e.g. human-human).
 
-## 4. Evaluating permutation resampling of the cluster similarity for empiricial null distributions
+### 4. Evaluating permutation resampling of the cluster similarity for empiricial null distributions
 
 Once the true cluster similarities have been evaluated, permutation resampling can be applied to build up empirical null distributions for the similarity of cluster pairs. This is done using the `permute_cluster_similarity.py` pipeline.
 
@@ -319,8 +320,8 @@ permute_cluster_similarity.py \
 --param-id 001 \
 --input-dirs data/human/derivatives/ data/mouse/derivatives/ \
 --expr-dirs data/human/expression data/mouse/expression \
---masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
---microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
+--masks data/human/registration/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+--microarray-coords data/human/expression/AHBA_microarray_coordinates_study.csv \
 --permutations-start 1 \
 --permutations-n 500 \
 --off-diagonal 1 \
@@ -328,3 +329,210 @@ permute_cluster_similarity.py \
 --nproc 8
 ```
 
+
+
+## Reproduction instructions
+
+The quantitative results in our manuscript were generated using the following pipeline configurations.
+
+### 1. Processing human and mouse images
+
+Processing the human images in the POND+ dataset:
+```shell
+process_human_images.py \
+  --params-id 700
+  --pipeline-dir data/human/derivatives/ \
+  --input-dir data/human/registration/jacobians_resampled/resolution_0.8/ \
+  --demographics data/human/registration/subject_info/demographics.csv \
+  --mask data/human/registration/reference_files/mask_0.8mm.mnc \
+  --datasets POND SickKids \
+  --es-group patients \
+  --es-method normative-growth \
+  --es-batch Site Scanner \
+  --es-df 3 \
+  --cluster-resolution 3.0 \
+  --cluster-nk-max 10 \
+  --cluster-metric correlation \
+  --cluster-K 10 \
+  --cluster-sigma 0.5 \
+  --cluster-t 20 \
+  --centroid-method mean \
+  --execution slurm \
+  --nproc 8 \
+  --slurm-njobs 300 \
+  --slurm-time 120 \
+  --slurm-mem 16G
+```
+
+Processing the human images in the HBN dataset:
+```shell
+process_human_images.py \
+  --params-id 013 \
+  --pipeline-dir data/human/derivatives/ \
+  --input-dir data/human/registration/jacobians_resampled/resolution_0.8/ \
+  --demographics data/human/registration/subject_info/demographics.csv \
+  --mask data/human/registration/reference_files/mask_0.8mm.mnc \
+  --datasets HBN \
+  --es-group patients \
+  --es-method normative-growth \
+  --es-batch Site Scanner \
+  --es-df 3 \
+  --cluster-resolution 3.0 \
+  --cluster-nk-max 10 \
+  --cluster-metric correlation \
+  --cluster-K 10 \
+  --cluster-sigma 0.5 \
+  --cluster-t 20 \
+  --centroid-method mean \
+  --execution slurm \
+  --nproc 8 \
+  --slurm-njobs 300 \
+  --slurm-time 120 \
+  --slurm-mem 16G
+```
+
+Processing the mouse images:
+```shell
+process_mouse_images.R
+```
+
+### 2. Evaluating cluster similarity
+
+Evaluating the similarity between POND+ human clusters and mouse clusters:
+
+```shell
+compute_cluster_similarity.py \
+  --pipeline-dir data/cross_species/ \
+  --params-id 375 \
+  --species human mouse \
+  --input-dirs data/human/derivatives/ data/mouse/derivatives/ \
+  --input-params-ids 700 001 \
+  --expr-dirs data/human/expression data/mouse/expression \
+  --masks data/human/registration/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+  --microarray-coords data/human/expression/AHBA_microarray_coordinates_study.csv \
+  --gene-space average-latent-space \
+  --n-latent-spaces 50 \
+  --metric correlation \
+  --signed true \
+  --threshold top_n \
+  --threshold-value 0.2 \
+  --threshold-symmetric true \
+  --jacobians absolute relative \
+  --execution slurm \
+  --slurm-njobs 300 \
+  --slurm-mem 16G \
+  --slurm-time 8:00:00
+```
+
+Evaluating the similarity between HBN human clusters and mouse clusters:
+
+```shell
+compute_cluster_similarity.py \
+  --pipeline-dir data/cross_species/ \
+  --params-id 861 \
+  --species human mouse \
+  --input-dirs data/human/derivatives/ data/mouse/derivatives/ \
+  --input-params-ids 013 001 \
+  --expr-dirs data/human/expression data/mouse/expression \
+  --masks data/human/registration/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+  --microarray-coords data/human/expression/AHBA_microarray_coordinates_study.csv \
+  --gene-space average-latent-space \
+  --n-latent-spaces 50 \
+  --metric correlation \
+  --signed true \
+  --threshold top_n \
+  --threshold-value 0.2 \
+  --threshold-symmetric true \
+  --jacobians absolute relative \
+  --execution slurm \
+  --slurm-njobs 300 \
+  --slurm-mem 16G \
+  --slurm-time 8:00:00
+```
+
+Evaluating the similarity between POND+ clusters and HBN clusters:
+
+```shell
+compute_cluster_similarity.py \
+  --pipeline-dir data/cross_species/ \
+  --params-id 779 \
+  --species human human \
+  --input-dirs data/human/derivatives/ data/human/derivatives/ \
+  --input-params-ids 700 013 \
+  --expr-dirs data/human/expression data/human/expression \
+  --masks data/human/registration/reference_files/mask_0.8mm.mnc data/human/registration/reference_files/mask_0.8mm.mnc \
+  --microarray-coords data/human/expression/AHBA_microarray_coordinates_study.csv \
+  --gene-space average-latent-space \
+  --n-latent-spaces 50 \
+  --metric correlation \
+  --signed true \
+  --threshold top_n \
+  --threshold-value 0.2 \
+  --threshold-symmetric true \
+  --jacobians absolute relative \
+  --execution slurm \
+  --slurm-njobs 300 \
+  --slurm-mem 16G \
+  --slurm-time 8:00:00
+```
+
+### 3. Permuting the cluster similarity 
+
+Permuting the similarity between POND+ human clusters and mouse clusters:
+
+```shell
+permute_cluster_similarity.py \
+--pipeline-dir data/cross_species/ \
+--param-id 375 \
+--input-dirs data/human/derivatives/ data/mouse/derivatives/ \
+--expr-dirs data/human/expression data/mouse/expression \
+--masks data/human/registration/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+--microarray-coords data/human/expression/AHBA_microarray_coordinates_study.csv \
+--permutations-start 1 \
+--permutations-n 500 \
+--off-diagonal 1 \
+--execution slurm \
+--slurm-njobs 300 \
+--slurm-mem 16G \
+--slurm-time 8:00:00
+```
+
+Permuting the similarity between HBN human clusters and mouse clusters:
+
+```shell
+permute_cluster_similarity.py \
+--pipeline-dir data/cross_species/ \
+--param-id 861 \
+--input-dirs data/human/derivatives/ data/mouse/derivatives/ \
+--expr-dirs data/human/expression data/mouse/expression \
+--masks data/human/registration/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+--microarray-coords data/human/expression/AHBA_microarray_coordinates_study.csv \
+--permutations-start 1 \
+--permutations-n 500 \
+--off-diagonal 1 \
+--execution slurm \
+--slurm-njobs 300 \
+--slurm-mem 16G \
+--slurm-time 8:00:00
+```
+
+Permuting the similarity between POND+ clusters and HBN clusters:
+
+```shell
+permute_cluster_similarity.py \
+--pipeline-dir data/cross_species/ \
+--param-id 779 \
+--input-dirs data/human/derivatives/ data/human/derivatives/ \
+--expr-dirs data/human/expression data/human/expression \
+--masks data/human/registration/reference_files/mask_0.8mm.mnc data/human/registration/reference_files/mask_0.8mm.mnc \ 
+--microarray-coords data/human/expression/AHBA_microarray_coordinates_study.csv \
+--permutations-start 1 \
+--permutations-n 500 \
+--off-diagonal 1 \
+--execution slurm \
+--slurm-njobs 300 \
+--slurm-mem 16G \
+--slurm-time 8:00:00
+```
+
+The source code for all downstream analyses and visualizations related to figures in the manuscript can be found in the subdirectory `figures/v3`.
