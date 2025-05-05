@@ -127,7 +127,9 @@ This assumes that Homebrew is installed in the standard directory `/opt/homebrew
 
 ## Build the project environment
 
-Construct the project (conda) environment by sourcing the setup script:
+The typical installation time for the project environment is approximatley 10 minutes.
+
+The project (conda) environment is constructed by sourcing the setup script:
 
 ```shell
 ./setup.sh
