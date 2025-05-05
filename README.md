@@ -53,7 +53,7 @@ RMINC v1.5.3.0
 MRIcrotome v0.2.0
 ```
 
-R dependencies are installed automatically as part of the environment setup process.
+R dependencies are stored in the file `R_packages_conda.txt` and are installed automatically as part of the environment setup process.
 
 ### Python dependencies
 
@@ -69,7 +69,7 @@ utils v1.0.2
 pyminc v0.57
 ```
 
-Python dependencies are installed automatically as part of the environment setup process.
+Python dependencies are stored in the files `python_packages_conda.txt` and `python_packages_pip.txt` and are installed automatically as part of the environment setup process.
 
 # Installation guide
 
