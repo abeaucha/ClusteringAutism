@@ -71,8 +71,6 @@ pyminc v0.57
 
 Python dependencies are installed automatically as part of the environment setup process.
 
----
-
 # Installation guide
 
 ## Requirement: conda
@@ -152,7 +150,6 @@ In addition to specifying the versions of R and Python, this defines a number of
 - `SRCPATH`: The path to the project source files (i.e. subdirectory `src`)
 - `MINC_TOOLKIT`: The path to the minc-toolkit-v2 installation in the `clustering-autism-minc-env` environment.
 
----
 
 # Demo
 
@@ -229,7 +226,6 @@ Notes:
 
 The demo pipeline should execute in approximately 150 seconds.
 
----
 
 # Instructions for use
 
