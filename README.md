@@ -1,4 +1,13 @@
 
+# Overview
+
+This repository contains all the source code pertaining to the manuscript:
+
+Ellegood J, Beauchamp A, Yee Y et al. 2025. "Assigning Targetable Molecular Pathways to Transdiagnostic Subgroups Across Autism and
+Related Neurodevelopmental Disorders".
+
+The manuscript is currently openly accessible on [bioRxiv](https://www.biorxiv.org/content/10.1101/2025.03.04.641443v1).
+
 # System requirements
 
 ## Hardware requirements
