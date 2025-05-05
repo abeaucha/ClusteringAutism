@@ -1,5 +1,7 @@
 #!/bin/bash
 
+START=$(date +%s)
+
 # Increase limit on file descriptors
 ulimit -Sn 100000
 
@@ -48,3 +50,6 @@ compute_cluster_similarity.py \
   --jacobians absolute relative \
   --execution local \
   --nproc 2
+
+END=$(date +%s)
+echo "Elapsed time: $((END - START)) seconds"
