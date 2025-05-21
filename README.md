@@ -12,7 +12,7 @@ The manuscript is currently openly accessible on [bioRxiv](https://www.biorxiv.o
 
 ## Hardware requirements
 
-This project is supported for ARM64 Apple Silicon computers.
+This project is supported for Linux x86_64 computers and Apple ARM64 computers.
 
 ## Software requirements
 
@@ -20,6 +20,7 @@ This project is supported for ARM64 Apple Silicon computers.
 
 The following operating systems are currently supported:
 - macOS Sequoia 15.4.1.
+- Ubuntu 22.04.5 LTS
 
 ### Software
 
@@ -87,6 +88,9 @@ Python dependencies are stored in the files `python_packages_conda.txt` and `pyt
 This project requires a conda distribution for environment and package management. A minimal installation of conda can be obtained via [Miniforge](https://github.com/conda-forge/miniforge). 
 
 Download the installation script from Github:
+- Apple ARM64: Miniforge3-MacOSx-arm64.sh
+- Linux x86_64: Miniforge3-Linux-x86_64.sh
+
 ```shell
 curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSx-arm64.sh"
 ```
@@ -96,7 +100,7 @@ Install Miniforge into your preferred destination (e.g. `~/opt/miniforge3`):
 bash Miniforge3-MacOSx-arm64.sh -b -p ~/opt/miniforge3
 ```
 
-Initialize conda for `zsh`:
+Initialize conda for `zsh` or `bash`:
 ```shell
 ~/opt/miniforge3/bin/conda init zsh
 ```
@@ -106,20 +110,32 @@ Disable auto-activation of base environment on startup:
 ~/opt/miniforge3/bin/conda config --set auto_activate_base false
 ```
 
-Restart Terminal or re-source the startup files:
+Restart Terminal or re-source the startup files. 
 ```shell
+# zsh startup files
 source ~/.zprofile
 source ~/.zshrc
+
+# bash startup files
+source ~/.bashrc
 ```
 
 
 ## Requirement: GFortran
 
 Installing `RMINC` requires a Fortran compiler. Since Apple uses clang by default, most users will not have a Fortran
-compiler installed. GFortran can be installed as part of the GNU Compiler Collection via Homebrew. 
+compiler installed. 
+
+On macOS, GFortran can be installed as part of the GNU Compiler Collection via Homebrew: 
 
 ```shell
 brew install gcc
+```
+
+On Linux systems, GFortran can be installed using the default package manager:
+
+```shell
+apt install gfortran
 ```
 
 Regardless of how you install GFortran you will need to tell
