@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # Path to conda installation
 CONDA_PATH=$(conda info --base)
@@ -15,18 +15,18 @@ MINC_ENV_PATH=${CONDA_PATH}/envs/${MINC_ENV_NAME}
 ENV_PATH=${CONDA_PATH}/envs/${ENV_NAME}
 
 # Create MINC environment and install minc-toolkit-v2
-echo "\nBuilding MINC environment..."
+echo -e "\nBuilding MINC environment..."
 conda create -n $MINC_ENV_NAME -c minc-forge minc-toolkit-v2 -y
 
 # Create conda environment and install R
-echo "\nBuilding R environment..."
+echo -e "\nBuilding R environment..."
 conda create -n $ENV_NAME -c conda-forge r-base=4.4.2 python=3.12.10 -y
 
 # Install compiled R packages via conda (faster)
-echo "\nInstalling R packages..."
+echo -e "\nInstalling R packages..."
 conda install -n $ENV_NAME -c conda-forge --file R_packages_conda.txt -y
 
-echo "\nInstalling python packages..."
+echo -e "\nInstalling python packages..."
 conda install -n $ENV_NAME -c conda-forge --file python_packages_conda.txt -y
 
 # Set $MINC_TOOLKIT upon activation 
@@ -52,15 +52,15 @@ EOF
 conda activate $ENV_NAME
 
 # Install RMINC from Github
-echo "\nInstalling RMINC from Github..."
+echo -e "\nInstalling RMINC from Github..."
 Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/RMINC", ref = "57ef9122311d255f24c44571f9c68972c1c3cc4f", upgrade = "never")'
 
 # Install MRIcrotome from Github
-echo "\nInstalling MRIcrotome from Github..."
+echo -e "\nInstalling MRIcrotome from Github..."
 Rscript -e 'devtools::install_github("Mouse-Imaging-Centre/MRIcrotome", upgrade = "never")'
 
 # Install Python datatable and pyminc using pip 
-echo "\nInstalling python packages using pip..."
+echo -e "\nInstalling python packages using pip..."
 pip3 install -r python_packages_pip.txt
 
 # Deactivate conda environment
