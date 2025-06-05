@@ -120,15 +120,26 @@ clusters <- clusters %>%
 clusters_genetics <- clusters %>% 
   left_join(genetics, by = c("Subject_ID" = "POND_ID")) %>% 
   mutate(gene_identified = !is.na(CLASSIFICATION)) %>% 
-  distinct()
+  distinct() %>% 
+  rename(significant_variant = `SIGNIFICANT VARIANT`,
+         significant_variant_type = `SIGNIFICANT VARIANT TYPE`,
+         classification = CLASSIFICATION)
+
+fxs_file <- demographics %>% 
+  filter(DX == "Fragile X") %>% 
+  pull(file)
+
+clusters_genetics <- clusters_genetics %>% 
+    mutate(significant_variant = ifelse(ID == fxs_file, "FMR1", significant_variant),
+           classification = ifelse(significant_variant == "FMR1", "Diagnosis", classification),
+           gene_identified = ifelse(ID == fxs_file, TRUE, gene_identified)) 
+
+clusters_genetics %>% 
+  filter(gene_identified) %>% 
+  select(ID, significant_variant_type, significant_variant)
 ```
 
 ```{r}
-sum(clusters_genetics$gene_identified)
-```
-
-
-```{r eval = FALSE}
 df_clusters_long <- clusters_genetics %>% 
   select(ID, contains("nk"), gene_identified) %>% 
   pivot_longer(cols = c(-ID, -gene_identified),names_to = "nk_name", values_to = "k") %>% 
@@ -144,8 +155,8 @@ df_clusters_gene_counts <- df_clusters_long %>%
 df_clusters_long <- df_clusters_long %>% 
   left_join(df_clusters_gene_counts, by = c("nk", "k"))
 
-df_clusters_long <- df_clusters_long %>% 
-  mutate(ngenes = ifelse(ngenes == 0, NA, ngenes))
+# df_clusters_long <- df_clusters_long %>% 
+  # mutate(ngenes = ifelse(ngenes == 0, NA, ngenes))
 
 clusters_w_matches <- c("2-1", "2-2", 
                         "3-1", "3-3", 
@@ -157,22 +168,31 @@ clusters_w_matches <- c("2-1", "2-2",
                         "9-4", "9-5", "9-7",
                         "10-10")
 
+df_clusters_long <- df_clusters_long %>% mutate(ngenes = factor(ngenes, levels = 0:15))
+
+df_clusters_long <- df_clusters_long %>% 
+  unite("cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  mutate(has_match = cluster_id %in% clusters_w_matches)
+
 p_sankey_genes <- ggplot(df_clusters_long,
                          aes(x = nk, stratum = k,
                              alluvium = ID,
                              fill = ngenes)) +
   geom_flow(stat = "alluvium", aes.flow = "forward") +
-  geom_stratum() +
-  scale_fill_gradientn(colors = brewer.pal(n = 9, name = "OrRd")[2:9],
-                       breaks = seq(0, 12, 2)) +
+  geom_stratum(aes(col = has_match, size = has_match)) +
+  scale_fill_manual(values = c("grey50", brewer.pal(n = 9, name = "OrRd")))  + 
+  scale_color_manual(values = c("grey50", "blue"), labels = c("No", "Yes")) + 
+  scale_size_manual(values = c(0.5, 1.0), labels = c("No", "Yes")) + 
   labs(x = "Number of clusters",
        y = "Number of patients",
        fill = "Identified variants",
+       color = "Mouse match",
+       size = "Mouse match", 
        title = "Human clusters with identified genetic variants") +
   theme_bw() +
   theme(panel.grid.major.x = element_blank())
 
-outfile <- "sankey_gene_variants.pdf"
+outfile <- "sankey_variants_all.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
@@ -183,44 +203,142 @@ dev.off()
 
 
 ```{r}
-df_variants_long <- df_clusters_long %>% 
-  select(ID, nk, k) %>% 
-  left_join(clusters_genetics %>% 
-              select(ID, Subject_ID, 
-                     gene_identified,
-                     `SIGNIFICANT VARIANT`, 
-                     `SIGNIFICANT VARIANT TYPE`,
-                     CLASSIFICATION),
-            by = "ID") %>% 
-  filter(gene_identified > 0) %>% 
-  select(-ID, -gene_identified) %>% 
-  arrange(nk, k) %>% 
-  unite("cluster", nk, k, sep = "-")
+df_variants <- clusters_genetics %>% 
+  filter(gene_identified) %>% 
+  arrange(nk2, nk3)
 
-outfile <- "cluster_variants_long.csv"
-outfile <- file.path(output_dir, outfile)
-write_csv(df_variants_long, outfile)
+df_variants[["gene"]] <- c("Pten", "Rtl9", 
+                           "Nlgn1", NA,
+                           "Rbm10", NA,
+                           NA, "Fgf14",
+                           "Tsc1", "Meis2",
+                           NA, "Kcnq2",
+                           "Gria2", "Rfx3",
+                           "Rai1", "Fmr1",
+                           "Tnpo3", "Stxbp1",
+                           NA) 
+
+df_variants <- df_variants %>% 
+  select(Subject_ID, file = ID, contains("nk"), 
+         significant_variant, significant_variant_type, classification, 
+         gene)
 ```
 
 ```{r}
-fxs_file <- demographics %>% 
-  filter(DX == "Fragile X") %>% 
+ids_no_single_gene <- df_variants %>% 
+  filter(is.na(gene)) %>% 
   pull(file)
 
-df_variants <- clusters_genetics %>% 
-  filter(gene_identified > 0 | ID == fxs_file) %>% 
-  select(Subject_ID, ID, contains("nk"),
-         significant_variant = `SIGNIFICANT VARIANT`, 
-         significant_variant_type = `SIGNIFICANT VARIANT TYPE`,
-         classification = CLASSIFICATION) %>% 
-  mutate(significant_variant = ifelse(ID == fxs_file, "FMR1", significant_variant),
-         classification = ifelse(significant_variant == "FMR1", "Diagnosis", classification)) %>% 
-  select(-ID) %>% 
-  arrange(nk2, nk3)
+df_clusters_long <- clusters_genetics %>% 
+  mutate(gene_identified = ifelse(ID %in% ids_no_single_gene, FALSE, gene_identified)) %>% 
+  select(ID, contains("nk"), gene_identified) %>% 
+  pivot_longer(cols = c(-ID, -gene_identified),names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
 
-outfile <- "cluster_variants.csv"
+df_clusters_gene_counts <- df_clusters_long %>% 
+  group_by(nk, k) %>% 
+  summarise(ngenes = sum(gene_identified), .groups = "drop")
+
+df_clusters_long <- df_clusters_long %>% 
+  left_join(df_clusters_gene_counts, by = c("nk", "k"))
+
+# df_clusters_long <- df_clusters_long %>% 
+  # mutate(ngenes = ifelse(ngenes == 0, NA, ngenes))
+
+
+df_clusters_long <- df_clusters_long %>% mutate(ngenes = factor(ngenes, levels = 0:14))
+
+df_clusters_long <- df_clusters_long %>% 
+  unite("cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  mutate(has_match = cluster_id %in% clusters_w_matches)
+
+p_sankey_genes <- ggplot(df_clusters_long,
+                         aes(x = nk, stratum = k,
+                             alluvium = ID,
+                             fill = ngenes)) +
+  geom_flow(stat = "alluvium", aes.flow = "forward") +
+  geom_stratum(aes(col = has_match, size = has_match)) +
+  scale_fill_manual(values = c("grey50", brewer.pal(n = 9, name = "OrRd")))  + 
+  scale_color_manual(values = c("grey50", "blue"), labels = c("No", "Yes")) + 
+  scale_size_manual(values = c(0.5, 1.0), labels = c("No", "Yes")) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients",
+       fill = "Identified variants",
+       color = "Mouse match",
+       size = "Mouse match", 
+       title = "Human clusters with identified single gene variants") +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())
+
+outfile <- "sankey_variants_no_cnv.pdf"
 outfile <- file.path(output_dir, outfile)
-write_csv(df_variants, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_sankey_genes)
+dev.off()
+```
+
+```{r}
+outfile <- "cluster_variants.csv"
+write_csv(df_variants, file.path(output_dir, outfile))
+write_csv(df_variants, file.path(pipeline_dir, outfile))
+```
+
+```{r}
+df_variants_long <- df_clusters_long %>% 
+  select(ID, nk, k) %>% 
+  left_join(clusters_genetics %>% 
+              select(ID, Subject_ID, gene_identified,
+                     significant_variant,
+                     significant_variant_type,
+                     classification),
+            by = "ID") %>% 
+  filter(gene_identified) %>% 
+  select(-gene_identified) %>% 
+  arrange(nk, k) %>% 
+  unite(col = "cluster", nk, k, sep = "-", remove = FALSE) %>% 
+  select(ID, Subject_ID, cluster, nk, k, significant_variant, significant_variant_type, classification)
+
+outfile <- "cluster_variants_long.csv"
+write_csv(df_variants_long, file.path(output_dir, outfile))
+write_csv(df_variants_long, file.path(pipeline_dir, outfile))
+```
+
+
+
+```{r}
+df_variants %>% 
+  group_by(significant_variant_type) %>% 
+  count()
+```
+
+```{r}
+clusters_genetics
+```
+
+```{r}
+clusters_genetics %>% 
+  select(ID, significant_variant, significant_variant_type, classification, gene_identified) %>% 
+  left_join(select(demographics, file, Dataset, DX), by = c("ID" = "file")) %>% 
+  filter(gene_identified)
+```
+
+
+```{r}
+n_POND <- demographics %>% 
+  filter(Dataset == "POND", DX != "Control") %>% 
+  nrow()
+
+n_POND_ASD <- demographics %>% 
+  filter(Dataset == "POND", DX == "ASD") %>% 
+  nrow()
+
+nrow(df_variants)/n_POND*100
+nrow(df_variants)/n_POND_ASD*100
 ```
 
 
