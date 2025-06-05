@@ -46,6 +46,50 @@ get_homologs <- function(genes, species, ordered=T) {
 }
 
 
+my_importMsigDBGMT <- function(file) {
+  # stop("This does not work at the present.")
+  msig <- list()
+  con <- file(file, open = "r")
+  lines <- readLines(con)
+  close(con)
+  ids <- gsub("\t.*", "", lines)
+  desc <- gsub("^[^\t]*\t([^\t]*)\t.*", "\\1", lines)
+  genes <- gsub("^[^\t]*\t[^\t]*\t(.*)", "\\1", lines)
+  msig$MODULES <- data.frame(ID = ids, Title = desc, stringsAsFactors = FALSE)
+  if (any(duplicated(msig$MODULES$ID))) {
+    warning("Duplicated IDs found; automatic IDs will be generated")
+    msig$MODULES$oldID <- msig$MODULES$ID
+    msig$MODULES$ID <- make.unique(as.character(msig$MODULES$ID))
+  }
+  rownames(msig$MODULES) <- msig$MODULES[, "ID"]
+  msig$MODULES2GENES <- strsplit(genes, "\t")
+  names(msig$MODULES2GENES) <- ids
+  msig$GENES <- data.frame(ID = unique(unlist(msig$MODULES2GENES)))
+  # msig <- new("tmod", msig)
+  msig
+}
+
+
+my_tmodImportMSigDB <- function (file = NULL, format = "xml", organism = "Homo sapiens", 
+          fields = c("STANDARD_NAME", "CATEGORY_CODE", "SUB_CATEGORY_CODE", 
+                     "EXACT_SOURCE", "EXTERNAL_DETAILS_URL")) 
+{
+  if (length(file) != 1) 
+    stop("Incorrect file parameter")
+  if (!file.exists(file)) 
+    stop(sprintf("File %s does not exist", file))
+  format <- match.arg(format, c("xml", "gmt"))
+  msig <- switch(format, xml = .importMsigDBXML(file, fields, 
+                                                organism), gmt = my_importMsigDBGMT(file))
+  s <- msig$gs$Title
+  msig$gs$Title <- paste0(toupper(substring(s, 1, 1)), tolower(substring(s, 
+                                                                         2)))
+  msig$gs$Title <- gsub("^Gse([0-9])", "GSE\\1", msig$gs$Title)
+  msig$gs$Title <- gsub("_", " ", msig$gs$Title)
+  msig$gs$B <- sapply(msig$gs2gv, length)
+  msig
+}
+
 # Main -----------------------------------------------------------------------
 
 # Parameters
@@ -93,9 +137,8 @@ if (!dir.exists(output_dir)) {
 }
 
 # File containing cluster variants
-variants <- "analyses/primary/outputs/human_cluster_genetics/"
-variants <- file.path(variants, pipeline_version, params_id)
-variants <- file.path(variants, "cluster_variants.csv")
+# variants <- "analyses/primary/outputs/human_cluster_genetics/"
+variants <- file.path(pipeline_dir, "cluster_variants.csv")
 
 # Import variants
 df_variants <- read_csv(variants, show_col_types = FALSE)
@@ -114,16 +157,16 @@ df_variants <- read_csv(variants, show_col_types = FALSE)
 #                            "Nlgn1")
 
 # Version 3
-df_variants[["gene"]] <- c("Pten", "Rtl9", 
-                           "Nlgn1", NA,
-                           "Rbm10", NA,
-                           NA, "Fgf14",
-                           "Tsc1", "Meis2",
-                           NA, "Kcnq2",
-                           "Gria2", "Rfx3",
-                           "Rai1", "Fmr1",
-                           "Tnpo3", "Stxbp1",
-                           NA) 
+# df_variants[["gene"]] <- c("Pten", "Rtl9", 
+#                            "Nlgn1", NA,
+#                            "Rbm10", NA,
+#                            NA, "Fgf14",
+#                            "Tsc1", "Meis2",
+#                            NA, "Kcnq2",
+#                            "Gria2", "Rfx3",
+#                            "Rai1", "Fmr1",
+#                            "Tnpo3", "Stxbp1",
+#                            NA) 
 
 # Import background gene set
 background_set <- file.path(enrichment_dir, background_set)
@@ -174,7 +217,7 @@ for (i in 1:nrow(params)) {
   } else {
     stop()
   }
-  bader_modules <- tmodImportMSigDB(bader_modules, format = "gmt")
+  bader_modules <- my_tmodImportMSigDB(bader_modules, format = "gmt")
   
   # Iterate over clusters
   list_cluster_interactions <- vector(mode = "list", length = nk)
