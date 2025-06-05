@@ -45,3 +45,4 @@ permutations_registry_*
 pMincMask*
 count_rows.R
 build_demo_data.R
+.Rproj.user
