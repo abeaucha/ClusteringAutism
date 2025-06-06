@@ -7,7 +7,7 @@
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(tmod))
+# suppressPackageStartupMessages(library(tmod))
 
 
 # Functions ------------------------------------------------------------------
@@ -46,7 +46,7 @@ get_homologs <- function(genes, species, ordered=T) {
 }
 
 
-my_importMsigDBGMT <- function(file) {
+importMsigDBGMT <- function(file) {
   # stop("This does not work at the present.")
   msig <- list()
   con <- file(file, open = "r")
@@ -70,25 +70,54 @@ my_importMsigDBGMT <- function(file) {
 }
 
 
-my_tmodImportMSigDB <- function (file = NULL, format = "xml", organism = "Homo sapiens", 
-          fields = c("STANDARD_NAME", "CATEGORY_CODE", "SUB_CATEGORY_CODE", 
-                     "EXACT_SOURCE", "EXTERNAL_DETAILS_URL")) 
-{
-  if (length(file) != 1) 
-    stop("Incorrect file parameter")
-  if (!file.exists(file)) 
-    stop(sprintf("File %s does not exist", file))
-  format <- match.arg(format, c("xml", "gmt"))
-  msig <- switch(format, xml = .importMsigDBXML(file, fields, 
-                                                organism), gmt = my_importMsigDBGMT(file))
-  s <- msig$gs$Title
-  msig$gs$Title <- paste0(toupper(substring(s, 1, 1)), tolower(substring(s, 
-                                                                         2)))
-  msig$gs$Title <- gsub("^Gse([0-9])", "GSE\\1", msig$gs$Title)
-  msig$gs$Title <- gsub("_", " ", msig$gs$Title)
-  msig$gs$B <- sapply(msig$gs2gv, length)
-  msig
+HGtest <- function (fg, bg, mset, qval = 0.05, cols = "Title", nodups = TRUE) {
+  
+  if (nodups) {
+    fg <- fg[!duplicated(fg)]
+    bg <- bg[!duplicated(bg)]
+  }
+  
+  if (is.null(bg)) {
+    warning("No genes in bg match any of the genes in the GENES")
+  }
+  
+  if (is.null(fg)) {
+    warning("No genes in fg match any of the genes in the GENES")
+    return(NULL)
+  }
+  
+  bg <- setdiff(bg, fg)
+  if (length(bg) == 0){stop("All features from bg in fg.")}
+  tot <- unique(c(fg, bg))
+  n <- length(tot)
+  k <- length(fg)
+  
+  n_modules <- length(mset[["MODULES2GENES"]])
+  enrichment <- matrix(data = 0, nrow = n_modules, ncol = 6)
+  for (i in 1:n_modules) {
+    
+    mg <- mset[["MODULES2GENES"]][[i]]
+    q <- sum(fg %in% mg)
+    m <- sum(tot %in% mg)
+    if (m == 0) {
+      E <- NA
+    } else {
+      E <- (q/k)/(m/n)
+    }
+    
+    pv <- phyper(q - 1, m, n - m, k, lower.tail = FALSE)
+    
+    enrichment[i,] <- c(q, m, k, n, E, pv)
+  }
+  
+  colnames(enrichment) <- c("b", "B", "n", "N", "E", "P.Value")
+  enrichment <- as_tibble(enrichment)
+  enrichment[["n_id"]] <- names(mset[["MODULES2GENES"]])
+  
+  return(enrichment)
+  
 }
+
 
 # Main -----------------------------------------------------------------------
 
@@ -217,7 +246,8 @@ for (i in 1:nrow(params)) {
   } else {
     stop()
   }
-  bader_modules <- my_tmodImportMSigDB(bader_modules, format = "gmt")
+  # bader_modules <- my_tmodImportMSigDB(bader_modules, format = "gmt")
+  bader_modules <- importMsigDBGMT(bader_modules)
   
   # Iterate over clusters
   list_cluster_interactions <- vector(mode = "list", length = nk)
@@ -272,12 +302,14 @@ for (i in 1:nrow(params)) {
     fg <- get_homologs(target_set, "mouse", ordered = F)[["human_genes"]]
     bg <- get_homologs(background_set, "mouse", ordered = F)[["human_genes"]]
     
+    hgtest_out <- HGtest(fg = fg, bg = bg, mset = bader_modules)
+    
     # Run hypergeometric test against pathway modules
     tmod_hgtest_out <- tmodHGtest(fg = fg, bg = bg, mset = bader_modules, 
                                   qval = 1.1, filter = FALSE, order.by = "pval")
     
     # Clean up output
-    tmod_hgtest_out <- tmod_hgtest_out %>% 
+    hgtest_out <- hgtest_out %>% 
       as_tibble() %>% 
       arrange(P.Value) %>% 
       mutate(rank = 1:nrow(.),
