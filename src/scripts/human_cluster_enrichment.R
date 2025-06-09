@@ -112,7 +112,8 @@ HGtest <- function (fg, bg, mset, qval = 0.05, cols = "Title", nodups = TRUE) {
   
   colnames(enrichment) <- c("b", "B", "n", "N", "E", "P.Value")
   enrichment <- as_tibble(enrichment)
-  enrichment[["n_id"]] <- names(mset[["MODULES2GENES"]])
+  enrichment[["ID"]] <- mset[["MODULES"]][["ID"]]
+  enrichment[["Title"]] <- mset[["MODULES"]][["Title"]]
   
   return(enrichment)
   
@@ -130,7 +131,8 @@ pipeline_version <- "v3"
 params_id <- 700
 
 # Cluster solution
-nk <- 2
+# nk <- 6
+nk_max <- 10
 
 # Path to pipeline directory
 pipeline_dir <- "data/human/derivatives/"
@@ -171,6 +173,9 @@ variants <- file.path(pipeline_dir, "cluster_variants.csv")
 
 # Import variants
 df_variants <- read_csv(variants, show_col_types = FALSE)
+
+df_variants <- df_variants %>% 
+  filter(!is.na(gene))
 
 # Identify genes for those patients with single gene mutations
 # Version 2
@@ -250,81 +255,82 @@ for (i in 1:nrow(params)) {
   bader_modules <- importMsigDBGMT(bader_modules)
   
   # Iterate over clusters
-  list_cluster_interactions <- vector(mode = "list", length = nk)
-  for (k in 1:nk) {
-    
-    message(
-      paste("\tCluster", k, "of", nk)
-    )
-    
-    message(
-      "\t\tBuilding gene neighbourhoods..."
-    )
-    
-    # Filter variants for cluster
-    cols <- c(paste0("nk", nk), "gene")
-    ind_k <- df_variants[[paste0("nk", nk)]] == k
-    df_variants_k <- df_variants[ind_k, cols]
-    df_variants_k[["queryIndex"]] <- 0:(nrow(df_variants_k)-1)
-    
-    # StringDB API query to get gene IDs
-    api_query_string_ids <- paste0(stringdb_url, "api/tsv/get_string_ids?identifiers=", 
-                                   paste(df_variants_k[["gene"]], collapse = "%0D"), 
-                                   "&species=10090&limit=1")
-    
-    df_string_ids <- read_tsv(api_query_string_ids, show_col_types = FALSE) %>% 
-      select(queryIndex, stringID = stringId, preferredName) 
-    
-    # Join StringDB IDs to variants
-    df_variants_k <- df_variants_k %>% 
-      left_join(df_string_ids, by = "queryIndex")
-    
-    # StringDB API query for gene neighbourhoods
-    api_query_interactions <- paste0(stringdb_url, "api/tsv/interaction_partners?identifiers=", 
-                                     paste(df_variants_k[["stringID"]], collapse = "%0D"),
-                                     "&species=10090&required_score=", gene_score)
-    
-    df_interactions_k <- read_tsv(api_query_interactions, show_col_types = FALSE) %>% 
-      rename(stringID_A = stringId_A, stringID_B = stringId_B) %>% 
-      left_join(df_variants_k %>% 
-                  select(nk2, stringID),
-                by = c("stringID_A" = "stringID"))  
-    
-    message(
-      "\t\tRunning hypergeometric tests..."
-    )
-    
-    # Target gene set for cluster k
-    target_set <- unique(c(df_interactions_k[["preferredName_A"]],
-                           df_interactions_k[["preferredName_B"]]))
-    
-    # Convert mouse gene names to human
-    fg <- get_homologs(target_set, "mouse", ordered = F)[["human_genes"]]
-    bg <- get_homologs(background_set, "mouse", ordered = F)[["human_genes"]]
-    
-    hgtest_out <- HGtest(fg = fg, bg = bg, mset = bader_modules)
-    
-    # Run hypergeometric test against pathway modules
-    tmod_hgtest_out <- tmodHGtest(fg = fg, bg = bg, mset = bader_modules, 
-                                  qval = 1.1, filter = FALSE, order.by = "pval")
-    
-    # Clean up output
-    hgtest_out <- hgtest_out %>% 
-      as_tibble() %>% 
-      arrange(P.Value) %>% 
-      mutate(rank = 1:nrow(.),
-             adj.P.Val = p.adjust(P.Value, method = "fdr"),
-             NLQ = -log(adj.P.Val),
-             k = k) %>% 
-      dplyr::select(rank, Title, NLQ, P.Value, adj.P.Val, everything()) %>% 
-      arrange(adj.P.Val)
-    
-    # Export the enrichment data to file
-    outfile <- paste("cluster_pathway_enrichment", nk, k, gene_score, sep = "_")
-    outfile <- paste0(outfile, ".csv")
-    outfile <- file.path(output_dir_i, outfile)
-    write_csv(x = tmod_hgtest_out, file = outfile)
-    
+  # list_cluster_interactions <- vector(mode = "list", length = nk)
+  for (nk in 2:nk_max) {
+    for (k in 1:nk) {
+      
+      message(
+        paste("\tCluster", k, "of", nk)
+      )
+      
+      message(
+        "\t\tBuilding gene neighbourhoods..."
+      )
+      
+      # Filter variants for cluster
+      cols <- c(paste0("nk", nk), "gene")
+      ind_k <- df_variants[[paste0("nk", nk)]] == k
+      if (sum(ind_k) == 0) {
+        message("\t\tNo genes in cluster.")
+        next
+      }
+      df_variants_k <- df_variants[ind_k, cols]
+      df_variants_k[["queryIndex"]] <- 0:(nrow(df_variants_k)-1)
+      
+      # StringDB API query to get gene IDs
+      api_query_string_ids <- paste0(stringdb_url, "api/tsv/get_string_ids?identifiers=", 
+                                     paste(df_variants_k[["gene"]], collapse = "%0D"), 
+                                     "&species=10090&limit=1")
+      
+      df_string_ids <- read_tsv(api_query_string_ids, show_col_types = FALSE) %>% 
+        select(queryIndex, stringID = stringId, preferredName) 
+      
+      # Join StringDB IDs to variants
+      df_variants_k <- df_variants_k %>% 
+        left_join(df_string_ids, by = "queryIndex")
+      
+      # StringDB API query for gene neighbourhoods
+      api_query_interactions <- paste0(stringdb_url, "api/tsv/interaction_partners?identifiers=", 
+                                       paste(df_variants_k[["stringID"]], collapse = "%0D"),
+                                       "&species=10090&required_score=", gene_score)
+      
+      df_interactions_k <- read_tsv(api_query_interactions, show_col_types = FALSE) %>% 
+        rename(stringID_A = stringId_A, stringID_B = stringId_B) %>% 
+        left_join(df_variants_k[, c(paste0("nk", nk), "stringID")],
+                  by = c("stringID_A" = "stringID"))  
+      
+      message(
+        "\t\tRunning hypergeometric tests..."
+      )
+      
+      # Target gene set for cluster k
+      target_set <- unique(c(df_interactions_k[["preferredName_A"]],
+                             df_interactions_k[["preferredName_B"]]))
+      
+      # Convert mouse gene names to human
+      fg <- get_homologs(target_set, "mouse", ordered = F)[["human_genes"]]
+      bg <- get_homologs(background_set, "mouse", ordered = F)[["human_genes"]]
+      
+      # Run hypergeometric test against pathway modules
+      hgtest_out <- HGtest(fg = fg, bg = bg, mset = bader_modules)
+      
+      # Clean up output
+      hgtest_out <- hgtest_out %>% 
+        as_tibble() %>% 
+        arrange(P.Value) %>% 
+        mutate(rank = 1:nrow(.),
+               adj.P.Val = p.adjust(P.Value, method = "fdr"),
+               NLQ = -log(adj.P.Val),
+               k = k) %>% 
+        select(rank, Title, NLQ, P.Value, adj.P.Val, everything()) %>% 
+        arrange(adj.P.Val)
+      
+      # Export the enrichment data to file
+      outfile <- paste("cluster_pathway_enrichment", nk, k, gene_score, sep = "_")
+      outfile <- paste0(outfile, ".csv")
+      outfile <- file.path(output_dir_i, outfile)
+      write_csv(x = hgtest_out, file = outfile)
+      
+    }
   }
-  
 }
