@@ -7,167 +7,895 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 ```
 
 ```{r packages}
 suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(tmod))
-```
-
-```{r functions}
-# Function from Jacob's Clustering_Functions.R source file
-get_homologs <- function(genes, species, ordered=T) {
-  if (!exists("hom", envir = globalenv())) {
-    hom <<- read_tsv("http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt")
-  }
-  species <- switch (species,
-                     mouse={"mouse, laboratory"},
-                     human={"human"}
-  )
-  
-  if (ordered) {
-    genes_human <- genes_mouse <- c()
-    prog <- txtProgressBar(max=length(genes), style = 3)
-    for (i in 1:length(genes)) {
-      g <- genes[i]
-      homologene_ids <- hom$`DB Class Key`[which((hom$Symbol==g) & hom$`Common Organism Name`==species)]
-      genes_mouse <- c(genes_mouse, hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="mouse, laboratory"))])
-      genes_human <- c(genes_human, hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="human"))])
-      setTxtProgressBar(prog, i)
-    }  
-    close(prog)
-  } else {
-    # Faster, but unordered
-    homologene_ids <- hom$`DB Class Key`[which((hom$Symbol %in% genes) & hom$`Common Organism Name`==species)]
-    genes_mouse <- hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="mouse, laboratory"))]
-    genes_human <- hom$Symbol[which((hom$`DB Class Key` %in% homologene_ids) & (hom$`Common Organism Name`=="human"))]
-  }
-  
-  return(list(input_genes=genes, mouse_genes=genes_mouse, human_genes=genes_human))  
-}
 ```
 
 ```{r}
-output_dir <- "outputs/human_cluster_pathways"
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+setwd(PROJECTPATH)
+```
 
-version <- "v2"
-params_id <- "700"
+# Pathway characteristics
 
-# Number of clusters
-nk <- 2
+```{r}
+importMsigDBGMT <- function(file) {
+  # stop("This does not work at the present.")
+  msig <- list()
+  con <- file(file, open = "r")
+  lines <- readLines(con)
+  close(con)
+  ids <- gsub("\t.*", "", lines)
+  desc <- gsub("^[^\t]*\t([^\t]*)\t.*", "\\1", lines)
+  genes <- gsub("^[^\t]*\t[^\t]*\t(.*)", "\\1", lines)
+  msig$MODULES <- data.frame(ID = ids, Title = desc, stringsAsFactors = FALSE)
+  if (any(duplicated(msig$MODULES$ID))) {
+    warning("Duplicated IDs found; automatic IDs will be generated")
+    msig$MODULES$oldID <- msig$MODULES$ID
+    msig$MODULES$ID <- make.unique(as.character(msig$MODULES$ID))
+  }
+  rownames(msig$MODULES) <- msig$MODULES[, "ID"]
+  msig$MODULES2GENES <- strsplit(genes, "\t")
+  names(msig$MODULES2GENES) <- ids
+  msig$GENES <- data.frame(ID = unique(unlist(msig$MODULES2GENES)))
+  # msig <- new("tmod", msig)
+  msig
+}
 
-# Gene similarity score for StringDB
-# gene_score <- 900
+bader_modules <- file.path(PROJECTPATH, "data/human/enrichment/", "Human_Reactome_October_01_2023_symbol.gmt")  
+bader_modules <- importMsigDBGMT(bader_modules)
+
+df_modules_size <- map_dbl(bader_modules[["MODULES2GENES"]], length) %>% 
+  enframe(name = "ID", value = "B") %>% 
+  inner_join(bader_modules[["MODULES"]], by = "ID")
+```
+
+```{r}
+B <- sort(df_modules_size$B)
+B_max <- max(B)
+B_min <- 0
+
+B_n <- 1e3
+B_seq <- seq(B_min, B_max, length.out = B_n)
+B_ecdf <- numeric(length(B_seq))
+for (i in 1:B_n) {B_ecdf[i] <- sum(B <= B_seq[i])/length(B)}
+
+tibble(B = B_seq,
+       cdf = B_ecdf) %>% 
+  ggplot(aes(x = B, y = cdf)) + 
+  geom_line() +
+  # geom_point(size = 0.5) + 
+  scale_x_continuous(breaks = seq(0, 3000, by = 200)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  labs(x = "Number of genes in pathway module",
+       y = "ECDF") + 
+  theme_bw()
+```
+
+There are a lot of small pathways.
+
+```{r}
+n_lt_100 <- df_modules_size %>% 
+  filter(B < 100) %>% 
+  nrow()
+
+n_lt_100/nrow(df_modules_size)
+```
+
+90% of pathways have fewer than 100 genes. 
+
+```{r}
+n_lt_10 <- df_modules_size %>% 
+  filter(B < 10) %>% 
+  nrow()
+
+n_lt_10/nrow(df_modules_size)
+```
+
+39% of pathways have fewer than ~10 genes. 
+
+```{r}
+df_modules_size %>% 
+  arrange(desc(B)) %>% 
+  select(Title, B)
+```
+
+```{r}
+df_modules_size %>% 
+  arrange(B) %>% 
+  select(Title, B)
+```
+
+
+```{r}
+B_threshold <- 10
+
+pathway_ids_keep <- df_modules_size %>% 
+  filter(B >= B_threshold) %>% 
+  pull(ID)
+```
+
+
+
+# Cluster pathway enrichment
+
+```{r}
+import_human_enrichment <- function(params_id, pipeline_dir = "data/human/derivatives/v3/",
+                                    nk, k, gene_score = 950, stringdb_version = "12.0",
+                                    bader_version = 2023, file_prefix = "cluster_pathway_enrichment"){
+  
+  enrichment_dir <- file.path(pipeline_dir, params_id, "enrichment", 
+                              paste("StringDB", stringdb_version, 
+                                    "Bader", bader_version, sep = "_"), 
+                              gene_score)
+  
+  enrichment_file <- paste(file_prefix, nk, k, gene_score, sep = "_")
+  enrichment_file <- paste0(enrichment_file, ".csv")
+  enrichment_file <- file.path(enrichment_dir, enrichment_file)
+  
+  enrichment <- read_csv(enrichment_file, show_col_types = FALSE) %>% 
+    arrange(rank)
+  
+  return(enrichment)
+}
+
+
+import_mouse_enrichment <- function(params_id, pipeline_dir = "data/human/derivatives/v3/",
+                                    nk, k, gene_score = 950, stringdb_version = "12.0",
+                                    bader_version = 2023, file_prefix = "NewBader_enrichment_clusterneighbourhood_vs_brain_all"){
+  
+  enrichment_dir <- file.path(pipeline_dir, params_id, "enrichment", 
+                              paste("StringDB", stringdb_version, 
+                                    "Bader", bader_version, sep = "_"), 
+                              "NeighbourhoodEnrichment", gene_score)
+  
+  enrichment_file <- paste(file_prefix, nk, k, gene_score, sep = "_")
+  enrichment_file <- paste0(enrichment_file, ".csv")
+  enrichment_file <- file.path(enrichment_dir, enrichment_file)
+  
+  enrichment <- read_csv(enrichment_file, show_col_types = FALSE) %>% 
+    arrange(rank)
+  
+  return(enrichment)
+  
+}
+
+compute_enrichment_ROC <- function(mouse_enrichment, human_enrichment, alpha = 0.05) {
+  out <- vector(mode = "list", length = length(alpha))
+  names(out) <- alpha
+  for (i in 1:length(alpha)) {
+    response <- mouse_enrichment[["adj.P.Val"]] < alpha[i]
+    if (sum(response) > 0) {
+      predictor <- 1 - human_enrichment[["adj.P.Val"]]
+      out[[i]] <- pROC::roc(response = response, predictor = predictor, quiet = TRUE)
+    } else {
+      out[[i]] <- NA
+    }
+  }
+  return(out)
+}
+
+compute_enrichment_HGtest <- function(mouse_enrichment, human_enrichment, alpha) {
+  
+  N <- nrow(mouse_enrichment)
+  
+  df_hgtest <- expand_grid(alpha_mouse = alpha,
+                           alpha_human = alpha) %>% 
+    mutate(b = 0, B = 0, n = 0, N = N, E = 0, pval = 0)
+  for (i in 1:nrow(df_hgtest)) {
+    mouse_pass <- mouse_enrichment[["adj.P.Val"]] < df_hgtest[[i, "alpha_mouse"]]
+    human_pass <- human_enrichment[["adj.P.Val"]] < df_hgtest[[i, "alpha_human"]]
+    B <- sum(mouse_pass)
+    n <- sum(human_pass)
+    b <- sum(mouse_pass & human_pass)
+    pval <- phyper(b-1, B, N-B, n, lower.tail = FALSE)
+    df_hgtest[[i, "b"]] <- b
+    df_hgtest[[i, "B"]] <- B
+    df_hgtest[[i, "n"]] <- n
+    df_hgtest[[i, "E"]] <- (b/B)/(n/N)
+    df_hgtest[[i, "pval"]] <- pval
+  }
+  return(df_hgtest)
+}
+```
+
+
+```{r}
+human_params_id <- 700
+human_pipeline_dir <- "data/human/derivatives/v3/"
+human_pipeline_dir <- file.path(PROJECTPATH, human_pipeline_dir)
+
+mouse_params_id <- 107
+mouse_pipeline_dir <- "data/mouse/derivatives/v3/"
+mouse_pipeline_dir <- file.path(PROJECTPATH, mouse_pipeline_dir)
+
+# Gene score for StringDB
 gene_score <- 950
+```
 
-# Output directory. Create if needed
-output_dir <- file.path(output_dir, version, params_id, gene_score)
-if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+
+
+## Pre-selected pathways
+
+```{r}
+pathway_ids <- c("ADHERENS JUNCTIONS INTERACTIONS%REACTOME DATABASE ID RELEASE 38%418990",
+                 "AXON GUIDANCE%REACTOME%R-HSA-422475.7",
+                 "CA2+ PATHWAY%REACTOME%R-HSA-4086398.4",
+                 "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 38%4839726",
+                 "GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.2",
+                 "GENE EXPRESSION (TRANSCRIPTION)%REACTOME%R-HSA-74160.8",
+                 "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.12",
+                 "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 38%9620244",
+                 "MAPK FAMILY SIGNALING CASCADES%REACTOME%R-HSA-5683057.4",
+                 "MTOR SIGNALLING%REACTOME%R-HSA-165159.7",
+                 "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 38%6794362",
+                 "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 38%1227986",
+                 "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 38%1236394",
+                 "SIGNALING BY GPCR%REACTOME DATABASE ID RELEASE 38%372790",
+                 "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 38%5358351",
+                 "SIGNALING BY NOTCH%REACTOME%R-HSA-157118.6",
+                 "SIGNALING BY VEGF%REACTOME%R-HSA-194138.3",
+                 "SIGNALING BY WNT%REACTOME DATABASE ID RELEASE 38%195721",
+                 "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 38%420029",
+                 "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.7")
+```
+
+```{r}
+human_enrichment <- import_human_enrichment(params_id = human_params_id, 
+                                            pipeline_dir = human_pipeline_dir, 
+                                            nk = 2, k = 1)
+
+mouse_enrichment <- import_mouse_enrichment(params_id = mouse_params_id, 
+                                            pipeline_dir = mouse_pipeline_dir, 
+                                            nk = 4, k = 1)
+
+human_enrichment <- human_enrichment %>% 
+  filter(ID %in% pathway_ids) %>% 
+  arrange(ID)
+
+mouse_enrichment <- mouse_enrichment %>% 
+  filter(ID %in% pathway_ids) %>% 
+  arrange(ID)
+
+mouse_alpha_seq_auc <- 2:10
+mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+
+enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
+                                         human_enrichment = human_enrichment,
+                                         alpha = mouse_alpha_seq_auc)
+
+enrichment_AUC <- map_dbl(enrichment_ROC, pROC::auc)
+
+enrichment_HG <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
+                                           human_enrichment = human_enrichment,
+                                           alpha = mouse_alpha_seq_auc)
 ```
 
 
 ```{r}
-variants_dir <- "outputs/human_cluster_genetics/"
-variants_dir <- file.path(variants_dir, version, params_id)
-variants_file <- file.path(variants_dir, "cluster_variants.csv")
-
-# Import human gene variants
-df_variants <- read_csv("outputs/human_cluster_genetics/v2/700/cluster_variants.csv",
-                        show_col_types = FALSE)
-
-# Identify genes for those patients with single gene mutations
-df_variants[["gene"]] <- c(NA, NA, 
-                           "Kcnq2", "Gria2",
-                           "Rai1", "Fmr1",
-                           "Tnpo3", "Stxbp1",
-                           NA, "Rbm10", 
-                           NA, NA, 
-                           "Fgf14", "Tsc1",
-                           "Meis2", "Rfx3",
-                           "Pten", "Rtl9",
-                           "Nlgn1")
-
-# Iterate over clusters
-list_cluster_interactions <- vector(mode = "list", length = nk)
-for (k in 1:nk) {
-  
-  # Filter variants for cluster
-  cols <- c("nk2", "gene")
-  ind_k <- df_variants[["nk2"]] == k
-  df_variants_k <- df_variants[ind_k, cols]
-  df_variants_k[["queryIndex"]] <- 0:(nrow(df_variants_k)-1)
-  
-  # StringDB API query to get gene IDs
-  api_query_string_ids <- paste0("https://string-db.org/api/tsv/get_string_ids?identifiers=", 
-                                 paste(df_variants_k[["gene"]], collapse = "%0D"), 
-                                 "&species=10090&limit=1")
-  
-  df_string_ids <- read_tsv(api_query_string_ids, show_col_types = FALSE) %>% 
-    select(queryIndex, stringID = stringId, preferredName) 
-  
-  # Join StringDB IDs to variants
-  df_variants_k <- df_variants_k %>% 
-    left_join(df_string_ids, by = "queryIndex")
-  
-  # StringDB API query for gene neighbourhoods
-  api_query_interactions <- paste0("https://string-db.org/api/tsv/interaction_partners?identifiers=", 
-                                   paste(df_variants_k[["stringID"]], collapse = "%0D"),
-                                   "&species=10090&required_score=", gene_score)
-  
-  df_interactions_k <- read_tsv(api_query_interactions, show_col_types = FALSE) %>% 
-    rename(stringID_A = stringId_A, stringID_B = stringId_B) %>% 
-    left_join(df_variants_k %>% 
-                select(nk2, stringID),
-              by = c("stringID_A" = "stringID"))  
-  
-  list_cluster_interactions[[k]] <- df_interactions_k
-  
-}
-
+df_roc_all %>% 
+  mutate(nlq = -log10(mouse_alpha),
+         nlq = factor(nlq)) %>% 
+  ggplot(aes(x = fpr, y = tpr, col = nlq)) + 
+  annotate(geom = "segment",
+           x = 0, xend = 1,
+           y = 0, yend = 1,
+           size = 0.3,
+           linetype = "dashed",
+           col = "black") +
+  geom_line(size = 0.35) +
+  # facet_wrap(~NLQ_mouse_lab, nrow = 2, ncol = 2) + 
+  scale_x_continuous(limits = c(0, 1)) + 
+  scale_y_continuous(limits = c(0, 1), 
+                     expand = expansion(add = 0.1)) + 
+  # scale_color_manual(values = pathways_human_palette) + 
+  labs(x = "False positive rate",
+       y = "True positive rate") +
+  theme_bw()
 ```
 
 ```{r}
-# Background set of genes
-background_set <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Raw/sagittal_gene_table_normalized_filtered.csv"
-background_set <- read_csv(background_set, show_col_types = FALSE) %>% 
-  pull(msg.genes.acronym) %>% 
-  as.character()
+mouse_alpha_seq_auc <- 2:10
+mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
 
-# Gene modules from Reactome database
-tmod_modules <- "/projects/jacob/ClusteringAutism_125Models_Mar2020/Data/Raw/Human_Reactome_March_01_2020_symbol.gmt"
-tmod_modules <- tmodImportMSigDB(tmod_modules, format = "gmt")
+df_auc <- tibble(alpha = mouse_alpha_seq_auc,
+                 auc = 0)
+for (i in 1:nrow(df_auc)) {
+  
+  predictor <- human_enrichment %>% 
+    pull(adj.P.Val)
+  
+  outcome <- mouse_enrichment %>% 
+    mutate(pass = adj.P.Val < df_auc[[i, "alpha"]]) %>% 
+    pull(pass)
+  
+  # Compute AUC
+  df_auc[[i, "auc"]] <- pROC::auc(outcome, 1-predictor, quiet = TRUE)[1]
+  
+}
 
-# Iterate over clusters
-for (k in 1:nk) {
+ggplot(df_auc, aes(x = -log10(alpha), y = auc)) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = seq(2.0, 10.0, by = 1)) + 
+  theme_bw()
+```
+
+
+## Large clusters not pre-selected
+
+```{r}
+human_enrichment <- import_human_enrichment(params_id = human_params_id, 
+                                            pipeline_dir = human_pipeline_dir, 
+                                            nk = 2, k = 1)
+
+mouse_enrichment <- import_mouse_enrichment(params_id = mouse_params_id, 
+                                            pipeline_dir = mouse_pipeline_dir, 
+                                            nk = 4, k = 1)
+
+human_enrichment <- human_enrichment %>% 
+  filter(ID %in% pathway_ids_keep) %>% 
+  arrange(ID)
+
+mouse_enrichment <- mouse_enrichment %>% 
+  filter(ID %in% pathway_ids_keep) %>% 
+  arrange(ID)
+
+mouse_alpha_seq_auc <- 2:10
+mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+
+enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
+                                         human_enrichment = human_enrichment,
+                                         alpha = mouse_alpha_seq_auc)
+
+enrichment_AUC <- map_dbl(enrichment_ROC, pROC::auc)
+
+enrichment_HG <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
+                                           human_enrichment = human_enrichment,
+                                           alpha = mouse_alpha_seq_auc)
+
+head(enrichment_HG)
+```
+
+```{r}
+enrichment_HG %>% 
+  ggplot(aes(x = -log10(alpha_human), y = -log10(pval), col = factor(-log10(alpha_mouse)))) + 
+  geom_line() + 
+  geom_point() +
+  theme_bw()
+```
+
+
+
+
+
+
+```{r}
+df_roc_all %>% 
+  mutate(nlq = -log10(mouse_alpha),
+         nlq = factor(nlq)) %>% 
+  ggplot(aes(x = fpr, y = tpr, col = nlq)) + 
+  annotate(geom = "segment",
+           x = 0, xend = 1,
+           y = 0, yend = 1,
+           size = 0.3,
+           linetype = "dashed",
+           col = "black") +
+  geom_line(size = 0.35) +
+  # facet_wrap(~NLQ_mouse_lab, nrow = 2, ncol = 2) + 
+  scale_x_continuous(limits = c(0, 1)) + 
+  scale_y_continuous(limits = c(0, 1), 
+                     expand = expansion(add = 0.1)) + 
+  # scale_color_manual(values = pathways_human_palette) + 
+  labs(x = "False positive rate",
+       y = "True positive rate") +
+  theme_bw()
+```
+```{r}
+df_roc
+```
+
+```{r}
+mouse_pass <- mouse_enrichment %>% 
+  mutate(pass = adj.P.Val < 1e-8) %>% 
+  pull(pass)
+
+human_pass <- human_enrichment %>% 
+  mutate(pass = adj.P.Val < 8e-7) %>% 
+  pull(pass)
+
+sum(mouse_pass)
+sum(human_pass)
+sum(human_pass & mouse_pass)
+sum(human_pass & !mouse_pass)
+```
+
+
+```{r}
+mouse_alpha_seq_auc <- 2:10
+mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+
+df_auc <- tibble(alpha = mouse_alpha_seq_auc,
+                 auc = 0)
+for (i in 1:nrow(df_auc)) {
   
-  # Target gene set for cluster k
-  target_set <- unique(c(list_cluster_interactions[[k]][["preferredName_A"]],
-                         list_cluster_interactions[[k]][["preferredName_B"]]))
+  predictor <- human_enrichment %>% 
+    pull(adj.P.Val)
   
-  # Convert mouse gene names to human
-  fg <- get_homologs(target_set, "mouse", ordered = F)[["human_genes"]]
-  bg <- get_homologs(background_set, "mouse", ordered = F)[["human_genes"]]
+  outcome <- mouse_enrichment %>% 
+    mutate(pass = adj.P.Val < df_auc[[i, "alpha"]]) %>% 
+    pull(pass)
   
-  # Run hypergeometric test against pathway modules
-  tmod_hgtest_out <- tmodHGtest(fg = fg, bg = bg, mset = tmod_modules, 
-                                qval = 1.1, filter = FALSE, order.by = "pval")
+  # Compute AUC
+  df_auc[[i, "auc"]] <- pROC::auc(outcome, 1-predictor, quiet = TRUE)[1]
   
-  # Clean up output
-  tmod_hgtest_out <- tmod_hgtest_out %>% 
-    as_tibble() %>% 
-    arrange(P.Value) %>% 
-    mutate(rank = 1:nrow(.),
-           NLQ = -log(adj.P.Val),
-           k = k) %>% 
-    dplyr::select(rank, Title, NLQ, P.Value, adj.P.Val, everything()) %>% 
-    arrange(adj.P.Val)
+}
+
+ggplot(df_auc, aes(x = -log10(alpha), y = auc)) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = seq(2.0, 10.0, by = 1)) + 
+  theme_bw()
+```
+
+```{r}
+mouse_enrichment %>% 
+  filter(adj.P.Val < 1e-10) 
+```
+
+```{r}
+human_enrichment %>% 
+  filter(adj.P.Val < 0.05) 
+```
+
+
+## Higher cluster numbers, pre-selected
+
+```{r}
+human_cluster_ids <- c("3-1", "4-2", "5-2", "6-6", "7-2", "8-6")
+
+i <- 5
+
+human_cluster_id <- human_cluster_ids[i]
+human_nk <- str_split(human_cluster_id, "-")[[1]][1]
+human_k <- str_split(human_cluster_id, "-")[[1]][2]
+
+human_enrichment <- import_human_enrichment(params_id = human_params_id, 
+                                            pipeline_dir = human_pipeline_dir, 
+                                            nk = human_nk, k = human_k)
+
+matching_clusters <- "data/cross_species/v3/375/matching_clusters.csv"
+df_matching_clusters <- read_csv(file.path(PROJECTPATH, matching_clusters),
+                                 show_col_types = FALSE)
+
+df_matching_clusters_i <- df_matching_clusters %>% 
+  filter(img1_cluster_id == human_cluster_id)
+
+j <- 2
+
+mouse_cluster_id <- df_matching_clusters_i[[j, "img2_cluster_id"]]
+mouse_nk <- str_split(mouse_cluster_id, "-")[[1]][1]
+mouse_k <- str_split(mouse_cluster_id, "-")[[1]][2]
+
+mouse_enrichment <- import_mouse_enrichment(params_id = mouse_params_id, 
+                                            pipeline_dir = mouse_pipeline_dir, 
+                                            nk = mouse_nk, k = mouse_k)
+
+human_enrichment <- human_enrichment %>% 
+  filter(ID %in% pathway_ids) %>% 
+  arrange(ID)
+
+mouse_enrichment <- mouse_enrichment %>% 
+  filter(ID %in% pathway_ids) %>% 
+  arrange(ID)
+
+mouse_alpha_seq_auc <- 2:10
+mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+
+enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
+                                         human_enrichment = human_enrichment,
+                                         alpha = mouse_alpha_seq_auc)
+
+enrichment_AUC <- map_dbl(enrichment_ROC, pROC::auc)
+
+enrichment_HG <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
+                                           human_enrichment = human_enrichment,
+                                           alpha = mouse_alpha_seq_auc)
+
+head(enrichment_HG)
+```
+
+```{r}
+enrichment_HG %>% 
+  ggplot(aes(x = -log10(alpha_human), y = -log10(pval), col = factor(-log10(alpha_mouse)))) + 
+  geom_line() + 
+  geom_point() +
+  theme_bw()
+```
+
+
+N is the number of genes in the background set, i.e. the set of all genes we're testing against. 
+n is the number of genes in the cluster neighbourhood that are also in the background set. This value should be fixed for a given cluster.
+B is the number of genes in the target set, i.e. the set of genes associated with the given molecular pathway. This value should be fixed for each pathway.
+b is the number of genes in the cluster neighbourhood that are also in the target set. 
+
+
+
+## Higher cluster numbers, not pre-selected
+
+```{r}
+human_cluster_ids <- c("3-1", "4-2", "5-2", "6-6", "7-2", "8-6")
+
+i <- 5
+
+human_cluster_id <- human_cluster_ids[i]
+human_nk <- str_split(human_cluster_id, "-")[[1]][1]
+human_k <- str_split(human_cluster_id, "-")[[1]][2]
+
+human_enrichment <- import_human_enrichment(params_id = human_params_id, 
+                                            pipeline_dir = human_pipeline_dir, 
+                                            nk = human_nk, k = human_k)
+
+matching_clusters <- "data/cross_species/v3/375/matching_clusters.csv"
+df_matching_clusters <- read_csv(file.path(PROJECTPATH, matching_clusters),
+                                 show_col_types = FALSE)
+
+df_matching_clusters_i <- df_matching_clusters %>% 
+  filter(img1_cluster_id == human_cluster_id)
+
+j <- 2
+
+mouse_cluster_id <- df_matching_clusters_i[[j, "img2_cluster_id"]]
+mouse_nk <- str_split(mouse_cluster_id, "-")[[1]][1]
+mouse_k <- str_split(mouse_cluster_id, "-")[[1]][2]
+
+mouse_enrichment <- import_mouse_enrichment(params_id = mouse_params_id, 
+                                            pipeline_dir = mouse_pipeline_dir, 
+                                            nk = mouse_nk, k = mouse_k)
+
+human_enrichment <- human_enrichment %>% 
+  filter(ID %in% pathway_ids_keep) %>% 
+  arrange(ID)
+
+mouse_enrichment <- mouse_enrichment %>% 
+  filter(ID %in% pathway_ids_keep) %>% 
+  arrange(ID)
+
+mouse_alpha_seq_auc <- 2:10
+mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+
+enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
+                                         human_enrichment = human_enrichment,
+                                         alpha = mouse_alpha_seq_auc)
+
+enrichment_AUC <- map_dbl(enrichment_ROC, pROC::auc)
+
+enrichment_HG <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
+                                           human_enrichment = human_enrichment,
+                                           alpha = mouse_alpha_seq_auc)
+
+head(enrichment_HG)
+```
+
+```{r}
+enrichment_AUC %>% 
+  enframe(name = "alpha", value = "auc") %>% 
+  mutate(alpha = as.numeric(alpha)) %>% 
+  ggplot(aes(x = -log10(alpha), y = auc)) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = seq(2.0, 10.0, by = 1)) + 
+  theme_bw()
+```
+
+```{r}
+list_roc <- vector(mode = "list", length = length(enrichment_ROC))
+for (i in 1:length(enrichment_ROC)) {
+  list_roc[[i]] <- tibble(tpr = enrichment_ROC[[i]][["sensitivities"]],
+                          fpr = 1-enrichment_ROC[[i]][["specificities"]],
+                          alpha = as.numeric(names(enrichment_ROC)[i]))
+}
+
+
+df_roc <- bind_rows(list_roc)
+
+df_roc %>% 
+  # filter(alpha %in% c(1e-9)) %>%
+  ggplot(aes(x = fpr, y = tpr, col = factor(-log10(alpha)))) + 
+  annotate(geom = "segment",
+           x = 0, xend = 1,
+           y = 0, yend = 1,
+           size = 0.3,
+           linetype = "dashed",
+           col = "black") +
+  geom_line(size = 0.35) +
+  # facet_wrap(~NLQ_mouse_lab, nrow = 2, ncol = 2) + 
+  scale_x_continuous(limits = c(0, 1)) + 
+  scale_y_continuous(limits = c(0, 1), 
+                     expand = expansion(add = 0.1)) + 
+  # scale_color_manual(values = pathways_human_palette) + 
+  labs(x = "False positive rate",
+       y = "True positive rate") +
+  theme_bw()
+```
+
+
+```{r}
+enrichment_HG %>% 
+  ggplot(aes(x = -log10(alpha_human), y = -log10(pval), col = factor(-log10(alpha_mouse)))) + 
+  geom_line() + 
+  geom_point() +
+  geom_hline(yintercept = -log10(0.05)) + 
+  theme_bw()
+```
+
+N is the number of genes in the background set, i.e. the set of all genes we're testing against. 
+n is the number of genes in the cluster neighbourhood that are also in the background set. This value should be fixed for a given cluster.
+B is the number of genes in the target set, i.e. the set of genes associated with the given molecular pathway. This value should be fixed for each pathway.
+b is the number of genes in the cluster neighbourhood that are also in the target set. 
+
+
+
+## Least matching cluster
+
+```{r}
+human_cluster_ids <- c("3-1", "4-2", "5-2", "6-6", "7-2", "8-6")
+
+i <- 5
+
+human_cluster_id <- human_cluster_ids[i]
+human_nk <- str_split(human_cluster_id, "-")[[1]][1]
+human_k <- str_split(human_cluster_id, "-")[[1]][2]
+
+human_enrichment <- import_human_enrichment(params_id = human_params_id, 
+                                            pipeline_dir = human_pipeline_dir, 
+                                            nk = human_nk, k = human_k)
+
+source(file.path(PROJECTPATH, "src", "analysis.R"))
+
+# Import cluster similarity
+similarity <- import_similarity(param_id = 375, 
+                                pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3"))
+
+# Import cluster similarity permutations
+permutations <- import_similarity_permutations(param_id = 375,
+                                               pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3"))
+
+# Compute significance of correlations
+df_sim_pvals <- compute_similarity_significance(similarity = similarity,
+                                                permutations = permutations)
+
+mouse_cluster_id <- df_sim_pvals %>% 
+  filter(img1_cluster_id == human_cluster_id, img2_nk == human_nk) %>% 
+  filter(similarity == min(similarity)) %>% 
+  pull(img2_cluster_id)
+
+print(mouse_cluster_id)
+mouse_nk <- str_split(mouse_cluster_id, "-")[[1]][1]
+mouse_k <- str_split(mouse_cluster_id, "-")[[1]][2]
+
+mouse_enrichment <- import_mouse_enrichment(params_id = mouse_params_id, 
+                                            pipeline_dir = mouse_pipeline_dir, 
+                                            nk = mouse_nk, k = mouse_k)
+
+human_enrichment <- human_enrichment %>% 
+  filter(ID %in% pathway_ids_keep) %>% 
+  arrange(ID)
+
+mouse_enrichment <- mouse_enrichment %>% 
+  filter(ID %in% pathway_ids_keep) %>% 
+  arrange(ID)
+
+mouse_alpha_seq_auc <- 2:10
+mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+
+enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
+                                         human_enrichment = human_enrichment,
+                                         alpha = mouse_alpha_seq_auc)
+
+enrichment_AUC <- map_dbl(enrichment_ROC, pROC::auc)
+
+enrichment_HG <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
+                                           human_enrichment = human_enrichment,
+                                           alpha = mouse_alpha_seq_auc)
+
+head(enrichment_HG)
+```
+
+```{r}
+enrichment_AUC %>% 
+  enframe(name = "alpha", value = "auc") %>% 
+  mutate(alpha = as.numeric(alpha)) %>% 
+  ggplot()
+```
+
+
+```{r}
+list_roc <- vector(mode = "list", length = length(enrichment_ROC))
+for (i in 1:length(enrichment_ROC)) {
+  list_roc[[i]] <- tibble(tpr = enrichment_ROC[[i]][["sensitivities"]],
+                          fpr = 1-enrichment_ROC[[i]][["specificities"]],
+                          alpha = as.numeric(names(enrichment_ROC)[i]))
+}
+
+
+df_roc <- bind_rows(list_roc)
+
+df_roc %>% 
+  # filter(alpha %in% c(1e-9)) %>%
+  ggplot(aes(x = fpr, y = tpr, col = factor(-log10(alpha)))) + 
+  annotate(geom = "segment",
+           x = 0, xend = 1,
+           y = 0, yend = 1,
+           size = 0.3,
+           linetype = "dashed",
+           col = "black") +
+  geom_line(size = 0.35) +
+  # facet_wrap(~NLQ_mouse_lab, nrow = 2, ncol = 2) + 
+  scale_x_continuous(limits = c(0, 1)) + 
+  scale_y_continuous(limits = c(0, 1), 
+                     expand = expansion(add = 0.1)) + 
+  # scale_color_manual(values = pathways_human_palette) + 
+  labs(x = "False positive rate",
+       y = "True positive rate") +
+  theme_bw()
+```
+
+
+```{r}
+enrichment_HG %>% 
+  ggplot(aes(x = -log10(alpha_human), y = -log10(pval), col = factor(-log10(alpha_mouse)))) + 
+  geom_line() + 
+  geom_point() +
+  geom_hline(yintercept = -log10(0.05)) + 
+  theme_bw()
+```
+
+N is the number of genes in the background set, i.e. the set of all genes we're testing against. 
+n is the number of genes in the cluster neighbourhood that are also in the background set. This value should be fixed for a given cluster.
+B is the number of genes in the target set, i.e. the set of genes associated with the given molecular pathway. This value should be fixed for each pathway.
+b is the number of genes in the cluster neighbourhood that are also in the target set. 
+
+
+
+## All matching clusters at 7
+
+```{r}
+human_cluster_id <- "7-2"
+human_nk <- str_split(human_cluster_id, "-")[[1]][1]
+human_k <- str_split(human_cluster_id, "-")[[1]][2]
+
+human_enrichment <- import_human_enrichment(params_id = human_params_id, 
+                                            pipeline_dir = human_pipeline_dir, 
+                                            nk = human_nk, k = human_k)
+
+human_enrichment <- human_enrichment %>% 
+  filter(ID %in% pathway_ids_keep) %>% 
+  arrange(ID)
+
+mouse_nk <- human_nk
+list_mouse_enrichment <- vector(mode = "list", length = mouse_nk)
+list_mouse_AUC <- vector(mode = "list", length = mouse_nk)
+list_mouse_HG <- vector(mode = "list", length = mouse_nk)
+for (k in 1:mouse_nk) {
   
-  # Export the enrichment data to file
-  outfile <- paste("human_cluster_pathway_enrichment", nk, k, gene_score, sep = "_")
-  outfile <- paste0(outfile, ".csv")
-  outfile <- file.path(output_dir, outfile)
-  write_csv(x = tmod_hgtest_out, file = outfile)
+  mouse_enrichment <- import_mouse_enrichment(params_id = mouse_params_id, 
+                                              pipeline_dir = mouse_pipeline_dir, 
+                                              nk = mouse_nk, k = k)
+  
+  mouse_enrichment <- mouse_enrichment %>% 
+    filter(ID %in% pathway_ids_keep) %>% 
+    arrange(ID)
+  
+  list_mouse_enrichment[[k]] <- mouse_enrichment
+  
+  mouse_alpha_seq_auc <- 2:10
+  mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+  mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+  
+  enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
+                                           human_enrichment = human_enrichment,
+                                           alpha = mouse_alpha_seq_auc)
+  
+  enrichment_ROC <- enrichment_ROC[!is.na(enrichment_ROC)]
+  
+  list_mouse_AUC[[k]] <- map_dbl(enrichment_ROC, pROC::auc)
+  
+  list_mouse_HG[[k]] <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
+                                                  human_enrichment = human_enrichment,
+                                                  alpha = mouse_alpha_seq_auc) %>% 
+    mutate(k = k)
   
 }
 ```
 
+```{r}
+list_mouse_AUC_df <- vector(mode = "list", length = mouse_nk)
+for (k in 1:length(list_mouse_AUC)) {
+  list_mouse_AUC_df[[k]] <- list_mouse_AUC[[k]] %>% 
+    enframe(name = "alpha", value = "auc") %>% 
+    mutate(k = k)
+}
+
+df_AUC <- bind_rows(list_mouse_AUC_df)
+
+ggplot(df_AUC, 
+       aes(x = -log10(as.numeric(alpha)), y = auc, col = factor(k))) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(ylim = c(0.4, 1)) + 
+  scale_x_continuous(breaks = seq(2.0, 10.0, by = 1)) + 
+  theme_bw()
+```
+
+```{r}
+df_sim_pvals %>% 
+  filter(img1_cluster_id == human_cluster_id, img2_nk == 7) %>% 
+  arrange(pval) %>% 
+  select(contains("cluster_id"), similarity, pval)
+```
+
+```{r}
+df_mouse_HG <- bind_rows(list_mouse_HG)
+
+ggplot(df_mouse_HG, aes(x = -log10(alpha_human), y = -log10(pval), col = factor(-log10(alpha_mouse)))) + 
+  geom_line() + 
+  geom_point() +
+  geom_hline(yintercept = -log10(0.05)) + 
+  facet_wrap(~k) + 
+  theme_bw()
+```
+
+```{r}
+human_enrichment %>% 
+  filter(adj.P.Val < 1e-10)
+```
+
+```{r}
+mouse_pass <- list_mouse_enrichment[[1]]$adj.P.Val < 0.05
+human_pass <- human_enrichment$adj.P.Val < 0.05
+
+message(paste("Number of mouse pathways:", sum(mouse_pass)))
+message(paste("Number of human pathways:", sum(human_pass)))
+message(paste("Number of common pathways:", sum(human_pass & mouse_pass)))
+```
+
+```{r}
+mouse_pass <- list_mouse_enrichment[[4]]$adj.P.Val < 0.05
+human_pass <- human_enrichment$adj.P.Val < 0.05
+
+message(paste("Number of mouse pathways:", sum(mouse_pass)))
+message(paste("Number of human pathways:", sum(human_pass)))
+message(paste("Number of common pathways:", sum(human_pass & mouse_pass)))
+```
+
+```{r}
+mouse_pass <- list_mouse_enrichment[[2]]$adj.P.Val < 0.05
+human_pass <- human_enrichment$adj.P.Val < 0.05
+
+message(paste("Number of mouse pathways:", sum(mouse_pass)))
+message(paste("Number of human pathways:", sum(human_pass)))
+message(paste("Number of common pathways:", sum(human_pass & mouse_pass)))
+```
+
+```{r}
+mouse_pass <- list_mouse_enrichment[[7]]$adj.P.Val < 0.05
+human_pass <- human_enrichment$adj.P.Val < 0.05
+
+message(paste("Number of mouse pathways:", sum(mouse_pass)))
+message(paste("Number of human pathways:", sum(human_pass)))
+message(paste("Number of common pathways:", sum(human_pass & mouse_pass)))
+```
