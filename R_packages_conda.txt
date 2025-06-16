@@ -21,4 +21,4 @@ r-viridis=0.6.5
 r-proc=1.18.5
 r-ggbeeswarm=0.7.2
 r-ggalluvial=0.12.5
-r-tmod=0.50.13
+r-prroc=1.4
