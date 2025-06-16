@@ -178,6 +178,27 @@ compute_enrichment_ROC <- function(mouse_enrichment, human_enrichment, alpha = 0
   return(out)
 }
 
+
+compute_enrichment_PR <- function(mouse_enrichment, human_enrichment, alpha = 0.05) {
+  out <- vector(mode = "list", length = length(alpha))
+  names(out) <- alpha
+  for (i in 1:length(alpha)) {
+    response <- mouse_enrichment[["adj.P.Val"]] < alpha[i]
+    if (sum(response) > 0) {
+      predictor <- 1 - human_enrichment[["adj.P.Val"]]
+      out[[i]] <- PRROC::pr.curve(scores.class0 = predictor[response],
+                                  scores.class1 = predictor[!response],
+                                  curve = TRUE)
+    } else {
+      out[[i]] <- list(type = "PR", auc.integral = NA, 
+                       auc.davis.goadrich = NA, curve = NA)
+    }
+    out[[i]] <- c(out[[i]], true.proportion = sum(response)/length(response))
+  }
+  return(out)
+}
+
+
 compute_enrichment_HGtest <- function(mouse_enrichment, human_enrichment, alpha) {
   
   N <- nrow(mouse_enrichment)
@@ -347,60 +368,73 @@ mouse_enrichment <- mouse_enrichment %>%
   filter(ID %in% pathway_ids_keep) %>% 
   arrange(ID)
 
-mouse_alpha_seq_auc <- 2:10
-mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
-mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+mouse_alpha_seq <- 2:10
+mouse_alpha_seq <- (1/10)^mouse_alpha_seq
+mouse_alpha_seq <- c(0.05, mouse_alpha_seq)
 
 enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
                                          human_enrichment = human_enrichment,
-                                         alpha = mouse_alpha_seq_auc)
+                                         alpha = mouse_alpha_seq)
 
-enrichment_AUC <- map_dbl(enrichment_ROC, pROC::auc)
+enrichment_ROC_AUC <- map_dbl(enrichment_ROC, pROC::auc) %>% 
+  enframe(name = "alpha", value = "AUC") %>% 
+  mutate(alpha = as.numeric(alpha))
+
+enrichment_PR <- compute_enrichment_PR(mouse_enrichment = mouse_enrichment,
+                                       human_enrichment = human_enrichment,
+                                       alpha = mouse_alpha_seq)
+
+enrichment_PR_AUC <- map_dfr(.x = enrichment_PR, 
+                             .f = function(x){
+                               tibble(AUC = x[["auc.integral"]], 
+                                      Prop = x[["true.proportion"]])
+                             }, .id = "alpha") %>% 
+  mutate(alpha = as.numeric(alpha))
 
 enrichment_HG <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
                                            human_enrichment = human_enrichment,
-                                           alpha = mouse_alpha_seq_auc)
+                                           alpha = mouse_alpha_seq)
 
 head(enrichment_HG)
 ```
 
 ```{r}
+ggplot(enrichment_ROC_AUC, 
+       aes(x = -log10(alpha), y = AUC)) +
+  geom_line() + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") + 
+  geom_point() + 
+  coord_cartesian(ylim = c(0.5, 1.0)) + 
+  scale_x_continuous(breaks = round(-log10(mouse_alpha_seq), 2)) +
+  labs(y = "ROC AUC") + 
+  theme_bw()
+```
+
+```{r}
+enrichment_PR_AUC %>% 
+  rename(Chance = Prop) %>% 
+  pivot_longer(cols = -alpha, names_to = "measure", values_to = "values") %>% 
+  ggplot(aes(x = -log10(alpha), y = values)) +
+  geom_line(aes(group = measure, linetype = measure)) + 
+  geom_point() + 
+  labs(y = "PR AUC") + 
+  scale_x_continuous(breaks = round(-log10(mouse_alpha_seq), 2)) + 
+  theme_bw()
+```
+
+```{r}
 enrichment_HG %>% 
-  ggplot(aes(x = -log10(alpha_human), y = -log10(pval), col = factor(-log10(alpha_mouse)))) + 
+  ggplot(aes(x = -log10(alpha_human), y = -log10(pval), col = factor(round(-log10(alpha_mouse), 2)))) + 
   geom_line() + 
   geom_point() +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") + 
+  labs(col = "-log10 threshold") + 
+  scale_x_continuous(breaks = round(-log10(mouse_alpha_seq), 2)) + 
+  scale_y_continuous(breaks = seq(0, 20, by = 2)) + 
   theme_bw()
 ```
 
 
-
-
-
-
-```{r}
-df_roc_all %>% 
-  mutate(nlq = -log10(mouse_alpha),
-         nlq = factor(nlq)) %>% 
-  ggplot(aes(x = fpr, y = tpr, col = nlq)) + 
-  annotate(geom = "segment",
-           x = 0, xend = 1,
-           y = 0, yend = 1,
-           size = 0.3,
-           linetype = "dashed",
-           col = "black") +
-  geom_line(size = 0.35) +
-  # facet_wrap(~NLQ_mouse_lab, nrow = 2, ncol = 2) + 
-  scale_x_continuous(limits = c(0, 1)) + 
-  scale_y_continuous(limits = c(0, 1), 
-                     expand = expansion(add = 0.1)) + 
-  # scale_color_manual(values = pathways_human_palette) + 
-  labs(x = "False positive rate",
-       y = "True positive rate") +
-  theme_bw()
-```
-```{r}
-df_roc
-```
 
 ```{r}
 mouse_pass <- mouse_enrichment %>% 
@@ -788,8 +822,9 @@ human_enrichment <- human_enrichment %>%
 
 mouse_nk <- human_nk
 list_mouse_enrichment <- vector(mode = "list", length = mouse_nk)
-list_mouse_AUC <- vector(mode = "list", length = mouse_nk)
-list_mouse_HG <- vector(mode = "list", length = mouse_nk)
+list_ROC_AUC <- vector(mode = "list", length = mouse_nk)
+list_PR_AUC <- vector(mode = "list", length = mouse_nk)
+list_HG <- vector(mode = "list", length = mouse_nk)
 for (k in 1:mouse_nk) {
   
   mouse_enrichment <- import_mouse_enrichment(params_id = mouse_params_id, 
@@ -802,66 +837,81 @@ for (k in 1:mouse_nk) {
   
   list_mouse_enrichment[[k]] <- mouse_enrichment
   
-  mouse_alpha_seq_auc <- 2:10
-  mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
-  mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+  mouse_alpha_seq <- 2:10
+  mouse_alpha_seq <- (1/10)^mouse_alpha_seq
+  mouse_alpha_seq <- c(0.05, mouse_alpha_seq)
   
   enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
                                            human_enrichment = human_enrichment,
-                                           alpha = mouse_alpha_seq_auc)
+                                           alpha = mouse_alpha_seq)
   
   enrichment_ROC <- enrichment_ROC[!is.na(enrichment_ROC)]
   
-  list_mouse_AUC[[k]] <- map_dbl(enrichment_ROC, pROC::auc)
+  list_ROC_AUC[[k]] <- map_dbl(enrichment_ROC, pROC::auc) %>% 
+    enframe(name = "alpha", value = "AUC") %>% 
+    mutate(alpha = as.numeric(alpha))
+  
+  enrichment_PR <- compute_enrichment_PR(mouse_enrichment = mouse_enrichment,
+                                       human_enrichment = human_enrichment,
+                                       alpha = mouse_alpha_seq)
+  
+  list_PR_AUC[[k]] <- map_dfr(.x = enrichment_PR, 
+                             .f = function(x){
+                               tibble(AUC = x[["auc.integral"]], 
+                                      Prop = x[["true.proportion"]])
+                             }, .id = "alpha") %>% 
+  mutate(alpha = as.numeric(alpha))
   
   list_mouse_HG[[k]] <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
                                                   human_enrichment = human_enrichment,
-                                                  alpha = mouse_alpha_seq_auc) %>% 
+                                                  alpha = mouse_alpha_seq) %>% 
     mutate(k = k)
   
 }
 ```
 
+
 ```{r}
-list_mouse_AUC_df <- vector(mode = "list", length = mouse_nk)
-for (k in 1:length(list_mouse_AUC)) {
-  list_mouse_AUC_df[[k]] <- list_mouse_AUC[[k]] %>% 
-    enframe(name = "alpha", value = "auc") %>% 
-    mutate(k = k)
-}
+df_ROC_AUC <- bind_rows(list_ROC_AUC, .id = "k") %>% 
+  mutate(k = as.numeric(k))
 
-df_AUC <- bind_rows(list_mouse_AUC_df)
-
-ggplot(df_AUC, 
-       aes(x = -log10(as.numeric(alpha)), y = auc, col = factor(k))) + 
+ggplot(df_ROC_AUC, 
+       aes(x = -log10(as.numeric(alpha)), y = AUC, col = factor(k))) + 
   geom_line() + 
   geom_point() + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") + 
   coord_cartesian(ylim = c(0.4, 1)) + 
-  scale_x_continuous(breaks = seq(2.0, 10.0, by = 1)) + 
+  scale_x_continuous(breaks = round(c(-log10(0.05), seq(2.0, 10.0, by = 1)), 2))  + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  labs(x = "-log10(alpha)",
+       col = "k") + 
   theme_bw()
 ```
-
 ```{r}
-df_sim_pvals %>% 
-  filter(img1_cluster_id == human_cluster_id, img2_nk == 7) %>% 
-  arrange(pval) %>% 
-  select(contains("cluster_id"), similarity, pval)
+df_PR_AUC <- bind_rows(list_PR_AUC, .id = "k") %>% 
+  mutate(k = as.numeric(k)) %>% 
+  filter(!is.na(AUC)) %>% 
+  mutate(delta = AUC - Prop)
+
+ggplot(df_PR_AUC, aes(x = -log10(alpha), y = delta, col = factor(k))) + 
+    geom_line() + 
+  geom_point() + 
+  theme_bw()
 ```
 
 ```{r}
 df_mouse_HG <- bind_rows(list_mouse_HG)
 
-ggplot(df_mouse_HG, aes(x = -log10(alpha_human), y = -log10(pval), col = factor(-log10(alpha_mouse)))) + 
+ggplot(df_mouse_HG, aes(x = -log10(alpha_human), y = -log10(pval), col = factor(round(-log10(alpha_mouse), 2)))) + 
   geom_line() + 
   geom_point() +
   geom_hline(yintercept = -log10(0.05)) + 
   facet_wrap(~k) + 
+  # scale_y_continuous(breaks = seq(0, 20, by = 1)) + 
+  labs(x = "Human threshold (-log10(q))",
+       col = "Mouse threshold (-log10(q))",
+       y = "-log10(p)") + 
   theme_bw()
-```
-
-```{r}
-human_enrichment %>% 
-  filter(adj.P.Val < 1e-10)
 ```
 
 ```{r}
