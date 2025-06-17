@@ -109,6 +109,68 @@ compute_cluster_fractions <- function(cluster_dir, nk, k, labels, defs, mask,
 }
 
 
+compute_enrichment_HGtest <- function(mouse_enrichment, human_enrichment, alpha_mouse, alpha_human = NULL) {
+  
+  if (is.null(alpha_human)) {
+    alpha_human <- alpha_mouse
+  } 
+  
+  N <- nrow(mouse_enrichment)
+  
+  df_hgtest <- expand_grid(alpha_mouse = alpha_mouse,
+                           alpha_human = alpha_human) %>% 
+    mutate(b = 0, B = 0, n = 0, N = N, E = 0, pval = 0)
+  for (i in 1:nrow(df_hgtest)) {
+    mouse_pass <- mouse_enrichment[["adj.P.Val"]] < df_hgtest[[i, "alpha_mouse"]]
+    human_pass <- human_enrichment[["adj.P.Val"]] < df_hgtest[[i, "alpha_human"]]
+    B <- sum(mouse_pass)
+    n <- sum(human_pass)
+    b <- sum(mouse_pass & human_pass)
+    pval <- phyper(b-1, B, N-B, n, lower.tail = FALSE)
+    df_hgtest[[i, "b"]] <- b
+    df_hgtest[[i, "B"]] <- B
+    df_hgtest[[i, "n"]] <- n
+    df_hgtest[[i, "E"]] <- (b/B)/(n/N)
+    df_hgtest[[i, "pval"]] <- pval
+  }
+  return(df_hgtest)
+}
+
+compute_enrichment_PR <- function(mouse_enrichment, human_enrichment, alpha = 0.05) {
+  out <- vector(mode = "list", length = length(alpha))
+  names(out) <- alpha
+  for (i in 1:length(alpha)) {
+    response <- mouse_enrichment[["adj.P.Val"]] < alpha[i]
+    if (sum(response) > 0) {
+      predictor <- 1 - human_enrichment[["adj.P.Val"]]
+      out[[i]] <- PRROC::pr.curve(scores.class0 = predictor[response],
+                                  scores.class1 = predictor[!response],
+                                  curve = TRUE)
+    } else {
+      out[[i]] <- list(type = "PR", auc.integral = NA, 
+                       auc.davis.goadrich = NA, curve = NA)
+    }
+    out[[i]] <- c(out[[i]], true.proportion = sum(response)/length(response))
+  }
+  return(out)
+}
+
+
+compute_enrichment_ROC <- function(mouse_enrichment, human_enrichment, alpha = 0.05) {
+  out <- vector(mode = "list", length = length(alpha))
+  names(out) <- alpha
+  for (i in 1:length(alpha)) {
+    response <- mouse_enrichment[["adj.P.Val"]] < alpha[i]
+    if (sum(response) > 0) {
+      predictor <- 1 - human_enrichment[["adj.P.Val"]]
+      out[[i]] <- pROC::roc(response = response, predictor = predictor, quiet = TRUE)
+    } else {
+      out[[i]] <- NA
+    }
+  }
+  return(out)
+}
+
 
 compute_similarity_significance <- function(similarity, permutations, off_diag = 1) {
   
@@ -242,6 +304,45 @@ import_cluster_map <- function(imgdir, nk, k, mask = NULL, flatten = TRUE, thres
   }
   
   return(img)
+}
+
+import_enrichment_human <- function(params_id, pipeline_dir = "data/human/derivatives/v3/",
+                                    nk, k, gene_score = 950, stringdb_version = "12.0",
+                                    bader_version = 2023, file_prefix = "cluster_pathway_enrichment"){
+  
+  enrichment_dir <- file.path(pipeline_dir, params_id, "enrichment", 
+                              paste("StringDB", stringdb_version, 
+                                    "Bader", bader_version, sep = "_"), 
+                              gene_score)
+  
+  enrichment_file <- paste(file_prefix, nk, k, gene_score, sep = "_")
+  enrichment_file <- paste0(enrichment_file, ".csv")
+  enrichment_file <- file.path(enrichment_dir, enrichment_file)
+  
+  enrichment <- read_csv(enrichment_file, show_col_types = FALSE) %>% 
+    arrange(rank)
+  
+  return(enrichment)
+}
+
+import_enrichment_mouse <- function(params_id, pipeline_dir = "data/human/derivatives/v3/",
+                                    nk, k, gene_score = 950, stringdb_version = "12.0",
+                                    bader_version = 2023, file_prefix = "NewBader_enrichment_clusterneighbourhood_vs_brain_all"){
+  
+  enrichment_dir <- file.path(pipeline_dir, params_id, "enrichment", 
+                              paste("StringDB", stringdb_version, 
+                                    "Bader", bader_version, sep = "_"), 
+                              "NeighbourhoodEnrichment", gene_score)
+  
+  enrichment_file <- paste(file_prefix, nk, k, gene_score, sep = "_")
+  enrichment_file <- paste0(enrichment_file, ".csv")
+  enrichment_file <- file.path(enrichment_dir, enrichment_file)
+  
+  enrichment <- read_csv(enrichment_file, show_col_types = FALSE) %>% 
+    arrange(rank)
+  
+  return(enrichment)
+  
 }
 
 
