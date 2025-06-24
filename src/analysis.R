@@ -172,6 +172,60 @@ compute_enrichment_ROC <- function(mouse_enrichment, human_enrichment, alpha = 0
 }
 
 
+simulate_enrichment_null <- function(enrichment, n_true, method = "ROC", n_sim = 500){
+  
+  if (!(method %in% c("ROC", "PR", "HG"))) {stop()}
+  
+  # Iterate over number of pathways enriched
+  out <- vector(mode = "list", length = length(n_true))
+  for (i in 1:length(n_true)) {
+    
+    # Iterate over simulations
+    out_i <- vector(mode = "list", length = n_sim)
+    for (s in 1:n_sim) {
+      
+      # Randomly sample which pathways are enriched for the given number 
+      target <- mutate(enrichment, adj.P.Val = 1)
+      set.seed(s)
+      idx_flip <- sample(1:nrow(target), size = n_true[i], replace = FALSE)
+      target$adj.P.Val[idx_flip] <- 0
+      
+      if (method == "ROC") {
+        out_i[[s]] <- compute_enrichment_ROC(mouse_enrichment = target, 
+                                             human_enrichment = enrichment,
+                                             alpha = 0.05) %>% 
+          map_dbl(pROC::auc) %>% 
+          enframe(name = "alpha", value = "AUC") %>% 
+          mutate(n_enriched = n_true[i]) %>% 
+          select(-alpha)
+      } else if (method == "PR") {
+        out_i[[s]] <- compute_enrichment_PR(mouse_enrichment = target, 
+                                            human_enrichment = enrichment,
+                                            alpha = 0.05) %>% 
+          map_dfr(.f = function(x){tibble(AUC = x[["auc.integral"]], 
+                                          Prop = x[["true.proportion"]])},
+                  .id = "alpha") %>% 
+          mutate(n_enriched = n_true[i]) %>% 
+          select(-alpha)
+      } else if (method == "HG") {
+        out_i[[s]] <- compute_enrichment_HGtest(mouse_enrichment = target, 
+                                                human_enrichment = enrichment,
+                                                alpha_mouse = 0.05,
+                                                alpha_human = c(0.05, 1e-3, 1e-5, 1e-10))
+      } else {
+        stop()
+      }
+    }
+    
+    out[[i]] <- bind_rows(out_i, .id = "sample")
+    
+  }
+  
+  return(bind_rows(out))
+  
+}
+
+
 compute_similarity_significance <- function(similarity, permutations, off_diag = 1) {
   
   nk_max_1 <- max(similarity[["img1_nk"]])
