@@ -1898,10 +1898,6 @@ df_human_cluster_variants_long %>%
 ```
 
 ```{r}
-df_human_variants
-```
-
-```{r}
 df_human_group_A_ranks <- readxl::read_excel(file.path(output_dir, "human_cluster_pathway_ranks.xlsx"))
 
 df_human_group_A_ranks <- df_human_group_A_ranks %>% 
@@ -1915,22 +1911,56 @@ ranks_matching <- df_human_group_A_ranks %>%
 
 wilcox.test(ranks_matching, mu = 0.5, alternative = "less")
 ```
+
 ```{r}
-ggplot(filter(df_human_group_A_ranks, match == 1), 
-       aes(x = norm_rank, y = fct_rev(human_cluster_id))) + 
-  geom_segment(aes(xend = 1, yend = fct_rev(human_cluster_id))) + 
-  geom_point() +
-  geom_vline(xintercept = 0.5, linetype = "dashed") + 
-  scale_x_reverse(breaks = seq(1, 0, by = -0.1)) +
-  coord_cartesian(xlim = c(1, 0)) +
-  labs(y = "Human cluster",
-       x = "Normalized rank") +
-  theme_bw()
+human_cluster_ids <- df_human_group_A_ranks %>% 
+  filter(match == 1) %>% 
+  pull(human_cluster_id)
+
+n_perm <- 1e4
+mat_sample_ranks <- matrix(data = 0, nrow = n_perm, ncol = length(human_cluster_ids))
+colnames(mat_sample_ranks) <- human_cluster_ids
+
+for (i in 1:n_perm) {
+  set.seed(i)
+  mat_sample_ranks[i,] <-
+    df_human_group_A_ranks %>% 
+    select(human_cluster_id, mouse_cluster_id, match) %>% 
+    group_by(human_cluster_id) %>% 
+    mutate(rank = sample(1:n(), size = n(), replace = FALSE),
+           norm_rank = (rank - 1)/(n() - 1)) %>% 
+    ungroup() %>% 
+    filter(match == 1) %>% 
+    pull(norm_rank) 
+}
+
+sample_rank_means <- rowSums(mat_sample_ranks)/ncol(mat_sample_ranks)
+
+true_rank_mean <- df_human_group_A_ranks %>% 
+  filter(match == 1) %>% 
+  pull(norm_rank) %>% 
+  mean()
+
+sum(sample_rank_means <= true_rank_mean)/n_perm
 ```
 
 ```{r}
-filter(df_human_group_A_ranks, match == 1)
+ggplot(tibble(x = sample_rank_means),
+       aes(x = x)) + 
+  geom_histogram(fill = "grey80",
+                 col = "grey20",
+                 bins = 30) +
+  annotate(geom = "segment",
+           x = true_rank_mean, xend = true_rank_mean,
+           y = 0, yend = 2000,
+           linetype = "dashed", col = "red") + 
+  coord_cartesian(ylim = c(0, 1000)) + 
+  labs(x = "Normalized rank",
+       y = "n") + 
+  theme_bw()
 ```
+
+
 
 
 
