@@ -1,0 +1,488 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-06-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r environment}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+setwd(PROJECTPATH)
+```
+
+```{r}
+source(file.path(SRCPATH, "analysis.R"))
+
+
+importMsigDBGMT <- function(file) {
+  # stop("This does not work at the present.")
+  msig <- list()
+  con <- file(file, open = "r")
+  lines <- readLines(con)
+  close(con)
+  ids <- gsub("\t.*", "", lines)
+  desc <- gsub("^[^\t]*\t([^\t]*)\t.*", "\\1", lines)
+  genes <- gsub("^[^\t]*\t[^\t]*\t(.*)", "\\1", lines)
+  msig$MODULES <- data.frame(ID = ids, Title = desc, stringsAsFactors = FALSE)
+  if (any(duplicated(msig$MODULES$ID))) {
+    warning("Duplicated IDs found; automatic IDs will be generated")
+    msig$MODULES$oldID <- msig$MODULES$ID
+    msig$MODULES$ID <- make.unique(as.character(msig$MODULES$ID))
+  }
+  rownames(msig$MODULES) <- msig$MODULES[, "ID"]
+  msig$MODULES2GENES <- strsplit(genes, "\t")
+  names(msig$MODULES2GENES) <- ids
+  msig$GENES <- data.frame(ID = unique(unlist(msig$MODULES2GENES)))
+  # msig <- new("tmod", msig)
+  msig
+}
+
+# Function to estimate cluster metrics over a range of solutions
+estimate_cluster_metrics <- function (W, NUMC = 2:5){
+  if (min(NUMC) == 1) {
+    warning("Note that we always assume there are more than one cluster.")
+    NUMC <- NUMC[NUMC > 1]
+  }
+  W <- (W + t(W))/2
+  diag(W) <- 0
+  if (length(NUMC) <= 0) {
+    warning(paste("Invalid NUMC provided, must be an integer vector", 
+                  "with atleast one other number than 1.", "Using default NUMC=c(2,3,4,5)", 
+                  sep = ""))
+    NUMC <- 2:5
+  }
+  degs <- rowSums(W)
+  degs[degs == 0] <- .Machine$double.eps
+  D <- diag(degs)
+  L <- D - W
+  Di <- diag(1/sqrt(degs))
+  L <- Di %*% L %*% Di
+  eigs <- eigen(L)
+  eigs_order <- sort(eigs$values, index.return = T)$ix
+  eigs$values <- eigs$values[eigs_order]
+  eigs$vectors <- eigs$vectors[, eigs_order]
+  eigengap <- abs(diff(eigs$values))
+  quality <- list()
+  for (c_index in 1:length(NUMC)) {
+    ck <- NUMC[c_index]
+    UU <- eigs$vectors[, 1:ck]
+    EigenvectorsDiscrete <- SNFtool:::.discretisation(UU)[[1]]
+    EigenVectors <- EigenvectorsDiscrete^2
+    temp1 <- EigenVectors[do.call(order, lapply(1:ncol(EigenVectors), 
+                                                function(i) EigenVectors[, i])), ]
+    temp1 <- t(apply(temp1, 1, sort, TRUE))
+    quality[[c_index]] <- (1 - eigs$values[ck + 1])/(1 - 
+                                                       eigs$values[ck]) * sum(sum(diag(1/(temp1[, 1] + .Machine$double.eps)) %*% 
+                                                                                    temp1[, 1:max(2, ck - 1)]))
+  }
+  
+  out <- tibble(nk = NUMC,
+                eigengap = eigengap[NUMC],
+                rotation = unlist(quality))
+  
+  return(out)
+}
+
+jaccard_index <- function(x, y) {length(intersect(x, y))/length(union(x, y))}
+
+jaccard_fitness <- function(params_id, pipeline_dir, nk, gene_score = 950, B_threshold = 10, q_threshold = 0.05) {
+
+  dj <- 0
+  for (ki in 1:nk) {
+    if (ki > 1) {
+      for (kj in 1:(ki-1)) {
+        
+        x <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nk, k = ki) %>%
+          filter(B >= B_threshold, adj.P.Val < q_threshold) %>%
+          pull(Title)
+        
+        y <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nk, k = kj) %>%
+          filter(B >= B_threshold, adj.P.Val < q_threshold) %>%
+          pull(Title)
+        
+        dj <- dj + (1-jaccard_index(x = x, y = y))
+        
+      }
+    }
+  }
+  
+  dj <- (2/(nk*(nk-1)))*dj
+  
+  return(dj)
+  
+}
+```
+
+```{r}
+output_dir <- file.path(PROJECTPATH, "analyses", "primary", "outputs", "cluster_optimality")
+if (!dir.exists(output_dir)){
+  dir.create(output_dir, recursive = TRUE)
+}
+```
+
+
+```{r}
+mouse_params_id <- 107
+mouse_pipeline_dir <- "data/mouse/derivatives/v3/"
+mouse_pipeline_dir <- file.path(PROJECTPATH, mouse_pipeline_dir)
+
+# Gene score for StringDB
+gene_score <- 950
+```
+
+```{r}
+df_jaccard <- tibble(nk = 2:10,
+                     jaccard = 0)
+for (i in 1:nrow(df_jaccard)) {
+  df_jaccard[[i, "jaccard"]] <- jaccard_fitness(params_id = mouse_params_id,
+                                                pipeline_dir = mouse_pipeline_dir,
+                                                nk = df_jaccard[[i, "nk"]], 
+                                                q_threshold = 0.05)
+}
+
+ggplot(df_jaccard, aes(x = nk, y = jaccard)) + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = 1:20) + 
+  labs(x = "nk",
+       y = "Jaccard fitness") + 
+  theme_bw()
+```
+
+```{r}
+q_thresholds <- c(0.05, 10^-c(2:6))
+
+list_jaccard <- vector(mode = "list", length = length(q_thresholds))
+for (l in 1:length(list_jaccard)) {
+  df_jaccard <- tibble(nk = 2:10, jaccard = 0)
+  for (i in 1:nrow(df_jaccard)) {
+    df_jaccard[[i, "jaccard"]] <- jaccard_fitness(params_id = mouse_params_id,
+                                                  pipeline_dir = mouse_pipeline_dir,
+                                                  nk = df_jaccard[[i, "nk"]], 
+                                                  q_threshold = q_thresholds[l])
+  }
+  list_jaccard[[l]] <- df_jaccard %>% 
+    mutate(q_threshold = q_thresholds[l])
+}
+
+df_jaccard <- bind_rows(list_jaccard) %>% 
+  mutate(nlq = -log10(q_threshold))
+
+plt <- ggplot(df_jaccard, aes(x = nk, y = jaccard, col = nlq, group = nlq)) + 
+  geom_line() + 
+  geom_point() +
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Jaccard fitness",
+       col = "-log10(q)") + 
+  theme_bw()
+
+outfile <- "jaccard_fitness_qthresholds.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"), 
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+
+```{r}
+# Cluster directories
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters", str_c("resolution_", mouse_cluster_resolution))
+
+# Mouse affinity matrix
+mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
+load(mouse_affinity_file)
+mat_mouse_affinity <- W
+df_mouse_affinity <- as_tibble(mat_mouse_affinity)
+
+# Max nk to examine
+nk_max <- 100
+
+# Mouse optimal nk
+estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
+
+# Get cluster metric distributions
+df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:nk_max)
+```
+
+
+```{r}
+eigengap <- c(0.051, 0.049, 0.086, 0.056, 0.034, 0.055, 0.013, 0.012, 0.025)
+df_eigengap <- tibble(nk = 2:10,
+                      eigengap = eigengap)
+
+plt <- ggplot(df_eigengap, aes(x = nk, y = eigengap)) + 
+  geom_line() + 
+  geom_point() +
+    coord_cartesian(ylim = c(0, 0.1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  scale_y_continuous(breaks = seq(0, 0.2, 0.01)) + 
+  labs(x = "nk",
+       y = "Eigengap") + 
+  theme_bw()
+
+outfile <- "eigengap.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"), 
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+```{r}
+df_fit_input <- inner_join(df_eigengap, filter(df_jaccard, q_threshold == 0.05), by = "nk") %>% 
+  mutate(eigengap = (eigengap - min(eigengap))/(max(eigengap) - min(eigengap)),
+         jaccard = (jaccard - min(jaccard))/(max(jaccard) - min(jaccard)))
+
+
+alpha_seq <- seq(0, 1, by = 0.2)
+list_fit <- vector(mode = "list", length = length(alpha_seq))
+for (i in 1:length(alpha_seq)) {
+  alpha <- alpha_seq[i]
+  list_fit[[i]] <- df_fit_input %>% 
+    mutate(fitness = (1-alpha)*eigengap + alpha*jaccard,
+           alpha = alpha) 
+}
+
+
+df_fit <- bind_rows(list_fit)
+
+df_fit_long <- df_fit %>%
+  pivot_longer(cols = c("eigengap", "jaccard", "fitness"), names_to = "measure", values_to = "score") %>% 
+  mutate(measure = factor(measure, levels = c("eigengap", "jaccard", "fitness")),
+         label = paste("alpha =", alpha))
+
+plt <- ggplot(df_fit_long, aes(x = nk, y = score, col = measure, alpha = measure)) + 
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~label) +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 1:10) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_color_manual(values = c("red", "blue", "black"), 
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  scale_alpha_manual(values = c(0.4, 0.4, 1.0),
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  labs(x = "nk", y = "Fitness score", col = "Measure", alpha = "Measure") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+
+outfile <- "fitness_minmax.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"), 
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+
+```{r}
+df_fit_input <- inner_join(df_eigengap, filter(df_jaccard, q_threshold == 0.05), by = "nk") %>% 
+  mutate(eigengap = eigengap/max(eigengap),
+         jaccard = jaccard/max(jaccard))
+
+
+alpha_seq <- seq(0, 1, by = 0.2)
+list_fit <- vector(mode = "list", length = length(alpha_seq))
+for (i in 1:length(alpha_seq)) {
+  alpha <- alpha_seq[i]
+  list_fit[[i]] <- df_fit_input %>% 
+    mutate(fitness = (1-alpha)*eigengap + alpha*jaccard,
+           alpha = alpha) 
+}
+
+
+df_fit <- bind_rows(list_fit)
+
+df_fit_long <- df_fit %>%
+  pivot_longer(cols = c("eigengap", "jaccard", "fitness"), names_to = "measure", values_to = "score") %>% 
+  mutate(measure = factor(measure, levels = c("eigengap", "jaccard", "fitness")),
+         label = paste("alpha =", alpha))
+
+plt <- ggplot(df_fit_long, aes(x = nk, y = score, col = measure, alpha = measure)) + 
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~label) +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 1:10) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_color_manual(values = c("red", "blue", "black"), 
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  scale_alpha_manual(values = c(0.4, 0.4, 1.0),
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  labs(x = "nk", y = "Fitness score", col = "Measure", alpha = "Measure") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+
+outfile <- "fitness_max.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"), 
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+```{r}
+ggplot(df_fit, aes(x = nk, y = fitness, col = alpha, group = alpha)) + 
+  geom_line() + 
+  geom_point() +
+  scale_color_distiller(palette ="RdYlBu", direction = 1) + 
+    scale_x_continuous(breaks = 1:10) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  labs(x = "nk", y = "Fitness score", col = "Alpha") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+df_fit_long %>% 
+  filter(measure == "fitness") %>% 
+  group_by(alpha) %>% 
+  filter(score == max(score)) %>% 
+  ungroup() %>% 
+  select(alpha, score, nk)
+```
+
+
+# Entropy approach
+
+
+```{r pathways-import}
+bader_modules <- file.path(PROJECTPATH, "data/human/enrichment/", "Human_Reactome_October_01_2023_symbol.gmt")  
+bader_modules <- importMsigDBGMT(bader_modules)
+
+df_modules_size <- map_dbl(bader_modules[["MODULES2GENES"]], length) %>% 
+  enframe(name = "ID", value = "B") %>% 
+  inner_join(bader_modules[["MODULES"]], by = "ID")
+
+# Pathway size threshold
+B_threshold <- 10
+
+# Pathways to keep
+pathway_ids_keep <- df_modules_size %>% 
+  filter(B >= B_threshold) %>% 
+  pull(ID)
+```
+
+
+```{r}
+mutual_information <- function(params_id, pipeline_dir, nk, gene_score = 950, q_threshold = 0.05) {
+
+  MI_tot <- 0
+  for (ki in 1:nk) {
+    if (ki > 1) {
+      for (kj in 1:(ki-1)) {
+        
+        x <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nk, k = ki) %>%
+          filter(ID %in% pathway_ids_keep) %>% 
+          arrange(ID) %>% 
+          mutate(enriched = adj.P.Val < q_threshold) %>% 
+          pull(enriched)
+        
+        y <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nk, k = kj) %>%
+          filter(ID %in% pathway_ids_keep) %>% 
+          arrange(ID) %>% 
+          mutate(enriched = adj.P.Val < q_threshold) %>% 
+          pull(enriched)
+        
+        # dj <- dj + (1-jaccard_index(x = x, y = y))
+        
+        # Joint probabilities
+        p_xy <- matrix(data = 0, nrow = 2, ncol = 2)
+        p_xy[1,1] <- sum(!x & !y)
+        p_xy[1,2] <- sum(!x & y)
+        p_xy[2,1] <- sum(x & !y)
+        p_xy[2,2] <- sum(x & y)
+        p_xy <- p_xy/N
+        
+        # Compute mutual information
+        MI <- 0
+        for (i in 1:nrow(p_xy)) {
+          for (j in 1:ncol(p_xy)) {
+            if (p_xy[i,j] != 0) {
+              MI <- MI + p_xy[i,j]*log(p_xy[i,j]/(rowSums(p_xy)[i]*colSums(p_xy)[j]), base = 2)
+            }
+          }
+        }
+        
+        MI_tot <- MI_tot + (1-MI)
+        
+      }
+    }
+  }
+  
+  MI_tot <- (2/(nk*(nk-1)))*MI_tot
+  
+  return(MI_tot)
+  
+}
+```
+
+```{r}
+df_MI <- tibble(nk = 2:10, MI = 0)
+for (i in 1:nrow(df_MI)) {
+  df_MI[[i, "MI"]] <- mutual_information(params_id = mouse_params_id,
+                                          pipeline_dir = mouse_pipeline_dir,
+                                          nk = df_MI[[i, "nk"]])
+}
+
+ggplot(df_MI, aes(x = nk, y = MI)) + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = 1:20) + 
+  labs(x = "nk",
+       y = "1 - MI") + 
+  theme_bw()
+```
+
+```{r}
+df_jaccard %>% 
+  filter(q_threshold == 0.05) %>% 
+  select(nk, jaccard) %>% 
+  inner_join(df_MI, by = "nk") %>% 
+  pivot_longer(cols = -nk, names_to = "metric", values_to = "value") %>% 
+  group_by(metric) %>% 
+  mutate(value = (value - min(value))/(max(value) - min(value))) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = nk, y = value, col = metric)) + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = 1:10) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  labs(x = "nk", y = "Normalized (min-max) score", col = "Metric") + 
+  scale_color_discrete(labels = c("Jaccard", "Mutual information")) + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+```
+
