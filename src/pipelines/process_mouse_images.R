@@ -15,19 +15,20 @@ SRCPATH <- Sys.getenv("SRCPATH")
 # Functions ------------------------------------------------------------------
 
 source(file.path(SRCPATH, "Clustering_Functions_AB.R"))
+source(file.path(SRCPATH, "processing.R"))
 
 
 # Main -----------------------------------------------------------------------
 
 # Parameter set ID
-params_id <- "001"
+params_id <- "107"
 
 # Image resolution 
 resolution_um <- 200
 resolution_mm <- resolution_um/1000
 
 # Cluster parameters
-cluster_nk_max <- 2
+cluster_nk_max <- 10
 cluster_metric <- "correlation"
 cluster_K <- 10
 cluster_sigma <- 0.5
@@ -37,24 +38,28 @@ cluster_t <- 20
 centroid_method <- "mean"
 
 # Pipeline directory
-pipeline_dir <- "data/mouse/derivatives/"
+pipeline_dir <- "data/mouse/derivatives/v3/"
 if (!dir.exists(pipeline_dir)) {
   dir.create(pipeline_dir, recursive = TRUE)
 }
 
 # Export parameter set to metadata
 metadata <- file.path(pipeline_dir, "metadata.csv")
-df_metadata <- tibble(dataset = "MICe",
-                      resolution = resolution_mm,
-                      cluster_resolution = resolution_mm,
-                      cluster_nk_max = cluster_nk_max,
-                      cluster_metric = cluster_metric,
-                      cluster_K = cluster_K,
-                      cluster_sigma = cluster_sigma,
-                      cluster_t = cluster_t, 
-                      centroid_method = centroid_method,
-                      id = params_id)
-write_csv(x = df_metadata, file = metadata)
+if (file.exists(metadata)) {
+  df_metadata <- read_csv(metadata, show_col_types = FALSE)
+} else {
+  df_metadata <- tibble(dataset = "MICe",
+                        resolution = resolution_mm,
+                        cluster_resolution = resolution_mm,
+                        cluster_nk_max = cluster_nk_max,
+                        cluster_metric = cluster_metric,
+                        cluster_K = cluster_K,
+                        cluster_sigma = cluster_sigma,
+                        cluster_t = cluster_t, 
+                        centroid_method = centroid_method,
+                        id = params_id)
+  write_csv(x = df_metadata, file = metadata)
+}
 
 # Update pipeline directory with parameter set ID
 pipeline_dir <- file.path(pipeline_dir, params_id)
@@ -82,7 +87,21 @@ paths <- list(
 )
 
 # Create output directories
-for (path in paths[-1]) {dir.create(path, recursive = TRUE)}
+for (path in paths[-1]) {
+  if (!dir.exists(path)) {
+    dir.create(path, recursive = TRUE)
+  }
+}
+
+# Copy model names file into pipeline directory
+names_file_in <- file.path(registration_dir, "Names_Paper.csv")
+names_file_out <- "model_names.csv"
+names_file_out <- file.path(pipeline_dir, names_file_out)
+df_names <- read_csv(names_file_in, show_col_types = FALSE) %>% 
+  select(file = Name, ID = NewName) %>% 
+  mutate(file = paste0(file, ".mnc"))
+write_csv(x = df_names, file = names_file_out)
+
 
 # Generate list of models
 model_list <- MakeModelList(
@@ -126,17 +145,24 @@ effect_size_data_matrix_rel[is.nan(effect_size_data_matrix_rel)] <- 0
 
 message("Generating clusters...")
 
-W <- SNFCombine(Data1 = effect_size_data_matrix_abs,
-                Data2 = effect_size_data_matrix_rel,
-                K = cluster_K, alpha = cluster_sigma, 
-                T = cluster_t, distfunc = "cor",
-                output_dir = paths[["clusters"]])
+# Run similarity network fusion
+outfile <- file.path(paths[["clusters"]], "affinity.csv")
+W <- similarity_network(x1 = effect_size_data_matrix_abs,
+                        x2 = effect_size_data_matrix_rel,
+                        metric = cluster_metric, K = cluster_K,
+                        sigma = cluster_sigma, t = cluster_t, 
+                        outfile = outfile)
 
+# Identify clusters from fused affinity matrix
+outfile <- file.path(paths[["clusters"]], "clusters.csv")
+clusters <- create_clusters(W = W, nk = cluster_nk_max)
+clusters[["ID"]] <- paste0(clusters[["ID"]], ".mnc")
+write.csv(x = clusters, file = outfile, row.names = FALSE)
 
-Clusters <- CreateClusters(num_clusters = as.character(cluster_nk_max),
-                           cluster_method = "spectral",
-                           output_dir = paths[["clusters"]],
-                           NameFile = file.path(registration_dir, "Names_Paper.csv"))
+# Clusters <- CreateClusters(num_clusters = as.character(cluster_nk_max),
+#                            cluster_method = "spectral",
+#                            output_dir = paths[["clusters"]],
+#                            NameFile = file.path(registration_dir, "Names_Paper.csv"))
 
 
 # Centroids -------------------------------------------------------------------
@@ -152,4 +178,27 @@ for (jtype in jacobians) {
                            dir_determinants = paths[["jacobians"]],
                            output_dir = paths[["centroids"]])
 }
+
+
+# Implementation consistent with human
+# Would need to update "clean_mouse_pipeline_outputs.py"
+
+# mask <- file.path(paths[["jacobians"]], "scanbase_second_level-nlin-3_mask_200um.mnc")
+# for (jtype in jacobians) {
+# 
+#   clusters_jtype <- clusters %>% 
+#     as_tibble() %>% 
+#     mutate(ID = file.path(paths[["effect_sizes"]], resolution_um, ID),
+#            ID = str_replace(ID, ".mnc", 
+#                             paste0("_ES_", str_to_title(jtype),
+#                                    "_", resolution_um, ".mnc"))) %>% 
+#     column_to_rownames("ID")
+#   
+#   outdir <- file.path(paths[["centroids"]], "test", jtype)
+#   if (!dir.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
+#   for (j in 1:ncol(clusters_jtype)) {
+#     compute_cluster_centroids(i = j, clusters = clusters_jtype, mask = mask,
+#                               method = centroid_method, outdir = outdir)
+#   }
+# }
 
