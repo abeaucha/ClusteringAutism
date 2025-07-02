@@ -8,15 +8,17 @@ date: "2025-06-26"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+# Initialization
+
 ```{r environment}
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
 SRCPATH <- Sys.getenv("SRCPATH")
 setwd(PROJECTPATH)
 ```
 
-```{r}
+```{r functions}
 source(file.path(SRCPATH, "analysis.R"))
-
 
 importMsigDBGMT <- function(file) {
   # stop("This does not work at the present.")
@@ -87,9 +89,10 @@ estimate_cluster_metrics <- function (W, NUMC = 2:5){
   return(out)
 }
 
+# Jaccard index of two sets
 jaccard_index <- function(x, y) {length(intersect(x, y))/length(union(x, y))}
 
-jaccard_fitness <- function(params_id, pipeline_dir, nk, gene_score = 950, B_threshold = 10, q_threshold = 0.05) {
+jaccard_fitness <- function(params_id, pipeline_dir, nk, gene_score = 950, B_threshold = 10, q_threshold = 0.05, pathway_ids = NULL) {
 
   dj <- 0
   for (ki in 1:nk) {
@@ -99,16 +102,23 @@ jaccard_fitness <- function(params_id, pipeline_dir, nk, gene_score = 950, B_thr
         x <- import_enrichment_mouse(params_id = params_id,
                                      pipeline_dir = pipeline_dir,
                                      gene_score = gene_score,
-                                     nk = nk, k = ki) %>%
-          filter(B >= B_threshold, adj.P.Val < q_threshold) %>%
-          pull(Title)
+                                     nk = nk, k = ki)
         
         y <- import_enrichment_mouse(params_id = params_id,
                                      pipeline_dir = pipeline_dir,
                                      gene_score = gene_score,
-                                     nk = nk, k = kj) %>%
-          filter(B >= B_threshold, adj.P.Val < q_threshold) %>%
-          pull(Title)
+                                     nk = nk, k = kj)
+        
+        if (is.null(pathway_ids)) {
+          x <- filter(x, B >= B_threshold, adj.P.Val < q_threshold)
+          y <- filter(y, B >= B_threshold, adj.P.Val < q_threshold)
+        } else {
+          x <- filter(x, ID %in% pathway_ids, adj.P.Val < q_threshold)
+          y <- filter(y, ID %in% pathway_ids, adj.P.Val < q_threshold)
+        }
+        
+        x <- x[["Title"]]
+        y <- y[["Title"]]
         
         dj <- dj + (1-jaccard_index(x = x, y = y))
         
@@ -123,15 +133,12 @@ jaccard_fitness <- function(params_id, pipeline_dir, nk, gene_score = 950, B_thr
 }
 ```
 
-```{r}
+```{r paths}
 output_dir <- file.path(PROJECTPATH, "analyses", "primary", "outputs", "cluster_optimality")
 if (!dir.exists(output_dir)){
   dir.create(output_dir, recursive = TRUE)
 }
-```
 
-
-```{r}
 mouse_params_id <- 107
 mouse_pipeline_dir <- "data/mouse/derivatives/v3/"
 mouse_pipeline_dir <- file.path(PROJECTPATH, mouse_pipeline_dir)
@@ -140,70 +147,13 @@ mouse_pipeline_dir <- file.path(PROJECTPATH, mouse_pipeline_dir)
 gene_score <- 950
 ```
 
-```{r}
-df_jaccard <- tibble(nk = 2:10,
-                     jaccard = 0)
-for (i in 1:nrow(df_jaccard)) {
-  df_jaccard[[i, "jaccard"]] <- jaccard_fitness(params_id = mouse_params_id,
-                                                pipeline_dir = mouse_pipeline_dir,
-                                                nk = df_jaccard[[i, "nk"]], 
-                                                q_threshold = 0.05)
-}
 
-ggplot(df_jaccard, aes(x = nk, y = jaccard)) + 
-  geom_line() + 
-  geom_point() +
-  scale_x_continuous(breaks = 1:20) + 
-  labs(x = "nk",
-       y = "Jaccard fitness") + 
-  theme_bw()
-```
+# Mouse cluster eigengap distribution
 
-```{r}
-q_thresholds <- c(0.05, 10^-c(2:6))
-
-list_jaccard <- vector(mode = "list", length = length(q_thresholds))
-for (l in 1:length(list_jaccard)) {
-  df_jaccard <- tibble(nk = 2:10, jaccard = 0)
-  for (i in 1:nrow(df_jaccard)) {
-    df_jaccard[[i, "jaccard"]] <- jaccard_fitness(params_id = mouse_params_id,
-                                                  pipeline_dir = mouse_pipeline_dir,
-                                                  nk = df_jaccard[[i, "nk"]], 
-                                                  q_threshold = q_thresholds[l])
-  }
-  list_jaccard[[l]] <- df_jaccard %>% 
-    mutate(q_threshold = q_thresholds[l])
-}
-
-df_jaccard <- bind_rows(list_jaccard) %>% 
-  mutate(nlq = -log10(q_threshold))
-
-plt <- ggplot(df_jaccard, aes(x = nk, y = jaccard, col = nlq, group = nlq)) + 
-  geom_line() + 
-  geom_point() +
-  coord_cartesian(ylim = c(0.5, 1)) + 
-  scale_x_continuous(breaks = 1:20) + 
-  scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
-  labs(x = "nk",
-       y = "Jaccard fitness",
-       col = "-log10(q)") + 
-  theme_bw()
-
-outfile <- "jaccard_fitness_qthresholds.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(8, "in"), 
-    height = unit(4, "in"))
-print(plt)
-dev.off()
-
-plt
-```
-
-
-```{r}
+```{r eigengap}
 # Cluster directories
-mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, "clusters", str_c("resolution_", mouse_cluster_resolution))
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id, 
+                               "clusters", "resolution_0.2")
 
 # Mouse affinity matrix
 mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
@@ -212,20 +162,14 @@ mat_mouse_affinity <- W
 df_mouse_affinity <- as_tibble(mat_mouse_affinity)
 
 # Max nk to examine
-nk_max <- 100
-
-# Mouse optimal nk
-estimateNumberOfClustersGivenGraph(W = mat_mouse_affinity, NUMC = 2:nk_max)
+nk_max <- 10
 
 # Get cluster metric distributions
-df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, NUMC = 2:nk_max)
-```
+df_mouse_cluster_metrics <- estimate_cluster_metrics(W = mat_mouse_affinity, 
+                                                     NUMC = 2:nk_max)
 
-
-```{r}
-eigengap <- c(0.051, 0.049, 0.086, 0.056, 0.034, 0.055, 0.013, 0.012, 0.025)
-df_eigengap <- tibble(nk = 2:10,
-                      eigengap = eigengap)
+df_eigengap <- df_mouse_cluster_metrics %>% 
+  select(nk, eigengap)
 
 plt <- ggplot(df_eigengap, aes(x = nk, y = eigengap)) + 
   geom_line() + 
@@ -234,7 +178,8 @@ plt <- ggplot(df_eigengap, aes(x = nk, y = eigengap)) +
   scale_x_continuous(breaks = 1:20) + 
   scale_y_continuous(breaks = seq(0, 0.2, 0.01)) + 
   labs(x = "nk",
-       y = "Eigengap") + 
+       y = "Eigengap",
+       title = "Eigengap metric for mouse cluster solutions") + 
   theme_bw()
 
 outfile <- "eigengap.pdf"
@@ -248,12 +193,70 @@ dev.off()
 plt
 ```
 
+# Assessing cluster optimality using the full set of pathways
+
+## Jaccard fitness 
+
 ```{r}
-df_fit_input <- inner_join(df_eigengap, filter(df_jaccard, q_threshold == 0.05), by = "nk") %>% 
+# Thresholds of q-values to determine pathway enrichment
+q_thresholds <- c(0.05, 10^-c(2:6))
+
+# Iterate over q-value thresholds
+list_jaccard <- vector(mode = "list", length = length(q_thresholds))
+for (l in 1:length(list_jaccard)) {
+  
+  # For each nk, evaluate the jaccard fitness 
+  df_jaccard <- tibble(nk = 2:10, jaccard = 0)
+  for (i in 1:nrow(df_jaccard)) {
+    df_jaccard[[i, "jaccard"]] <- jaccard_fitness(params_id = mouse_params_id,
+                                                  pipeline_dir = mouse_pipeline_dir,
+                                                  nk = df_jaccard[[i, "nk"]], 
+                                                  q_threshold = q_thresholds[l])
+  }
+  list_jaccard[[l]] <- df_jaccard %>% 
+    mutate(q_threshold = q_thresholds[l])
+}
+
+df_jaccard_full <- bind_rows(list_jaccard) %>% 
+  mutate(nlq = -log10(q_threshold))
+
+plt <- ggplot(df_jaccard_full, 
+              aes(x = nk, y = jaccard, 
+                  col = nlq, group = nlq)) + 
+  geom_line() + 
+  geom_point() +
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Jaccard fitness",
+       col = "-log10(q)",
+       title = "Pathway separation across enrichment thresholds") + 
+  theme_bw()
+
+outfile <- "full_jaccard_fitness_qthresholds.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"), 
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+The pattern of pathway separability over clusters is consistent regardless of the q-value threshold used to determine pathway enrichment.
+
+```{r}
+# Join eigengap fitness and Jaccard fitness and apply min-max normalization
+# q-threshold used is 0.05
+df_fit_input <- inner_join(df_eigengap, 
+                           filter(df_jaccard_full, q_threshold == 0.05), 
+                           by = "nk") %>% 
   mutate(eigengap = (eigengap - min(eigengap))/(max(eigengap) - min(eigengap)),
          jaccard = (jaccard - min(jaccard))/(max(jaccard) - min(jaccard)))
 
-
+# Compute fitness score over a range of mixing parameters
 alpha_seq <- seq(0, 1, by = 0.2)
 list_fit <- vector(mode = "list", length = length(alpha_seq))
 for (i in 1:length(alpha_seq)) {
@@ -267,7 +270,9 @@ for (i in 1:length(alpha_seq)) {
 df_fit <- bind_rows(list_fit)
 
 df_fit_long <- df_fit %>%
-  pivot_longer(cols = c("eigengap", "jaccard", "fitness"), names_to = "measure", values_to = "score") %>% 
+  pivot_longer(cols = c("eigengap", "jaccard", "fitness"), 
+               names_to = "measure", 
+               values_to = "score") %>% 
   mutate(measure = factor(measure, levels = c("eigengap", "jaccard", "fitness")),
          label = paste("alpha =", alpha))
 
@@ -282,11 +287,13 @@ plt <- ggplot(df_fit_long, aes(x = nk, y = score, col = measure, alpha = measure
                      labels = c("Eigengap", "Jaccard", "Total")) + 
   scale_alpha_manual(values = c(0.4, 0.4, 1.0),
                      labels = c("Eigengap", "Jaccard", "Total")) + 
-  labs(x = "nk", y = "Fitness score", col = "Measure", alpha = "Measure") + 
+  labs(x = "nk", y = "Fitness score", 
+       col = "Measure", alpha = "Measure",
+       title = "Cluster optimality across mixing parameter values") + 
   theme_bw() + 
   theme(panel.grid.minor.x = element_blank())
 
-outfile <- "fitness_minmax.pdf"
+outfile <- "full_fitness_minmax.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(8, "in"), 
@@ -297,55 +304,7 @@ dev.off()
 plt
 ```
 
-
-```{r}
-df_fit_input <- inner_join(df_eigengap, filter(df_jaccard, q_threshold == 0.05), by = "nk") %>% 
-  mutate(eigengap = eigengap/max(eigengap),
-         jaccard = jaccard/max(jaccard))
-
-
-alpha_seq <- seq(0, 1, by = 0.2)
-list_fit <- vector(mode = "list", length = length(alpha_seq))
-for (i in 1:length(alpha_seq)) {
-  alpha <- alpha_seq[i]
-  list_fit[[i]] <- df_fit_input %>% 
-    mutate(fitness = (1-alpha)*eigengap + alpha*jaccard,
-           alpha = alpha) 
-}
-
-
-df_fit <- bind_rows(list_fit)
-
-df_fit_long <- df_fit %>%
-  pivot_longer(cols = c("eigengap", "jaccard", "fitness"), names_to = "measure", values_to = "score") %>% 
-  mutate(measure = factor(measure, levels = c("eigengap", "jaccard", "fitness")),
-         label = paste("alpha =", alpha))
-
-plt <- ggplot(df_fit_long, aes(x = nk, y = score, col = measure, alpha = measure)) + 
-  geom_line() + 
-  geom_point() +
-  facet_wrap(~label) +
-  coord_cartesian(ylim = c(0, 1)) + 
-  scale_x_continuous(breaks = 1:10) + 
-  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
-  scale_color_manual(values = c("red", "blue", "black"), 
-                     labels = c("Eigengap", "Jaccard", "Total")) + 
-  scale_alpha_manual(values = c(0.4, 0.4, 1.0),
-                     labels = c("Eigengap", "Jaccard", "Total")) + 
-  labs(x = "nk", y = "Fitness score", col = "Measure", alpha = "Measure") + 
-  theme_bw() + 
-  theme(panel.grid.minor.x = element_blank())
-
-outfile <- "fitness_max.pdf"
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(8, "in"), 
-    height = unit(4, "in"))
-print(plt)
-dev.off()
-
-plt
-```
+The optimum is dominated by either 4 clusters when the mixing favourizes the eigengap or 10 clusters when it favourizes the pathway separability.
 
 ```{r}
 ggplot(df_fit, aes(x = nk, y = fitness, col = alpha, group = alpha)) + 
@@ -354,7 +313,7 @@ ggplot(df_fit, aes(x = nk, y = fitness, col = alpha, group = alpha)) +
   scale_color_distiller(palette ="RdYlBu", direction = 1) + 
     scale_x_continuous(breaks = 1:10) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
-  labs(x = "nk", y = "Fitness score", col = "Alpha") + 
+  labs(x = "nk", y = "Fitness score", col = "Mixing parameter") + 
   theme_bw() + 
   theme(panel.grid.minor.x = element_blank())
 ```
@@ -369,8 +328,7 @@ df_fit_long %>%
 ```
 
 
-# Entropy approach
-
+## Mutual information
 
 ```{r pathways-import}
 bader_modules <- file.path(PROJECTPATH, "data/human/enrichment/", "Human_Reactome_October_01_2023_symbol.gmt")  
@@ -486,3 +444,481 @@ df_jaccard %>%
   theme(panel.grid.minor.x = element_blank())
 ```
 
+
+
+# Assessing cluster optimality using the set of pre-selected pathways
+
+```{r}
+# Set of pre-selected pathways
+pathway_ids <- c("ADHERENS JUNCTIONS INTERACTIONS%REACTOME DATABASE ID RELEASE 38%418990",
+                 "AXON GUIDANCE%REACTOME%R-HSA-422475.7",
+                 "CA2+ PATHWAY%REACTOME%R-HSA-4086398.4",
+                 "CHROMATIN ORGANIZATION%REACTOME DATABASE ID RELEASE 38%4839726",
+                 "GAP JUNCTION TRAFFICKING AND REGULATION%REACTOME%R-HSA-157858.2",
+                 "GENE EXPRESSION (TRANSCRIPTION)%REACTOME%R-HSA-74160.8",
+                 "GENERIC TRANSCRIPTION PATHWAY%REACTOME%R-HSA-212436.12",
+                 "LONG-TERM POTENTIATION%REACTOME DATABASE ID RELEASE 38%9620244",
+                 "MAPK FAMILY SIGNALING CASCADES%REACTOME%R-HSA-5683057.4",
+                 "MTOR SIGNALLING%REACTOME%R-HSA-165159.7",
+                 "PROTEIN-PROTEIN INTERACTIONS AT SYNAPSES%REACTOME DATABASE ID RELEASE 38%6794362",
+                 "SIGNALING BY ERBB2%REACTOME DATABASE ID RELEASE 38%1227986",
+                 "SIGNALING BY ERBB4%REACTOME DATABASE ID RELEASE 38%1236394",
+                 "SIGNALING BY GPCR%REACTOME DATABASE ID RELEASE 38%372790",
+                 "SIGNALING BY HEDGEHOG%REACTOME DATABASE ID RELEASE 38%5358351",
+                 "SIGNALING BY NOTCH%REACTOME%R-HSA-157118.6",
+                 "SIGNALING BY VEGF%REACTOME%R-HSA-194138.3",
+                 "SIGNALING BY WNT%REACTOME DATABASE ID RELEASE 38%195721",
+                 "TIGHT JUNCTION INTERACTIONS%REACTOME DATABASE ID RELEASE 38%420029",
+                 "TRANSMISSION ACROSS CHEMICAL SYNAPSES%REACTOME%R-HSA-112315.7")
+```
+
+```{r}
+q_thresholds <- c(0.05, 10^-c(2:6))
+
+list_jaccard <- vector(mode = "list", length = length(q_thresholds))
+for (l in 1:length(list_jaccard)) {
+  df_jaccard <- tibble(nk = 2:10, jaccard = 0)
+  for (i in 1:nrow(df_jaccard)) {
+    df_jaccard[[i, "jaccard"]] <- jaccard_fitness(params_id = mouse_params_id,
+                                                  pipeline_dir = mouse_pipeline_dir,
+                                                  nk = df_jaccard[[i, "nk"]], 
+                                                  pathway_ids = pathway_ids,
+                                                  q_threshold = q_thresholds[l])
+  }
+  list_jaccard[[l]] <- df_jaccard %>% 
+    mutate(q_threshold = q_thresholds[l])
+}
+
+df_jaccard_preselect <- bind_rows(list_jaccard) %>% 
+  mutate(nlq = -log10(q_threshold))
+
+plt <- ggplot(df_jaccard_preselect, aes(x = nk, y = jaccard, col = nlq, group = nlq)) + 
+  geom_line() + 
+  geom_point() +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Jaccard fitness",
+       col = "-log10(q)",
+       title = "Pathway separation across enrichment thresholds") + 
+  theme_bw()
+
+outfile <- "preselected_jaccard_fitness_qthresholds.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+```{r}
+df_jaccard_compare <- bind_rows(df_jaccard_full %>% 
+                                  filter(q_threshold == 0.05) %>% 
+                                  select(nk, jaccard) %>% 
+                                  mutate(pathways = "Full set"),
+                                df_jaccard_preselect %>% 
+                                  filter(q_threshold == 0.05) %>% 
+                                  select(nk, jaccard) %>% 
+                                  mutate(pathways = "Pre-selected set"))
+
+plt <- ggplot(df_jaccard_compare, aes(x = nk, y = jaccard, col = pathways, group = pathways)) + 
+  geom_line() + 
+  geom_point() +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Jaccard fitness",
+       col = "Pathway set",
+       title = "Jaccard fitness comparison between full and pre-selected pathway sets") + 
+  theme_bw()
+
+outfile <- "pathway_set_jaccard_comparison.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+The Jaccard fitness behaves similarly regardless of whether we use the full set of pathways or the pre-selected set.
+
+```{r}
+df_fit_input <- inner_join(df_eigengap, filter(df_jaccard_preselect, q_threshold == 0.05), by = "nk") %>% 
+  mutate(eigengap = (eigengap - min(eigengap))/(max(eigengap) - min(eigengap)),
+         jaccard = (jaccard - min(jaccard))/(max(jaccard) - min(jaccard)))
+
+alpha_seq <- seq(0, 1, by = 0.2)
+list_fit <- vector(mode = "list", length = length(alpha_seq))
+for (i in 1:length(alpha_seq)) {
+  alpha <- alpha_seq[i]
+  list_fit[[i]] <- df_fit_input %>% 
+    mutate(fitness = (1-alpha)*eigengap + alpha*jaccard,
+           alpha = alpha) 
+}
+
+
+df_fit <- bind_rows(list_fit)
+
+df_fit_long <- df_fit %>%
+  pivot_longer(cols = c("eigengap", "jaccard", "fitness"), names_to = "measure", values_to = "score") %>% 
+  mutate(measure = factor(measure, levels = c("eigengap", "jaccard", "fitness")),
+         label = paste("alpha =", alpha))
+
+plt <- ggplot(df_fit_long, aes(x = nk, y = score, col = measure, alpha = measure)) + 
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~label) +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 1:10) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_color_manual(values = c("red", "blue", "black"), 
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  scale_alpha_manual(values = c(0.4, 0.4, 1.0),
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  labs(x = "nk", y = "Fitness score", col = "Measure", alpha = "Measure",
+       title = "Cluster optimality across mixing parameter values") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+
+outfile <- "preselected_fitness_minmax.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+
+# Mouse clusters with human matches
+
+```{r}
+# Modified Jaccard fitness function that takes cluster IDs rather than just nk
+jaccard_fitness_2 <- function(params_id, pipeline_dir, cluster_ids, gene_score = 950, B_threshold = 10, q_threshold = 0.05, pathway_ids = NULL) {
+  
+  dj <- 0
+  count <- 0
+  for (i in 1:length(cluster_ids)) {
+    if (i > 1){
+      for (j in 1:(i-1)) {
+        
+        nki <- str_split(cluster_ids[i], "-")[[1]][1]
+        ki <- str_split(cluster_ids[i], "-")[[1]][2]
+        
+        nkj <- str_split(cluster_ids[j], "-")[[1]][1]
+        kj <- str_split(cluster_ids[j], "-")[[1]][2]
+        
+        x <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nki, k = ki)
+        
+        y <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nkj, k = kj)
+        
+        if (is.null(pathway_ids)) {
+          x <- filter(x, B >= B_threshold, adj.P.Val < q_threshold)
+          y <- filter(y, B >= B_threshold, adj.P.Val < q_threshold)
+        } else {
+          x <- filter(x, ID %in% pathway_ids, adj.P.Val < q_threshold)
+          y <- filter(y, ID %in% pathway_ids, adj.P.Val < q_threshold)
+        }
+        
+        x <- x[["Title"]]
+        y <- y[["Title"]]
+        
+        dj <- dj + (1-jaccard_index(x = x, y = y))
+        
+        count <- count + 1
+        
+      }
+    }
+  }
+  
+  dj <- dj/count
+  
+  return(dj)
+  
+}
+```
+
+```{r}
+# Import cluster similarity
+similarity <- import_similarity(param_id = 375, 
+                                pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3"))
+
+# Import cluster similarity permutations
+permutations <- import_similarity_permutations(param_id = 375,
+                                               pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3"))
+
+# Compute significance of correlations
+df_sim_pvals <- compute_similarity_significance(similarity = similarity,
+                                                permutations = permutations)
+
+colnames(df_sim_pvals) <- str_replace(colnames(df_sim_pvals), "img1", "human")
+colnames(df_sim_pvals) <- str_replace(colnames(df_sim_pvals), "img2", "mouse")
+```
+
+```{r}
+df_matching_clusters <- df_sim_pvals %>% 
+  filter(pval < 0.05) %>%
+  # filter(pval < 0.10) %>% 
+  select(mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  distinct()
+
+
+q_thresholds <- c(0.05, 10^-c(2:6))
+
+list_jaccard_matching <- vector(mode = "list", length = length(q_thresholds))
+for (l in 1:length(list_jaccard_matching)) {
+  df_jaccard_matching <- tibble(nk = 2:10, jaccard = 0)
+  for (i in 1:nrow(df_jaccard_matching)) {
+
+    cluster_ids <- df_matching_clusters %>%
+      filter(mouse_nk == df_jaccard[[i, "nk"]]) %>%
+      pull(mouse_cluster_id)
+    
+    df_jaccard_matching[[i, "jaccard"]] <- jaccard_fitness_2(params_id = mouse_params_id,
+                                                    pipeline_dir = mouse_pipeline_dir,
+                                                    cluster_ids = cluster_ids,
+                                                    q_threshold = q_thresholds[l])
+    
+  }
+  list_jaccard_matching[[l]] <- df_jaccard_matching %>% 
+    mutate(q_threshold = q_thresholds[l])
+  
+}
+
+df_jaccard_matching_0.05 <- bind_rows(list_jaccard_matching) %>% 
+  mutate(nlq = -log10(q_threshold))
+
+plt <- ggplot(df_jaccard_matching_0.05, aes(x = nk, y = jaccard, col = nlq, group = nlq)) + 
+  geom_line() + 
+  geom_point() +
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Jaccard fitness",
+       col = "-log10(q)",
+       title = "Pathway separation across enrichment thresholds") + 
+  theme_bw()
+
+outfile <- "matching_clusters_jaccard_fitness_qthresholds_0.05.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+```{r}
+df_matching_clusters <- df_sim_pvals %>% 
+  filter(pval < 0.10) %>%
+  select(mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  distinct()
+
+
+q_thresholds <- c(0.05, 10^-c(2:6))
+
+list_jaccard_matching <- vector(mode = "list", length = length(q_thresholds))
+for (l in 1:length(list_jaccard_matching)) {
+  df_jaccard_matching <- tibble(nk = 2:10, jaccard = 0)
+  for (i in 1:nrow(df_jaccard_matching)) {
+
+    cluster_ids <- df_matching_clusters %>%
+      filter(mouse_nk == df_jaccard[[i, "nk"]]) %>%
+      pull(mouse_cluster_id)
+    
+    df_jaccard_matching[[i, "jaccard"]] <- jaccard_fitness_2(params_id = mouse_params_id,
+                                                    pipeline_dir = mouse_pipeline_dir,
+                                                    cluster_ids = cluster_ids,
+                                                    q_threshold = q_thresholds[l])
+    
+  }
+  list_jaccard_matching[[l]] <- df_jaccard_matching %>% 
+    mutate(q_threshold = q_thresholds[l])
+  
+}
+
+df_jaccard_matching_0.10 <- bind_rows(list_jaccard_matching) %>% 
+  mutate(nlq = -log10(q_threshold))
+
+plt <- ggplot(df_jaccard_matching_0.10, aes(x = nk, y = jaccard, col = nlq, group = nlq)) + 
+  geom_line() + 
+  geom_point() +
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Jaccard fitness",
+       col = "-log10(q)",
+       title = "Pathway separation across enrichment thresholds") + 
+  theme_bw()
+
+outfile <- "matching_clusters_jaccard_fitness_qthresholds_0.10.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+```{r}
+df_jaccard_comparison <- bind_rows(df_jaccard_matching_0.05 %>% 
+                                     filter(q_threshold == 0.05) %>% 
+                                     select(nk, jaccard) %>% 
+                                     mutate(clusters = "Clusters with matches (p < 0.05)"),
+                                   df_jaccard_matching_0.10 %>% 
+                                     filter(q_threshold == 0.05) %>% 
+                                     select(nk, jaccard) %>% 
+                                     mutate(clusters = "Clusters with matches (p < 0.10)"),
+                                   df_jaccard_full %>% 
+                                     filter(q_threshold == 0.05) %>% 
+                                     select(nk, jaccard) %>% 
+                                     mutate(clusters = "All clusters"))
+
+plt <- ggplot(df_jaccard_comparison, 
+       aes(x = nk, y = jaccard, col = clusters)) + 
+  geom_line() + 
+  geom_point() + 
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Jaccard fitness",
+       col = "Cluster set") + 
+  theme_bw()
+
+outfile <- "cluster_set_jaccard_comparison.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+
+```{r}
+df_fit_input <- inner_join(df_eigengap, filter(df_jaccard_matching_0.05, q_threshold == 0.05), by = "nk") %>% 
+  mutate(eigengap = (eigengap - min(eigengap))/(max(eigengap) - min(eigengap)),
+         jaccard = (jaccard - min(jaccard))/(max(jaccard) - min(jaccard)))
+
+
+alpha_seq <- seq(0, 1, by = 0.2)
+list_fit <- vector(mode = "list", length = length(alpha_seq))
+for (i in 1:length(alpha_seq)) {
+  alpha <- alpha_seq[i]
+  list_fit[[i]] <- df_fit_input %>% 
+    mutate(fitness = (1-alpha)*eigengap + alpha*jaccard,
+           alpha = alpha) 
+}
+
+
+df_fit <- bind_rows(list_fit)
+
+df_fit_long <- df_fit %>%
+  pivot_longer(cols = c("eigengap", "jaccard", "fitness"), names_to = "measure", values_to = "score") %>% 
+  mutate(measure = factor(measure, levels = c("eigengap", "jaccard", "fitness")),
+         label = paste("alpha =", alpha))
+
+plt <- ggplot(df_fit_long, aes(x = nk, y = score, col = measure, alpha = measure)) + 
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~label) +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 1:10) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_color_manual(values = c("red", "blue", "black"), 
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  scale_alpha_manual(values = c(0.4, 0.4, 1.0),
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  labs(x = "nk", y = "Fitness score", col = "Measure", alpha = "Measure",
+       title = "Cluster optimality across mixing parameter values") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+
+outfile <- "matching_clusters_fitness_minmax_0.05.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
+
+
+```{r}
+df_fit_input <- inner_join(df_eigengap, filter(df_jaccard_matching_0.10, q_threshold == 0.05), by = "nk") %>% 
+  mutate(eigengap = (eigengap - min(eigengap))/(max(eigengap) - min(eigengap)),
+         jaccard = (jaccard - min(jaccard))/(max(jaccard) - min(jaccard)))
+
+
+alpha_seq <- seq(0, 1, by = 0.2)
+list_fit <- vector(mode = "list", length = length(alpha_seq))
+for (i in 1:length(alpha_seq)) {
+  alpha <- alpha_seq[i]
+  list_fit[[i]] <- df_fit_input %>% 
+    mutate(fitness = (1-alpha)*eigengap + alpha*jaccard,
+           alpha = alpha) 
+}
+
+
+df_fit <- bind_rows(list_fit)
+
+df_fit_long <- df_fit %>%
+  pivot_longer(cols = c("eigengap", "jaccard", "fitness"), names_to = "measure", values_to = "score") %>% 
+  mutate(measure = factor(measure, levels = c("eigengap", "jaccard", "fitness")),
+         label = paste("alpha =", alpha))
+
+plt <- ggplot(df_fit_long, aes(x = nk, y = score, col = measure, alpha = measure)) + 
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~label) +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 1:10) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_color_manual(values = c("red", "blue", "black"), 
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  scale_alpha_manual(values = c(0.4, 0.4, 1.0),
+                     labels = c("Eigengap", "Jaccard", "Total")) + 
+  labs(x = "nk", y = "Fitness score", col = "Measure", alpha = "Measure",
+       title = "Cluster optimality across mixing parameter values") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+
+outfile <- "matching_clusters_fitness_minmax_0.10.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+
+plt
+```
