@@ -85,7 +85,7 @@ get_homologs <- function(genes, species, ordered=T) {
 
 
 
-get_gene_neighbourhood <- function(genes, score = 950, stringdb_version = "12.0"){
+get_gene_neighbourhood <- function(genes, score = 950, stringdb_version = "12.0", limit = 1000){
   
   # StringDB version URL
   if (stringdb_version == "11.5") {
@@ -109,7 +109,7 @@ get_gene_neighbourhood <- function(genes, score = 950, stringdb_version = "12.0"
   # StringDB API query for gene neighbourhoods
   api_query_interactions <- paste0(stringdb_url, "api/tsv/interaction_partners?identifiers=", 
                                    paste(string_ids[["stringID"]], collapse = "%0D"),
-                                   "&species=10090&required_score=", score)
+                                   "&species=10090&required_score=", score, "&limit=", limit)
   
   # Fetch gene neighbourhoods
   neighbourhood <- read_tsv(api_query_interactions, show_col_types = FALSE) %>% 
