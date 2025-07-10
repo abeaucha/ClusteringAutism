@@ -12,8 +12,8 @@ knitr::opts_chunk$set(echo = FALSE)
 ```{r packages}
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(SNFtool))
-suppressPackageStartupMessages(library(umap))
-suppressPackageStartupMessages(library(cluster))
+# suppressPackageStartupMessages(library(umap))
+# suppressPackageStartupMessages(library(cluster))
 suppressPackageStartupMessages(library(ggalluvial))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(RColorBrewer))
@@ -23,52 +23,8 @@ suppressPackageStartupMessages(library(RColorBrewer))
 SRCPATH <- Sys.getenv("SRCPATH")
 
 source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "analysis.R"))
 
-# Function to estimate cluster metrics over a range of solutions
-estimate_cluster_metrics <- function (W, NUMC = 2:5){
-  if (min(NUMC) == 1) {
-    warning("Note that we always assume there are more than one cluster.")
-    NUMC <- NUMC[NUMC > 1]
-  }
-  W <- (W + t(W))/2
-  diag(W) <- 0
-  if (length(NUMC) <= 0) {
-    warning(paste("Invalid NUMC provided, must be an integer vector", 
-                  "with atleast one other number than 1.", "Using default NUMC=c(2,3,4,5)", 
-                  sep = ""))
-    NUMC <- 2:5
-  }
-  degs <- rowSums(W)
-  degs[degs == 0] <- .Machine$double.eps
-  D <- diag(degs)
-  L <- D - W
-  Di <- diag(1/sqrt(degs))
-  L <- Di %*% L %*% Di
-  eigs <- eigen(L)
-  eigs_order <- sort(eigs$values, index.return = T)$ix
-  eigs$values <- eigs$values[eigs_order]
-  eigs$vectors <- eigs$vectors[, eigs_order]
-  eigengap <- abs(diff(eigs$values))
-  quality <- list()
-  for (c_index in 1:length(NUMC)) {
-    ck <- NUMC[c_index]
-    UU <- eigs$vectors[, 1:ck]
-    EigenvectorsDiscrete <- SNFtool:::.discretisation(UU)[[1]]
-    EigenVectors <- EigenvectorsDiscrete^2
-    temp1 <- EigenVectors[do.call(order, lapply(1:ncol(EigenVectors), 
-                                                function(i) EigenVectors[, i])), ]
-    temp1 <- t(apply(temp1, 1, sort, TRUE))
-    quality[[c_index]] <- (1 - eigs$values[ck + 1])/(1 - 
-                                                       eigs$values[ck]) * sum(sum(diag(1/(temp1[, 1] + .Machine$double.eps)) %*% 
-                                                                                    temp1[, 1:max(2, ck - 1)]))
-  }
-  
-  out <- tibble(nk = NUMC,
-                eigengap = eigengap[NUMC],
-                rotation = unlist(quality))
-  
-  return(out)
-}
 ```
 
 ```{r directories}
