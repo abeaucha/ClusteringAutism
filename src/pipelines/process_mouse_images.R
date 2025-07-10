@@ -21,7 +21,8 @@ source(file.path(SRCPATH, "processing.R"))
 # Main -----------------------------------------------------------------------
 
 # Parameter set ID
-params_id <- "107"
+# params_id <- "107"
+params_id <- 108
 
 # Image resolution 
 resolution_um <- 200
@@ -29,7 +30,7 @@ resolution_mm <- resolution_um/1000
 
 # Cluster parameters
 cluster_nk_max <- 10
-cluster_metric <- "correlation"
+cluster_metric <- "euclidean"
 cluster_K <- 10
 cluster_sigma <- 0.5
 cluster_t <- 20
@@ -55,11 +56,12 @@ if (file.exists(metadata)) {
                         cluster_metric = cluster_metric,
                         cluster_K = cluster_K,
                         cluster_sigma = cluster_sigma,
-                        cluster_t = cluster_t, 
+                        cluster_t = cluster_t,
                         centroid_method = centroid_method,
                         id = params_id)
   write_csv(x = df_metadata, file = metadata)
 }
+
 
 # Update pipeline directory with parameter set ID
 pipeline_dir <- file.path(pipeline_dir, params_id)
@@ -168,6 +170,8 @@ write.csv(x = clusters, file = outfile, row.names = FALSE)
 # Centroids -------------------------------------------------------------------
 
 message("Generating cluster centroids...")
+output_dir = file.path(paths[["centroids"]], "original")
+if (!dir.exists(output_dir)) {dir.create(output_dir, recursive = TRUE)}
 jacobians <- c("absolute", "relative")
 for (jtype in jacobians) {
   CreateClusterAnatomyMaps(num_clusters = as.character(cluster_nk_max),
@@ -176,29 +180,29 @@ for (jtype in jacobians) {
                            volume_type = jtype, 
                            resolution = as.character(resolution_um),
                            dir_determinants = paths[["jacobians"]],
-                           output_dir = paths[["centroids"]])
+                           output_dir = output_dir)
 }
 
 
 # Implementation consistent with human
-# Would need to update "clean_mouse_pipeline_outputs.py"
+# Need to update "clean_mouse_pipeline_outputs.py"
 
-# mask <- file.path(paths[["jacobians"]], "scanbase_second_level-nlin-3_mask_200um.mnc")
-# for (jtype in jacobians) {
-# 
-#   clusters_jtype <- clusters %>% 
-#     as_tibble() %>% 
-#     mutate(ID = file.path(paths[["effect_sizes"]], resolution_um, ID),
-#            ID = str_replace(ID, ".mnc", 
-#                             paste0("_ES_", str_to_title(jtype),
-#                                    "_", resolution_um, ".mnc"))) %>% 
-#     column_to_rownames("ID")
-#   
-#   outdir <- file.path(paths[["centroids"]], "test", jtype)
-#   if (!dir.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
-#   for (j in 1:ncol(clusters_jtype)) {
-#     compute_cluster_centroids(i = j, clusters = clusters_jtype, mask = mask,
-#                               method = centroid_method, outdir = outdir)
-#   }
-# }
+mask <- file.path(paths[["jacobians"]], "scanbase_second_level-nlin-3_mask_200um.mnc")
+for (jtype in jacobians) {
+
+  clusters_jtype <- clusters %>%
+    as_tibble() %>%
+    mutate(ID = file.path(paths[["effect_sizes"]], resolution_um, ID),
+           ID = str_replace(ID, ".mnc",
+                            paste0("_ES_", str_to_title(jtype),
+                                   "_", resolution_um, ".mnc"))) %>%
+    column_to_rownames("ID")
+
+  outdir <- file.path(paths[["centroids"]], jtype)
+  if (!dir.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
+  for (j in 1:ncol(clusters_jtype)) {
+    compute_cluster_centroids(i = j, clusters = clusters_jtype, mask = mask,
+                              method = centroid_method, outdir = outdir)
+  }
+}
 
