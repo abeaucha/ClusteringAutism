@@ -19,75 +19,7 @@ setwd(PROJECTPATH)
 
 ```{r functions}
 source(file.path(SRCPATH, "analysis.R"))
-
-importMsigDBGMT <- function(file) {
-  # stop("This does not work at the present.")
-  msig <- list()
-  con <- file(file, open = "r")
-  lines <- readLines(con)
-  close(con)
-  ids <- gsub("\t.*", "", lines)
-  desc <- gsub("^[^\t]*\t([^\t]*)\t.*", "\\1", lines)
-  genes <- gsub("^[^\t]*\t[^\t]*\t(.*)", "\\1", lines)
-  msig$MODULES <- data.frame(ID = ids, Title = desc, stringsAsFactors = FALSE)
-  if (any(duplicated(msig$MODULES$ID))) {
-    warning("Duplicated IDs found; automatic IDs will be generated")
-    msig$MODULES$oldID <- msig$MODULES$ID
-    msig$MODULES$ID <- make.unique(as.character(msig$MODULES$ID))
-  }
-  rownames(msig$MODULES) <- msig$MODULES[, "ID"]
-  msig$MODULES2GENES <- strsplit(genes, "\t")
-  names(msig$MODULES2GENES) <- ids
-  msig$GENES <- data.frame(ID = unique(unlist(msig$MODULES2GENES)))
-  # msig <- new("tmod", msig)
-  msig
-}
-
-# Function to estimate cluster metrics over a range of solutions
-estimate_cluster_metrics <- function (W, NUMC = 2:5){
-  if (min(NUMC) == 1) {
-    warning("Note that we always assume there are more than one cluster.")
-    NUMC <- NUMC[NUMC > 1]
-  }
-  W <- (W + t(W))/2
-  diag(W) <- 0
-  if (length(NUMC) <= 0) {
-    warning(paste("Invalid NUMC provided, must be an integer vector", 
-                  "with atleast one other number than 1.", "Using default NUMC=c(2,3,4,5)", 
-                  sep = ""))
-    NUMC <- 2:5
-  }
-  degs <- rowSums(W)
-  degs[degs == 0] <- .Machine$double.eps
-  D <- diag(degs)
-  L <- D - W
-  Di <- diag(1/sqrt(degs))
-  L <- Di %*% L %*% Di
-  eigs <- eigen(L)
-  eigs_order <- sort(eigs$values, index.return = T)$ix
-  eigs$values <- eigs$values[eigs_order]
-  eigs$vectors <- eigs$vectors[, eigs_order]
-  eigengap <- abs(diff(eigs$values))
-  quality <- list()
-  for (c_index in 1:length(NUMC)) {
-    ck <- NUMC[c_index]
-    UU <- eigs$vectors[, 1:ck]
-    EigenvectorsDiscrete <- SNFtool:::.discretisation(UU)[[1]]
-    EigenVectors <- EigenvectorsDiscrete^2
-    temp1 <- EigenVectors[do.call(order, lapply(1:ncol(EigenVectors), 
-                                                function(i) EigenVectors[, i])), ]
-    temp1 <- t(apply(temp1, 1, sort, TRUE))
-    quality[[c_index]] <- (1 - eigs$values[ck + 1])/(1 - 
-                                                       eigs$values[ck]) * sum(sum(diag(1/(temp1[, 1] + .Machine$double.eps)) %*% 
-                                                                                    temp1[, 1:max(2, ck - 1)]))
-  }
-  
-  out <- tibble(nk = NUMC,
-                eigengap = eigengap[NUMC],
-                rotation = unlist(quality))
-  
-  return(out)
-}
+source(file.path(SRCPATH, "enrichment.R"))
 
 # Jaccard index of two sets
 jaccard_index <- function(x, y) {length(intersect(x, y))/length(union(x, y))}
@@ -156,10 +88,9 @@ mouse_cluster_dir <- file.path(mouse_pipeline_dir, mouse_params_id,
                                "clusters", "resolution_0.2")
 
 # Mouse affinity matrix
-mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
-load(mouse_affinity_file)
-mat_mouse_affinity <- W
-df_mouse_affinity <- as_tibble(mat_mouse_affinity)
+mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.csv")
+mat_mouse_affinity <- as.matrix(read_csv(mouse_affinity_file, show_col_types = FALSE))
+rownames(mat_mouse_affinity) <- colnames(mat_mouse_affinity)
 
 # Max nk to examine
 nk_max <- 10
@@ -195,7 +126,9 @@ plt
 
 # Assessing cluster optimality using the full set of pathways
 
-## Jaccard fitness 
+## Discrete (binary) enrichment
+
+### Jaccard fitness 
 
 ```{r}
 # Thresholds of q-values to determine pathway enrichment
@@ -328,7 +261,7 @@ df_fit_long %>%
 ```
 
 
-## Mutual information
+### Mutual information
 
 ```{r pathways-import}
 bader_modules <- file.path(PROJECTPATH, "data/human/enrichment/", "Human_Reactome_October_01_2023_symbol.gmt")  
@@ -442,6 +375,470 @@ df_jaccard %>%
   scale_color_discrete(labels = c("Jaccard", "Mutual information")) + 
   theme_bw() + 
   theme(panel.grid.minor.x = element_blank())
+```
+
+
+## Continuous enrichment
+
+```{r}
+df_module_sizes <- get_module_sizes(modules = bader_modules)
+
+# Pathway size threshold
+B_threshold <- 10
+
+# Pathways to keep
+pathway_ids_keep <- df_modules_size %>% 
+  filter(B >= B_threshold, B < 500) %>% 
+  pull(ID)
+```
+
+
+```{r}
+params_id <- mouse_params_id
+pipeline_dir <- mouse_pipeline_dir
+nk <- 2
+gene_score <- 950
+pathway_ids <- pathway_ids_keep
+measure <- "NLQ"
+
+pathway_fitness <- function(params_id, pipeline_dir, nk, gene_score = 950, measure = "E", metric = "MSE", pathway_ids = NULL) {
+
+  if (!(measure %in% c("E", "NLQ", "adj.P.Val"))) {stop()}
+  
+  d <- 0
+  for (ki in 1:nk) {
+    if (ki > 1) {
+      for (kj in 1:(ki-1)) {
+        
+        x <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nk, k = ki)
+        
+        y <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nk, k = kj)
+        
+        x <- mutate(x, E = ifelse(is.na(E), 0, E))
+        y <- mutate(y, E = ifelse(is.na(E), 0, E))
+        
+        # x <- mutate(x, NLQ = ifelse(adj.P.Val >= 0.05, 0, NLQ))
+        # y <- mutate(y, NLQ = ifelse(adj.P.Val >= 0.05, 0, NLQ))
+        
+        if (!is.null(pathway_ids)) {
+          x <- x %>% filter(ID %in% pathway_ids) %>% arrange(ID)
+          y <- y %>% filter(ID %in% pathway_ids) %>% arrange(ID)
+        } else {
+          x <- x %>% arrange(ID)
+          y <- y %>% arrange(ID)
+        }
+        
+        x <- x[[measure]]
+        y <- y[[measure]]
+        
+        if (metric == "correlation") {
+          d <- d + (1-cor(x,y))
+        } else if (metric == "MSE") {
+          d <- d + mean((x-y)^2)
+        } else {
+          stop()
+        }
+      }
+    }
+  }
+  
+  d <- (2/(nk*(nk-1)))*d
+  
+  return(d)
+  
+}
+```
+
+```{r}
+pathway_fitness(params_id = mouse_params_id, 
+                pipeline_dir = mouse_pipeline_dir, 
+                nk = 7, pathway_ids = pathway_ids_keep)
+```
+
+```{r}
+metrics <- c("correlation", "MSE")
+measures <- c("E", "NLQ")
+
+list_fitness <- vector(mode = "list", length = length(metrics))
+names(list_fitness) <- metrics
+for (l in 1:length(list_fitness)) {
+
+  list_fitness[[l]] <- vector(mode = "list", length = length(measures))
+  names(list_fitness[[l]]) <- measures
+  for (ll in 1:length(list_fitness[[l]])) {
+    
+    # For each nk, evaluate the jaccard fitness 
+    df_fitness <- tibble(nk = 2:10, fitness = 0)
+    for (i in 1:nrow(df_fitness)) {
+      df_fitness[[i, "fitness"]] <- pathway_fitness(params_id = mouse_params_id,
+                                                    pipeline_dir = mouse_pipeline_dir,
+                                                    nk = df_fitness[[i, "nk"]], 
+                                                    metric = metrics[l],
+                                                    measure = measures[ll],
+                                                    pathway_ids = pathway_ids_keep)
+    }
+    list_fitness[[l]][[ll]] <- df_fitness %>% 
+      mutate(measure = measures[ll], 
+             metric = metrics[l])
+    
+  }
+}
+
+df_fitness <- list_fitness %>% map(bind_rows) %>% bind_rows
+```
+
+```{r}
+plt <- ggplot(filter(df_fitness, metric == "MSE"), 
+              aes(x = nk, y = fitness)) + 
+  geom_line() + 
+  geom_point() +
+  # facet_grid(measure~metric, scales = "free_y") + 
+  facet_wrap(~measure, nrow = 2, ncol = 1, scales = "free_y") +
+  # coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  # scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Fitness",
+       title = "Pathway separation via mean squared error") + 
+  theme_bw()
+
+# outfile <- "full_jaccard_fitness_qthresholds.pdf"
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile,
+#     width = unit(8, "in"), 
+#     height = unit(4, "in"))
+# print(plt)
+# dev.off()
+
+plt
+```
+
+```{r}
+plt <- ggplot(filter(df_fitness, metric == "correlation"), 
+              aes(x = nk, y = fitness)) + 
+  geom_line() + 
+  geom_point() +
+  # facet_grid(measure~metric, scales = "free_y") + 
+  facet_wrap(~measure, nrow = 2, ncol = 1, scales = "free_y") +
+  # coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_x_continuous(breaks = 1:20) + 
+  # scale_y_continuous(breaks = seq(0, 1, 0.1)) + 
+  labs(x = "nk",
+       y = "Fitness",
+       title = "Pathway separation via correlation distance") + 
+  theme_bw()
+
+# outfile <- "full_jaccard_fitness_qthresholds.pdf"
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile,
+#     width = unit(8, "in"), 
+#     height = unit(4, "in"))
+# print(plt)
+# dev.off()
+
+plt
+```
+
+```{r}
+# Join eigengap fitness and Jaccard fitness and apply min-max normalization
+# q-threshold used is 0.05
+df_fit_input <- inner_join(df_eigengap, 
+                           filter(df_fitness, metric == "MSE", measure == "NLQ"), 
+                           by = "nk") %>% 
+  rename(pathway = fitness) %>% 
+  mutate(eigengap = (eigengap - min(eigengap))/(max(eigengap) - min(eigengap)),
+         pathway = (pathway - min(pathway))/(max(pathway) - min(pathway)))
+
+# Compute fitness score over a range of mixing parameters
+alpha_seq <- seq(0, 1, by = 0.2)
+list_fit <- vector(mode = "list", length = length(alpha_seq))
+for (i in 1:length(alpha_seq)) {
+  alpha <- alpha_seq[i]
+  list_fit[[i]] <- df_fit_input %>% 
+    mutate(fitness = (1-alpha)*eigengap + alpha*pathway,
+           alpha = alpha) 
+}
+
+
+df_fit <- bind_rows(list_fit)
+
+df_fit_long <- df_fit %>%
+  pivot_longer(cols = c("eigengap", "pathway", "fitness"), 
+               names_to = "term", 
+               values_to = "score") %>% 
+  mutate(term = factor(term, levels = c("eigengap", "pathway", "fitness")),
+         label = paste("alpha =", alpha))
+
+plt <- ggplot(df_fit_long, aes(x = nk, y = score, col = term, alpha = term)) + 
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~label) +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 1:10) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_color_manual(values = c("red", "blue", "black"), 
+                     labels = c("Eigengap", "Pathway", "Total")) + 
+  scale_alpha_manual(values = c(0.4, 0.4, 1.0),
+                     labels = c("Eigengap", "Pathway", "Total")) + 
+  labs(x = "nk", y = "Fitness score", 
+       col = "Term", alpha = "Term",
+       title = "Cluster optimality across mixing parameter values") + 
+  theme_bw() + 
+  theme(panel.grid.minor.x = element_blank())
+
+# outfile <- "full_fitness_minmax.pdf"
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile,
+#     width = unit(8, "in"), 
+#     height = unit(4, "in"))
+# print(plt)
+# dev.off()
+
+plt
+```
+
+```{r}
+enrichment_comparison <- function(params_id, pipeline_dir, nk, gene_score = 950, measure = "E", pathway_ids = NULL) {
+
+  if (!(measure %in% c("E", "NLQ", "adj.P.Val"))) {stop()}
+    
+  l <- 1
+  list_enrichment <- vector(mode = "list", length = nk*(nk-1)/2)
+  for (ki in 1:nk) {
+    if (ki > 1) {
+      for (kj in 1:(ki-1)) {
+        
+        x <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nk, k = ki)
+        
+        y <- import_enrichment_mouse(params_id = params_id,
+                                     pipeline_dir = pipeline_dir,
+                                     gene_score = gene_score,
+                                     nk = nk, k = kj)
+        
+        x <- mutate(x, E = ifelse(is.na(E), 0, E))
+        y <- mutate(y, E = ifelse(is.na(E), 0, E))
+        
+        if (!is.null(pathway_ids)) {
+          x <- x %>% filter(ID %in% pathway_ids) %>% arrange(ID)
+          y <- y %>% filter(ID %in% pathway_ids) %>% arrange(ID)
+        } else {
+          x <- x %>% arrange(ID)
+          y <- y %>% arrange(ID)
+        }
+        
+        x <- x[[measure]]
+        y <- y[[measure]]
+        
+        list_enrichment[[l]] <- tibble(x = x, y = y, kx = ki, ky = kj)
+        l <- l + 1
+        
+      }
+    }
+  }
+  
+  out <- bind_rows(list_enrichment)
+  
+  return(out)
+  
+}
+```
+
+
+```{r}
+df_enrichment <- enrichment_comparison(params_id = mouse_params_id, 
+                                       pipeline_dir = mouse_pipeline_dir, 
+                                       measure = "NLQ", 
+                                       nk = 8, pathway_ids = pathway_ids_keep)
+
+df_enrichment %>% 
+  filter(kx == 7, ky == 2) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point()
+```
+
+```{r}
+df_enrichment %>% 
+  filter(kx == 3, ky == 1) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point()
+```
+
+```{r}
+df_enrichment %>% 
+  filter(kx == 4, ky == 2) %>% 
+  mutate(ID = 1:nrow(.))
+```
+
+```{r}
+df_fitness
+```
+
+```{r fig.height = 10, fig.width = 5}
+df_enrichment <- enrichment_comparison(params_id = mouse_params_id, 
+                                       pipeline_dir = mouse_pipeline_dir, 
+                                       measure = "NLQ", 
+                                       nk = 2, pathway_ids = pathway_ids_keep)
+
+df_plt <- df_enrichment %>% 
+  mutate(ID = 1:nrow(.),
+         distance = (x - y)^2)
+
+ggplot(df_plt, aes(y = ID)) + 
+  geom_segment(mapping = aes(x = 0, xend = distance)) +
+  geom_point(mapping = aes(x = distance)) + 
+  geom_vline(xintercept = mean(df_plt$distance), 
+             col = "red") + 
+  labs(x = "Distance", y = "Pathway") + 
+  theme_bw() + 
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+  
+print(mean((df_plt$x - df_plt$y)^2))
+```
+
+```{r fig.height = 10, fig.width = 5}
+df_enrichment <- enrichment_comparison(params_id = mouse_params_id, 
+                                       pipeline_dir = mouse_pipeline_dir, 
+                                       measure = "NLQ", 
+                                       nk = 8, pathway_ids = pathway_ids_keep)
+
+df_plt <- df_enrichment %>% 
+  filter(kx == 4, ky == 2) %>% 
+  mutate(ID = 1:nrow(.),
+         distance = (x - y)^2)
+
+ggplot(df_plt, aes(y = ID)) + 
+  geom_segment(mapping = aes(x = 0, xend = distance)) +
+  geom_point(mapping = aes(x = distance)) + 
+  geom_vline(xintercept = mean(df_plt$distance), 
+             col = "red") + 
+  labs(x = "Distance", y = "Pathway") + 
+  theme_bw() + 
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+print(mean((df_plt$x - df_plt$y)^2))
+```
+
+```{r}
+list_clusters <- vector(mode = "list", length = 9)
+for (nk in 2:10) {
+  list_clusters[[nk-1]] <- expand_grid(kx = 1:nk, ky = 1:nk) %>% 
+    mutate(nk = nk)
+}
+
+df_clusters <- bind_rows(list_clusters) %>% mutate(distance = 0)
+for (i in 1:nrow(df_clusters)) {
+
+    x <- import_enrichment_mouse(params_id = params_id,
+                               pipeline_dir = pipeline_dir,
+                               gene_score = gene_score,
+                               nk = df_clusters[[i, "nk"]], 
+                               k = df_clusters[[i, "kx"]])
+  
+  y <- import_enrichment_mouse(params_id = params_id,
+                               pipeline_dir = pipeline_dir,
+                               gene_score = gene_score,
+                               nk = df_clusters[[i, "nk"]], 
+                               k = df_clusters[[i, "ky"]])
+  
+  x <- mutate(x, E = ifelse(is.na(E), 0, E))
+  y <- mutate(y, E = ifelse(is.na(E), 0, E))
+  
+  x <- x %>% filter(ID %in% pathway_ids_keep) %>% arrange(ID)
+  y <- y %>% filter(ID %in% pathway_ids_keep) %>% arrange(ID)
+  
+  x <- x[["NLQ"]]
+  y <- y[["NLQ"]]
+  
+  df_clusters[[i, "distance"]] <- mean((x-y)^2)
+  
+}
+
+
+
+
+tmp <- df_clusters %>% 
+  unite(col = "cluster_id_x", nk, kx, sep = "-", remove = FALSE) %>% 
+  unite(col = "cluster_id_y", nk, ky, sep = "-", remove = FALSE) %>% 
+  mutate(distance = ifelse(cluster_id_x == cluster_id_y, NA, distance))
+
+cluster_id_lvls <- tmp %>% 
+  select(cluster_id_x, nk, kx) %>% 
+  distinct() %>% 
+  arrange(nk, kx) %>% 
+  pull(cluster_id_x)
+
+tmp <- tmp %>% 
+  mutate(cluster_id_x = factor(cluster_id_x, levels = cluster_id_lvls)) %>% 
+  mutate(cluster_id_y = factor(cluster_id_y, levels = cluster_id_lvls))
+
+ggplot(tmp, aes(x = cluster_id_x, y = fct_rev(cluster_id_y), fill = distance)) + 
+  geom_tile(na.rm = TRUE) +
+  scale_fill_continuous(na.value = "grey90") + 
+  theme_bw()
+```
+
+
+
+```{r}
+nonzero <- runif(n = 500, min = 5, max = 30)
+zero <- rep(0, 500)
+test <- tibble(x = c(nonzero, zero),
+               y = c(zero, nonzero))
+
+ggplot(test, aes(x = x, y = y)) + 
+  geom_point()
+
+
+sqrt(sum((x-y)^2))
+```
+
+
+```{r}
+cluster_ids <- character()
+for (nk in 2:10) {
+  for (k in 1:nk) {
+    cluster_ids <- c(cluster_ids, paste(nk, k, sep = "-"))
+  }
+}
+
+list_enrichment <- vector(mode = "list", length = length(cluster_ids))
+for (i in 1:length(list_enrichment)) {
+  nk <- str_split(cluster_ids[i], pattern = "-")[[1]][[1]]
+  k <- str_split(cluster_ids[i], pattern = "-")[[1]][[2]]
+  list_enrichment[[i]] <- import_enrichment_mouse(params_id = params_id,
+                                                  pipeline_dir = pipeline_dir,
+                                                  gene_score = gene_score,
+                                                  nk = nk, k = k) %>% 
+    filter(ID %in% pathway_ids_keep) %>% 
+    arrange(ID)
+  
+}
+
+df_enrichment <- bind_rows(list_enrichment) 
+
+df_enrichment <- df_enrichment %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+df_enrichment %>% 
+  filter(rank <= 50) %>% 
+ggplot(aes(x = rank, y = NLQ, col = factor(nk), group = cluster_id)) + 
+  geom_line()
+```
+
+```{r}
+list_enrichment[[1]] %>% 
+  arrange(rank)
 ```
 
 
