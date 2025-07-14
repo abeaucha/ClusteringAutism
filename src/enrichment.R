@@ -216,3 +216,12 @@ get_neighbourhood_enrichment <- function(target, background, modules = "Human_Re
   return(out)
   
 }
+
+
+get_module_sizes <- function(modules = "Human_Reactome_October_01_2023_symbol.gmt") {
+  modules <- importMsigDBGMT(modules)
+  module_sizes <- map_dbl(modules[["MODULES2GENES"]], length) %>% 
+    enframe(name = "ID", value = "B") %>% 
+    inner_join(modules[["MODULES"]], by = "ID")
+  return(module_sizes)
+}
