@@ -426,12 +426,12 @@ import_enrichment_human <- function(params_id, pipeline_dir = "data/human/deriva
 
 import_enrichment_mouse <- function(params_id, pipeline_dir = "data/human/derivatives/v3/",
                                     nk, k, gene_score = 950, stringdb_version = "12.0",
-                                    bader_version = 2023, file_prefix = "NewBader_enrichment_clusterneighbourhood_vs_brain_all"){
+                                    bader_version = 2023, file_prefix = "cluster_pathway_enrichment"){
   
   enrichment_dir <- file.path(pipeline_dir, params_id, "enrichment", 
                               paste("StringDB", stringdb_version, 
                                     "Bader", bader_version, sep = "_"), 
-                              "NeighbourhoodEnrichment", gene_score)
+                              gene_score, "NeighbourhoodEnrichment")
   
   enrichment_file <- paste(file_prefix, nk, k, gene_score, sep = "_")
   enrichment_file <- paste0(enrichment_file, ".csv")
