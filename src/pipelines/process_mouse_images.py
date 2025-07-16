@@ -280,8 +280,8 @@ def main(pipeline_dir, input_dir, models, mask, params_id = None,
 
     # Execute processing pipeline
     print("Executing processing pipeline...", flush = True)
-    script = 'process_mouse_images_dev.R'
-    # utils.execute_local(script = script, kwargs = kwargs)
+    script = 'process_mouse_images.R'
+    utils.execute_local(script = script, kwargs = kwargs)
 
     # Transform images
     if transform is not None:
