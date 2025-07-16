@@ -18,7 +18,7 @@ import argparse
 import os
 import utils
 import pandas as pd
-from shutil import rmtree, move
+from shutil import rmtree
 from pyminc.volumes.factory import volumeFromFile
 
 # Command line arguments -----------------------------------------------------
