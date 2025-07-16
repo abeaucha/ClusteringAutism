@@ -1,11 +1,6 @@
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(tidyverse))
-# suppressPackageStartupMessages(library(RMINC))
-# suppressPackageStartupMessages(library(splines))
-# suppressPackageStartupMessages(library(SNFtool))
-# suppressPackageStartupMessages(library(parallel))
-# suppressPackageStartupMessages(library(doSNOW))
 
 
 # Environment variables ------------------------------------------------------
