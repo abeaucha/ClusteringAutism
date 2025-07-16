@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument(
         '--params-id',
         type = str,
-        help = ()
+        help = ("Optional ID for pipeline parameter set.")
     )
 
     parser.add_argument(
