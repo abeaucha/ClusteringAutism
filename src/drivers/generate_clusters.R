@@ -184,7 +184,7 @@ x2 <- as.matrix(x2)
 
 # Run similarity network fusion
 if (verbose) {message("Running similarity network fusion...")}
-W <- similarity_network(x1 = x1, x2 = x2,
+W <- similarity_network(x = list(x1, x2),
                         K = SNF_K, sigma = SNF_sigma,
                         t = SNF_t, metric = SNF_metric,
                         outfile = affinity_file)

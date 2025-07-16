@@ -889,8 +889,7 @@ propensity_matching_norm <- function(imgdir, demographics, mask, outdir,
 
 #' Run similarity network fusion (SNF)
 #'
-#' @param x1 (matrix) Input matrix
-#' @param x2 (matrix) Input matrix
+#' @param x (list) List of input matrices
 #' @param metric (character scalar) Distance metric used to compute the
 #' affinity matrices.
 #' @param K (numeric scalar) Number of nearest-neighbours used to
@@ -903,30 +902,27 @@ propensity_matching_norm <- function(imgdir, demographics, mask, outdir,
 #' affinity matrix.
 #'
 #' @return (matrix) SNF affinity matrix.
-similarity_network <- function(x1, x2, metric = "correlation", K = 10,
+similarity_network <- function(x, metric = "correlation", K = 10,
                                sigma = 0.5, t = 20, outfile = NULL){
-  
+
   if (metric == "correlation") {
-    d1 <- (1-cor(t(x1)))
-    d2 <- (1-cor(t(x2)))
+    d <- map(x, function(x) {1-cor(t(x))})
   } else if (metric == "euclidean") {
-    d1 <- (dist2(as.matrix(x1), as.matrix(x1)))^(1/2)
-    d2 <- (dist2(as.matrix(x2), as.matrix(x2)))^(1/2)
+    d <- map(x, function(x){(dist2(as.matrix(x), as.matrix(x)))^(1/2)})
   } else {
     stop(paste("Argument metric must be one of {correlation, euclidean}:", metric))
   }
-  
-  W1 <- affinityMatrix(d1, K = K, sigma = sigma)
-  W2 <- affinityMatrix(d2, K = K, sigma = sigma)
-  
-  W <- SNF(list(W1, W2), K = K, t = t)
-  
+
+  W_list <- map(d, affinityMatrix, K = K, sigma = sigma)
+
+  W <- SNF(W_list, K = K, t = t)
+
   if (!is.null(outfile)){
     data.table::fwrite(x = as_tibble(W), file = outfile)
   }
-  
+
   return(W)
-  
+
 }
 
 
