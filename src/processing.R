@@ -15,17 +15,25 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 # Functions ------------------------------------------------------------------
 
+# Import modified minc_parallel.R functions from RMINC
+# (I forget why right now)
 source(file.path(SRCPATH, "minc_parallel.R"))
 
+#' Import a MINC image
+#'
+#' @param img (character scalar) Path to image file (.mnc)
+#' @param mask (character scalar) Path to mask file (.mnc)
+#' @param flatten (logical scalar) Return image as flattened vector or array
+#' @param version 
+#'
+#' @returns (mincSingleDim or mincArray) Image
 import_image <- function(img, mask = NULL, flatten = TRUE, version = "v1") {
   
   # Import image
   img <- mincGetVolume(img)
   
   # Convert to 3D if specified
-  if (!flatten) {
-    img <- mincArray(img)
-  }
+  if (!flatten) {img <- mincArray(img)}
   
   # Apply mask if specified
   if (!is.null(mask)) {
@@ -51,6 +59,17 @@ import_image <- function(img, mask = NULL, flatten = TRUE, version = "v1") {
   return(img)
 }
 
+#' Import a set of MINC images
+#'
+#' @param imgfiles (character vector) Path to image files (.mnc)
+#' @param mask (character scalar) Path to mask file (.mnc)
+#' @param output_format (character scalar) Output format for imported images
+#' @param flatten (logical scalar) Flatten images into vectors
+#' @param margin (numeric scalar) Margin along which to store images in matrix
+#' @param version 
+#' @param nproc (numeric scalar) Number of processors to use. 
+#'
+#' @returns (list, matrix, tbl) Images
 import_images <- function(imgfiles, mask = NULL, output_format = "list",
                           flatten = TRUE, margin = 1, version = "v1",
                           nproc = 1) {
@@ -141,6 +160,18 @@ import_images <- function(imgfiles, mask = NULL, output_format = "list",
 }
 
 
+#' Build a voxel matrix (data frame) from a set of images
+#'
+#' @param imgfiles (character vector) Path to image files (.mnc)
+#' @param mask (character scalar) Path to mask file (.mnc)
+#' @param file_col (logical scalar) Keep image files in a column named "file".
+#' @param sort (logical scalar) Option to sort rows by image file names.
+#' @param save (logical scalar) Option to export file to CSV
+#' @param outfile (character scalar) Name of file (.csv) in which to export
+#' @param version (character scalar)
+#' @param nproc (numeric scalar) Number of processors to use.
+#'
+#' @returns (tbl, data.frame) Data frame of image voxels
 build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE,
                                sort = FALSE, save = FALSE,
                                outfile = "voxel_matrix.csv", version = "v1",
@@ -171,17 +202,22 @@ build_voxel_matrix <- function(imgfiles, mask = NULL, file_col = FALSE,
 }
 
 
+#' Export a vector as MINC image
+#'
+#' @param x (numeric vector) Vector to export
+#' @param outfile (character scalar) Path to output image file (.mnc)
+#' @param mask (character scalar) Path to mask file (.mnc). This is used to 
+#' define the image.
+#' @param version 
+#'
+#' @returns NULL
 vector_to_image <- function(x, outfile, mask, version = "v1") {
   
   # Check output file
-  if (is.null(outfile)) {
-    stop("Specify output file.")
-  }
+  if (is.null(outfile)) {stop("Specify output file.")}
   
   # Check mask
-  if (is.null(mask)) {
-    stop("Specify mask file.")
-  }
+  if (is.null(mask)) {stop("Specify mask file.")}
   
   # Import mask
   mask <- mincGetVolume(mask)
@@ -212,6 +248,17 @@ vector_to_image <- function(x, outfile, mask, version = "v1") {
 }
 
 
+#' Export a matrix to a set of images
+#'
+#' @param x (matrix) Matrix to export
+#' @param outfiles (character vector) Vector of paths to output files (.mnc)
+#' @param mask (character scalar) Path to mask file (.mnc). This is used to 
+#' define the image.
+#' @param margin (numeric scalar) Margin specifying the images. 
+#' @param version 
+#' @param nproc (numeric scalar) Number of processors to use.
+#'
+#' @returns
 matrix_to_images <- function(x, outfiles, mask, margin = 1, version = "v1",
                              nproc = 1) {
   
@@ -258,6 +305,15 @@ matrix_to_images <- function(x, outfiles, mask, margin = 1, version = "v1",
 }
 
 
+#' Threshold an image based on intensity values
+#'
+#' @param img (mincSingleDim or mincArray) Image to threshold.
+#' @param threshold (numeric scalar) Intensity threshold to apply.
+#' @param symmetric (logical scalar) Apply threshold symmetrically. 
+#' @param comparison (character scalar) Method of comparison used to apply the 
+#' threshold.
+#'
+#' @returns (mincSingleDim or mincArray) Thresholded image.
 threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE,
                                 comparison = "gt") {
   
@@ -290,6 +346,15 @@ threshold_intensity <- function(img, threshold = 0.5, symmetric = TRUE,
   
 }
 
+#' Threshold an image based on rank
+#'
+#' @param img (mincSingleDim or mincArray) Image to threshold.
+#' @param n (numeric scalar) Top number or fraction of voxels to return. 
+#' If negative, the function will return the top negative values. 
+#' @param symmetric (logical scalar) Apply threshold symmetrically. 
+#' @param tolerance (numeric scalar)
+#'
+#' @returns (mincSingleDim or mincArray) Thresholded image.
 threshold_top_n <- function(img, n = 0.2, symmetric = TRUE, tolerance = 1e-5) {
   
   # Raise error if symmetric is True and n < 0
@@ -343,6 +408,16 @@ threshold_top_n <- function(img, n = 0.2, symmetric = TRUE, tolerance = 1e-5) {
 }
 
 
+#' Threshold an image
+#'
+#' @param img (mincSingleDim or mincArray) Image to threshold.
+#' @param method (character scalar) Method used for thresholding.
+#' @param threshold (numeric scalar) Threshold value.
+#' @param symmetric (logical scalar) Apply threshold symmetrically. 
+#' @param comparison (character scalar) Method of comparison used to apply the 
+#' threshold.
+#'
+#' @returns (mincSingleDim or mincArray) Thresholded image.
 threshold_image <- function(img, method = "top_n", threshold = 0.2,
                             symmetric = TRUE, comparison = "gt") {
   
@@ -365,7 +440,15 @@ threshold_image <- function(img, method = "top_n", threshold = 0.2,
 }
 
 
+#' Create a mask from nonzero voxels
+#'
+#' @param img (mincSingleDim or mincArray) Image to threshold.
+#' @param signed (logical scalar) Return a mask with -1 for negative voxels 
+#' and 1 for positive voxels
+#'
+#' @returns (mincSingleDim or mincArray) Mask
 mask_from_image <- function(img, signed = FALSE) {
+  
   mask <- img
   if (signed) {
     mask[img > 0] <- 1
@@ -376,106 +459,6 @@ mask_from_image <- function(img, signed = FALSE) {
   return(mask)
 }
 
-
-#' Fit and predict normative model
-#'
-#' @param y (numeric vector) Voxel values across study participants.
-#' @param demographics (data.frame) Demographics information for study
-#' participants.
-#' @param group (character scalar) Group of participants for which to
-#' compute effect sizes.
-#' @param batch (character scalar) Batch variable to residualize.
-#' @param df (numeric scalar) Degrees of freedom in natural spline
-#' model.
-#'
-#' @return (data.frame) Model predictions for test participants.
-fit_predict_model <- function(y, demographics, group = "patients",
-                              cv_seed = NULL, batch = NULL, df = 3) {
-  
-  if (length(y) != nrow(demographics)) {stop()}
-  
-  # Residualize using batch variable if specified
-  if (!is.null(batch)) {
-    batch <- demographics %>%
-      select(all_of(batch)) %>%
-      unite(col = batch) %>%
-      pull(batch)
-    y <- residuals(lm(y ~ batch))
-    names(y) <- NULL
-  }
-  
-  # Filters for train and test sets
-  ind_fit <- demographics[["DX"]] == "Control"
-  if (group == "patients") {
-    ind_pred <- !ind_fit
-  } else if (group == "controls") {
-    ind_pred <- ind_fit
-  } else if (group == "all") {
-    ind_pred <- !logical(nrow(demographics))
-  }
-  
-  # Training data frame
-  df_fit <- demographics[ind_fit, c("Age", "Sex")]
-  df_fit[["y"]] <- y[ind_fit]
-  
-  # Test data frame
-  df_pred <- demographics[ind_pred, c("Age", "Sex")]
-  df_pred[["y"]] <- y[ind_pred]
-  
-  # Fit model and predict on test set
-  model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
-  model_pred <- predict(model_fit,
-                        newdata = df_pred,
-                        interval = "prediction",
-                        level = pnorm(q = 1) - pnorm(q = -1))
-  
-  # Extract model parameters of interest
-  df_pred <- df_pred %>%
-    mutate(y_pred = model_pred[,"fit"],
-           y_lwr = model_pred[,"lwr"],
-           y_upr = model_pred[,"upr"],
-           y_sd = y_pred - y_lwr)
-  
-  return(df_pred)
-  
-}
-
-
-#' Compute z-score
-#'
-#' @param x (data.frame) Data frame containing normative growth
-#' model outputs.
-#'
-#' @return (data.frame) Input data frame with new column containing
-#' z-scores.
-zscore <- function(x){
-  cols_check <- c("y", "y_pred", "y_sd")
-  if (any(!(cols_check %in% colnames(x)))){stop()}
-  x <- mutate(x, z = (y - y_pred)/y_sd)
-  return(x)
-}
-
-
-#' Compute normative z-score for a voxel
-#'
-#' @param y (numeric vector) Voxel values across study participants.
-#' @param demographics (data.frame) Demographics information for study
-#' participants.
-#' @param group (character scalar) Group of participants for which to
-#' compute effect sizes.
-#' @param batch (character scalar) Batch variable to residualize.
-#' @param df (numeric scalar) Degrees of freedom in natural spline
-#' model.
-#'
-#' @return (numeric vector) Voxel normative z-scores
-# compute_normative_zscore <- function(y, demographics, group = "patients",
-#                                      cv_seed = NULL, batch = NULL, df = 3) {
-#   y_pred <- fit_predict_model(y = y, demographics = demographics,
-#                               cv_seed = NULL, group = group,
-#                               batch = batch, df = df)
-#   z <- pull(zscore(y_pred), "z")
-#   return(z)
-# }
 
 #' Compute normative z-score for a voxel
 #'
@@ -517,6 +500,7 @@ compute_normative_zscore <- function(y, idx, demographics, df = 3) {
   return(z)
   
 }
+
 
 #' Calculate human effect sizes using normative growth modelling.
 #'
@@ -682,189 +666,6 @@ normative_growth_norm <- function(imgdir, demographics, mask, outdir,
   return(outfiles)
 }
 
-normative_growth_norm_old <- function(imgdir, demographics, mask, outdir,
-                                      cv_seed = cv_seed,
-                                      key = "file", group = "patients",
-                                      df = 3, batch = NULL,
-                                      execution = "local", nproc = 1,
-                                      registry_name = NULL,
-                                      registry_cleanup = TRUE,
-                                      njobs = NULL, resources = list()) {
-  
-  imgdir <- "data/human/derivatives/v3/577/jacobians/absolute/"
-  demographics <- "data/human/registration/v3/subject_info/demographics.csv"
-  mask <- "data/human/registration/v3/reference_files/mask_3.0mm.mnc"
-  outdir <- "data/human/derivatives/v3/577/cross_validation/sample_1//effect_sizes/resolution_3.0/absolute/"
-  key <- "file"
-  cv_seed <- 1
-  group <- "controls"
-  df <- 3
-  batch <- "Site-Scanner"
-  execution <- "local"
-  nproc <- 8
-  registry_name <- "test"
-  registry_cleanup <- FALSE
-  njobs <- 300
-  resources <- list(memory="16G",
-                    walltime=60*60)
-  verbose <- TRUE
-  
-  # Raise cross-validation error
-  if (!is.null(cv_seed) & group != "controls") {
-    stop("Cross-validation only possible for controls.")
-  }
-  
-  # Import demographics data
-  if (verbose) {message("Importing demographics information...")}
-  demographics <- as_tibble(data.table::fread(demographics, header = TRUE))
-  
-  # Check existence of key column in demographics
-  if (!(key %in% colnames(demographics))) {
-    stop(paste("demographics data is missing key column:", key))
-  }
-  
-  # Remove entries with missing diagnosis, age, or sex
-  demographics <- demographics %>%
-    filter(!is.na(DX),
-           !is.na(Age),
-           !is.na(Sex))
-  
-  # TODO: Remove rows where batch columns are NA
-  # Check existence of batch columns
-  if (!is.null(batch)) {
-    batch <- str_split(batch, pattern = "-")[[1]]
-    batch_check <- batch %in% colnames(demographics)
-    if (!all(batch_check)) {
-      stop("Batch columns not found in demographics:\n",
-           str_flatten(batch, collapse = "\n"))
-    }
-  }
-  
-  # Image files
-  imgfiles <- list.files(imgdir, full.names = TRUE)
-  
-  # Match image files to demographics
-  if (verbose) {message("Matching image files to demographics...")}
-  imgs_in_demographics <- basename(imgfiles) %in% demographics[[key]]
-  imgfiles <- imgfiles[imgs_in_demographics]
-  row_match <- match(basename(imgfiles), demographics[[key]])
-  demographics <- demographics[row_match,]
-  
-  
-  
-  
-  if (length(y) != nrow(demographics)) {stop()}
-  
-  # Residualize using batch variable if specified
-  if (!is.null(batch)) {
-    batch <- demographics %>%
-      select(all_of(batch)) %>%
-      unite(col = batch) %>%
-      pull(batch)
-    y <- residuals(lm(y ~ batch))
-    names(y) <- NULL
-  }
-  
-  # Filters for train and test sets
-  ind_fit <- demographics[["DX"]] == "Control"
-  if (group == "patients") {
-    ind_pred <- !ind_fit
-  } else if (group == "controls") {
-    ind_pred <- ind_fit
-  } else if (group == "all") {
-    ind_pred <- !logical(nrow(demographics))
-  }
-  
-  # Training data frame
-  df_fit <- demographics[ind_fit, c("Age", "Sex")]
-  df_fit[["y"]] <- y[ind_fit]
-  
-  # Test data frame
-  df_pred <- demographics[ind_pred, c("Age", "Sex")]
-  df_pred[["y"]] <- y[ind_pred]
-  
-  # Fit model and predict on test set
-  model_fit <- lm(y ~ Sex + ns(Age, df = df), data = df_fit)
-  model_pred <- predict(model_fit,
-                        newdata = df_pred,
-                        interval = "prediction",
-                        level = pnorm(q = 1) - pnorm(q = -1))
-  
-  # Extract model parameters of interest
-  df_pred <- df_pred %>%
-    mutate(y_pred = model_pred[,"fit"],
-           y_lwr = model_pred[,"lwr"],
-           y_upr = model_pred[,"upr"],
-           y_sd = y_pred - y_lwr)
-  
-  
-  
-  y_pred <- fit_predict_model(y = y, demographics = demographics,
-                              cv_seed = NULL, group = group,
-                              batch = batch, df = df)
-  z <- pull(zscore(y_pred), "z")
-  
-  quit()
-  
-  ti <- Sys.time()
-  # Run normative growth modelling
-  if (verbose) {message("Evaluating normative growth models...")}
-  if (execution == "local") {
-    voxels <- mcMincApply(filenames = imgfiles,
-                          fun = compute_normative_zscore,
-                          demographics = demographics,
-                          cv_seed = cv_seed,
-                          group = group,
-                          batch = batch,
-                          df = df,
-                          mask = mask,
-                          cores = nproc,
-                          return_raw = TRUE)
-  } else if (execution == "slurm") {
-    voxels <- qMincApply(filenames = imgfiles,
-                         fun = compute_normative_zscore,
-                         demographics = demographics,
-                         cv_seed = cv_seed,
-                         group = group,
-                         batch = batch,
-                         df = df,
-                         mask = mask,
-                         batches = njobs,
-                         source = file.path(SRCPATH, "processing.R"),
-                         registry_name = ifelse(is.null(registry_name),
-                                                "registry_normative_growth",
-                                                registry_name),
-                         cleanup = registry_cleanup,
-                         return_raw = TRUE,
-                         resources = resources)
-  } else {
-    stop()
-  }
-  
-  # Convert voxel list into matrix
-  # This matrix has number of voxels consistent with mask > 0.5
-  voxels <- simplify_masked(voxels[["vals"]])
-  
-  tf <- Sys.time()
-  print(tf-ti)
-  
-  # Export images
-  if (verbose) {message("Exporting normalized images...")}
-  if (!file.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
-  if (group == "patients") {
-    outfiles <- demographics[demographics[["DX"]] != "Control", key][[1]]
-  } else if (group == "controls") {
-    outfiles <- demographics[demographics[["DX"]] == "Control", key][[1]]
-  } else if (group == "all") {
-    outfiles <- demographics[[key]]
-  }
-  outfiles <- file.path(outdir, outfiles)
-  matrix_to_images(x = voxels, outfiles = outfiles, mask = mask,
-                   margin = 2, version = "v2", nproc = nproc)
-  
-  return(outfiles)
-}
-
 
 #' Calculate human effect sizes using propensity-matching.
 #'
@@ -967,20 +768,17 @@ create_clusters <- function(W, nk = 10, outfile = NULL) {
 
 #' Compute cluster centroids
 #'
-#' @param i 
-#' @param clusters 
-#' @param mask 
-#' @param outdir 
-#' @param method 
-#' @param execution 
-#' @param nproc 
-#' @param njobs 
-#' @param resources 
+#' @param i (numeric scalar) Column index.
+#' @param clusters (data.frame, tbl) Data frame containing cluster assignments.
+#' @param mask (character scalar) Path to a mask image (.mnc).
+#' @param outdir (character scalar) Path to the output directory.
+#' @param method (character scalar) Method used to compute centroids.
+#' @param execution (character scalar) Method of execution.
+#' @param nproc (numeric scalar) Number of processors to use.
+#' @param njobs (numeric scalar) Number of jobs to deploy.
+#' @param resources (list) Resources to use on a Slurm cluster.
 #'
-#' @return
-#' @export
-#'
-#' @examples
+#' @return (character vector) Paths to the centroid images.
 compute_cluster_centroids <- function(i, clusters, mask, outdir, method = "mean",
                                       execution = "local", nproc = 1,
                                       njobs = NULL, resources = list()){
