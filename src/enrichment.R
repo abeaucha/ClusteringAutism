@@ -10,15 +10,22 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 # Functions ------------------------------------------------------------------
 
+#' Filter mouse models for enrichment
+#'
+#' @param models (character scalar) Path to the file (.csv) containing models
+#'
+#' @returns (data.frame, tbl) Filtered set of models.
 get_model_genes <- function(models) {
   
   # Genes to rename
-  genes_rename <- tibble(gene = c("Andr", "Caspr2", "Dat", "Mor", "Nl1", "Nl3",
-                                  "Nrxn1a", "Sert", "Pcdh", "Chd7;En1Cre",
-                                  "Ube3a.2", "FusDelta14", "Nr1a", "Snf2L", "Snf2H"),
-                         gene_new = c("Ar", "Cntnap2", "Slc6a3", "Oprm1", "Nlgn1",
-                                      "Nlgn3", "Nrxn1", "Slc6a4", "Pcdhga3", "Chd7",
-                                      "Ube3a", "Fus", "Nmdar1", "Smarca1", "Smarca5"))
+  genes_rename <- tibble(
+    gene = c("Andr", "Caspr2", "Dat", "Mor", "Nl1", "Nl3", "Nrxn1a", "Sert", 
+             "Pcdh", "Chd7;En1Cre", "Ube3a.2", "FusDelta14", "Nr1a", "Snf2L", 
+             "Snf2H"),
+    gene_new = c("Ar", "Cntnap2", "Slc6a3", "Oprm1", "Nlgn1", "Nlgn3", 
+                 "Nrxn1", "Slc6a4", "Pcdhga3", "Chd7", "Ube3a", "Fus", 
+                 "Nmdar1", "Smarca1", "Smarca5")
+  )
   
   # Genes to exclude
   genes_exclude <- c("15q11-13", "16p11.2", "22q11.2", "XO", "Btbr", "Balbc", 
@@ -47,6 +54,7 @@ get_model_genes <- function(models) {
   return(models)
   
 }
+
 
 get_homologs <- function(genes, species, ordered=T) {
   if (!exists("hom", envir = globalenv())) {
@@ -80,7 +88,17 @@ get_homologs <- function(genes, species, ordered=T) {
 
 
 
-get_gene_neighbourhood <- function(genes, score = 950, stringdb_version = "12.0", limit = 1000){
+#' Get the gene neighbourhood for a set of genes
+#'
+#' @param genes (character vector) Genes whose neighbourhood to identify.
+#' @param score (numeric scalar) StringDB score for gene network confidence.
+#' @param stringdb_version (character scalar) StringDB version.
+#' @param limit (numeric scalar) Max number of records to return per gene from 
+#' the StringDB API.
+#'
+#' @returns (data.frame, tbl) Neighbourhood information for the input genes.
+get_gene_neighbourhood <- function(genes, score = 950, 
+                                   stringdb_version = "12.0", limit = 1000){
   
   # StringDB version URL
   if (stringdb_version == "11.5") {
@@ -116,6 +134,14 @@ get_gene_neighbourhood <- function(genes, score = 950, stringdb_version = "12.0"
 }
 
 
+#' Import GMT file
+#'
+#' Modified version of the function from tmod, which currently doesn't work 
+#' in the package.
+#'
+#' @param file (character scalar) File to import (.gmt)
+#'
+#' @returns (list) Modules and genes.
 importMsigDBGMT <- function(file) {
   # stop("This does not work at the present.")
   msig <- list()
@@ -190,7 +216,15 @@ HGtest <- function (fg, bg, mset, qval = 0.05, cols = "Title", nodups = TRUE) {
 }
 
 
-get_neighbourhood_enrichment <- function(target, background, modules = "Human_Reactome_October_01_2023_symbol.gmt") {
+#' Evaluate the enrichment for a target set
+#'
+#' @param target (character vector) Target set of genes
+#' @param background (character vector) Background set of genes
+#' @param modules (character scalar) File (.gmt) containing the pathway modules
+#'
+#' @returns (data.frame, tbl) Enrichment data frame
+get_neighbourhood_enrichment <- function(target, background, 
+                                         modules = "Human_Reactome_October_01_2023_symbol.gmt") {
   
   modules <- importMsigDBGMT(modules)
   
@@ -199,16 +233,16 @@ get_neighbourhood_enrichment <- function(target, background, modules = "Human_Re
   bg <- get_homologs(background, "mouse", ordered = F)[["human_genes"]]
   
   # Run hypergeometric test against pathway modules
-  out <- HGtest(fg = fg, bg = bg, mset = modules)
+  enrichment <- HGtest(fg = fg, bg = bg, mset = modules)
   
-  out <- out %>% 
+  enrichment <- enrichment %>% 
     arrange(P.Value) %>% 
     mutate(rank = 1:nrow(.),
            adj.P.Val = p.adjust(P.Value, method = "fdr"),
            NLQ = -log10(adj.P.Val)) %>% 
     select(rank, ID, Title, P.Value, adj.P.Val, NLQ, b, B, n, N, E)
   
-  return(out)
+  return(enrichment)
   
 }
 
