@@ -22,17 +22,13 @@ process_human_images.py \
 
 # Mouse image processing pipeline
 echo "Processing mouse images..."
-process_mouse_images.R
-
-# Clean mouse pipeline outputs
-echo "Organizing mouse pipeline outputs..."
-clean_mouse_pipeline_outputs.py \
-  --pipeline-dir data/mouse/derivatives/001 \
-  --resolution 200 \
-  --method mean \
-  --transform data/mouse/registration/transforms/MICe_scanbase.xfm \
-  --transform-like data/mouse/atlas/average_template_200um.mnc \
-  --nproc 4
+process_mouse_images.py \
+  --params-id 001 \
+  --pipeline-dir data/mouse/derivatives \
+  --input-dir data/mouse/registration \
+  --models data/mouse/registration/Names_Paper.csv \
+  --mask data/mouse/registration/reference_files/scanbase_second_level-nlin-3_mask_200um.mnc \
+  --cluster-nk-max 2
 
 # Mouse-human cluster similarity pipeline
 echo "Evaluating similarity of mouse and human clusters..."
