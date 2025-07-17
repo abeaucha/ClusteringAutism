@@ -158,6 +158,13 @@ def parse_args():
         help = "Path to transform likefile (.mnc)."
     )
 
+    parser.add_argument(
+        '--nproc',
+        type = int,
+        default = 1,
+        help = "Number of processors to use."
+    )
+
     return vars(parser.parse_args())
 
 
@@ -264,7 +271,7 @@ def main(pipeline_dir, input_dir, models, mask, params_id = None,
          cluster_file = 'clusters.csv',
          cluster_affinity_file = 'affinity.csv',
          centroid_method = 'mean',
-         transform = None, transform_like = None):
+         transform = None, transform_like = None, nproc = 1):
 
     # Initialize pipeline
     kwargs = locals().copy()
@@ -274,6 +281,7 @@ def main(pipeline_dir, input_dir, models, mask, params_id = None,
     del kwargs['params_id']
     del kwargs['transform']
     del kwargs['transform_like']
+    del kwargs['nproc']
     kwargs['pipeline_dir'] = paths['pipeline']
     kwargs['registration_dir'] = kwargs.pop('input_dir')
     kwargs = {key.replace('_', '-'): val for key, val in kwargs.items()}
@@ -310,7 +318,7 @@ def main(pipeline_dir, input_dir, models, mask, params_id = None,
                                                   outdir = centroid_dir_tmp_j,
                                                   like = transform_like,
                                                   transform = transform,
-                                                  nproc = 4)
+                                                  nproc = nproc)
 
             for file in output_files:
                 os.rename(file, os.path.join(centroid_dir_j, os.path.basename(file)))
