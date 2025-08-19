@@ -69,16 +69,6 @@ if (is.null(params_id)) {
   stop("Specify the parameter set ID for the pipeline outputs.")
 }
 
-# Command line args? 
-# pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/")
-# enrichment_dir <- file.path(PROJECTPATH, "data/enrichment/")
-# params_id <- "107"
-# models <- "model_names.csv"
-# # nk_max <- 10
-# gene_score <- 950
-# stringdb_version <- "12.0"
-# bader_version <- 2025
-
 # Get pipeline parameters
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata, 
