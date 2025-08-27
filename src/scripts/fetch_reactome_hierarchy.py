@@ -8,6 +8,7 @@
 
 import os
 import requests
+import time
 import pandas as pd
 
 # Environment variables ------------------------------------------------------
@@ -35,52 +36,55 @@ if __name__ == '__main__':
 
         print("Fetching hierarchy for pathway root: {}".format(row['Name']))
 
+        # GETTING A CONNECTION ISSUE ON THE SERVER SIDE
         # For each root pathway, get all the events that fall within that tree
         pathway_hierarchy_url = 'https://reactome.org/ContentService/data/pathway/{}/containedEvents/'.format(row['ID'])
         pathway_hierarchy_resp = requests.get(pathway_hierarchy_url).json()
-        df_pathway_hierarchy = pd.DataFrame(
-            dict(Name = [x['displayName'] for x in pathway_hierarchy_resp],
-                 ID = [x['stId'] for x in pathway_hierarchy_resp],
-                 SchemaClass = [x['schemaClass'] for x in pathway_hierarchy_resp])
-        )
 
-        print("\tFetching parents of nodes in hierarchy...")
-
-        # For each root pathway, get the parent pathway of each event
-        pathway_parents_url = '{}eventOf'.format(pathway_hierarchy_url)
-        pathway_parents_resp = requests.get(pathway_parents_url)
-        pathway_parents = (pathway_parents_resp.text
-                           .replace("[", "").replace("[", "")
-                           .split("\n, "))
-        pathway_parents = [pathway.split("\n") for pathway in pathway_parents]
-        pathway_parents = [pathway[0] for pathway in pathway_parents]
-        pathway_parents = [pathway.split("\t") for pathway in pathway_parents]
-        df_pathway_parents = pd.DataFrame(
-            dict(ParentID = [x[0] for x in pathway_parents],
-                 Parent = [x[1] for x in pathway_parents])
-        )
-
-        print("\tJoining nodes with parent nodes...")
-
-        # Concatenate node information with parent node information
-        df_pathways = pd.concat([df_pathway_hierarchy, df_pathway_parents], axis = 1)
-        df_pathways['Root'] = row['Name']
-        df_pathways = df_pathways.loc[df_pathways['SchemaClass'] == 'Pathway'].copy()
-        df_pathways = df_pathways.drop("SchemaClass", axis = 1)
-
-        # Create a row for the hierarchy root
-        df_pathway_root = pd.DataFrame([
-            dict(Name = row['Name'], ID = row['ID'],
-                 ParentID = None, Parent = None,
-                 Root = row['Name'])
-        ])
-
-        # Concatenate the root with the rest of the hierarchy
-        df_pathways = pd.concat([df_pathway_root, df_pathways], axis = 0)
-        df_pathways = df_pathways.reset_index(drop = True)
-
-        # Append hierarchy to list
-        list_pathways_all.append(df_pathways)
+        time.sleep(10)
+        # df_pathway_hierarchy = pd.DataFrame(
+        #     dict(Name = [x['displayName'] for x in pathway_hierarchy_resp],
+        #          ID = [x['stId'] for x in pathway_hierarchy_resp],
+        #          SchemaClass = [x['schemaClass'] for x in pathway_hierarchy_resp])
+        # )
+        #
+        # print("\tFetching parents of nodes in hierarchy...")
+        #
+        # # For each root pathway, get the parent pathway of each event
+        # pathway_parents_url = '{}eventOf'.format(pathway_hierarchy_url)
+        # pathway_parents_resp = requests.get(pathway_parents_url)
+        # pathway_parents = (pathway_parents_resp.text
+        #                    .replace("[", "").replace("[", "")
+        #                    .split("\n, "))
+        # pathway_parents = [pathway.split("\n") for pathway in pathway_parents]
+        # pathway_parents = [pathway[0] for pathway in pathway_parents]
+        # pathway_parents = [pathway.split("\t") for pathway in pathway_parents]
+        # df_pathway_parents = pd.DataFrame(
+        #     dict(ParentID = [x[0] for x in pathway_parents],
+        #          Parent = [x[1] for x in pathway_parents])
+        # )
+        #
+        # print("\tJoining nodes with parent nodes...")
+        #
+        # # Concatenate node information with parent node information
+        # df_pathways = pd.concat([df_pathway_hierarchy, df_pathway_parents], axis = 1)
+        # df_pathways['Root'] = row['Name']
+        # df_pathways = df_pathways.loc[df_pathways['SchemaClass'] == 'Pathway'].copy()
+        # df_pathways = df_pathways.drop("SchemaClass", axis = 1)
+        #
+        # # Create a row for the hierarchy root
+        # df_pathway_root = pd.DataFrame([
+        #     dict(Name = row['Name'], ID = row['ID'],
+        #          ParentID = None, Parent = None,
+        #          Root = row['Name'])
+        # ])
+        #
+        # # Concatenate the root with the rest of the hierarchy
+        # df_pathways = pd.concat([df_pathway_root, df_pathways], axis = 0)
+        # df_pathways = df_pathways.reset_index(drop = True)
+        #
+        # # Append hierarchy to list
+        # list_pathways_all.append(df_pathways)
 
 # Concatenate all pathways into one data frame
 df_pathways_all = pd.concat(list_pathways_all, axis = 0).reset_index(drop = True)
