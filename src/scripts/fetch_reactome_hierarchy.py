@@ -10,6 +10,10 @@ import os
 import requests
 import pandas as pd
 
+# Environment variables ------------------------------------------------------
+
+PROJECTPATH = os.getenv("PROJECTPATH")
+
 
 # Main -----------------------------------------------------------------------
 
@@ -83,6 +87,6 @@ df_pathways_all = pd.concat(list_pathways_all, axis = 0).reset_index(drop = True
 
 # Export pathway hierarchy
 outfile = "reactome_hierarchy.csv"
-outdir = "data/enrichment/"
+outdir = os.path.join(PROJECTPATH, "data/enrichment/")
 outfile = os.path.join(outdir, outfile)
 df_pathways_all.to_csv(outfile, index = False)
