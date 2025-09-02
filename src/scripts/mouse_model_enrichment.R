@@ -14,7 +14,7 @@ source(file.path(SRCPATH, "analysis.R"))
 source(file.path(SRCPATH, "Clustering_Functions_AB.R"))
 
 # Pipeline directory
-pipeline_dir <- "data/mouse/derivatives/test/"
+pipeline_dir <- "data/mouse/derivatives/model_pathways/"
 if (!dir.exists(pipeline_dir)) {
   dir.create(pipeline_dir, recursive = TRUE)
 }
@@ -47,6 +47,13 @@ paths <- list(
   clusters = file.path(pipeline_dir, "clusters", paste0("resolution_", resolution_mm)),
   centroids = file.path(pipeline_dir, "centroids", paste0("resolution_", resolution_mm))
 )
+
+# Create output directories
+for (path in paths[-1]) {
+  if (!dir.exists(path)) {
+    dir.create(path, recursive = TRUE)
+  }
+}
 
 
 # ANATOMY -----------
@@ -120,57 +127,42 @@ write_csv(x = models, file = models_file_out)
 
 models <- get_model_genes(models_file_out)
 
+# models <- models %>% 
+#   filter(gene != "Ar")
+
 n_models <- nrow(models)
 
-enrichment_E <- enrichment_NLQ <- enrichment_binary <- matrix(data = 0, 
-                                                              nrow = n_models, 
-                                                              ncol = n_modules)
+enrichment <- matrix(data = 0, nrow = n_models, ncol = n_modules)
 
-gene_scores <- c(500, 700, 900, 950)
 genes_unique <- unique(models[["gene"]])
-list_enrichment <- vector(mode = "list", length = length(gene_scores))
-names(list_enrichment) <- gene_scores
-for (l in 1:length(list_enrichment)) {
+for (gene in genes_unique) {
   
-  print(paste("Gene score", gene_scores[l]))
+  print(gene)
   
-  for (gene in genes_unique) {
-    
-    print(gene)
-    
-    neighbourhood <- get_gene_neighbourhood(genes = gene, 
-                                            score = gene_scores[l], 
-                                            stringdb_version = stringdb_version)
-    
-    if (nrow(neighbourhood) == 0){
-      target_set <- gene
-    } else {
-      target_set <- unique(c(neighbourhood[["gene_A"]], neighbourhood[["gene_B"]]))
-    }
-    
-    enrichment_gene <- get_neighbourhood_enrichment(target = target_set,
-                                                    background = background_set, 
-                                                    modules = bader_modules) %>% 
-      filter(ID %in% pathway_ids_keep) %>% 
-      arrange(ID)
-    
-    idx_gene <- which(models[["gene"]] == gene)
-    for (i in idx_gene) {
-      enrichment_E[i,] <- enrichment_gene$E
-      enrichment_NLQ[i,] <- enrichment_gene$NLQ
-      enrichment_binary[i,] <- as.numeric(enrichment_gene$adj.P.Val < 0.05)
-    }
+  neighbourhood <- get_gene_neighbourhood(genes = gene, 
+                                          score = gene_score, 
+                                          stringdb_version = stringdb_version)
+  
+  if (nrow(neighbourhood) == 0){
+    target_set <- gene
+  } else {
+    target_set <- unique(c(neighbourhood[["gene_A"]], neighbourhood[["gene_B"]]))
   }
   
-  rownames(enrichment_E) <- str_remove(models$file, ".mnc")
-  rownames(enrichment_NLQ) <- str_remove(models$file, ".mnc")
-  rownames(enrichment_binary) <- str_remove(models$file, ".mnc")
+  enrichment_gene <- get_neighbourhood_enrichment(target = target_set,
+                                                  background = background_set, 
+                                                  modules = bader_modules) %>% 
+    filter(ID %in% pathway_ids_keep) %>% 
+    arrange(ID)
   
-  list_enrichment[[l]][["E"]] <- enrichment_E
-  list_enrichment[[l]][["NLQ"]] <- enrichment_NLQ
-  list_enrichment[[l]][["binary"]] <- enrichment_binary
-  
+  idx_gene <- which(models[["gene"]] == gene)
+  for (i in idx_gene) {
+    enrichment[i,] <- enrichment_gene$NLQ
+  }
 }
+
+rownames(enrichment) <- str_remove(models$file, ".mnc")
+  
   
 
 
@@ -204,193 +196,56 @@ idx_single_genes <- rownames(effect_size_data_matrix_abs) %in% str_remove(models
 es_matrix_abs <- effect_size_data_matrix_abs[idx_single_genes,]
 es_matrix_rel <- effect_size_data_matrix_rel[idx_single_genes,]
 
-list_clusters <- vector(mode = "list", length = length(list_enrichment))
-list_metrics <- vector(mode = "list", length = length(list_enrichment))
-names(list_clusters) <- names(list_enrichment)
-names(list_metrics) <- names(list_enrichment)
-for (l in 1:length(list_clusters)) {
+outfile <- file.path(paths$clusters, "affinity.csv")
+affinity <- similarity_network_new(x = list(es_matrix_abs, es_matrix_rel, enrichment),
+                                   metric = "euclidean", outfile = outfile)
+
+outfile <- file.path(paths$clusters, "clusters.csv")
+clusters <- create_clusters(W = affinity, nk = 10, outfile = outfile)
+
+
+mask <- file.path(paths[["jacobians"]], "scanbase_second_level-nlin-3_mask_200um.mnc")
+jacobians <- c("absolute", "relative")
+for (jtype in jacobians) {
   
-  affinity <- similarity_network_new(x = list(es_matrix_abs, es_matrix_rel, list_enrichment[[l]][["E"]]),
-                                                      metric = "euclidean")
-  # affinity <- similarity_network_new(x = list(es_matrix_rel, list_enrichment[[l]][["E"]]),
-  #                                    metric = "euclidean")
-  list_metrics[[l]][["E"]] <- estimate_cluster_metrics(W = affinity, NUMC = 2:10)
-  list_clusters[[l]][["E"]] <- create_clusters(W = affinity, nk = 10)
+  clusters_jtype <- clusters %>%
+    as_tibble() %>%
+    mutate(ID = file.path(paths[["effect_sizes"]], resolution_um, ID),
+           ID = paste0(ID, "_ES_", str_to_title(jtype), "_", resolution_um, ".mnc")) %>%
+    column_to_rownames("ID")
   
-  affinity <- similarity_network_new(x = list(es_matrix_abs,es_matrix_rel, list_enrichment[[l]][["NLQ"]]),
-                                                      metric = "euclidean")
-  # affinity <- similarity_network_new(x = list(es_matrix_rel, list_enrichment[[l]][["NLQ"]]),
-  #                                    metric = "euclidean")
-  list_metrics[[l]][["NLQ"]] <- estimate_cluster_metrics(W = affinity, NUMC = 2:10)
-  list_clusters[[l]][["NLQ"]] <- create_clusters(W = affinity, nk = 10)
-  
-  affinity <- similarity_network_new(x = list(es_matrix_abs, es_matrix_rel, list_enrichment[[l]][["binary"]]),
-                                                      metric = "euclidean")
-  # affinity <- similarity_network_new(x = list(es_matrix_rel, list_enrichment[[l]][["binary"]]),
-  #                                    metric = "euclidean")
-  list_metrics[[l]][["binary"]] <- estimate_cluster_metrics(W = affinity, NUMC = 2:10)
-  list_clusters[[l]][["binary"]] <- create_clusters(W = affinity, nk = 10)
-}
-
-
-df_metrics <- list_metrics %>% 
-  map(bind_rows, .id = "measure") %>% 
-  bind_rows(.id = "score") %>% 
-  mutate(measure = factor(measure, levels = c("E", "NLQ", "binary")))
-
-plt_metrics <- ggplot(df_metrics, aes(x = nk, y = eigengap, group = measure, col = measure)) + 
-  geom_line() + 
-  geom_point() +
-  facet_wrap(~score, ncol = 4) + 
-  scale_x_continuous(breaks = seq(2, 10, by = 1)) + 
-  labs(y = "Eigengap") +
-  theme_bw() +
-  theme(panel.grid.minor.x = element_blank())
-
-outfile <- "cluster_metrics.pdf"
-outfile <- file.path(pipeline_dir, outfile)
-pdf(file = outfile, 
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(plt_metrics)
-dev.off()
-
-
-# Convert cluster information to long format
-measures <- names(list_clusters[[1]])
-for (score in gene_scores) {
-  for (measure in measures) {
-    
-    score <- as.character(score)
-    
-    clusters_long <- list_clusters[[score]][[measure]] %>% 
-      pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-      mutate(nk = str_remove(nk_name, "nk"),
-             nk = as.numeric(nk),
-             nk = factor(nk),
-             k = factor(k))
-    
-    # Mouse cluster Sankey plot
-    sankey <- ggplot(clusters_long,
-                     aes(x = nk,
-                         stratum = k,
-                         alluvium = ID,
-                         fill = k, 
-                         label = k)) + 
-      geom_flow(stat = "alluvium", aes.flow = "forward") + 
-      geom_stratum(alpha = 0.5) + 
-      labs(x = 'Number of clusters',
-           y = 'Number of models',
-           title = paste("Gene score", score, "; Measure", measure)) + 
-      theme_bw() + 
-      theme(panel.grid.major.x = element_blank())
-    
-    outfile <- paste("sankey", score, measure, sep = "_")
-    outfile <- paste0(outfile, ".pdf")
-    outfile <- file.path(pipeline_dir, outfile)
-    pdf(file = outfile, 
-        width = unit(10, "in"),
-        height = unit(5, "in"))
-    print(sankey)
-    dev.off()
-    
+  outdir <- file.path(paths[["centroids"]], jtype)
+  if (!dir.exists(outdir)) {dir.create(outdir, recursive = TRUE)}
+  for (j in 1:ncol(clusters_jtype)) {
+    compute_cluster_centroids(i = j, clusters = clusters_jtype, mask = mask,
+                              method = "mean", outdir = outdir)
   }
 }
 
 
-affinity_euclidean <- similarity_network_new(x = list(es_matrix_abs, es_matrix_rel),
-                                             metric = "euclidean")
 
-affinity_cor <- similarity_network_new(x = list(es_matrix_abs, es_matrix_rel),
-                                      metric = "correlation")
-df_metrics <- bind_rows(estimate_cluster_metrics(W = affinity_euclidean, NUMC = 2:10) %>% 
-            mutate(metric = "euclidean"),
-          estimate_cluster_metrics(W = affinity_cor, NUMC = 2:10) %>% 
-            mutate(metric = "correlation"))
-
- 
-outfile <- "cluster_metrics_anat_only.pdf"
-outfile <- file.path(pipeline_dir, outfile)
-plt_metrics <- ggplot(df_metrics, aes(x = nk, y = eigengap, group = metric, col = metric)) + 
-  geom_line() + 
-  geom_point() +
-  scale_x_continuous(breaks = seq(2, 10, by = 1)) + 
-  labs(y = "Eigengap") +
-  theme_bw() +
-  theme(panel.grid.minor.x = element_blank())
-
-pdf(file = outfile, 
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(plt_metrics)
-dev.off()
+heatmap_palette_cols <- RColorBrewer::brewer.pal(n = 9, name = "OrRd")
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
 
 
+nk <- 7
 
-affinity_euclidean <- similarity_network_new(x = list(effect_size_data_matrix_abs, effect_size_data_matrix_rel), 
-                                             metric = "euclidean")
+clusters_nk <- clusters %>% 
+  select(ID, k = paste0("nk", nk)) %>% 
+  arrange(k, ID)
 
-affinity_cor <- similarity_network_new(x = list(effect_size_data_matrix_abs, effect_size_data_matrix_rel),
-                                       metric = "correlation")
-df_metrics <- bind_rows(estimate_cluster_metrics(W = affinity_euclidean, NUMC = 2:10) %>% 
-                          mutate(metric = "euclidean"),
-                        estimate_cluster_metrics(W = affinity_cor, NUMC = 2:10) %>% 
-                          mutate(metric = "correlation"))
+idx_match <- match(clusters_nk$ID, rownames(enrichment))
+mat <- enrichment[idx_match,]
+mat[mat > 20] <- 20
+mat[mat == 0] <- NA
 
-outfile <- "cluster_metrics_anat_all_models.pdf"
-outfile <- file.path(pipeline_dir, outfile)
-plt_metrics <- ggplot(df_metrics, aes(x = nk, y = eigengap, group = metric, col = metric)) + 
-  geom_line() + 
-  geom_point() +
-  scale_x_continuous(breaks = seq(2, 10, by = 1)) + 
-  labs(y = "Eigengap") +
-  theme_bw() +
-  theme(panel.grid.minor.x = element_blank())
+annotation_row <- clusters_nk %>% 
+  column_to_rownames("ID") %>% 
+  mutate(k = factor(k))
 
-pdf(file = outfile, 
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(plt_metrics)
-dev.off()
-
-
-# Mixing correlation and euclidean ---- 
-
-
-list_metrics <- vector(mode = "list", length = length(list_enrichment))
-names(list_metrics) <- names(list_enrichment)
-for (l in 1:length(list_metrics)) {
-  for(measure in measures) {
-    x <- list_enrichment[[l]][[measure]]
-    d1 <- 1-cor(t(es_matrix_abs))
-    d2 <- 1-cor(t(es_matrix_rel))
-    d3 <- (dist2(as.matrix(x), as.matrix(x)))^(1/2)
-    # W_list <- map(list(d1, d2, d3), affinityMatrix, K = 10, sigma = 0.5)
-    W_list <- map(list(d2, d3), affinityMatrix, K = 10, sigma = 0.5)
-    W <- SNF(W_list, K = 10, t = 20)
-    list_metrics[[l]][[measure]] <- estimate_cluster_metrics(W = W, NUMC = 2:10)
-    
-  }
-}
-
-df_metrics <- list_metrics %>% 
-  map(bind_rows, .id = "measure") %>% 
-  bind_rows(.id = "score") %>% 
-  mutate(measure = factor(measure, levels = c("E", "NLQ", "binary")))
-
-outfile <- "cluster_metrics_mixed_rel_only.pdf"
-outfile <- file.path(pipeline_dir, outfile)
-plt_metrics <- ggplot(df_metrics, aes(x = nk, y = eigengap, group = measure, col = measure)) + 
-  geom_line() + 
-  geom_point() +
-  facet_wrap(~score, ncol = 4) + 
-  scale_x_continuous(breaks = seq(2, 10, by = 1)) + 
-  labs(y = "Eigengap") +
-  theme_bw() +
-  theme(panel.grid.minor.x = element_blank())
-
-pdf(file = outfile,
-    width = unit(10, "in"),
-    height = unit(5, "in"))
-print(plt_metrics)
-dev.off()
+outfile <- file.path(pipeline_dir, "enrichment_heatmap_nk7.pdf")
+pheatmap::pheatmap(mat = mat, 
+                   cluster_cols = FALSE, cluster_rows = FALSE, 
+                   annotation_row = annotation_row,
+                   color = heatmap_palette, border_color = "grey85", na_col = "grey85",
+                   fontsize_row = 6, filename = outfile, width = unit(16, "in"), height = unit(10, "in"))
