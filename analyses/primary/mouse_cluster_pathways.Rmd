@@ -2238,3 +2238,204 @@ for (k in 1:nk) {
 
 
 
+# Pathways analysis (2025)
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+setwd(PROJECTPATH)
+```
+
+
+```{r}
+source(file.path(SRCPATH, "enrichment.R"))
+```
+
+
+```{r}
+bader_modules <- file.path(PROJECTPATH, "data/enrichment/", "Human_Reactome_June_01_2025_symbol.gmt")  
+
+df_module_sizes <- get_module_sizes(modules = bader_modules)
+
+# Pathway size threshold
+B_threshold <- 10
+
+# Pathways to keep
+pathway_ids_keep <- df_module_sizes %>% 
+  filter(B >= B_threshold) %>% 
+  pull(ID)
+
+length(pathway_ids_keep)
+```
+
+```{r}
+df_module_sizes_keep <- df_module_sizes %>% filter(B >= B_threshold)
+
+B_max <- max(df_module_sizes_keep$B)
+B_min <- min(df_module_sizes_keep$B)
+B_seq <- seq(B_min, B_max, by = 1)
+B_ecdf <- numeric(length(B_seq))
+for (i in 1:length(B_seq)) {
+  B_ecdf[i] <- sum(df_module_sizes_keep$B <= B_seq[i])/nrow(df_module_sizes_keep)
+}
+
+tibble(x = B_seq, y = B_ecdf) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  geom_vline(xintercept = 33)
+```
+
+```{r}
+quantile(x = df_module_sizes_keep$B)
+```
+
+
+
+```{r}
+mouse_enrichment_dir <- file.path(PROJECTPATH,  "data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950/NeighbourhoodEnrichment")
+
+files <- list.files(mouse_enrichment_dir) %>% 
+  str_subset(paste0("cluster_pathway_enrichment_", nk))
+
+files <- file.path(mouse_enrichment_dir, files)
+
+list_enrichment <- vector(mode = "list", length = nk)
+for (i in 1:nk) {
+  list_enrichment[[i]] <- read_csv(files[i]) %>% 
+  filter(ID %in% pathway_ids_keep)
+}
+
+df_enrichment <- bind_rows(list_enrichment)
+```
+
+```{r}
+df_module_sizes %>% 
+  filter(str_detect(Title, "RNA Polymerase I Promoter"))
+```
+
+
+```{r}
+df_enrichment %>% 
+  select(k, n) %>% 
+  distinct() %>% 
+  arrange(k)
+```
+
+```{r}
+df_enrichment %>% 
+  filter(adj.P.Val < 0.05) %>% 
+  group_by(k) %>% 
+  count()
+```
+
+```{r}
+pathways_enriched <- df_enrichment %>% 
+  filter(adj.P.Val < 0.05) %>% 
+  pull(ID) %>% 
+  unique()
+
+```
+
+```{r}
+tmp <- df_enrichment %>% 
+  filter(ID %in% pathways_enriched) 
+
+ggplot(tmp, aes(x = Title, y = factor(k), fill = -log10(adj.P.Val))) + 
+  geom_tile()
+```
+
+
+```{r}
+modules <- importMsigDBGMT(bader_modules)
+
+# modules_keep <- names(modules$MODULES2GENES) %in% pathway_ids_keep
+modules_enriched <- names(modules$MODULES2GENES) %in% pathways_enriched
+modules$MODULES2GENES <- modules$MODULES2GENES[modules_enriched]
+
+# modules$MODULES <- modules$MODULES %>% filter(ID %in% pathway_ids_keep)
+modules$MODULES <- modules$MODULES %>% filter(ID %in% pathways_enriched)
+
+genes_all <- modules$MODULES2GENES %>% reduce(c) %>% unique() %>% sort()
+
+nmodules <- length(modules$MODULES2GENES)
+ngenes <- length(genes_all)
+
+membership <- matrix(data = FALSE, nrow = ngenes, ncol = nmodules)
+
+for (i in 1:nmodules) {
+  pathway_genes <- modules[["MODULES2GENES"]][[i]]
+  idx <- which(genes_all %in% pathway_genes)
+  membership[idx,i] <- TRUE
+}
+
+overlap_coef <- function(x, y) {
+  intersect <- sum(x & y)
+  min_size <- min(sum(x), sum(y))
+  if (min_size == 0) return(NA)
+  intersect / min_size
+}
+
+jaccard <- function(x, y) {
+  intersect <- sum(x & y)
+  union <- sum(x | y)
+  if (union == 0) return(NA)  # handle edge case
+  intersect / union
+}
+
+jac_mat <- matrix(0, nrow = nmodules, ncol = nmodules)
+for (i in 1:nrow(jac_mat)) {
+  if (i %% 10 == 0) {print(i)}
+  for (j in i:ncol(jac_mat)) {
+    jac_mat[i, j] <- jaccard(membership[,i], membership[,j])
+  }
+}
+
+jac_mat <- 1 - jac_mat
+
+jac_mat[lower.tri(jac_mat)] <- t(jac_mat)[lower.tri(jac_mat)]
+```
+```{r}
+jaccard_dist <- dist(x = t(membership), method = "binary")
+motifs <- cluster::pam(x = jaccard_dist, diss = TRUE, k = 20)
+motifs$medoids
+```
+
+```{r}
+df_pathways <- modules[["MODULES"]] %>% 
+  mutate(cluster = motifs$clustering) %>% 
+  left_join(df_module_sizes, by = c("ID", "Title"))
+
+ggplot(df_pathways, aes(x = cluster, y = B)) + 
+  geom_point()
+```
+
+```{r}
+df_pathways %>% filter(cluster == 8) %>% 
+  arrange(desc(B))
+```
+
+
+
+```{r}
+length(modules$MODULES2GENES$`DEVELOPMENTAL BIOLOGY%REACTOME DATABASE ID RELEASE 92%1266738`)
+length(modules$MODULES2GENES$`GENE EXPRESSION (TRANSCRIPTION)%REACTOME DATABASE ID RELEASE 92%74160`)
+```
+
+
+```{r}
+medoid_IDs <- modules$MODULES[motifs$medoids,]$ID
+```
+
+```{r}
+table(motifs$clustering)
+```
+
+```{r}
+df_module_sizes %>% 
+  filter(ID %in% medoid_IDs)
+```
+
