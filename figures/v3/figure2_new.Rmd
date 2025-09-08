@@ -475,6 +475,132 @@ dev.off()
 ```
 
 
+```{r}
+df_enrichment_nk10 <- df_enrichment_all %>% 
+  filter(nk == 10) %>% 
+  mutate(Title_trunc = str_trunc(Title, width = 40))
+
+
+for (i in 1:length(pathway_roots)) {
+  i <- 18
+  root <- pathway_roots[i]
+  
+  df_enrichment_nk10_i <- df_enrichment_nk10 %>% 
+    filter(Root == root, 
+           level < 5)
+  
+  pathways_enriched <- df_enrichment_nk10_i %>% 
+    filter(adj.P.Val < 0.01) %>% 
+    pull(Title) %>% 
+    unique()
+  
+  df_enrichment_nk10_i <- df_enrichment_nk10_i %>% 
+    filter(Title %in% pathways_enriched)
+  
+  NLQ_max <- df_enrichment_nk10_i %>% 
+    pull(NLQ) %>% 
+    max()
+  
+  plt <- ggplot(df_enrichment_nk10_i, aes(x = factor(k), y = Title_trunc, fill = NLQ)) + 
+    geom_tile(col = "grey60") +
+    facet_grid(level~., scales = "free", space = "free") +
+    scale_x_discrete(expand = expansion()) + 
+    scale_y_discrete(expand = expansion()) + 
+    scale_fill_gradientn(colors = heatmap_palette,
+                         limits = c(2, NLQ_max),
+                         na.value = "grey85") +
+    # scale_fill_brewer(palette = "PuBu", na.value = "grey85") + 
+    labs(x = "Mouse cluster", y = "Pathway", fill = "Enrichment",
+         title = root) + 
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 6))
+  
+  root_output <- root %>% 
+    str_remove_all("\\(") %>% 
+    str_remove_all("\\)") %>% 
+    str_replace_all(" ", "_")
+  
+  outfile <- "pathway_enrichment_"
+  outfile <- paste0(outfile, root_output)
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile, 
+      width = unit(10, "in"),
+      height = unit(10, "in"))
+  print(plt)
+  dev.off()
+  
+}
+```
+
+
+
+```{r}
+df_pathway_levels <- readxl::read_excel("pathway_levels.xlsx")
+```
+
+```{r}
+df_enrichment_plot <- df_enrichment_all %>% 
+  filter(level %in% 0:1,
+         Title %in% pathway_lvls) %>% 
+  mutate(Title_trunc = str_trunc(Title, width = 40),
+         Title_trunc = factor(Title_trunc, levels = pathway_lvls_trunc))
+
+NLQ_max <- df_enrichment_plot %>% 
+  pull(NLQ) %>% 
+  max()
+
+list_pathways <- vector(mode = "list", length = nrow(df_pathway_levels))
+for (i in 1:length(list_pathways)) {
+  root <- df_pathway_levels[[i, "Root"]]
+  lvl <- df_pathway_levels[[i, "Level"]]
+  list_pathways[[i]] <- df_enrichment_all %>% 
+    filter(Root == root, level == lvl)
+}
+
+df_pathways <- bind_rows(list_pathways) %>% 
+  mutate(Title_trunc = str_trunc(Title, width = 40))
+
+pathways_enriched <- df_pathways %>% 
+  filter(adj.P.Val < 0.01) %>% 
+  pull(Title) %>% 
+  unique()
+
+df_pathways <- df_pathways %>% 
+  filter(Title %in% pathways_enriched)
+
+NLQ_max <- df_pathways %>% 
+  pull(NLQ) %>% 
+  max()
+
+df_pathways <- df_pathways %>% 
+  filter(Root != "Disease")
+
+plt <- ggplot(df_pathways, aes(x = factor(k), y = fct_rev(Title_trunc), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(Root~nk,  scales = "free", space = "free", switch = "y") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(2, NLQ_max),
+                       na.value = "grey85") +
+  labs(x = "Mouse cluster", 
+       y = "Pathway", 
+       fill = "Enrichment (-log10(q))") + 
+  theme_bw() +
+  theme(legend.position = "bottom",
+        axis.text.y = element_text(size = 5))
+
+outfile <- "figure2_new_draft_lvl_best.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(11, "in"))
+print(plt)
+dev.off()
+```
+
+
 
 # Extra
 
