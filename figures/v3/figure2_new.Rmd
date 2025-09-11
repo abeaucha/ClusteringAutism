@@ -335,6 +335,7 @@ ggplot(df_enrichment_root, aes(x = factor(k), y = fct_rev(Root), fill = NLQ)) +
   theme_bw()
 ```
 
+# All clusters
 
 ```{r}
 nk_max <- 10
@@ -363,21 +364,72 @@ for (nk in 2:nk_max) {
 df_enrichment_all <- bind_rows(list_enrichment) %>% 
   mutate(NLQ = -log10(adj.P.Val))
 
-df_enrichment_plot <- df_enrichment_all %>% 
-  filter(level %in% 0:1,
-         Title %in% pathway_lvls) %>% 
+df_enrichment_all <- df_enrichment_all %>% 
+  mutate(Title = ifelse(Title == "Signaling Pathways", "Signal Transduction", Title))
+```
+
+
+
+```{r}
+root_excl <- c("Circadian clock", "Disease",
+               "Digestion and absorption", "DNA Repair", "DNA Replication", 
+               "Drug ADME", "Muscle contraction", "Protein localization",
+               "Reproduction", "Sensory Perception", "Transport of small molecules")
+
+root_w_lvl_1 <- c("Chromatin organization", "Gene expression (Transcription)", 
+                  "Immune System", "Neuronal System", "Signal Transduction")
+
+df_enrichment_lvl_0 <- df_enrichment_all %>%
+  filter(level == 0) %>% 
+  filter(!(Root %in% root_excl)) 
+
+df_enrichment_lvl_1 <- df_enrichment_all %>% 
+  filter(Root %in% root_w_lvl_1, 
+         level == 1)
+
+lvl_1_enriched <- df_enrichment_lvl_1 %>% 
+  mutate(significant = adj.P.Val < 0.01) %>% 
+  group_by(Root, Title) %>% 
+  summarise(n_significant = sum(significant)) %>% 
+  ungroup() %>% 
+  filter(n_significant > 0) %>% 
+  pull(Title)
+
+pathway_roots <- df_enrichment_lvl_0 %>% 
+  pull(Root) %>% 
+  unique() %>% 
+  sort()
+
+pathways_enriched <- c(pathway_roots, lvl_1_enriched)
+
+df_enrichment_lvl_0_1 <- bind_rows(df_enrichment_lvl_0, df_enrichment_lvl_1)
+
+df_enrichment_lvl_0_1 <- df_enrichment_lvl_0_1 %>% 
+  filter(Title %in% pathways_enriched)
+
+list_pathways_lvl_1 <- vector(mode = "list", length = length(pathway_roots))
+names(list_pathways_lvl_1) <- pathway_roots
+for (i in 1:length(list_pathways_lvl_1)) {
+  lvls <- df_enrichment_lvl_0_1 %>% 
+    filter(Root == pathway_roots[i], 
+           level == 1) %>% 
+    pull(Title) %>% 
+    unique() %>% 
+    sort()
+  list_pathways_lvl_1[[i]] <- c(pathway_roots[i], lvls)
+}
+
+pathway_lvls <- reduce(list_pathways_lvl_1, c)
+pathway_lvls_trunc <- str_trunc(pathway_lvls, width = 40)
+
+
+df_enrichment_plot <- df_enrichment_lvl_0_1 %>% 
   mutate(Title_trunc = str_trunc(Title, width = 40),
          Title_trunc = factor(Title_trunc, levels = pathway_lvls_trunc))
 
 NLQ_max <- df_enrichment_plot %>% 
   pull(NLQ) %>% 
   max()
-
-
-```
-
-
-```{r}
 
 
 plt <- ggplot(df_enrichment_plot, aes(x = factor(k), y = fct_rev(Title_trunc), fill = NLQ)) + 
@@ -393,12 +445,14 @@ plt <- ggplot(df_enrichment_plot, aes(x = factor(k), y = fct_rev(Title_trunc), f
        fill = "Enrichment (-log10(q))") + 
   theme_bw() +
   theme(legend.position = "bottom",
-        axis.text.y = element_text(size = 6))
+        axis.text.y = element_text(size = 6),
+        strip.background.y = element_blank(),
+        strip.text.y = element_blank())
 
 output_dir <- "figures/v3/figure2_new/"
 output_dir <- file.path(PROJECTPATH, output_dir)
 dir.create(path = output_dir, recursive = TRUE)
-outfile <- "figure2_new_draft_lvl_0-1.pdf"
+outfile <- "figure2_new_draft.pdf"
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile, 
     width = unit(10, "in"),
@@ -406,6 +460,11 @@ pdf(file = outfile,
 print(plt)
 dev.off()
 ```
+
+```{r}
+df_enrichment_plot %>% pull(Title) %>% unique() %>% length()
+```
+
 
 ```{r}
 df_enrichment_root <- df_enrichment_all %>% 
@@ -482,7 +541,6 @@ df_enrichment_nk10 <- df_enrichment_all %>%
 
 
 for (i in 1:length(pathway_roots)) {
-  i <- 18
   root <- pathway_roots[i]
   
   df_enrichment_nk10_i <- df_enrichment_nk10 %>% 
@@ -575,6 +633,9 @@ NLQ_max <- df_pathways %>%
 
 df_pathways <- df_pathways %>% 
   filter(Root != "Disease")
+
+heatmap_palette_cols <- RColorBrewer::brewer.pal(n = 9, name = "OrRd")
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
 
 plt <- ggplot(df_pathways, aes(x = factor(k), y = fct_rev(Title_trunc), fill = NLQ)) + 
   geom_tile(col = "grey60") +
