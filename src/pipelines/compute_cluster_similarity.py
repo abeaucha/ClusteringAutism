@@ -103,8 +103,8 @@ def parse_args():
     parser.add_argument(
         '--gene-space',
         type = str,
-        default = 'average-latent-space',
-        choices = ['average-latent-space', 'latent-space', 'homologous-genes'],
+        default = 'avg-latent-space',
+        choices = ['avg-mlp-latent-space', 'mlp-latent-space', 'vae-latent-space', 'homologous-genes'],
         help = ("The gene expression space to use to evaluate the similarity "
                 "between cluster centroid images.")
     )
@@ -114,7 +114,7 @@ def parse_args():
         type = int,
         default = 100,
         help = ("The number of latent spaces to include when --gene-space is "
-                "'average-latent-space'. Ignored otherwise.")
+                "'avg-mlp-latent-space'. Ignored otherwise.")
     )
 
     parser.add_argument(
@@ -122,7 +122,7 @@ def parse_args():
         type = int,
         default = 1,
         help = ("The ID of the latent space to use when --gene-space is "
-                "'latent-space'. Ignored otherwise.")
+                "'mlp-latent-space'. Ignored otherwise.")
     )
 
     parser.add_argument(
@@ -364,7 +364,7 @@ def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
 def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
          params_id = None,
          microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study.csv',
-         gene_space = 'average-latent-space',
+         gene_space = 'avg-mlp-latent-space',
          n_latent_spaces = 100, latent_space_id = 1,
          metric = 'correlation', signed = True,
          threshold = 'top_n', threshold_value = 0.2,
@@ -400,15 +400,15 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     microarray_coords: str
         Path to file (.csv) containing the world coordinates of the
         AHBA microarray samples in the human imaging study space.
-    gene_space: {'average-latent-space', 'latent-space', 'homologous-genes'}
+    gene_space: {'avg-mlp-latent-space', 'mlp-latent-space', 'vae-latent-space', 'homologous-genes'}
         The gene expression space to use to evaluate the similarity
         between cluster centroid images.
     n_latent_spaces: int, default 100
         The number of latent spaces to include when
-        gene_space = 'average-latent-space'. Ignored otherwise.
+        gene_space = 'avg-mlp-latent-space'. Ignored otherwise.
     latent_space_id: int, default 1
         The ID of the latent space to use when
-        gene_space = 'latent_space'. Ignored otherwise.
+        gene_space = 'mlp-latent_space'. Ignored otherwise.
     metric: str, default 'correlation'
         The metric used to evaluate the similarity between cluster
         centroid gene expression signature.
@@ -449,9 +449,12 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     """
 
     # Adapt gene space parameters to the selected gene space
-    if gene_space == 'average-latent-space':
+    if gene_space == 'avg-mlp-latent-space':
         latent_space_id = None
-    elif gene_space == 'latent-space':
+    elif gene_space == 'mlp-latent-space':
+        n_latent_spaces = None
+    elif gene_space == 'vae-latent-space':
+        latent_space_id = None
         n_latent_spaces = None
     elif gene_space == 'homologous-genes':
         latent_space_id = None

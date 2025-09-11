@@ -77,8 +77,8 @@ def parse_args():
     parser.add_argument(
         '--gene-space',
         type = str,
-        default = 'average-latent-space',
-        choices = ['average-latent-space', 'latent-space', 'homologous-genes'],
+        default = 'avg-mlp-latent-space',
+        choices = ['avg-mlp-latent-space', 'mlp-latent-space', 'vae-latent-space', 'homologous-genes'],
         help = ("The gene expression space to use to evaluate the similarity "
                 "between clusters.")
     )
@@ -88,14 +88,14 @@ def parse_args():
         type = int,
         default = 100,
         help = ("Number of latent spaces to include when --gene-space is "
-                "'average-latent-space'. Ignored otherwise.")
+                "'avg-mlp-latent-space'. Ignored otherwise.")
     )
 
     parser.add_argument(
         '--latent-space-id',
         type = int,
         default = 1,
-        help = ("Latent space to use when --gene-space is 'latent-space'. "
+        help = ("Latent space to use when --gene-space is 'mlp-latent-space'. "
                 "Ignored otherwise.")
     )
 
