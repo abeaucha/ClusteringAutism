@@ -103,7 +103,7 @@ def parse_args():
     parser.add_argument(
         '--gene-space',
         type = str,
-        default = 'avg-latent-space',
+        default = 'avg-mlp-latent-space',
         choices = ['avg-mlp-latent-space', 'mlp-latent-space', 'vae-latent-space', 'homologous-genes'],
         help = ("The gene expression space to use to evaluate the similarity "
                 "between cluster centroid images.")
@@ -460,7 +460,9 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
         latent_space_id = None
         n_latent_spaces = None
     else:
-        raise ValueError
+        raise ValueError("Argument `gene_space` must be one of "
+                         "{'avg-mlp-latent-space', 'mlp-latent-space', "
+                         "'vae-latent-space', 'homologous-genes'}.")
 
     # Adapt thresholding parameters if no thresholding specified
     if threshold is None:
@@ -557,7 +559,10 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
 if __name__ == '__main__':
     args = parse_args()
     args['input_dirs'] = tuple(args['input_dirs'])
-    args['input_params_ids'] = tuple(args['input_params_ids'])
+    if args['input_params_ids'] is None:
+        raise ValueError("Argument `--input-params-ids` is required.")
+    else:
+        args['input_params_ids'] = tuple(args['input_params_ids'])
     args['species'] = tuple(args['species'])
     args['expr_dirs'] = tuple(args['expr_dirs'])
     args['masks'] = tuple(args['masks'])
