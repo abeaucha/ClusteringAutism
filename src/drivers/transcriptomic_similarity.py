@@ -162,7 +162,8 @@ if __name__ == '__main__':
                                      else False)
 
     # Import image pairs
-    if kwargs['input_file'] is None: raise ValueError("Must provide input file")
+    if kwargs['input_file'] is None:
+        raise ValueError("Argument `--input-file` is required.")
     df_imgs = pd.read_csv(kwargs['input_file'])
     imgs = df_imgs.values.tolist()
     imgs = [tuple(x) for x in imgs]
