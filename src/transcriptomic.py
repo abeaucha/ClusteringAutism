@@ -2,16 +2,16 @@ import contextlib
 import os
 import sys
 import utils
-import multiprocessing as mp
 import numpy as np
 import pandas as pd
 import processing
 #from datatable import fread
+from dask.distributed import Client, progress
+from dask_jobqueue import SLURMCluster
 from functools import partial
 from io import StringIO
 from itertools import product
 from pyminc.volumes.factory import volumeFromFile
-from tqdm import tqdm
 
 
 @contextlib.contextmanager
@@ -420,7 +420,8 @@ def transcriptomic_similarity(imgs, species, expr, masks,
                               metric = 'correlation', signed = True,
                               threshold = 'top_n', threshold_value = 0.2,
                               threshold_symmetric = True, return_signed = False,
-                              nproc = 1, verbose = True):
+                              execution = 'local', nproc = 1, verbose = True,
+                              slurm_kwargs = None):
     """
     Compute the transcriptomic similarity for a set of image pairs.
 
@@ -554,18 +555,27 @@ def transcriptomic_similarity(imgs, species, expr, masks,
                        threshold_symmetric = threshold_symmetric,
                        return_signed = return_signed)
 
-    if nproc > 1:
-        pool = mp.Pool(nproc)
-        sim = []
-        for s in tqdm(pool.imap(iterator, inputs), total = len(inputs)):
-            sim.append(s)
-        pool.close()
-        pool.join()
+    if execution == 'local':
+        client = Client(processes = True,
+                        n_workers = nproc,
+                        threads_per_worker = 1)
+    elif execution == 'slurm':
+        cluster = SLURMCluster(
+            cores = slurm_kwargs.get('cores', 1),
+            memory = slurm_kwargs.get('memory', '16GB'),
+            walltime = slurm_kwargs.get('walltime', '08:00:00')
+        )
+        cluster.scale(jobs = slurm_kwargs.get("jobs", nproc))
+        client = Client(cluster)
     else:
-        if verbose:
-            sim = list(map(iterator, tqdm(inputs)))
-        else:
-            sim = list(map(iterator, inputs))
+        raise ValueError("Argument `execution` must be one of {'local', 'slurm'}")
+
+    futures = client.map(iterator, inputs)
+
+    if verbose:
+        progress(futures)
+
+    sim = client.gather(futures)
 
     if return_signed:
         results = pd.DataFrame(
