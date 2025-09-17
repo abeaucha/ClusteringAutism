@@ -21,6 +21,7 @@ import os
 import utils
 import pandas as pd
 from itertools import product
+from transcriptomic import transcriptomic_similarity
 
 
 # Command line arguments -----------------------------------------------------
@@ -193,26 +194,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--registry-name',
-        type = str,
-        default = "compute_cluster_similarity_registry",
-        help = "Name of the registry directory for batched jobs."
-    )
-
-    parser.add_argument(
-        '--registry-cleanup',
-        type = str,
-        default = "true",
-        help = "Option to clean up registry after completion of batched jobs."
-    )
-
-    parser.add_argument(
-        '--slurm-njobs',
-        type = int,
-        help = "Number of jobs to deploy on Slurm."
-    )
-
-    parser.add_argument(
         '--slurm-mem',
         type = str,
         help = "Memory per CPU."
@@ -371,9 +352,7 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
          threshold_symmetric = True,
          jacobians = ('absolute', 'relative'),
          execution = 'local', nproc = 1,
-         registry_name = 'compute_cluster_similarity_registry',
-         registry_cleanup = True, slurm_njobs = None, slurm_mem = None,
-         slurm_time = None):
+         slurm_mem = None, slurm_time = None):
 
     """
     Execute the cluster similarity pipeline.
@@ -431,12 +410,6 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
         the Slurm scheduler on an HPC cluster.
     nproc: int, default 1
         Number of processors to use.
-    registry_name: str, default 'compute_cluster_similarity_registry'
-        Name of the registry directory for batched jobs.
-    registry_cleanup: bool, default True
-        Option to clean up registry after completion of batched jobs.
-    slurm_njobs: int, default None
-        Number of jobs to deploy on Slurm. Ignored when execution = 'local'.
     slurm_mem: str, default None
         Memory per CPU on Slurm. Ignored when execution = 'local'.
     slurm_time: str, default None
@@ -480,77 +453,35 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     print("Generating centroid image pairs...", flush = True)
     cluster_pairs = generate_cluster_pairs(centroid_dirs = paths['centroids'],
                                            jacobians = jacobians)
-    cluster_pairs = pd.DataFrame(cluster_pairs)
 
-    # Driver script
-    driver = 'transcriptomic_similarity.py'
+    # Export centroid pairs
+    output_file = os.path.join(paths['pipeline'], 'centroid_pairs.csv')
+    pd.DataFrame(cluster_pairs).to_csv(output_file, index = False)
 
-    # Update kwargs for driver
+    # Clean up kwargs for driver module
+    kwargs['imgs'] = [tuple(x) for x in cluster_pairs]
     kwargs['expr'] = kwargs.pop('expr_dirs')
-    kwargs['signed'] = 'true' if signed else 'false'
-    kwargs['threshold_symmetric'] = 'true' if threshold_symmetric else 'false'
+    if kwargs['execution'] == 'slurm':
+        kwargs['slurm_kwargs'] = dict(memory = kwargs['slurm_mem'],
+                                      walltime = kwargs['slurm_time'])
+    elif kwargs['execution'] == 'local':
+        kwargs['slurm_kwargs'] = None
+    else:
+        raise ValueError("Argument `execution` must be one of {'local', 'slurm'}")
     del kwargs['pipeline_dir']
     del kwargs['params_id']
     del kwargs['input_dirs']
     del kwargs['input_params_ids']
     del kwargs['jacobians']
-    del kwargs['execution']
-    del kwargs['registry_name']
-    del kwargs['registry_cleanup']
-    del kwargs['slurm_njobs']
     del kwargs['slurm_mem']
     del kwargs['slurm_time']
 
-    # Execute the driver
-    print("Evaluating cluster similarity...", flush = True)
-    if execution == 'local':
+    # Compute pairwise similarity between cluster centroids
+    results = transcriptomic_similarity(**kwargs)
 
-        # Export the cluster pairs
-        outfile = os.path.join(paths['pipeline'], 'centroid_pairs.csv')
-        cluster_pairs.to_csv(outfile, index = False)
-
-        # Update the kwargs for driver
-        kwargs['input-file'] = outfile
-        kwargs['output-file'] = os.path.join(paths['pipeline'], 'similarity.csv')
-        kwargs = {key.replace('_', '-'):val for key, val in kwargs.items()}
-
-        # Execute the driver
-        utils.execute_local(script = driver, kwargs = kwargs)
-
-    elif execution == 'slurm':
-
-        # Specify the Slurm job resources
-        resources = dict(
-            nodes = 1,
-            mem = slurm_mem,
-            time = slurm_time
-        )
-
-        # Create the registry
-        registry = utils.Registry(resources = resources,
-                                  name = registry_name)
-
-        # Create data batches
-        registry.create_batches(x = cluster_pairs,
-                                nbatches = slurm_njobs,
-                                prefix = 'centroid_pairs_batch')
-
-        # Create jobs for batches
-        kwargs['nproc'] = 1
-        registry.create_jobs(script = driver,
-                             kwargs = kwargs)
-
-        # Submit the jobs
-        out = registry.submit_jobs(wait = True, cleanup = registry_cleanup)
-
-        # Export the results
-        print("Exporting results...", flush = True)
-        output_file = os.path.join(paths['pipeline'], 'similarity.csv')
-        out.to_csv(output_file, index = False)
-
-    else:
-        raise ValueError("Argument `execution` must be one of "
-                         "{'local', 'slurm'}")
+    # Export similarity values
+    output_file = os.path.join(paths['pipeline'], 'similarity.csv')
+    results.to_csv(output_file, index = False)
 
     return
 
@@ -572,8 +503,6 @@ if __name__ == '__main__':
                          else args['threshold'])
     args['threshold_symmetric'] = (True if args['threshold_symmetric'] == 'true'
                                    else False)
-    args['registry_cleanup'] = (True if args['registry_cleanup'] == 'true'
-                                else False)
     #with utils.catchtime() as t:
     main(**args)
     #print(f'Time: {t():.3f} seconds')
