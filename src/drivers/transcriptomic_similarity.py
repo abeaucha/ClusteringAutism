@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ----------------------------------------------------------------------------
-# compute_image_similarity.py
+# transcriptomic_similarity.py
 # Author: Antoine Beauchamp
 # Created: April 2nd, 2024
 
@@ -15,11 +15,6 @@ Description
 
 import argparse
 import pandas as pd
-import sys
-
-from IPython.core.magics import execution
-
-import utils
 from transcriptomic import transcriptomic_similarity
 
 
@@ -66,7 +61,7 @@ def parse_args():
         '--masks',
         nargs = 2,
         type = str,
-        help = ("Paths to the mask files (.mnc).")
+        help = "Paths to the mask files (.mnc)."
     )
 
     parser.add_argument(
@@ -74,7 +69,7 @@ def parse_args():
         type = str,
         default = 'data/human/expression/AHBA_microarray_coordinates_study_v3.csv',
         help = ("Path to file (.csv) containing the world coordinates of "
-                "the AHBA microarray samples.")
+                "the Allen Human Brain Atlas microarray samples.")
     )
 
     parser.add_argument(
@@ -197,9 +192,8 @@ if __name__ == '__main__':
     output_file = kwargs['output_file']
     del kwargs['output_file']
 
-    # Extract kwargs for module
+    # Clean up kwargs for driver module
     kwargs['imgs'] = imgs
-
     if kwargs['execution'] == 'slurm':
         kwargs['slurm_kwargs'] = dict(memory = kwargs['slurm_mem'],
                                       walltime = kwargs['slurm_time'])
@@ -207,12 +201,9 @@ if __name__ == '__main__':
         kwargs['slurm_kwargs'] = None
     else:
         raise ValueError("Argument `execution` must be one of {'local', 'slurm'}")
-
     del kwargs['slurm_mem']
     del kwargs['slurm_time']
 
-    # Compute pairwise similarity between cluster centroids
-    # with utils.catchtime() as t:
+    # Compute pairwise similarity between image pairs
     results = transcriptomic_similarity(**kwargs)
     results.to_csv(output_file, index = False)
-    # print(f'Time: {t():.3f} seconds')
