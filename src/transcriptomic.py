@@ -422,7 +422,7 @@ def transcriptomic_similarity(imgs, species, expr, masks,
                               threshold_symmetric = True, return_signed = False,
                               nproc = 1, verbose = True):
     """
-    Compute the transcriptomic similarity for a set of mouse and human images.
+    Compute the transcriptomic similarity for a set of image pairs.
 
     Parameters
     ----------
@@ -470,13 +470,18 @@ def transcriptomic_similarity(imgs, species, expr, masks,
         A data frame containing the similarity values for all input images.
     """
 
-    if imgs is None: raise ValueError
-    if species is None: raise ValueError
-    if expr is None: raise ValueError
-    if masks is None: raise ValueError
+    if imgs is None:
+        raise ValueError("Argument `imgs` is required.")
+    if species is None:
+        raise ValueError("Argument `species` is required.")
+    if expr is None:
+        raise ValueError("Argument `expr` is required.")
+    if masks is None:
+        raise ValueError("Argument `masks` is required.")
     if 'human' in species:
         if microarray_coords is None:
-            raise ValueError
+            raise ValueError("Argument `microarray_coords` is required when "
+                             "one of the species is 'human'.")
 
     # If imgs is tuple, convert to list of tuple
     if type(imgs) is tuple:
