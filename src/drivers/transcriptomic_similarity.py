@@ -16,6 +16,9 @@ Description
 import argparse
 import pandas as pd
 import sys
+
+from IPython.core.magics import execution
+
 import utils
 from transcriptomic import transcriptomic_similarity
 
@@ -143,10 +146,31 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--execution',
+        type = str,
+        default = 'local',
+        choices = ['local', 'slurm'],
+        help = ("Flag indicating whether the pipeline should be executed "
+                "or using the SLURM scheduler on a HPC cluster.")
+    )
+
+    parser.add_argument(
         '--nproc',
         type = int,
         default = 1,
         help = "Number of processors to use."
+    )
+
+    parser.add_argument(
+        '--slurm-mem',
+        type = str,
+        help = "Memory per CPU."
+    )
+
+    parser.add_argument(
+        '--slurm-time',
+        type = str,
+        help = "Walltime in hh:mm:ss format for Slurm jobs."
     )
 
     return vars(parser.parse_args())
@@ -175,6 +199,17 @@ if __name__ == '__main__':
 
     # Extract kwargs for module
     kwargs['imgs'] = imgs
+
+    if kwargs['execution'] == 'slurm':
+        kwargs['slurm_kwargs'] = dict(memory = kwargs['slurm_mem'],
+                                      walltime = kwargs['slurm_time'])
+    elif kwargs['execution'] == 'local':
+        kwargs['slurm_kwargs'] = None
+    else:
+        raise ValueError("Argument `execution` must be one of {'local', 'slurm'}")
+
+    del kwargs['slurm_mem']
+    del kwargs['slurm_time']
 
     # Compute pairwise similarity between cluster centroids
     # with utils.catchtime() as t:
