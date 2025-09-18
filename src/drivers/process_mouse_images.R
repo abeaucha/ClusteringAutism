@@ -50,7 +50,6 @@ SRCPATH <- Sys.getenv("SRCPATH")
 
 # Functions ------------------------------------------------------------------
 
-source(file.path(SRCPATH, "Clustering_Functions_AB.R"))
 source(file.path(SRCPATH, "processing.R"))
 
 
@@ -69,20 +68,6 @@ cluster_t <- args[["cluster-t"]]
 cluster_file <- args[["cluster-file"]]
 affinity_file <- args[["cluster-affinity-file"]]
 centroid_method <- args[["centroid-method"]]
-
-# pipeline_dir <- "data/mouse/derivatives/test/100/"
-# mask <- "data/mouse/registration/reference_files/scanbase_second_level-nlin-3_mask_200um.mnc"
-# cluster_resolution <- 0.2
-# cluster_nk_max <- 10
-# cluster_metric <- "correlation"
-# cluster_K <- 10
-# cluster_sigma <- 0.5
-# cluster_t <- 20
-# cluster_file <- "clusters.csv"
-# cluster_affinity_file <- "affinity.csv"
-# centroid_method <- "mean"
-# registration_dir <- "data/mouse/registration/"
-
 
 resolution_mm <- cluster_resolution
 resolution_um <- cluster_resolution*1000
@@ -160,31 +145,8 @@ clusters <- create_clusters(W = W, nk = cluster_nk_max)
 clusters[["ID"]] <- paste0(clusters[["ID"]], ".mnc")
 write.csv(x = clusters, file = outfile, row.names = FALSE)
 
-# Clusters <- CreateClusters(num_clusters = as.character(cluster_nk_max),
-#                            cluster_method = "spectral",
-#                            output_dir = paths[["clusters"]],
-#                            NameFile = file.path(registration_dir, "Names_Paper.csv"))
-
 
 # Centroids -------------------------------------------------------------------
-
-# message("Generating cluster centroids...")
-# output_dir = file.path(paths[["centroids"]], "original")
-# if (!dir.exists(output_dir)) {dir.create(output_dir, recursive = TRUE)}
-# jacobians <- c("absolute", "relative")
-# for (jtype in jacobians) {
-#   CreateClusterAnatomyMaps(num_clusters = as.character(cluster_nk_max),
-#                            cluster_method = "spectral", 
-#                            average_kind = centroid_method,
-#                            volume_type = jtype, 
-#                            resolution = as.character(resolution_um),
-#                            dir_determinants = paths[["jacobians"]],
-#                            output_dir = output_dir)
-# }
-
-
-# Implementation consistent with human
-# Need to update "clean_mouse_pipeline_outputs.py"
 
 for (jtype in jacobians) {
   message(paste("Generating", jtype, "centroid images..."))
@@ -203,4 +165,3 @@ for (jtype in jacobians) {
                               method = centroid_method, outdir = outdir)
   }
 }
-

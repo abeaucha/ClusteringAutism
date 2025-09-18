@@ -1,7 +1,9 @@
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
 suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(glue))
 suppressPackageStartupMessages(library(splines))
 suppressPackageStartupMessages(library(SNFtool))
 suppressPackageStartupMessages(library(parallel))
@@ -858,4 +860,240 @@ scaler <- function(data, scale = TRUE, axis = "columns"){
   
   return(out)
   
+}
+
+
+MakeModelList<-function(scanbase_scans_file="Data/Resources/scanbase_40um - Scans_22July19.csv",
+                        scanbase_studies_file="Data/Resources/scanbase_40um - Studies_Feb2023.csv",
+                        scanbase_genotypes_file="Data/Resources/scanbase_40um - Genotypes_Feb2023.csv",
+                        scanbase_focus="Autism",
+                        scanbase_sample_size_threshold=6,
+                        base_directory="Data/Outputs/ModelInfo"){
+
+  dir.create(base_directory, recursive = TRUE, showWarnings = FALSE)
+
+  scans <- read.csv(scanbase_scans_file)
+  studies <- read.csv(scanbase_studies_file)
+  genotypes_file <- read.csv(scanbase_genotypes_file)
+
+  # Use only autism studies
+  studies %<>% filter(Focus==scanbase_focus)
+
+  # Keep only scans in autism studies
+  scans %<>% filter(Study_Name %in% studies$Study_Name)
+  genotypes_file %<>% filter(Study_Name %in% studies$Study_Name)
+
+  scans %<>% filter(Genotype_Code %in% genotypes_file$Genotype_Code)
+  scans %<>% filter(Study_Name %in% genotypes_file$Study_Name)
+
+
+  # Make genotype code a character
+  scans %<>% mutate(Study_Name=as.character(Study_Name),
+                    Genotype_Code=as.character(Genotype_Code))
+
+
+  # Remove sex tags in scan genotype code
+  # Why is this even here? There is a variable associated with sex
+  scans %<>% mutate(Genotype_Code=(Genotype_Code %>%
+                                     gsub("_M", "", .) %>%
+                                     gsub("_F", "", .)))
+
+  # Fix Pten_Kim study
+  scans$Study_Name[which(scans$Study_Name=="PTEN_Kim" & endsWith(scans$Genotype_Code, "_131"))] <- "PTEN_Kim_131"
+  scans$Study_Name[which(scans$Study_Name=="PTEN_Kim" & endsWith(scans$Genotype_Code, "_167"))] <- "PTEN_Kim_167"
+
+  # Relabel genotypes for consistency
+  wt_codes <- c("B6", "Wt", "WT_131", "WT_167", "Chd7++", "Chd7ff", "CON","Kctd13Wt_LatWt","WND","WNA","Snf2L_WT","Snf2Hcko-nestincre_WT")
+  scans$Genotype_Code[which(scans$Genotype_Code %in% wt_codes)] <- "WT"
+
+  het_codes <- c("HT", "HETero", "HT_131", "HT_167", "Het", "Hetero")
+  scans$Genotype_Code[which(scans$Genotype_Code %in% het_codes)] <- "HET"
+
+  hom_codes <- c("Hom", "HOMo","Homo")
+  scans$Genotype_Code[which(scans$Genotype_Code %in% hom_codes)] <- "HOM"
+
+  hem_codes <- c("Hemi","Hem","HMZ","Hmz")
+  scans$Genotype_Code[which(scans$Genotype_Code %in% hem_codes)] <- "HEM"
+
+  mut_codes <- c("Mut")
+  scans$Genotype_Code[which(scans$Genotype_Code %in% mut_codes)] <- "MUT"
+
+  # Sample size data per genotype
+  table(scans$Study_Name, scans$Genotype_Code)
+
+  # Remove studies with fewer than 8 wildtypes
+  scans %<>% filter(Study_Name %in% names(which(table(scans$Study_Name, scans$Genotype_Code)[,"WT"] >= scanbase_sample_size_threshold)))
+
+  #Removes scans with bad label files based on NA values in later steps.
+  #scans<-scans[-c(1674,2402,2417,3097,3357,3387,3675),]
+
+  write.csv(scans, file = glue("{base_directory}/scanbase_scans_autism_filtered_Feb2023.csv"))
+
+  unique_studies <- unique(scans$Study_Name)
+  model_list <- list()
+  for (i in seq_along(unique_studies)) {
+    study <- unique_studies[i]
+    study_scans <- scans %>% filter(Study_Name==study)
+    unique_genotypes <- setdiff(unique(study_scans$Genotype_Code), "WT")
+    genotypes <- c()
+    for (j in seq_along(unique_genotypes)) {
+      genotype <- unique_genotypes[j]
+      N <- nrow(study_scans %>% filter(Genotype_Code==genotype))
+      if (N >= scanbase_sample_size_threshold) {
+        genotypes <- c(genotypes, genotype)
+      }
+    }
+    if (length(genotypes) >= 1) {
+      model_list[[study]] <- list(wildtype="WT",
+                                  genotypes=genotypes)
+    }
+  }
+
+  save(list = "model_list", file = glue("{base_directory}/model_list_Feb2023.RData"))
+  return(model_list)
+}
+
+
+
+MakeEffectSizeMaps<-function(jdtype,model_list,resolution="200",
+                             dir_determinants="Data/Raw/jacobian_determinants",
+                             output_phenotype_dir="Data/Outputs/EffectSizeMaps",
+                             base_directory="Data/Outputs/ModelInfo",
+                             boot="Y",
+                             num_boot="100"){
+
+  scans<-read.csv(glue("{base_directory}/scanbase_scans_autism_filtered_Feb2023.csv"))
+
+  if(boot=="Y"){
+    output_phenotype_dir<-glue("{output_phenotype_dir}/{resolution}/Boot")
+  } else {
+    output_phenotype_dir<-glue("{output_phenotype_dir}/{resolution}")
+  }
+
+  dir.create(output_phenotype_dir,recursive = TRUE,showWarnings = FALSE)
+  mvol <- mincGetVolume(glue("{dir_determinants}/scanbase_second_level-nlin-3_mask_{resolution}um.mnc"))
+  nvoxels <- length(which(mvol > 0.5))
+  scans<-read.csv(file = glue("{base_directory}/scanbase_scans_autism_filtered_Feb2023.csv"))
+
+  if(startsWith(tolower(jdtype),"a")){
+    jddir <- glue("abs_{resolution}")
+    jdtype <- "Absolute"
+  }else{
+    jddir <- glue("rel_{resolution}")
+    jdtype <- "Relative"
+  }
+
+  effect_size_data_matrix <- matrix(nrow=length(as.character(unlist(sapply(model_list, "[[", 2)))), ncol=nvoxels)
+  effect_size_data_matrix_rownames <- c()
+
+  if (boot=="Y"){
+    for (nboot in 1:num_boot) {
+      for (model in names(model_list)) {
+        genotypes <- model_list[[model]]$genotypes
+
+        study_scans_wt <- scans %>% filter(Study_Name==model, Genotype_Code %in% c("WT"))
+        wt_data_matrix <- matrix(nrow=nrow(study_scans_wt), ncol = nvoxels)
+
+        for (i in 1:nrow(study_scans_wt)) {
+          filename <- glue("{dir_determinants}/{jddir}/{as.character(study_scans_wt$Mouse_ID)[i]}_{jddir}.mnc")
+          wt_data_matrix[i,] <- mincGetVolume(filename)[mvol > 0.5]
+        }
+
+        rowboot<-sample(nrow(wt_data_matrix),size=nrow(wt_data_matrix),replace=TRUE)
+        wt_data_matrix<-wt_data_matrix[rowboot,]
+
+        wt_mean <- colMeans(wt_data_matrix)
+        # wt_sd <- colSd(wt_data_matrix)
+        # Equivalent to: apply(wt_data_matrix, MARGIN=2, FUN=function(x) {mean(x)})
+        wt_sd<-apply(wt_data_matrix, MARGIN=2, sd)
+
+        for (genotype in genotypes) {
+
+          print(paste("Working on model:", model, ",", "genotype:", genotype, ",", "num_boot:", nboot))
+
+          # Make a dataframe with only wildtypes and genotype of interest
+          study_scans_mut <- scans %>% filter(Study_Name==model, Genotype_Code %in% c(genotype))
+          mut_data_matrix <- matrix(nrow=nrow(study_scans_mut), ncol = nvoxels)
+
+          rowboot<-sample(nrow(mut_data_matrix),size=nrow(mut_data_matrix),replace=TRUE)
+          mut_data_matrix<-mut_data_matrix[rowboot,]
+
+          for (i in 1:nrow(study_scans_mut)) {
+            filename <- glue("{dir_determinants}/{jddir}/{as.character(study_scans_mut$Mouse_ID)[i]}_{jddir}.mnc")
+            mut_data_matrix[i,] <- mincGetVolume(filename)[mvol > 0.5]
+          }
+
+          mut_mean <- colMeans(mut_data_matrix)
+          effect_size <- (mut_mean - wt_mean) / wt_sd
+
+          filenameES <- glue("{output_phenotype_dir}/{as.character(model)}_{as.character(genotype)}_ES_{jdtype}_{resolution}_{nboot}.mnc")
+
+          ovol <- mvol
+          ovol[] <- 0
+          ovol[mvol > 0.5] <- effect_size
+          #ovol[is.infinite()]<-0
+          ovol[is.na(ovol)]<-0
+          mincWriteVolume(ovol, filenameES)
+
+        }
+      }
+    }
+  } else {
+    k <- 1
+    for (model in names(model_list)) {
+      genotypes <- model_list[[model]]$genotypes
+
+      study_scans_wt <- scans %>% filter(Study_Name==model, Genotype_Code %in% c("WT"))
+      wt_data_matrix <- matrix(nrow=nrow(study_scans_wt), ncol = nvoxels)
+
+      for (i in 1:nrow(study_scans_wt)) {
+        filename <- glue("{dir_determinants}/{jddir}/{as.character(study_scans_wt$Mouse_ID)[i]}_{jddir}.mnc")
+        wt_data_matrix[i,] <- mincGetVolume(filename)[mvol > 0.5]
+      }
+
+      wt_mean <- colMeans(wt_data_matrix)
+      # wt_sd <- colSd(wt_data_matrix)
+      # Equivalent to: apply(wt_data_matrix, MARGIN=2, FUN=function(x) {mean(x)})
+      wt_sd<-apply(wt_data_matrix, MARGIN=2, sd)
+
+      for (genotype in genotypes) {
+
+        message(paste("Working on model:", model, ",", "genotype:", genotype))
+
+        # Make a dataframe with only wildtypes and genotype of interest
+        study_scans_mut <- scans %>% filter(Study_Name==model, Genotype_Code %in% c(genotype))
+        mut_data_matrix <- matrix(nrow=nrow(study_scans_mut), ncol = nvoxels)
+
+        for (i in 1:nrow(study_scans_mut)) {
+          filename <- glue("{dir_determinants}/{jddir}/{as.character(study_scans_mut$Mouse_ID)[i]}_{jddir}.mnc")
+          mut_data_matrix[i,] <- mincGetVolume(filename)[mvol > 0.5]
+        }
+
+        mut_mean <- colMeans(mut_data_matrix)
+        effect_size <- (mut_mean - wt_mean) / wt_sd
+
+        filenameES <- glue("{output_phenotype_dir}/{as.character(model)}_{as.character(genotype)}_ES_{jdtype}_{resolution}.mnc")
+
+        ovol <- mvol
+        ovol[] <- 0
+        ovol[mvol > 0.5] <- effect_size
+        #ovol[is.infinite()]<-0
+        ovol[is.na(ovol)]<-0
+        mincWriteVolume(ovol, filenameES, clobber = TRUE)
+
+        effect_size_data_matrix[k,] <- effect_size
+        effect_size_data_matrix_rownames <- c(effect_size_data_matrix_rownames, paste(model, genotype, sep="_"))
+        k <- k + 1
+
+
+      }
+    }
+
+  }
+
+  if(boot!="Y"){
+    rownames(effect_size_data_matrix)<-effect_size_data_matrix_rownames
+    save(file=glue("{output_phenotype_dir}/ES_Matricies_{jdtype}.RData"),effect_size_data_matrix)
+    return(effect_size_data_matrix)
+  }
 }
