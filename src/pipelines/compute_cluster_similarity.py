@@ -461,7 +461,8 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     pd.DataFrame(cluster_pairs).to_csv(output_file, index = False)
 
     # Set imgs arg in driver kwargs
-    kwargs['imgs'] = [tuple(x) for x in cluster_pairs]
+    imgs = [tuple(x) for x in cluster_pairs]
+    kwargs['imgs'] = imgs[:300]
 
     # Initialize Dask client for execution
     if kwargs['execution'] == 'local':
@@ -478,6 +479,8 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
         client = Client(cluster)
     else:
         raise ValueError("Argument `--execution` must be one of {'local', 'slurm'}")
+
+    print(client.dashboard_link)
 
     # Add client to driver kwargs
     kwargs['client'] = client
