@@ -461,8 +461,7 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     pd.DataFrame(cluster_pairs).to_csv(output_file, index = False)
 
     # Set imgs arg in driver kwargs
-    imgs = [tuple(x) for x in cluster_pairs]
-    kwargs['imgs'] = imgs[:300]
+    kwargs['imgs'] = [tuple(x) for x in cluster_pairs]
 
     # Initialize Dask client for execution
     if kwargs['execution'] == 'local':
