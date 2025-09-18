@@ -195,7 +195,7 @@ if __name__ == '__main__':
     output_file = kwargs['output_file']
     del kwargs['output_file']
 
-    # Generate Dask client for execution
+    # Initialize Dask client for execution
     if kwargs['execution'] == 'local':
         client = Client(processes = True,
                         n_workers = kwargs['nproc'],

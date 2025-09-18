@@ -22,6 +22,8 @@ import utils
 import pandas as pd
 from itertools import product
 from transcriptomic import transcriptomic_similarity
+from dask.distributed import Client
+from dask_jobqueue import SLURMCluster
 
 
 # Command line arguments -----------------------------------------------------
@@ -458,26 +460,45 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     output_file = os.path.join(paths['pipeline'], 'centroid_pairs.csv')
     pd.DataFrame(cluster_pairs).to_csv(output_file, index = False)
 
-    # Clean up kwargs for driver module
+    # Set imgs arg in driver kwargs
     kwargs['imgs'] = [tuple(x) for x in cluster_pairs]
-    kwargs['expr'] = kwargs.pop('expr_dirs')
-    if kwargs['execution'] == 'slurm':
-        kwargs['slurm_kwargs'] = dict(memory = kwargs['slurm_mem'],
-                                      walltime = kwargs['slurm_time'])
-    elif kwargs['execution'] == 'local':
-        kwargs['slurm_kwargs'] = None
+
+    # Initialize Dask client for execution
+    if kwargs['execution'] == 'local':
+        client = Client(processes = True,
+                        n_workers = kwargs['nproc'],
+                        threads_per_worker = 1)
+    elif kwargs['execution'] == 'slurm':
+        cluster = SLURMCluster(
+            cores = 1,
+            memory = kwargs['slurm_mem'],
+            walltime = kwargs['slurm_time']
+        )
+        cluster.scale(jobs = kwargs['nproc'])
+        client = Client(cluster)
     else:
-        raise ValueError("Argument `execution` must be one of {'local', 'slurm'}")
+        raise ValueError("Argument `--execution` must be one of {'local', 'slurm'}")
+
+    # Add client to driver kwargs
+    kwargs['client'] = client
+
+    # Clean up driver kwargs
+    kwargs['expr'] = kwargs.pop('expr_dirs')
     del kwargs['pipeline_dir']
     del kwargs['params_id']
     del kwargs['input_dirs']
     del kwargs['input_params_ids']
     del kwargs['jacobians']
+    del kwargs['execution']
+    del kwargs['nproc']
     del kwargs['slurm_mem']
     del kwargs['slurm_time']
 
     # Compute pairwise similarity between cluster centroids
     results = transcriptomic_similarity(**kwargs)
+
+    # Close Dask client
+    client.close()
 
     # Export similarity values
     output_file = os.path.join(paths['pipeline'], 'similarity.csv')
