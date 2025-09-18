@@ -566,6 +566,9 @@ def transcriptomic_similarity(imgs, species, expr, masks,
         close_client = False
         warn("Remember to close the client after use.")
 
+    print(client.scheduler_info())
+    print(client.dashboard_link)
+
     # Map function over inputs
     futures = client.map(iterator, inputs)
     if verbose: progress(futures)
