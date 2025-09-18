@@ -21,6 +21,9 @@ import pandas as pd
 from compute_cluster_similarity import generate_cluster_pairs
 from process_human_images import centroids
 from shutil import rmtree
+from transcriptomic import transcriptomic_similarity
+from dask.distributed import Client
+from dask_jobqueue import SLURMCluster
 
 
 # Command line arguments -----------------------------------------------------
@@ -42,7 +45,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--param-id',
+        '--params-id',
         type = str,
         help = ("ID specifying the similarity pipeline parameter set "
                 "to use.")
@@ -133,21 +136,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--registry-name',
-        type = str,
-        default = "permute_cluster_similarity_registry",
-        help = "Name of the registry directory for batched jobs."
-    )
-
-    parser.add_argument(
-        '--registry-cleanup',
-        type = str,
-        default = "true",
-        help = "Option to clean up registry after completion of batched jobs."
-    )
-
-    parser.add_argument(
-        '--slurm-njobs',
+        '--nproc',
         type = int,
         help = "Number of jobs to deploy on Slurm."
     )
@@ -196,13 +185,13 @@ def initialize(**kwargs):
     expr_dirs = [os.path.join(path, '') for path in kwargs['expr_dirs']]
 
     # Fetch the similarity pipeline parameters
-    param_id = kwargs['param_id']
+    params_id = kwargs['params_id']
     metadata = os.path.join(pipeline_dir, 'metadata.csv')
     if not os.path.exists(metadata):
         raise OSError("Input pipeline metadata file not found: {}"
                       .format(metadata))
     params = utils.fetch_params_metadata(metadata = metadata,
-                                         id = param_id)
+                                         id = params_id)
     params = {key:val[0] for key, val in params.to_dict(orient = 'list').items()}
 
     # If latent_space_id is NaN, set to 1 (subsequently unused)
@@ -242,7 +231,7 @@ def initialize(**kwargs):
     inputs = {key:tuple(val) for key, val in inputs.items()}
 
     # Create pipeline directory
-    pipeline_dir = os.path.join(pipeline_dir, param_id, 'permutations', '')
+    pipeline_dir = os.path.join(pipeline_dir, params_id, 'permutations', '')
     if not os.path.exists(pipeline_dir):
         os.makedirs(pipeline_dir)
 
@@ -372,14 +361,11 @@ def subset_cluster_pairs(centroid_pairs, off_diagonal = 1):
 
 
 @utils.timing
-def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
+def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
          microarray_coords = 'data/human/expression/AHBA_microarray_coordinates_study.csv',
          permutations_n = 100, permutations_start = 1, permutations_ids = None,
          off_diagonal = 1, keep_centroids = False,
-         execution = 'local',
-         registry_name = 'permute_cluster_similarity_registry',
-         registry_cleanup = True, slurm_njobs = None, slurm_mem = None,
-         slurm_time = None):
+         execution = 'local', nproc = 1, slurm_mem = None, slurm_time = None):
     """
     Execute the similarity permutation pipeline.
 
@@ -389,7 +375,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
         Path to the directory in which to export pipeline outputs.
         A uniquely identified subdirectory will be created using the
         specified set of pipeline parameters.
-    param_id: str
+    params_id: str
         Parameter set ID for the similarity pipeline to permute.
     input_dirs: tuple of str
         Paths to the processing pipeline directories containing
@@ -419,12 +405,8 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
         Flag indicating whether the pipeline should be executed or
         using the Slurm scheduler on an HPC cluster.
         Number of processors to use in parallel.
-    registry_name: str, default 'permute_cluster_similarity_registry'
-        Name of the registry directory to use in batched jobs.
-    registry_cleanup: bool, default True
-        Option to clean up registry after completion of batched jobs.
-    slurm_njobs: int, default None
-        Number of jobs to deploy on Slurm. Ignored when execution = 'local'.
+    nproc: int, default 1
+        Number of jobs to deploy on Slurm.
     slurm_mem: str, default None
         Memory per CPU on Slurm. Ignored when execution = 'local'.
     slurm_time: str, default = None
@@ -452,8 +434,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
                                           start = permutations_start,
                                           ids = permutations_ids)
 
-    # Driver script and kwargs
-    driver = 'transcriptomic_similarity.py'
+    # Driver script kwargs
     driver_kwargs = {key:val for key, val in params.items()
                      if 'input' not in key}
     driver_kwargs.update(dict(
@@ -463,6 +444,30 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
         microarray_coords = kwargs['microarray_coords']
     ))
     del driver_kwargs['id']
+    driver_kwargs['n_latent_spaces'] = int(driver_kwargs['n_latent_spaces'])
+    driver_kwargs['latent_space_id'] = int(driver_kwargs['latent_space_id'])
+    driver_kwargs['signed'] = True if driver_kwargs['signed'] == 'true' else False
+    driver_kwargs['threshold_value'] = float(driver_kwargs['threshold_value'])
+    driver_kwargs['threshold_symmetric'] = True if driver_kwargs['threshold_symmetric'] == 'true' else False
+
+    # Initialize Dask client for execution
+    if execution == 'local':
+        client = Client(processes = True,
+                        n_workers = nproc,
+                        threads_per_worker = 1)
+    elif execution == 'slurm':
+        cluster = SLURMCluster(
+            cores = 1,
+            memory = slurm_mem,
+            walltime = slurm_time
+        )
+        cluster.scale(jobs = nproc)
+        client = Client(cluster)
+    else:
+        raise ValueError("Argument `--execution` must be one of {'local', 'slurm'}")
+
+    # Add client to driver kwargs
+    driver_kwargs['client'] = client
 
     # Iterate over permutations
     # If permutation IDs given, use those. Otherwise, iterate in sequence.
@@ -472,9 +477,6 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
         permutations_ids = list(permutations_range)
     for p, f in zip(permutations_ids, permutations):
         print("Permutation {}".format(p), flush = True)
-
-        # Update registry name for current permutation
-        registry_name_p = '{}_{}'.format(registry_name, p)
 
         # Compute permuted cluster centroid images
         print("Generating permuted centroids...", flush = True)
@@ -488,7 +490,7 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
             execution = 'slurm',
             nproc = 8,
             registry_cleanup = True,
-            registry_name = registry_name_p,
+            registry_name = 'permutation_{}'.format(p),
             slurm_mem = '16G',
             slurm_time = 120
         )
@@ -502,69 +504,24 @@ def main(pipeline_dir, param_id, input_dirs, expr_dirs, masks,
         # Identify subset of centroid pairs on and off the nk diagonal
         centroid_pairs = subset_cluster_pairs(centroid_pairs = centroid_pairs,
                                               off_diagonal = off_diagonal)
-        centroid_pairs = pd.DataFrame(centroid_pairs)
+
+        # Add image pairs to driver kwargs
+        driver_kwargs['imgs'] = [tuple(x) for x in centroid_pairs]
 
         # Evaluate the cluster similarity using specified execution
         print("Evaluating cluster similarity...", flush = True)
-        if execution == 'local':
+        results = transcriptomic_similarity(**driver_kwargs)
 
-            # Export cluster pairs
-            outfile = 'centroid_pairs_permutation_{}.csv'.format(p)
-            outfile = os.path.join(paths['similarity'], outfile)
-            centroid_pairs.to_csv(outfile, index = False)
-            input_file = outfile
-
-            # Output file for permuted similarity
-            output_file = 'similarity_permutation_{}.csv'.format(p)
-            output_file = os.path.join(paths['similarity'], output_file)
-
-            # Update driver kwargs
-            driver_kwargs['input-file'] = input_file
-            driver_kwargs['output-file'] = output_file
-            driver_kwargs = {key.replace('_', '-'):val
-                             for key, val in driver_kwargs.items()}
-
-            # Execute driver
-            utils.execute_local(script = driver, kwargs = driver_kwargs)
-
-        elif execution == 'slurm':
-
-            # Slurm job resources
-            resources = dict(
-                nodes = 1,
-                mem = slurm_mem,
-                time = slurm_time
-            )
-
-            # Create registry
-            registry = utils.Registry(resources = resources,
-                                      name = registry_name_p)
-
-            # Create data batches
-            registry.create_batches(x = centroid_pairs,
-                                    nbatches = slurm_njobs,
-                                    prefix = 'centroid_pairs_batch')
-
-            # Create jobs for batches
-            kwargs['nproc'] = 1
-            registry.create_jobs(script = driver,
-                                 kwargs = driver_kwargs)
-
-            # Submit jobs
-            out = registry.submit_jobs(wait = True, cleanup = registry_cleanup)
-
-            # Export results
-            print("Exporting results...", flush = True)
-            output_file = 'similarity_permutation_{}.csv'.format(p)
-            output_file = os.path.join(paths['similarity'], output_file)
-            out.to_csv(output_file, index = False)
-
-        else:
-            raise ValueError("Argument `execution` must be one of "
-                             "{'local', 'slurm'}")
+        # Output file for permuted similarity
+        output_file = 'similarity_permutation_{}.csv'.format(p)
+        output_file = os.path.join(paths['similarity'], output_file)
+        results.to_csv(output_file, index = False)
 
         # Remove permuted centroids if specified
         if not keep_centroids: rmtree(centroid_dirs[0])
+
+    # Close Dask client
+    client.close()
 
     return
 
@@ -577,6 +534,4 @@ if __name__ == '__main__':
     args['masks'] = tuple(args['masks'])
     args['keep_centroids'] = (True if args['keep_centroids'] == 'true'
                               else False)
-    args['registry_cleanup'] = (True if args['registry_cleanup'] == 'true'
-                                else False)
     main(**args)
