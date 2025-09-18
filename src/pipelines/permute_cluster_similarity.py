@@ -138,6 +138,7 @@ def parse_args():
     parser.add_argument(
         '--nproc',
         type = int,
+        default = 1,
         help = "Number of jobs to deploy on Slurm."
     )
 
