@@ -16,6 +16,8 @@ Description
 import argparse
 import pandas as pd
 from transcriptomic import transcriptomic_similarity
+from dask.distributed import Client
+from dask_jobqueue import SLURMCluster
 
 
 # Command line arguments -----------------------------------------------------
@@ -186,24 +188,40 @@ if __name__ == '__main__':
     df_imgs = pd.read_csv(kwargs['input_file'])
     imgs = df_imgs.values.tolist()
     imgs = [tuple(x) for x in imgs]
+    kwargs['imgs'] = imgs
     del kwargs['input_file']
 
     # Output file
     output_file = kwargs['output_file']
     del kwargs['output_file']
 
-    # Clean up kwargs for driver module
-    kwargs['imgs'] = imgs
-    if kwargs['execution'] == 'slurm':
-        kwargs['slurm_kwargs'] = dict(memory = kwargs['slurm_mem'],
-                                      walltime = kwargs['slurm_time'])
-    elif kwargs['execution'] == 'local':
-        kwargs['slurm_kwargs'] = None
+    # Generate Dask client for execution
+    if kwargs['execution'] == 'local':
+        client = Client(processes = True,
+                        n_workers = kwargs['nproc'],
+                        threads_per_worker = 1)
+    elif kwargs['execution'] == 'slurm':
+        cluster = SLURMCluster(
+            cores = 1,
+            memory = kwargs['slurm_mem'],
+            walltime = kwargs['slurm_time']
+        )
+        cluster.scale(jobs = kwargs['nproc'])
+        client = Client(cluster)
     else:
-        raise ValueError("Argument `execution` must be one of {'local', 'slurm'}")
+        raise ValueError("Argument `--execution` must be one of {'local', 'slurm'}")
+
+    kwargs['client'] = client
+    del kwargs['execution']
+    del kwargs['nproc']
     del kwargs['slurm_mem']
     del kwargs['slurm_time']
 
     # Compute pairwise similarity between image pairs
     results = transcriptomic_similarity(**kwargs)
+
+    # Close Dask client
+    client.close()
+
+    # Export results
     results.to_csv(output_file, index = False)
