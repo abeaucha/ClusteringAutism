@@ -7,11 +7,11 @@ import pandas as pd
 import processing
 #from datatable import fread
 from dask.distributed import Client, progress
-from dask_jobqueue import SLURMCluster
 from functools import partial
 from io import StringIO
 from itertools import product
 from pyminc.volumes.factory import volumeFromFile
+from warnings import warn
 
 
 @contextlib.contextmanager
@@ -420,8 +420,7 @@ def transcriptomic_similarity(imgs, species, expr, masks,
                               metric = 'correlation', signed = True,
                               threshold = 'top_n', threshold_value = 0.2,
                               threshold_symmetric = True, return_signed = False,
-                              execution = 'local', nproc = 1, verbose = True,
-                              slurm_kwargs = None):
+                              client = None, verbose = True):
     """
     Compute the transcriptomic similarity for a set of image pairs.
 
@@ -462,8 +461,9 @@ def transcriptomic_similarity(imgs, species, expr, masks,
     threshold_symmetric: bool, default True
         Option to apply threshold symmetrically to positive and negative voxel
         values.
-    nproc: int, default 1
-        Number of processors to use in parallel.
+    return_signed: bool, default False
+    client: Dask Client, default None
+    verbose: bool, default True
 
     Returns
     -------
@@ -544,6 +544,7 @@ def transcriptomic_similarity(imgs, species, expr, masks,
     # Expand all combinations of images and expression spaces
     inputs = list(product(imgs, expr))
 
+    # Mapping function
     iterator = partial(_compute_transcriptomic_similarity,
                        species = species,
                        masks = masks,
@@ -555,27 +556,21 @@ def transcriptomic_similarity(imgs, species, expr, masks,
                        threshold_symmetric = threshold_symmetric,
                        return_signed = return_signed)
 
-    if execution == 'local':
+    # If no Dask client passed, create one
+    if client is None:
         client = Client(processes = True,
-                        n_workers = nproc,
+                        n_workers = 1,
                         threads_per_worker = 1)
-    elif execution == 'slurm':
-        cluster = SLURMCluster(
-            cores = slurm_kwargs.get('cores', 1),
-            memory = slurm_kwargs.get('memory', '16GB'),
-            walltime = slurm_kwargs.get('walltime', '08:00:00')
-        )
-        cluster.scale(jobs = slurm_kwargs.get("jobs", nproc))
-        client = Client(cluster)
+        close_client = True
     else:
-        raise ValueError("Argument `execution` must be one of {'local', 'slurm'}")
+        close_client = False
+        warn("Remember to close the client after use.")
 
+    # Map function over inputs
     futures = client.map(iterator, inputs)
-
-    if verbose:
-        progress(futures)
-
+    if verbose: progress(futures)
     sim = client.gather(futures)
+    if close_client: client.close()
 
     if return_signed:
         results = pd.DataFrame(
