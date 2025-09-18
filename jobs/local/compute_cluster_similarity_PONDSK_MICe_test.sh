@@ -1,7 +1,7 @@
 #!/bin/bash
 
 compute_cluster_similarity.py \
---pipeline-dir data/cross_species/v3/ \
+--pipeline-dir data/cross_species/test/ \
 --species human mouse \
 --input-dirs data/human/derivatives/v3/ data/mouse/derivatives/v3/ \
 --param-ids 700 107 \
