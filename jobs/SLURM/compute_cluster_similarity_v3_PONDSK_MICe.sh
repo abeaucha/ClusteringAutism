@@ -4,12 +4,12 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
-#SBATCH --chdir=/hpf/largeprojects/MICe/abeauchamp/Paper_ClusteringAutism/main
-#SBATCH --output=logs/compute_cluster_similarity_v3_POND_SK_%j.out
+#SBATCH --chdir=/project/def-jlerch/abeaucha/Paper_ClusteringAutism/main/
+#SBATCH --output=logs/compute_cluster_similarity_PONDSK_%j.out
 ##SBATCH --dependency=afterok:
 
 # Activate virtual environment
-source activate_venv_hpc.sh
+source activate_venv.sh
 
 # Pipeline registry directory
 REGISTRY="compute_cluster_similarity_registry_${SLURM_JOB_ID}"
@@ -24,12 +24,11 @@ compute_cluster_similarity.py \
 --expr-dirs data/human/expression data/mouse/expression \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
---gene-space average-latent-space \
---n-latent-spaces 50 \
+--gene-space mlp-latent-space \
 --jacobians absolute relative \
 --execution slurm \
---registry-name $REGISTRY \
---registry-cleanup true \
---slurm-njobs 600 \
+--nproc 600 \
 --slurm-mem 16G \
 --slurm-time 8:00:00
+
+deactivate
