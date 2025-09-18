@@ -402,11 +402,10 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
     keep_centroids: bool, default False
         Options to keep permuted centroid images.
     execution: {'local', 'slurm'}
-        Flag indicating whether the pipeline should be executed or
-        using the Slurm scheduler on an HPC cluster.
-        Number of processors to use in parallel.
+        Flag indicating whether the pipeline should be executed locally or
+        using the SLURM scheduler on an HPC cluster.
     nproc: int, default 1
-        Number of jobs to deploy on Slurm.
+        Number of jobs to deploy.
     slurm_mem: str, default None
         Memory per CPU on Slurm. Ignored when execution = 'local'.
     slurm_time: str, default = None
