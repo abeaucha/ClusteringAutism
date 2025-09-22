@@ -47,7 +47,8 @@ def parse_args():
     parser.add_argument(
         '--params-id',
         type = str,
-        help = ()
+        help = ("Optional parameter set ID for pipeline. "
+                "ID will be randomly generated if not specified.")
     )
 
     parser.add_argument(
@@ -231,7 +232,6 @@ def initialize(**kwargs):
     # Ensure proper paths
     pipeline_dir = os.path.join(kwargs['pipeline_dir'], '')
     input_dirs = [os.path.join(path, '') for path in kwargs['input_dirs']]
-    expr_dirs = [os.path.join(path, '') for path in kwargs['expr_dirs']]
 
     # Convert bool to str for multilingual consistency
     for key, val in kwargs.items():
@@ -306,7 +306,7 @@ def generate_cluster_pairs(centroid_dirs, jacobians = ('absolute', 'relative')):
     ----------
     centroid_dirs: list of str
         List of paths to the directories containing the centroid images.
-        Expects sub-directories named 'absolute', 'relative', or both.
+        Expects subdirectories named 'absolute', 'relative', or both.
     jacobians: tuple of str
         Strings indicating which Jacobian images to use.
 
@@ -370,7 +370,7 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     input_dirs: tuple of str
         Paths to the processing pipeline directories containing the
         centroid images to compare. Expects a subdirectory 'centroids'.
-    param_ids: tuple of str
+    input_params_ids: tuple of str
         List of integer IDs specifying the processing pipeline
         parameter sets to use.
     expr_dirs: tuple of str
@@ -378,6 +378,9 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
         being compared.
     masks: tuple of str
         Paths to the mask image files (.mnc).
+    params_id: str
+        Optional parameter set ID for pipeline. ID will be randomly
+        generated if not specified.
     microarray_coords: str
         Path to file (.csv) containing the world coordinates of the
         AHBA microarray samples in the human imaging study space.
@@ -479,7 +482,7 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     else:
         raise ValueError("Argument `--execution` must be one of {'local', 'slurm'}")
 
-    print(client.dashboard_link)
+    print("Dask dashboard at: {}".format(client.dashboard_link))
 
     # Add client to driver kwargs
     kwargs['client'] = client
@@ -497,12 +500,14 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     del kwargs['slurm_time']
 
     # Compute pairwise similarity between cluster centroids
+    print("Evaluating transcriptomic similarity of clusters...", flush = True)
     results = transcriptomic_similarity(**kwargs)
 
     # Close Dask client
     client.close()
 
     # Export similarity values
+    print("Exporting similarity values...", flush = True)
     output_file = os.path.join(paths['pipeline'], 'similarity.csv')
     results.to_csv(output_file, index = False)
 
