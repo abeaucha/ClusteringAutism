@@ -22,3 +22,4 @@ r-proc=1.18.5
 r-ggbeeswarm=0.7.2
 r-ggalluvial=0.12.5
 r-prroc=1.4
+r-ggplotify=0.1.3
