@@ -1,0 +1,758 @@
+---
+title: "New figure 2"
+output: html_document
+date: "2025-09-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r}
+source(file.path(SRCPATH, "enrichment.R"))
+```
+
+
+```{r}
+mouse_enrichment_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950/NeighbourhoodEnrichment")
+
+reactome_hierarchy <- file.path(PROJECTPATH, "data/enrichment/reactome_hierarchy.csv")
+df_reactome_hierarchy <- read_csv(reactome_hierarchy)
+
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(level = ifelse(is.na(ParentID), 0, NA))
+
+
+# Iterate lvl down the tree
+# Probably a while loop
+nmissing <- sum(is.na(df_reactome_hierarchy$level))
+lvl <- 0
+while (nmissing > 0) {
+  
+  df_reactome_lvl <- df_reactome_hierarchy %>% 
+    filter(level == lvl)
+  
+  # Iterate over nodes at given level
+  for (i in 1:nrow(df_reactome_lvl)){
+    
+    node <- df_reactome_lvl[[i, "Name"]]
+    
+    df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+      mutate(level = ifelse(is.na(Parent), 0, 
+                            ifelse(Parent == node, lvl+1, level)))
+    
+  }
+  
+  nmissing <- sum(is.na(df_reactome_hierarchy$level))
+  lvl <- lvl + 1
+  
+}
+
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(Name = str_replace_all(Name, "  ", " "),
+         Name = str_replace_all(Name, "/", " "))
+```
+
+```{r}
+module_file <- file.path(PROJECTPATH, "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt")
+df_modules <- get_module_sizes(modules = module_file)
+
+df_modules <- df_modules %>% 
+  rename(IDBader = ID) %>% 
+  mutate(ID = IDBader %>% 
+           str_split_i("%", i = -1) %>% 
+           str_remove("R-HSA-") %>% 
+           str_remove("\\.[0-9]+"),
+         ID = paste0("R-HSA-", ID)) %>% 
+  mutate(Title = str_replace_all(Title, "  ", " "))
+```
+
+```{r}
+df_reactome <- inner_join(df_reactome_hierarchy,
+                          df_modules,
+                          by = "ID")
+```
+
+
+```{r}
+ggplot(df_reactome, aes(x = level, y = B)) + 
+  geom_jitter(width = 0.3, alpha = 0.5) +
+  scale_x_continuous(breaks = seq(0, 20, 1)) +
+  labs(x = "Hierarchy level",
+       y = "Pathway size") + 
+  theme_bw()
+```
+```{r}
+pathway_ids_keep <- df_reactome %>% 
+  filter(B > 10) %>% 
+  pull(IDBader)
+```
+
+
+```{r}
+nk <- 10
+list_enrichment <- vector(mode = "list", length = nk)
+for (k in 1:nk) {
+  enrichment_file <- paste("cluster_pathway_enrichment", nk, k, "950", sep = "_")
+  enrichment_file <- paste0(enrichment_file, ".csv")
+  enrichment_file <- file.path(mouse_enrichment_dir, enrichment_file)
+  list_enrichment[[k]] <- read_csv(enrichment_file, show_col_types = FALSE) %>%
+    semi_join(df_reactome, by = c("ID" = "IDBader")) %>% 
+    left_join(df_reactome %>% 
+                select(ID = IDBader, level, Parent, Root), by = "ID") %>% 
+    filter(ID %in% pathway_ids_keep)
+}
+
+df_enrichment <- bind_rows(list_enrichment) %>% 
+  mutate(NLQ = -log10(adj.P.Val))
+
+```
+
+
+```{r}
+df_reactome_roots <- df_reactome_hierarchy %>% 
+  filter(level == 0)
+
+df_roots_n <- tibble(Root = df_reactome_roots$Name,
+                     n = 0)
+
+df_root_grid <- expand_grid(k = 1:nk, 
+                            Root = df_reactome_roots$Name)
+```
+
+```{r}
+df_top_n_root <- df_enrichment %>% 
+  group_by(k) %>% 
+  top_n(n = -20, wt = rank) %>% 
+  group_by(k, Root) %>% 
+  count() %>% 
+  ungroup() %>% 
+  right_join(df_root_grid, by = c("k", "Root")) %>% 
+  arrange(Root)
+
+ggplot(df_top_n_root, aes(x = factor(k), y = fct_rev(Root), fill = n)) + 
+  geom_tile() +
+  labs(x = "Cluster", y = "Root pathway") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  theme_bw()
+```
+
+```{r fig.width = 10, fig.height = 5}
+qthresholds <- c(0.05, 0.01, 0.001)
+list_qthresholds <- vector(mode = "list", length = length(qthresholds))
+for (q in 1:length(qthresholds)) {
+  
+  list_qthresholds[[q]] <- df_enrichment %>% 
+    filter(adj.P.Val < qthresholds[q]) %>% 
+    group_by(k, Root) %>% 
+    count() %>% 
+    ungroup() %>% 
+    right_join(df_root_grid, by = c("k", "Root")) %>% 
+    arrange(Root) %>% 
+    mutate(qval = as.character(qthresholds[q]))
+  
+}
+
+df_enriched_root <- bind_rows(list_qthresholds) %>% 
+  mutate(qlabs = paste0("q = ", qval),
+         qlabs = factor(qlabs, levels = paste0("q = ", qthresholds)))
+
+heatmap_palette_cols <- RColorBrewer::brewer.pal(n = 9, name = "OrRd")
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
+heatmap_limits <- c(2, 40)
+
+df_enriched_root <- df_enriched_root %>% 
+  mutate(n_binned = cut(n, breaks = c(1, 5, 10, 15, 20, 25, 30, 35, 40, 120)))
+
+# df_enriched_root %>% 
+#   mutate(n = ifelse(n > 40, 40, n)) %>% 
+#   ggplot(aes(x = factor(k), y = fct_rev(Root), fill = n)) + 
+#   geom_tile(col = "grey60") +
+#   facet_wrap(~qval) + 
+#   labs(x = "Cluster", y = "Root pathway") + 
+#   scale_x_discrete(expand = expansion()) + 
+#   scale_y_discrete(expand = expansion()) + 
+#   scale_fill_gradientn(colors = heatmap_palette,
+#                        limits = c(1, 40),
+#                        na.value = "grey85") + 
+#   theme_bw()
+
+ggplot(df_enriched_root, aes(x = factor(k), y = fct_rev(Root), fill = n_binned)) + 
+  geom_tile(col = "grey60") +
+  facet_wrap(~qlabs) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_brewer(palette = "PuBu", na.value = "grey85") + 
+  labs(x = "Cluster", y = "Root pathway", fill = "Number of pathways enriched") + 
+  theme_bw()
+
+```
+
+```{r fig.width = 10, fig.height = 4}
+root_excl <- c("Autophagy", "Cell-Cell communication", "Circadian clock",
+               "Digestion and absorption", "DNA Repair", "DNA Replication", 
+               "Drug ADME", "Extracellular matrix organization", 
+               "Metabolism of RNA", "Muscle contraction", "Protein localization",
+               "Reproduction", "Sensory Perception", "Transport of small molecules", 
+               "Vesicle-mediated transport")
+
+df_enriched_root %>% 
+  filter(!(Root %in% root_excl)) %>% 
+  ggplot(aes(x = factor(k), y = fct_rev(Root), fill = n_binned)) + 
+  geom_tile(col = "grey60") +
+  facet_wrap(~qlabs) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_brewer(palette = "PuBu", na.value = "grey85") + 
+  labs(x = "Cluster", y = "Root pathway", fill = "Number of pathways enriched") + 
+  theme_bw()
+```
+
+
+```{r}
+df_enrichment_root_mean <- df_enrichment %>% 
+  filter(adj.P.Val < 0.01) %>% 
+  group_by(k, Root) %>% 
+  summarise(NLQ_median = median(NLQ),
+            NLQ_mean = mean(NLQ)) %>% 
+  ungroup() %>% 
+  right_join(df_root_grid, by = c("k", "Root")) %>% 
+  arrange(Root)
+
+ggplot(df_enrichment_root_mean, aes(x = factor(k), y = fct_rev(Root), fill = NLQ_median)) + 
+  geom_tile(col = "grey60") +
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       # limits = c(1, 40),
+                       na.value = "grey85") +
+  labs(x = "Cluster", y = "Root pathway", fill = "Mean enrichment (-log10(q))") + 
+  theme_bw()
+```
+
+```{r}
+df_enrichment_root <- df_enrichment %>% 
+  filter(level == 0) %>% 
+  mutate(NLQ = ifelse(NLQ > 30, 30, NLQ))
+
+ggplot(df_enrichment_root, aes(x = factor(k), y = fct_rev(Root), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(2, 30),
+                       na.value = "grey85") +
+  labs(x = "Cluster", y = "Root pathway", fill = "Enrichment (-log10(q))") + 
+  theme_bw()
+```
+
+```{r fig.width = 10, fig.height = 20}
+root_excl <- c("Circadian clock",
+               "Digestion and absorption", "DNA Repair", "DNA Replication", 
+               "Drug ADME", "Muscle contraction", "Protein localization",
+               "Reproduction", "Sensory Perception", "Transport of small molecules")
+
+df_enrichment_lvl_1 <- df_enrichment %>% 
+  filter(!(Root == "Signal Transduction" & Title == "Integrin signaling")) %>% 
+  filter(level %in% 0:1) %>% 
+  filter(!(Root %in% root_excl)) %>% 
+  mutate(Title = ifelse(Title == "Signaling Pathways", "Signal Transduction", Title)) %>% 
+  mutate(NLQ = ifelse(NLQ > 30, 30, NLQ),
+         Title_trunc = str_trunc(Title, width = 40))
+
+lvl_1_enriched <- df_enrichment_lvl_1 %>% 
+  filter(level == 1) %>% 
+  mutate(significant = adj.P.Val < 0.01) %>% 
+  group_by(Root, Title) %>% 
+  summarise(n_significant = sum(significant)) %>% 
+  ungroup() %>% 
+  filter(n_significant > 0) %>% 
+  pull(Title)
+
+pathway_roots <- df_enrichment_lvl_1 %>% 
+  pull(Root) %>% 
+  unique() %>% 
+  sort()
+
+pathways_enriched <- c(pathway_roots, lvl_1_enriched)
+
+df_enrichment_lvl_1 <- df_enrichment_lvl_1 %>% 
+  filter(Title %in% pathways_enriched)
+```
+
+```{r fig.width = 10, fig.height = 15}
+list_pathways_lvl_1 <- vector(mode = "list", length = length(pathway_roots))
+names(list_pathways_lvl_1) <- pathway_roots
+for (i in 1:length(list_pathways_lvl_1)) {
+  lvls <- df_enrichment_lvl_1 %>% 
+    filter(Root == pathway_roots[i], 
+           level == 1) %>% 
+    pull(Title) %>% 
+    unique() %>% 
+    sort()
+  list_pathways_lvl_1[[i]] <- c(pathway_roots[i], lvls)
+}
+
+pathway_lvls <- reduce(list_pathways_lvl_1, c)
+pathway_lvls_trunc <- str_trunc(pathway_lvls, width = 40)
+
+df_enrichment_lvl_1 <- df_enrichment_lvl_1 %>%
+  mutate(Title_trunc = factor(Title_trunc, levels = pathway_lvls_trunc))
+
+ggplot(df_enrichment_lvl_1, aes(x = factor(k), y = fct_rev(Title_trunc), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(Root~.,  scales = "free", space = "free", switch = "y") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(2, 30),
+                       na.value = "grey85") +
+  labs(x = "Cluster", y = "Root pathway", fill = "Enrichment (-log10(q))") + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(df_enrichment_root, aes(x = factor(k), y = fct_rev(Root), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(2, 30),
+                       na.value = "grey85") +
+  labs(x = "Cluster", y = "Root pathway", fill = "Enrichment (-log10(q))") + 
+  theme_bw()
+```
+
+# All clusters
+
+```{r}
+nk_max <- 10
+list_enrichment <- vector(mode = "list", length = nk_max-1)
+for (nk in 2:nk_max) {
+  
+  list_enrichment_nk <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    enrichment_file <- paste("cluster_pathway_enrichment", nk, k, "950", sep = "_")
+    enrichment_file <- paste0(enrichment_file, ".csv")
+    enrichment_file <- file.path(mouse_enrichment_dir, enrichment_file)
+  
+    list_enrichment_nk[[k]] <- read_csv(enrichment_file, show_col_types = FALSE) %>%
+      semi_join(df_reactome, by = c("ID" = "IDBader")) %>% 
+      left_join(df_reactome %>% 
+                  select(ID = IDBader, level, Parent, Root), by = "ID") %>% 
+      filter(ID %in% pathway_ids_keep) %>% 
+      filter(!(Root == "Signal Transduction" & Title == "Integrin signaling")) 
+    
+  }
+  
+  list_enrichment[[nk-1]] <- bind_rows(list_enrichment_nk)
+  
+}
+
+df_enrichment_all <- bind_rows(list_enrichment) %>% 
+  mutate(NLQ = -log10(adj.P.Val))
+
+df_enrichment_all <- df_enrichment_all %>% 
+  mutate(Title = ifelse(Title == "Signaling Pathways", "Signal Transduction", Title))
+```
+
+
+
+```{r}
+root_excl <- c("Circadian clock", "Disease",
+               "Digestion and absorption", "DNA Repair", "DNA Replication", 
+               "Drug ADME", "Muscle contraction", "Protein localization",
+               "Reproduction", "Sensory Perception", "Transport of small molecules")
+
+root_w_lvl_1 <- c("Chromatin organization", "Gene expression (Transcription)", 
+                  "Immune System", "Neuronal System", "Signal Transduction")
+
+df_enrichment_lvl_0 <- df_enrichment_all %>%
+  filter(level == 0) %>% 
+  filter(!(Root %in% root_excl)) 
+
+df_enrichment_lvl_1 <- df_enrichment_all %>% 
+  filter(Root %in% root_w_lvl_1, 
+         level == 1)
+
+lvl_1_enriched <- df_enrichment_lvl_1 %>% 
+  mutate(significant = adj.P.Val < 0.01) %>% 
+  group_by(Root, Title) %>% 
+  summarise(n_significant = sum(significant)) %>% 
+  ungroup() %>% 
+  filter(n_significant > 0) %>% 
+  pull(Title)
+
+pathway_roots <- df_enrichment_lvl_0 %>% 
+  pull(Root) %>% 
+  unique() %>% 
+  sort()
+
+pathways_enriched <- c(pathway_roots, lvl_1_enriched)
+
+df_enrichment_lvl_0_1 <- bind_rows(df_enrichment_lvl_0, df_enrichment_lvl_1)
+
+df_enrichment_lvl_0_1 <- df_enrichment_lvl_0_1 %>% 
+  filter(Title %in% pathways_enriched)
+
+list_pathways_lvl_1 <- vector(mode = "list", length = length(pathway_roots))
+names(list_pathways_lvl_1) <- pathway_roots
+for (i in 1:length(list_pathways_lvl_1)) {
+  lvls <- df_enrichment_lvl_0_1 %>% 
+    filter(Root == pathway_roots[i], 
+           level == 1) %>% 
+    pull(Title) %>% 
+    unique() %>% 
+    sort()
+  list_pathways_lvl_1[[i]] <- c(pathway_roots[i], lvls)
+}
+
+pathway_lvls <- reduce(list_pathways_lvl_1, c)
+pathway_lvls_trunc <- str_trunc(pathway_lvls, width = 40)
+
+
+df_enrichment_plot <- df_enrichment_lvl_0_1 %>% 
+  mutate(Title_trunc = str_trunc(Title, width = 40),
+         Title_trunc = factor(Title_trunc, levels = pathway_lvls_trunc))
+
+NLQ_max <- df_enrichment_plot %>% 
+  pull(NLQ) %>% 
+  max()
+
+
+plt <- ggplot(df_enrichment_plot, aes(x = factor(k), y = fct_rev(Title_trunc), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(Root~nk,  scales = "free", space = "free", switch = "y") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(2, NLQ_max),
+                       na.value = "grey85") +
+  labs(x = "Mouse cluster", 
+       y = "Pathway", 
+       fill = "Enrichment (-log10(q))") + 
+  theme_bw() +
+  theme(legend.position = "bottom",
+        axis.text.y = element_text(size = 6),
+        strip.background.y = element_blank(),
+        strip.text.y = element_blank())
+
+output_dir <- "figures/v3/figure2_new/"
+output_dir <- file.path(PROJECTPATH, output_dir)
+dir.create(path = output_dir, recursive = TRUE)
+outfile <- "figure2_new_draft.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(10, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+df_enrichment_plot %>% pull(Title) %>% unique() %>% length()
+```
+
+
+```{r}
+df_enrichment_root <- df_enrichment_all %>% 
+  filter(level == 0)
+
+NLQ_max <- df_enrichment_root %>% 
+  pull(NLQ) %>% 
+  max()
+
+plt_roots <- ggplot(df_enrichment_root, aes(x = factor(k), y = fct_rev(Root), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(.~nk, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(2, NLQ_max),
+                       na.value = "grey85") +
+  labs(x = "Mouse cluster", 
+       y = "Pathway", 
+       fill = "Enrichment (-log10(q))") + 
+  theme_bw() +
+  theme(legend.position = "bottom",
+        axis.text.y = element_text(size = 6))
+
+outfile <- "figure2_new_draft_roots_only.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt_roots)
+dev.off()
+```
+
+
+```{r}
+df_n_enriched <- df_enrichment_all %>% 
+  mutate(significant = adj.P.Val < 0.01) %>% 
+  group_by(nk, k, Root) %>%
+  summarise(nenriched = sum(significant)) %>% 
+  ungroup() %>% 
+  right_join(df_root_grid, by = c("k", "Root")) %>% 
+  arrange(nk, k, Root) %>% 
+  mutate(nenriched = ifelse(nenriched == 0, NA, nenriched))
+  
+plt_n_enriched <- ggplot(df_n_enriched, aes(x = factor(k), y = fct_rev(Root), fill = nenriched)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(.~nk, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       # limits = c(2, NLQ_max),
+                       na.value = "grey85") +
+  # scale_fill_brewer(palette = "PuBu", na.value = "grey85") + 
+  labs(x = "Mouse cluster", y = "Reactome tree", fill = "Number of pathways enriched") + 
+  theme_bw() +
+  theme(legend.position = "bottom",
+        axis.text.y = element_text(size = 6))
+
+outfile <- "figure2_new_draft_n_enriched.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt_n_enriched)
+dev.off()
+
+```
+
+
+```{r}
+df_enrichment_nk10 <- df_enrichment_all %>% 
+  filter(nk == 10) %>% 
+  mutate(Title_trunc = str_trunc(Title, width = 40))
+
+
+for (i in 1:length(pathway_roots)) {
+  root <- pathway_roots[i]
+  
+  df_enrichment_nk10_i <- df_enrichment_nk10 %>% 
+    filter(Root == root, 
+           level < 5)
+  
+  pathways_enriched <- df_enrichment_nk10_i %>% 
+    filter(adj.P.Val < 0.01) %>% 
+    pull(Title) %>% 
+    unique()
+  
+  df_enrichment_nk10_i <- df_enrichment_nk10_i %>% 
+    filter(Title %in% pathways_enriched)
+  
+  NLQ_max <- df_enrichment_nk10_i %>% 
+    pull(NLQ) %>% 
+    max()
+  
+  plt <- ggplot(df_enrichment_nk10_i, aes(x = factor(k), y = Title_trunc, fill = NLQ)) + 
+    geom_tile(col = "grey60") +
+    facet_grid(level~., scales = "free", space = "free") +
+    scale_x_discrete(expand = expansion()) + 
+    scale_y_discrete(expand = expansion()) + 
+    scale_fill_gradientn(colors = heatmap_palette,
+                         limits = c(2, NLQ_max),
+                         na.value = "grey85") +
+    # scale_fill_brewer(palette = "PuBu", na.value = "grey85") + 
+    labs(x = "Mouse cluster", y = "Pathway", fill = "Enrichment",
+         title = root) + 
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 6))
+  
+  root_output <- root %>% 
+    str_remove_all("\\(") %>% 
+    str_remove_all("\\)") %>% 
+    str_replace_all(" ", "_")
+  
+  outfile <- "pathway_enrichment_"
+  outfile <- paste0(outfile, root_output)
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile, 
+      width = unit(10, "in"),
+      height = unit(10, "in"))
+  print(plt)
+  dev.off()
+  
+}
+```
+
+
+
+```{r}
+df_pathway_levels <- readxl::read_excel("pathway_levels.xlsx")
+```
+
+```{r}
+df_enrichment_plot <- df_enrichment_all %>% 
+  filter(level %in% 0:1,
+         Title %in% pathway_lvls) %>% 
+  mutate(Title_trunc = str_trunc(Title, width = 40),
+         Title_trunc = factor(Title_trunc, levels = pathway_lvls_trunc))
+
+NLQ_max <- df_enrichment_plot %>% 
+  pull(NLQ) %>% 
+  max()
+
+list_pathways <- vector(mode = "list", length = nrow(df_pathway_levels))
+for (i in 1:length(list_pathways)) {
+  root <- df_pathway_levels[[i, "Root"]]
+  lvl <- df_pathway_levels[[i, "Level"]]
+  list_pathways[[i]] <- df_enrichment_all %>% 
+    filter(Root == root, level == lvl)
+}
+
+df_pathways <- bind_rows(list_pathways) %>% 
+  mutate(Title_trunc = str_trunc(Title, width = 40))
+
+pathways_enriched <- df_pathways %>% 
+  filter(adj.P.Val < 0.01) %>% 
+  pull(Title) %>% 
+  unique()
+
+df_pathways <- df_pathways %>% 
+  filter(Title %in% pathways_enriched)
+
+NLQ_max <- df_pathways %>% 
+  pull(NLQ) %>% 
+  max()
+
+df_pathways <- df_pathways %>% 
+  filter(Root != "Disease")
+
+heatmap_palette_cols <- RColorBrewer::brewer.pal(n = 9, name = "OrRd")
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
+
+plt <- ggplot(df_pathways, aes(x = factor(k), y = fct_rev(Title_trunc), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(Root~nk,  scales = "free", space = "free", switch = "y") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = c(2, NLQ_max),
+                       na.value = "grey85") +
+  labs(x = "Mouse cluster", 
+       y = "Pathway", 
+       fill = "Enrichment (-log10(q))") + 
+  theme_bw() +
+  theme(legend.position = "bottom",
+        axis.text.y = element_text(size = 5))
+
+outfile <- "figure2_new_draft_lvl_best.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(11, "in"))
+print(plt)
+dev.off()
+```
+
+
+
+# Extra
+
+
+
+```{r}
+df_lvl_grid <- expand_grid(k = 1:nk,
+                           level = 0:max(df_enrichment$level))
+
+df_enriched_lvl <- df_enrichment %>% 
+  filter(adj.P.Val < 0.05) %>% 
+  group_by(k, level) %>% 
+  count() %>% 
+  ungroup() %>% 
+  right_join(df_lvl_grid, by = c("k", "level")) %>% 
+  arrange(level)
+```
+
+
+```{r}
+ggplot(df_enriched_lvl, aes(x = factor(k), y = factor(level), fill = n)) + 
+  geom_tile() +
+  labs(x = "Cluster", y = "Hierarchy level") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  theme_bw()
+```
+
+
+
+
+```{r fig.width = 20}
+tmp <- df_enrichment %>% 
+  filter(Root == "Signal Transduction") %>% 
+  mutate(NLQ = -log10(adj.P.Val),
+         NLQ = ifelse(NLQ > 30, 30, NLQ)) %>% 
+  filter(adj.P.Val < 0.01) %>% 
+  arrange(k, level)
+
+pathway_lvls <- tmp %>% pull(Title) %>% unique()
+
+tmp %>% 
+  mutate(Title = factor(Title, levels = pathway_lvls)) %>% 
+ggplot(aes(x = factor(k), y = fct_rev(Title), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  geom_text(aes(label = level)) + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = heatmap_limits,
+                       na.value = "grey85") + 
+  labs(y = "Pathway", x = "Cluster") + 
+  theme_bw()  
+```
+
+```{r}
+df_pathways_subset <- readxl::read_excel("pathway_subset.xlsx")
+df_pathways_subset <- df_pathways_subset %>% 
+  filter(Pathway %in% df_enrichment$Title)
+
+
+pathway_lvls <- df_pathways_subset$Pathway
+
+
+```
+
+
+
+```{r fig.width = 10, fig.height = 20}
+tmp <- df_enrichment %>% 
+  filter(!(Root == "Signal Transduction" & Title == "Integrin signaling")) %>% 
+  filter(Title %in% df_pathways_subset$Pathway) %>% 
+  mutate(NLQ = -log10(adj.P.Val),
+         NLQ = ifelse(NLQ > 30, 30, NLQ),
+         Title = factor(Title, levels = pathway_lvls))
+
+heatmap_palette_cols <- RColorBrewer::brewer.pal(n = 9, name = "OrRd")
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
+heatmap_limits <- c(2, 30)
+
+ggplot(tmp, aes(x = factor(k), y = fct_rev(Title), fill = NLQ)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(Root~., scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion()) + 
+    scale_fill_gradientn(colors = heatmap_palette,
+                       limits = heatmap_limits,
+                       na.value = "grey85") + 
+  labs(y = "Pathway", x = "Cluster") + 
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        strip.text = element_blank())
+```
+
