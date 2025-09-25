@@ -1,10 +1,5 @@
 #!/bin/bash
 
-process_mouse_images.py \
-  --pipeline-dir data/mouse/derivatives/v3 \
-  --params-id 107 \
-  --nproc 16
-
 mouse_cluster_enrichment.R \
   --pipeline-dir data/mouse/derivatives/v3/ \
   --params-id 107 \
