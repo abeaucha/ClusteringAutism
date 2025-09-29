@@ -11,8 +11,11 @@ filter_latent_space <- function(infile, outfile, ind) {
 
 # Directories
 expr_dir <- "data/human/expression/"
-input_dir <- file.path(expr_dir, "latent_space_full")
-output_dir <- file.path(expr_dir, "latent_space")
+output_dir <- "vae_latent_space"
+input_dir <- paste0(output_dir, "_all_samples")
+
+input_dir <- file.path(expr_dir, input_dir)
+output_dir <- file.path(expr_dir, output_dir)
 if (!dir.exists(output_dir)) {dir.create(output_dir, recursive = TRUE)}
 
 # Microarray sample annotations filter
@@ -23,7 +26,9 @@ annotations <- read_csv(annotations, show_col_types = FALSE)
 # Apply function over files
 input_files <- list.files(input_dir, full.names = TRUE)
 output_files <- file.path(output_dir, basename(input_files))  
-result <- parallel::mcmapply(filter_latent_space, input_files, output_files,
-                             MoreArgs = list(ind = annotations[["keep"]]),
-                             mc.cores = 8)
+# result <- parallel::mcmapply(filter_latent_space, input_files, output_files,
+#                              MoreArgs = list(ind = annotations[["keep"]]),
+#                              mc.cores = 8)
+result <- mapply(filter_latent_space, input_files, output_files, 
+                 MoreArgs = list(ind = annotations[["keep"]]))
 
