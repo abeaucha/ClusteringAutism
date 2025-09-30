@@ -464,7 +464,7 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     pd.DataFrame(cluster_pairs).to_csv(output_file, index = False)
 
     # Set imgs arg in driver kwargs
-    kwargs['imgs'] = [tuple(x) for x in cluster_pairs]
+    kwargs['imgs'] = [tuple(x) for x in cluster_pairs[:1000]]
 
     # Initialize Dask client for execution
     if kwargs['execution'] == 'local':
@@ -504,7 +504,7 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     results = transcriptomic_similarity(**kwargs)
 
     # Close Dask client
-    client.close()
+    # client.close()
 
     # Export similarity values
     print("Exporting similarity values...", flush = True)
