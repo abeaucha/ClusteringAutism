@@ -22,7 +22,7 @@ import utils
 import pandas as pd
 from itertools import product
 from transcriptomic import transcriptomic_similarity
-from dask.distributed import Client
+from dask.distributed import Client, LocalCluster
 from dask_jobqueue import SLURMCluster
 
 
@@ -468,9 +468,8 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
 
     # Initialize Dask client for execution
     if kwargs['execution'] == 'local':
-        client = Client(processes = True,
-                        n_workers = kwargs['nproc'],
-                        threads_per_worker = 1)
+        cluster = LocalCluster(n_workers = kwargs['nproc'],
+                               threads_per_worker = 1)
     elif kwargs['execution'] == 'slurm':
         cluster = SLURMCluster(
             cores = 1,
@@ -478,9 +477,10 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
             walltime = kwargs['slurm_time']
         )
         cluster.scale(jobs = kwargs['nproc'])
-        client = Client(cluster)
     else:
         raise ValueError("Argument `--execution` must be one of {'local', 'slurm'}")
+
+    client = Client(cluster)
 
     print("Dask dashboard at: {}".format(client.dashboard_link))
 
