@@ -25,6 +25,8 @@ from transcriptomic import transcriptomic_similarity
 from dask.distributed import Client
 from dask_jobqueue import SLURMCluster
 
+import sys
+
 
 # Command line arguments -----------------------------------------------------
 
@@ -517,6 +519,8 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
 # Execution ------------------------------------------------------------------
 if __name__ == '__main__':
     args = parse_args()
+    print(args)
+    sys.exit()
     args['input_dirs'] = tuple(args['input_dirs'])
     if args['input_params_ids'] is None:
         raise ValueError("Argument `--input-params-ids` is required.")
