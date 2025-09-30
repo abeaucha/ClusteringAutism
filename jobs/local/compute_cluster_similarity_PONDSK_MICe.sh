@@ -10,4 +10,4 @@ compute_cluster_similarity.py \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
 --gene-space vae-latent-space \
 --jacobians absolute relative \
---nproc 8
+--nproc 36
