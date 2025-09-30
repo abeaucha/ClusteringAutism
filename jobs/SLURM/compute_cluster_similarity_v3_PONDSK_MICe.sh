@@ -1,17 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=compute_cluster_similarity
-#SBATCH --nodes=3
+#SBATCH --nodes=2
 #SBATCH --time=12:00:00
 #SBATCH --chdir=/scratch/abeaucha/ClusteringAutism/main/
 
 # Activate virtual environment
 source activate_venv.sh
 
-# Pipeline registry directory
-#DATADIR="/scratch/abeaucha/ClusteringAutism/main/"
-
 # Execute pipeline
-# Maximum of 300 jobs allowed on HPF (??)
 compute_cluster_similarity.py \
 --pipeline-dir data/cross_species/v3/ \
 --species human mouse \
@@ -23,6 +19,6 @@ compute_cluster_similarity.py \
 --gene-space vae-latent-space \
 --jacobians absolute relative \
 --execution local \
---nproc 600
+--nproc 384
 
 deactivate
