@@ -20,11 +20,11 @@ DATADIR="/scratch/abeaucha/ClusteringAutism/main/"
 compute_cluster_similarity.py \
 --pipeline-dir ${DATADIR}data/cross_species/v3/ \
 --species human mouse \
---input-dirs data/human/derivatives/v3/ data/mouse/derivatives/v3/ \
+--input-dirs ${DATADIR}data/human/derivatives/v3/ ${DATADIR}data/mouse/derivatives/v3/ \
 --input-params-ids 700 107 \
---expr-dirs data/human/expression data/mouse/expression \
---masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
---microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
+--expr-dirs ${DATADIR}data/human/expression ${DATADIR}data/mouse/expression \
+--masks ${DATADIR}data/human/registration/v3/reference_files/mask_0.8mm.mnc ${DATADIR}data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
+--microarray-coords ${DATADIR}data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
 --gene-space vae-latent-space \
 --jacobians absolute relative \
 --execution slurm \
