@@ -24,7 +24,7 @@ from itertools import product
 from transcriptomic import transcriptomic_similarity
 from dask.distributed import Client, LocalCluster
 from dask_jobqueue import SLURMCluster
-
+from time import time
 
 # Command line arguments -----------------------------------------------------
 
@@ -505,6 +505,7 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
 
     # Close Dask client
     client.close()
+    time.sleep(5)
     cluster.close()
 
     # Export similarity values
