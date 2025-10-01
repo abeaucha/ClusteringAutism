@@ -504,8 +504,11 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     results = transcriptomic_similarity(**kwargs)
 
     # Close Dask client
+    print("Closing client", flush = True)
     client.close()
-    time.sleep(5)
+    print("Waiting 10 seconds...", flush = True)
+    time.sleep(10)
+    print("Closing cluster", flush = True)
     cluster.close()
 
     # Export similarity values
