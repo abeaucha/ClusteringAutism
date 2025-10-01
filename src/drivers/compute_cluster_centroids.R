@@ -136,13 +136,19 @@ registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
 
 # Execution options
 if (execution == "local") {
-  resources <- list(cores = nproc)
+  cores_per_job <- nproc
+  resources <- list(cores = cores_per_job)
   conf_file <- NA
+  cluster_functions <- makeClusterFunctionsInteractive()
 } else if (execution == "slurm") {
-  resources <- list(memory = args[["slurm-mem"]],
-                    walltime = args[["slurm-time"]] * 60,
-                    ncpus = nproc)
-  conf_file <- getOption("RMINC_BATCH_CONF")
+  # resources <- list(memory = args[["slurm-mem"]],
+  #                   walltime = args[["slurm-time"]] * 60,
+  #                   ncpus = nproc)
+  # conf_file <- getOption("RMINC_BATCH_CONF")
+  cores_per_job <- floor(nproc/ncol(clusters))
+  resources <- list(cores = cores_per_job)
+  conf_file <- NA
+  cluster_functions <- makeClusterFunctionsMulticore(nproc)
 } else {
   stop()
 }
@@ -155,14 +161,14 @@ reg <- makeRegistry(file.dir = ifelse(is.null(registry_name),
                     packages = "RMINC",
                     conf.file = conf_file,
                     seed = 1)
-reg$cluster.functions <- makeClusterFunctionsMulticore(ncol(clusters)*nproc)
+reg$cluster.functions <- cluster_functions
 jobs <- batchMap(fun = compute_cluster_centroids,
                  1:ncol(clusters),
                  more.args = list(clusters = clusters,
                                   mask = mask,
                                   outdir = outdir,
                                   method = method,
-                                  nproc = nproc))
+                                  nproc = cores_per_job))
 submitJobs(jobs, resources = resources, reg = reg)
 waitForJobs(reg = reg)
 centroids <- reduceResults(c)

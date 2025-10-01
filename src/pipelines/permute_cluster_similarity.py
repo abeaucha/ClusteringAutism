@@ -502,8 +502,8 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
             outdir = outdir,
             mask = masks[0],
             method = params['input_1_centroid_method'],
-            execution = 'local',
-            nproc = 8,
+            execution = 'slurm',
+            nproc = nproc,
             registry_cleanup = True,
             registry_name = 'permutation_{}'.format(p)
         )
