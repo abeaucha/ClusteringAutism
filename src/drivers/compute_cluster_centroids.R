@@ -136,7 +136,7 @@ registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
 
 # Execution options
 if (execution == "local") {
-  resources <- list()
+  resources <- list(cores = nproc)
   conf_file <- NA
 } else if (execution == "slurm") {
   resources <- list(memory = args[["slurm-mem"]],
@@ -155,6 +155,7 @@ reg <- makeRegistry(file.dir = ifelse(is.null(registry_name),
                     packages = "RMINC",
                     conf.file = conf_file,
                     seed = 1)
+reg$cluster.functions <- makeClusterFunctionsMulticore(ncol(clusters)*nproc)
 jobs <- batchMap(fun = compute_cluster_centroids,
                  1:ncol(clusters),
                  more.args = list(clusters = clusters,
@@ -162,7 +163,7 @@ jobs <- batchMap(fun = compute_cluster_centroids,
                                   outdir = outdir,
                                   method = method,
                                   nproc = nproc))
-submitJobs(jobs, resources = resources)
+submitJobs(jobs, resources = resources, reg = reg)
 waitForJobs(reg = reg)
 centroids <- reduceResults(c)
 if (registry_cleanup) {removeRegistry(reg = reg)}
