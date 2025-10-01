@@ -198,6 +198,8 @@ def initialize(**kwargs):
     # If latent_space_id is NaN, set to 1 (subsequently unused)
     params['latent_space_id'] = (str(1) if params['latent_space_id'] is np.nan
                                  else params['latent_space_id'])
+    params['n_latent_spaces'] = (str(1) if params['n_latent_spaces'] is np.nan
+                                 else params['n_latent_spaces'])
 
     # Build paths to the input directories
     input_ids = (params['input_1_id'], params['input_2_id'])
