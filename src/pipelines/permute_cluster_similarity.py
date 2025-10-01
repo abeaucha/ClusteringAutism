@@ -503,11 +503,14 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
             mask = masks[0],
             method = params['input_1_centroid_method'],
             execution = 'slurm',
-            nproc = nproc,
+            nproc = 8,
             registry_cleanup = True,
             registry_name = 'permutation_{}'.format(p)
         )
         centroid_outputs = centroids(**centroid_kwargs)
+
+        import sys
+        sys.exit()
 
         # Generate all pairs of centroid images
         print("Generating centroid image pairs...", flush = True)
