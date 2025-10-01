@@ -22,7 +22,7 @@ from compute_cluster_similarity import generate_cluster_pairs
 from process_human_images import centroids
 from shutil import rmtree
 from transcriptomic import transcriptomic_similarity
-from dask.distributed import Client
+from dask.distributed import Client, LocalCluster
 from dask_jobqueue import SLURMCluster
 
 
@@ -452,9 +452,8 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
 
     # Initialize Dask client for execution
     if execution == 'local':
-        client = Client(processes = True,
-                        n_workers = nproc,
-                        threads_per_worker = 1)
+        cluster = LocalCluster(n_workers = nproc,
+                               threads_per_worker=1)
     elif execution == 'slurm':
         cluster = SLURMCluster(
             cores = 1,
@@ -462,9 +461,10 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
             walltime = slurm_time
         )
         cluster.scale(jobs = nproc)
-        client = Client(cluster)
     else:
         raise ValueError("Argument `--execution` must be one of {'local', 'slurm'}")
+
+    client = Client(cluster)
 
     # Add client to driver kwargs
     driver_kwargs['client'] = client
@@ -481,18 +481,29 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
         # Compute permuted cluster centroid images
         print("Generating permuted centroids...", flush = True)
         outdir = os.path.join(paths['centroids'], 'permutation_{}'.format(p), '')
+        # centroid_kwargs = dict(
+        #     clusters = f,
+        #     imgdir = inputs['effect_sizes'][0],
+        #     outdir = outdir,
+        #     mask = masks[0],
+        #     method = params['input_1_centroid_method'],
+        #     execution = 'slurm',
+        #     nproc = 8,
+        #     registry_cleanup = True,
+        #     registry_name = 'permutation_{}'.format(p),
+        #     slurm_mem = '16G',
+        #     slurm_time = 120
+        # )
         centroid_kwargs = dict(
             clusters = f,
             imgdir = inputs['effect_sizes'][0],
             outdir = outdir,
             mask = masks[0],
             method = params['input_1_centroid_method'],
-            execution = 'slurm',
+            execution = 'local',
             nproc = 8,
             registry_cleanup = True,
-            registry_name = 'permutation_{}'.format(p),
-            slurm_mem = '16G',
-            slurm_time = 120
+            registry_name = 'permutation_{}'.format(p)
         )
         centroid_outputs = centroids(**centroid_kwargs)
 
