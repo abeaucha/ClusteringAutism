@@ -24,7 +24,7 @@ from itertools import product
 from transcriptomic import transcriptomic_similarity
 from dask.distributed import Client, LocalCluster
 from dask_jobqueue import SLURMCluster
-from time import sleep
+
 
 # Command line arguments -----------------------------------------------------
 
