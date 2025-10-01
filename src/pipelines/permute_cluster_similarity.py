@@ -547,4 +547,6 @@ if __name__ == '__main__':
     args['masks'] = tuple(args['masks'])
     args['keep_centroids'] = (True if args['keep_centroids'] == 'true'
                               else False)
-    main(**args)
+    with utils.catchtime() as t:
+        main(**args)
+    print(f'Time: {t():.3f} seconds', flush = True)
