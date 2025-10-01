@@ -17,9 +17,9 @@ permute_cluster_similarity.py \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/mouse/atlas/coronal_200um_coverage_bin0.8.mnc \
 --microarray-coords data/human/expression/v3/AHBA_microarray_coordinates_study.csv \
 --permutations-start 1 \
---permutations-n 10 \
+--permutations-n 500 \
 --off-diagonal 1 \
 --execution local \
---nproc 384
+--nproc 576
 
 # --permutations-ids 67 71 \
