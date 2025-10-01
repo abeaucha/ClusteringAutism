@@ -25,6 +25,9 @@ from transcriptomic import transcriptomic_similarity
 from dask.distributed import Client, LocalCluster
 from dask_jobqueue import SLURMCluster
 
+import time
+import sys
+
 
 # Command line arguments -----------------------------------------------------
 
@@ -480,6 +483,8 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
     for p, f in zip(permutations_ids, permutations):
         print("Permutation {}".format(p), flush = True)
 
+        start_time = time.time()
+
         # Compute permuted cluster centroid images
         print("Generating permuted centroids...", flush = True)
         outdir = os.path.join(paths['centroids'], 'permutation_{}'.format(p), '')
@@ -529,6 +534,12 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
         output_file = 'similarity_permutation_{}.csv'.format(p)
         output_file = os.path.join(paths['similarity'], output_file)
         results.to_csv(output_file, index = False)
+
+        end_time = time.time()
+
+        print(f"Elapsed time: {end_time - start_time:.4f} seconds")
+        sys.exit()
+
 
         # Remove permuted centroids if specified
         if not keep_centroids: rmtree(centroid_dirs[0])

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=permute_cluster_similarity
-#SBATCH --nodes=3
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=192
 #SBATCH --time=24:00:00
 #SBATCH --chdir=/scratch/abeaucha/ClusteringAutism/main/
@@ -20,6 +20,6 @@ permute_cluster_similarity.py \
 --permutations-n 500 \
 --off-diagonal 1 \
 --execution local \
---nproc 576
+--nproc 384
 
 # --permutations-ids 67 71 \
