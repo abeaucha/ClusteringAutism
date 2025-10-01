@@ -24,7 +24,7 @@ from itertools import product
 from transcriptomic import transcriptomic_similarity
 from dask.distributed import Client, LocalCluster
 from dask_jobqueue import SLURMCluster
-from time import time
+from time import sleep
 
 # Command line arguments -----------------------------------------------------
 
@@ -507,7 +507,7 @@ def main(pipeline_dir, species, input_dirs, input_params_ids, expr_dirs, masks,
     print("Closing client", flush = True)
     client.close()
     print("Waiting 10 seconds...", flush = True)
-    time.sleep(10)
+    sleep(10)
     print("Closing cluster", flush = True)
     cluster.close()
 
