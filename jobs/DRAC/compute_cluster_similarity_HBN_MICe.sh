@@ -2,7 +2,7 @@
 #SBATCH --job-name=compute_cluster_similarity
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=192
-#SBATCH --time=1:00:00
+#SBATCH --time=00:30:00
 #SBATCH --chdir=/scratch/abeaucha/ClusteringAutism/main/
 
 # Activate virtual environment
