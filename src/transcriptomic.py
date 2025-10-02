@@ -393,11 +393,14 @@ def compute_transcriptomic_similarity(imgs, species, expr, masks,
 
         is_nan = np.isnan(sim)
         if all(is_nan):
-            raise Exception("No surviving voxels.")
-        if not return_signed:
-            sim = np.array(sim)
-            sim = sim[~is_nan]
-            sim = np.mean(sim)
+            # raise Exception("No surviving voxels.")
+            warn("No surviving voxels. Setting similarity to NaN.")
+            sim = np.float64(np.nan)
+        else:
+            if not return_signed:
+                sim = np.array(sim)
+                sim = sim[~is_nan]
+                sim = np.mean(sim)
 
     else:
         sim = similarity(x = signatures[0],
