@@ -4,6 +4,7 @@
 #SBATCH --ntasks-per-node=192
 #SBATCH --time=24:00:00
 #SBATCH --chdir=/scratch/abeaucha/ClusteringAutism/main/
+#SBATCH --output=logs/permute_similarity_PONDK_MICe_%j.out
 
 # Activate virtual environment
 source activate_venv.sh
