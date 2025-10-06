@@ -10,9 +10,10 @@
 source activate_venv.sh
 
 # Execute pipeline
+
 permute_cluster_similarity.py \
 --pipeline-dir data/cross_species/v3/ \
---param-id 253 \
+--params-id 253 \
 --input-dirs data/human/derivatives/v3/ data/human/derivatives/v3/ \
 --expr-dirs data/human/expression data/human/expression \
 --masks data/human/registration/v3/reference_files/mask_0.8mm.mnc data/human/registration/v3/reference_files/mask_0.8mm.mnc \
