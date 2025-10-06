@@ -505,7 +505,7 @@ def main(pipeline_dir, params_id, input_dirs, expr_dirs, masks,
             execution = 'slurm',
             nproc = 16,
             registry_cleanup = True,
-            registry_name = 'permutation_{}'.format(p)
+            registry_name = '{}_permutation_{}'.format(params_id, p)
         )
         centroid_outputs = centroids(**centroid_kwargs)
 
