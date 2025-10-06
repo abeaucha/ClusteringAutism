@@ -10,6 +10,7 @@
 source activate_venv.sh
 
 # Execute pipeline
+# Took about 15 hrs for 100 permutations on Trillium
 permute_cluster_similarity.py \
 --pipeline-dir data/cross_species/v3/ \
 --params-id 021 \

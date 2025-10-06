@@ -4,12 +4,13 @@
 #SBATCH --ntasks-per-node=192
 #SBATCH --time=24:00:00
 #SBATCH --chdir=/scratch/abeaucha/ClusteringAutism/main/
-#SBATCH --output=logs/permute_similarity_PONDK_MICe_%j.out
+#SBATCH --output=logs/permute_similarity_PONDSK_MICe_%j.out
 
 # Activate virtual environment
 source activate_venv.sh
 
 # Execute pipeline
+# Took about 15 hrs for 100 permutations on Trillium
 permute_cluster_similarity.py \
 --pipeline-dir data/cross_species/v3/ \
 --params-id 852 \
