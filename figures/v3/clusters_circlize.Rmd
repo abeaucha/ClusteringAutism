@@ -1,0 +1,88 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-10-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(circlize)
+
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+
+
+```{r}
+set.seed(999)
+mat = matrix(sample(18, 18), 3, 6) 
+rownames(mat) = paste0("S", 1:3)
+colnames(mat) = paste0("E", 1:6)
+mat
+```
+
+
+```{r}
+chordDiagram(mat)
+```
+
+```{r}
+sum(mat[,1])
+```
+
+```{r}
+file <- "../../data/mouse/derivatives/v3/107/clusters/resolution_0.2/clusters.csv"
+mouse_clusters <- read_csv(file, show_col_types = FALSE)
+
+file <- "../../data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv"
+human_clusters <- read_csv(file, show_col_types = FALSE)
+
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
+similarity <- import_similarity(param_id = 375, pipeline_dir = pipeline_dir)
+permutations <- import_similarity_permutations(param_id = 375, pipeline_dir = pipeline_dir)
+df_mouse_human <- compute_similarity_significance(similarity = similarity, permutations = permutations)
+
+colnames(df_mouse_human) <- colnames(df_mouse_human) %>% 
+  str_replace("img1", "human") %>% 
+  str_replace("img2", "mouse")
+
+cluster_ids <- df_mouse_human %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  arrange(human_nk, human_k) %>% 
+  distinct() %>% 
+  pull(human_cluster_id)
+
+df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                               mouse_cluster_id = cluster_ids) 
+
+df_matches <- df_mouse_human %>% 
+  mutate(match = as.numeric(pval < 0.05)) %>% 
+  select(human_cluster_id, mouse_cluster_id, match) %>% 
+  right_join(df_cluster_grid) %>% 
+  mutate(match = ifelse(is.na(match), 0, match))
+
+mat <- df_matches %>% 
+  pivot_wider(id_cols = human_cluster_id, names_from = "mouse_cluster_id", values_from = "match") %>% 
+  column_to_rownames(var = "human_cluster_id") %>% 
+  as.matrix()
+
+rownames(mat) <- paste0("H", rownames(mat))
+colnames(mat) <- paste0("M", colnames(mat))
+
+idx <- 1:nrow(mat)
+mat <- mat[rev(idx),]
+```
+
+```{r fig.width = 10, fig.height = 10}
+chordDiagram(mat, order = union(rownames(mat), colnames(mat)))
+```

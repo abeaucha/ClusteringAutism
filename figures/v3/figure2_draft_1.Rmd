@@ -1,0 +1,547 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-10-08"
+---
+
+# Initialization
+
+```{r}
+library(tidyverse)
+library(RMINC)
+library(MRIcrotome)
+library(grid)
+library(gridExtra)
+library(RColorBrewer)
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r}
+output_dir <- file.path("outputs", "figure2_draft_1")
+outfile_prefix <- "figure2_draft_1"
+```
+
+```{r}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
+
+params_id <- "375"
+metadata <- file.path(pipeline_dir, "metadata.csv")
+pipeline_params <- fetch_params_metadata(metadata = metadata,
+                                         params = list(id = params_id))
+
+human_params_id <- pipeline_params[["input_1_id"]]
+mouse_params_id <- pipeline_params[["input_2_id"]]
+```
+
+```{r}
+human_params_id <- pipeline_params[["input_1_id"]]
+
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/", human_params_id)
+
+human_cluster_dir <- file.path(human_pipeline_dir, "clusters", "resolution_3.0")
+human_centroid_dir <- file.path(human_pipeline_dir, "centroids", "resolution_0.8")
+```
+
+```{r}
+mouse_params_id <- pipeline_params[["input_2_id"]]
+
+mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/", mouse_params_id)
+
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters", "resolution_0.2")
+mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids", "resolution_0.05")
+```
+
+
+# Mouse-human cluster correspondence
+
+```{r}
+mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
+mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+
+df_mouse_cluster_counts <- mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  ungroup()
+```
+
+```{r}
+human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
+human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
+
+df_human_cluster_counts <- human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  ungroup()
+```
+
+```{r}
+df_similarity <- compute_similarity_significance(
+  similarity = import_similarity(param_id = params_id, 
+                                 pipeline_dir = pipeline_dir), 
+  permutations = import_similarity_permutations(param_id = params_id, 
+                                                pipeline_dir = pipeline_dir)
+  )
+
+colnames(df_similarity) <- colnames(df_similarity) %>% 
+  str_replace("img1", "human") %>% 
+  str_replace("img2", "mouse")
+
+cluster_ids <- df_similarity %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  arrange(human_nk, human_k) %>% 
+  distinct() %>% 
+  pull(human_cluster_id)
+
+df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                               mouse_cluster_id = cluster_ids) 
+
+df_matches <- df_similarity %>% 
+  mutate(match = pval < 0.05) %>% 
+  select(human_cluster_id, mouse_cluster_id, match, similarity, pval) %>% 
+  right_join(df_cluster_grid) %>% 
+  mutate(match = ifelse(is.na(match), FALSE, match))
+```
+
+
+
+
+```{r}
+df_cluster_coords <- tibble(cluster_id = cluster_ids) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk), k = as.numeric(k),
+         x = 1:nrow(.))
+
+x_gap <- 1
+
+df_cluster_coords <- tibble(nk = 2:10, 
+                            gap = x_gap*0:8) %>% 
+  right_join(df_cluster_coords, by = "nk") %>% 
+  mutate(x = x + gap)
+```
+
+
+
+```{r}
+w <- 0.8
+h <- 0.5
+
+df_cluster_coords_human <- df_cluster_coords %>% 
+  select(cluster_id, nk, k, x) %>% 
+  left_join(df_human_cluster_counts, by = "cluster_id") %>% 
+  mutate(xmin = x-w/2, xmax = x+w/2,
+         y = 0, ymin = y, ymax = ymin - n*(h/max(n)))
+
+# df_cluster_coords_human <- df_cluster_coords %>% 
+#   select(cluster_id, x) %>% 
+#   mutate(y = 0, ymin = y, ymax = ymin-h)
+
+df_cluster_coords_mouse <- df_cluster_coords %>% 
+  select(cluster_id, nk, k, x) %>% 
+  left_join(df_mouse_cluster_counts, by = "cluster_id") %>% 
+  mutate(xmin = x-w/2, xmax = x+w/2,
+         y = 1, ymin = y, ymax = ymin + n*(h/max(n)))
+
+# df_cluster_coords_mouse <- df_cluster_coords %>% 
+#   select(cluster_id, x) %>% 
+#   mutate(y = 1, ymin = y, ymax = ymin+h)
+
+df_cluster_bars <- bind_rows(df_cluster_coords_human,
+                              df_cluster_coords_mouse)
+
+df_segments <- df_matches %>% 
+  filter(match) %>% 
+  select(-match) %>% 
+  left_join(df_cluster_coords_human %>% 
+              select(cluster_id, x, y),
+            by = c("human_cluster_id" = "cluster_id")) %>% 
+  left_join(df_cluster_coords_mouse %>% 
+              select(cluster_id, xend = x, yend = y),
+            by = c("mouse_cluster_id" = "cluster_id"))
+```
+
+
+```{r}
+h_block <- 0.1
+
+df_cluster_blocks_human <- df_cluster_coords_human %>% 
+    group_by(nk) %>% 
+  mutate(xmin = min(xmin),
+         xmax = max(xmax)) %>% 
+  ungroup() %>% 
+  select(nk, xmin, xmax, ymin) %>% 
+  mutate(ymax = ymin - h - h_block,
+         xmin = xmin - 0.3*x_gap,
+         xmax = xmax + 0.3*x_gap) %>% 
+  distinct() 
+
+df_cluster_blocks_mouse <- df_cluster_coords_mouse %>% 
+    group_by(nk) %>% 
+  mutate(xmin = min(xmin),
+         xmax = max(xmax)) %>% 
+  ungroup() %>% 
+  select(nk, xmin, xmax, ymin) %>% 
+  mutate(ymax = ymin + h + h_block,
+         xmin = xmin - 0.3*x_gap,
+         xmax = xmax + 0.3*x_gap) %>% 
+  distinct() 
+
+df_cluster_blocks <- bind_rows(df_cluster_blocks_human, df_cluster_blocks_mouse)
+
+```
+
+```{r}
+df_segments
+```
+
+
+```{r}
+
+plt <- ggplot(df_segments, aes(x = x, y = y)) + 
+  geom_segment(aes(xend = xend, yend = yend, colour = pval), alpha = 1.0) +
+  geom_rect(data = df_cluster_blocks, 
+            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            inherit.aes = FALSE,
+            alpha = 0.2) +
+  geom_rect(data = df_cluster_bars, 
+            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            inherit.aes = FALSE) + 
+  scale_x_continuous(expand = expansion()) + 
+  scale_y_continuous(expand = expansion()) + 
+  # scale_color_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[c(1:4, 8)])) +
+  scale_color_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[3:9])) +
+  theme_bw() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+plt <- plt + theme_void()
+
+outfile <- "mouse_human_matches.pdf"
+outfile <- paste(outfile_prefix, outfile, sep = "_")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8.5, "in"),
+    height = unit(3, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+matches_grob <- ggplotGrob(plt)
+```
+
+
+# Mouse slices
+
+```{r}
+# Jacobians to display
+jacobians <- "relative"
+
+# Threshold method
+threshold <- pipeline_params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold)
+
+# Threshold value
+threshold_value <- pipeline_params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_value)
+
+# Threshold symmetric option
+threshold_symmetric <- pipeline_params %>% 
+  filter(id == params_id) %>% 
+  pull(threshold_symmetric)
+
+# Mouse centroid map directory
+mouse_centroid_dir <- file.path(mouse_centroid_dir, jacobians)
+
+# Mouse anatomy
+mouse_anat_file <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc")
+mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_anat_vol <- mincArray(mouse_anat)
+
+# Mouse mask
+mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc")
+mouse_mask <- mincGetVolume(mouse_mask_file)
+```
+
+
+```{r}
+nk_mouse <- c(2, 5, 10)
+
+# Iterate over cluster solutions
+list_mouse_centroids <- vector(mode = "list", length = length(nk_mouse))
+names(list_mouse_centroids) <- nk_mouse
+for (nk in nk_mouse) {
+  
+  # Iterate over clusters
+  list_mouse_centroids[[as.character(nk)]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    
+    # Import centroid
+    img <- import_cluster_map(imgdir = mouse_centroid_dir,
+                              mask = mouse_mask_file,
+                              nk = nk, k = k, 
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    list_mouse_centroids[[as.character(nk)]][[k]] <- mincArray(img)
+    
+  }
+}
+```
+
+```{r}
+# Mouse anatomy thresholds
+mouse_anat_low <- 800
+mouse_anat_high <- 2000
+
+ss_nslices <- 6
+mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
+
+ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+  overlay(list_mouse_centroids[["2"]][[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["2"]][[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  grobify()
+
+width_pt <- 133
+height_pt <- 268
+
+width_in <- width_pt/72
+height_in <- height_pt/72
+
+outfile <- "mouse_anat_nk_2.pdf"
+outfile <- paste(outfile_prefix, outfile, sep = "_")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+grid.draw(ssgrob)
+dev.off()
+```
+
+```{r}
+ss_nslices <- 6
+mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
+
+ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+  overlay(list_mouse_centroids[["5"]][[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["5"]][[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["5"]][[3]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["5"]][[4]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["5"]][[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  grobify()
+
+width_pt <- 232
+height_pt <- 268
+
+width_in <- width_pt/72
+height_in <- height_pt/72
+
+outfile <- "mouse_anat_nk_5.pdf"
+outfile <- paste(outfile_prefix, outfile, sep = "_")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+grid.draw(ssgrob)
+dev.off()
+```
+
+
+```{r}
+overlay_low <- 0.1
+overlay_high <- 1
+
+ss_nslices <- 3
+mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
+
+ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+  overlay(list_mouse_centroids[["10"]][[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["10"]][[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["10"]][[3]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["10"]][[4]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["10"]][[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  grobify()
+
+width_pt <- 232
+height_pt <- 268/2
+
+width_in <- width_pt/72
+height_in <- height_pt/72
+
+outfile <- "mouse_anat_nk_10_row_1.pdf"
+outfile <- paste(outfile_prefix, outfile, sep = "_")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+grid.draw(ssgrob)
+dev.off()
+```
+
+```{r}
+ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+  overlay(list_mouse_centroids[["10"]][[6]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["10"]][[7]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["10"]][[8]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["10"]][[9]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["10"]][[10]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  grobify()
+
+width_pt <- 232
+height_pt <- 268/2
+
+width_in <- width_pt/72
+height_in <- height_pt/72
+
+outfile <- "mouse_anat_nk_10_row_2.pdf"
+outfile <- paste(outfile_prefix, outfile, sep = "_")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(width_in, "in"),
+    height = unit(height_in, "in"))
+grid.draw(ssgrob)
+dev.off()
+```
+
+
+# Figure
+
+```{r}
+fig_width <- 612
+fig_height <- 792
+
+fig_widths <- 612
+fig_heights <- rep(792/3, 3)
+
+fig_layout <- rbind(c(NA, NA, NA),
+                    c())
+
+fig_grob <- arrangeGrob(
+  rectGrob(), #1
+  rectGrob(), #2
+  rectGrob(), # ss 
+  rectGrob(), #4
+  rectGrob(), # ss 
+  rectGrob(), #6
+  rectGrob(), # ss 
+  rectGrob(), #8
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  rectGrob(), #
+  layout_matrix = fig_layout,
+  widths = unit(fig_widths, "bigpts"),
+  heights = unit(fig_heights, "bigpts")
+)
+
+fig_width_pt <- sum(fig_widths)
+fig_height_pt <- sum(fig_heights)
+
+fig_width_in <- fig_width_pt/72
+fig_height_in <- fig_height_pt/72
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+dev.off()
+```
+
+
+
+# Misc
+
+
+```{r}
+cp <- data.frame(
+  x = c(
+    0, -5, -5, 5, 5, 2.5, 5, 7.5, 5, 2.5, 5, 7.5, 5, -2.5, -5, -7.5, -5,
+    -2.5, -5, -7.5, -5
+  ),
+  y = c(
+    0, -5, 5, -5, 5, 5, 7.5, 5, 2.5, -5, -7.5, -5, -2.5, 5, 7.5, 5, 2.5,
+    -5, -7.5, -5, -2.5
+  ),
+  class = sample(letters[1:3], 21, replace = TRUE)
+)
+
+
+paths <- data.frame(
+  ind = c(
+    7, 5, 8, 8, 5, 9, 9, 5, 6, 6, 5, 7, 7, 5, 1, 3, 15, 8, 5, 1, 3, 17, 9, 5,
+    1, 2, 19, 6, 5, 1, 4, 12, 7, 5, 1, 4, 10, 6, 5, 1, 2, 20
+  ),
+  group = c(
+    1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7,
+    7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10
+  )
+)
+
+paths$x <- cp$x[paths$ind]
+paths$y <- cp$y[paths$ind]
+paths$class <- cp$class[paths$ind]
+
+paths %>% filter(group == 10) %>% 
+ggplot() +
+  geom_bspline(aes(x = x, y = y, group = group, colour = after_stat(index))) +
+  geom_point(aes(x = x, y = y), data = cp, color = 'steelblue')
+```
+```{r}
+paths %>% filter(group == 10) %>% arrange(x)
+```
+
+
+```{r}
+library(ggforce)
+
+ggplot(tibble(x = c(1, 2, 3), y = c(0, 0.25, 1)), aes(x = x, y = y)) +
+  geom_bspline() + 
+geom_point()
+```
