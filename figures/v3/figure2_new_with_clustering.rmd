@@ -40,7 +40,7 @@ source(file.path(SRCPATH, "enrichment.R"))
 
 ```{r fig2-pipeline-params}
 # Output directory
-output_dir <- "figure2/"
+output_dir <- "figure2_new_with_clustering/"
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 } 
@@ -621,11 +621,74 @@ for (i in 1:length(list_pathways_lvl_1)) {
 
 pathway_lvls <- reduce(list_pathways_lvl_1, c)
 pathway_lvls_trunc <- str_trunc(pathway_lvls, width = 40)
+```
 
 
+```{r}
+mat_pathways <- df_pathways_lvl_0_1 %>% 
+  group_by(pathway) %>% 
+    mutate(NLQ_norm = NLQ/max(NLQ)) %>% 
+  ungroup() %>% 
+  mutate(NLQ_norm = ifelse(is.nan(NLQ_norm), 0, NLQ_norm)) %>% 
+  select(pathway, cluster_id, NLQ_norm) %>% 
+  pivot_wider(id_cols = pathway, 
+              names_from = cluster_id, 
+              values_from = NLQ_norm) %>% 
+  column_to_rownames("pathway") %>% 
+  as.matrix()
+
+mat_pathways %>% 
+  t() %>% 
+  hclust_wcss() %>% 
+  as_tibble() %>% 
+  mutate(nk = 1:nrow(.)) %>% 
+  ggplot(df_pathway_hclust,
+         mapping = aes(nk, y = value)) + 
+  geom_line() + 
+  geom_point() + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  labs(x = "Number of clusters",
+       y = "Within-cluster sum of squared distance") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+# Hierarchical clustering of the pathways
+pathway_hc <- hclust(d = dist(mat_pathways, 
+                              method = "euclidean"))
+
+# Extract pathway order according to clustering
+pathway_lvls <- pathway_hc[["labels"]]
+pathway_order <- pathway_hc[["order"]]
+pathway_lvls_clustered <- pathway_lvls[pathway_order]
+
+pathway_lvls_clustered_trunc <- str_trunc(pathway_lvls_clustered, width = 40)
+
+# Obtain pathway cluster order at selected solution
+df_pathway_hclust <- cutree(pathway_hc, k = 6) %>% 
+  enframe(name = "pathway", value = "pathway_cluster") 
+
+# Relevel pathways to follow dendrogram order
+df_pathway_cluster_lvls <- df_pathway_hclust %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
+  arrange(pathway) %>% 
+  select(pathway_cluster) %>% 
+  distinct() %>% 
+  mutate(pathway_cluster_new = 1:nrow(.))
+
+df_pathway_hclust <- df_pathway_hclust %>% 
+  left_join(df_pathway_cluster_lvls, by = "pathway_cluster") %>% 
+  select(-pathway_cluster, pathway_cluster = pathway_cluster_new)
+```
+
+
+
+```{r}
 df_pathways_heatmap <- df_pathways_lvl_0_1 %>% 
+  left_join(df_pathway_hclust, by = "pathway") %>% 
   mutate(pathway_trunc = str_trunc(pathway, width = 40),
-         pathway_trunc = factor(pathway_trunc, levels = pathway_lvls_trunc))
+         pathway_trunc = factor(pathway_trunc, levels = pathway_lvls_clustered_trunc))
 
 # Identify most significant POND p-values for each mouse cluster
 # Create labels for significance levels
@@ -668,6 +731,19 @@ df_pathways_heatmap <- df_pathways_heatmap %>%
               select(cluster_id, has_match),
             by = "cluster_id")
 
+
+new_cluster_labels <- readxl::read_excel("../../mouse_labels.xlsx") %>% 
+  rename(k = k_old)
+
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  left_join(new_cluster_labels, by = c("nk", "k"))
+
+df_sig_nk <- df_sig_nk %>% 
+  left_join(new_cluster_labels, by = c("nk", "k"))
+```
+
+
+```{r}
 NLQ_max <- df_pathways_heatmap %>% 
   pull(NLQ) %>% 
   max()
@@ -687,11 +763,11 @@ heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
 fig2_heatmap_pathways_legend_width_pt <- 50
 
 fig2_heatmap_pathways <- ggplot(df_pathways_heatmap, 
-                                aes(x = factor(k), 
+                                aes(x = factor(k_new), 
                                     y = fct_rev(pathway_trunc), 
                                     fill = NLQ)) + 
   geom_tile(col = "grey60") +
-  facet_grid(Root~nk,  scales = "free", space = "free", switch = "y") + 
+  facet_grid(pathway_cluster~nk,  scales = "free", space = "free", switch = "y") + 
   scale_x_discrete(expand = expansion()) + 
   scale_y_discrete(expand = expansion(),
                    position = "right") + 
@@ -736,7 +812,7 @@ fig2_heatmap_pathways <- fig2_heatmap_pathways +
 ```{r fig2-heatmap-human-match-plot}
 # Generate heatmap of mouse clusters with human matches
 fig2_heatmap_human_match <- ggplot(df_sig_nk,
-                                   mapping = aes(x = factor(k), 
+                                   mapping = aes(x = factor(k_new), 
                                                  y = y, 
                                                  fill = p,
                                                  label = plab)) + 
@@ -861,17 +937,23 @@ df_pathways_subset <- df_pathways_lvl_0 %>%
   semi_join(df_mouse_matches, 
             by = c("cluster_id", "nk", "k"))
 
-pathway_lvls_polar <- df_pathways_lvl_0 %>% pull(pathway) %>% unique() %>% sort()
+df_pathways_subset <- df_pathways_subset %>% 
+  left_join(new_cluster_labels, by = c("nk", "k"))
 
-pathway_lvls_polar_acronym <- c("AP", "CC", "CCC", "CRS", "CO", "DB", 
-                                "ECMO", "GE", "HS", "IS", "M", "MP", 
-                                "MRNA", "NS", "OBM", "PCD", "ST", "VST")
+pathway_lvls_polar <- pathway_lvls_clustered[pathway_lvls_clustered %in% df_pathways_lvl_0$pathway]
+
+
+pathway_lvls_polar_acronym <- c("HS", "ST", "IS", "CRS", "AP", "PCD",
+                                "CCC", "MP", "M", "CC", "CO", "DB", "GE",
+                                "OBM", "NS", "MRNA", "ECMO", "VMT")
+
 
 # Cluster IDs for selected cluster solutions
 df_clusters_subset <- df_pathways_subset %>% 
-  select(cluster_id, nk, k) %>% 
+  select(cluster_id, nk, k, k_new) %>% 
   distinct() %>% 
   arrange(nk, k)
+
 ```
 
 ```{r fig2-pathways-cluster-streams}
@@ -888,6 +970,9 @@ df_mouse_clusters_long <- df_mouse_clusters %>%
          nk = as.numeric(nk)) %>% 
   filter(nk >= 4) %>% 
   unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)  
+
+df_mouse_clusters_long <- df_mouse_clusters_long %>% 
+  left_join(new_cluster_labels, by = c("nk", "k"))
 
 # Extract cluster IDs for nk = 4
 cluster_ids_nk4 <- df_mouse_clusters_long %>% 
@@ -976,6 +1061,9 @@ df_polar_palette <- bind_rows(df_polar_palette %>%
 df_polar_palette <- df_polar_palette %>% 
   semi_join(df_mouse_matches,
             by = c("cluster_id", "nk", "k"))
+
+df_polar_palette <- df_polar_palette %>% 
+  left_join(new_cluster_labels, by = c("nk", "k"))
 
 # Polar plot pathway order
 polar_plot_lvls <- c(" ", pathway_lvls_polar)
@@ -1068,8 +1156,8 @@ for (i in 1:length(nk_subset)) {
   #                                   0.00, 0.00, 0.00, 0.03, 0.01)
   
   # Add units to nudge values
-  polar_plot_nk_labels_x_nudge <- unit(polar_plot_nk_labels_x_nudge, "native")
-  polar_plot_nk_labels_y_nudge <- unit(polar_plot_nk_labels_y_nudge, "native")
+  # polar_plot_nk_labels_x_nudge <- unit(polar_plot_nk_labels_x_nudge, "native")
+  # polar_plot_nk_labels_y_nudge <- unit(polar_plot_nk_labels_y_nudge, "native")
   
   # Fix axis labels in each panel
 
@@ -1097,73 +1185,6 @@ for (i in 1:length(nk_subset)) {
 }
 ```
 
-
-```{r fig2-pathways-polar-plots}
-# Height of polar plot based on ss width
-fig2_polar_height_pt <- 2*fig2_mouse_ss_width_pt
-
-# Iterate over neuro panel ss grobs
-fig2_neuro_panel_grobs <- vector(mode = "list", length = length(fig2_neuro_ss_grobs))
-fig2_neuro_widths_nopadding <- numeric(length(fig2_neuro_ss_grobs))
-for (i in 1:length(fig2_neuro_panel_grobs)) {
-  
-  # Number of slices in the current panel
-  nslc <- length(fig2_neuro_ss_grobs[[i]])
-  
-  # Number of columns in the panel grid
-  ncols <- 2*nslc-1
-  
-  # Number of grobs in the panel
-  ngrobs <- 2*nslc+1
-  
-  # Indices for ss and padding elements
-  ind_ss <- seq(1, ncols, by = 2)
-  ind_padding <- seq(2, ncols, by = 2)
-  
-  # Widths of the panel grid
-  fig2_neuro_panel_widths <- numeric(ncols)
-  fig2_neuro_panel_widths[ind_ss] <- fig2_mouse_ss_width_pt
-  fig2_neuro_panel_widths[ind_padding] <- fig2_neuro_ss_padding_pt
-  
-  # Heights of the panel grids
-  fig2_neuro_panel_heights <- c(fig2_polar_height_pt, fig2_neuro_ss_padding_pt, sum(fig2_neuro_ss_heights))
-  
-  # Build the list of grobs for the panel
-  fig2_neuro_panel_grobs_list <- vector(mode = "list", length = ngrobs)
-  fig2_neuro_panel_grobs_list[1] <- list_polar_plots[i]
-  fig2_neuro_panel_grobs_list[2] <- list(zeroGrob())
-  fig2_neuro_panel_grobs_list[ind_ss+2] <- fig2_neuro_ss_grobs[[i]]
-  fig2_neuro_panel_grobs_list[ind_padding+2] <- list(zeroGrob())
-  
-  # Layout of the panel grid
-  fig2_neuro_panel_layout <-  rbind(rep(1, ncols),
-                                    rep(2, ncols),
-                                    3:(ncols+2))
-  
-  # Grob for the current panel
-  fig2_neuro_panel_grobs[[i]] <- arrangeGrob(grobs = fig2_neuro_panel_grobs_list,
-                                             layout_matrix = fig2_neuro_panel_layout,
-                                             widths = unit(fig2_neuro_panel_widths, "bigpts"),
-                                             heights = unit(fig2_neuro_panel_heights, "bigpts"))
-  
-  # Dimensions of the panel in bigpts
-  fig2_neuro_panel_width <- sum(fig2_neuro_panel_widths)
-  fig2_neuro_panel_height <- sum(fig2_neuro_panel_heights)  
-  
-  # Export panel
-  outfile <- paste(output_plot_prefix, "neuro_panel_nk", nk_subset[i], sep = "_")
-  outfile <- paste0(outfile, ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  export_pdf(x = fig2_neuro_panel_grobs[[i]],
-             file = outfile,
-             width = fig2_neuro_panel_width,
-             height = fig2_neuro_panel_height,
-             units = "bigpts")  
-  
-  fig2_neuro_widths_nopadding[i] <- fig2_neuro_panel_width
-  
-}
-```
 
 # Figure element: Mouse brain slices
 
@@ -1254,6 +1275,9 @@ mouse_slc_dim <- 1
 
 # Mouse brain slice to display
 mouse_slc <- 92
+
+df_clusters_subset <- df_clusters_subset %>% 
+  arrange(nk, k_new)
 
 # Iterate over nk subset
 list_mouse_slices <- vector(mode = "list", length = length(nk_subset))
@@ -1361,7 +1385,7 @@ human_anat_vol <- mincArray(human_anat)
 # Cropped human human images
 slices_dim_1 <- 27:220
 slices_dim_2 <- 10:280
-slices_dim_3 <- 1:220
+slices_dim_3 <- 10:220
 human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
 ```
 
@@ -1640,6 +1664,9 @@ fig2_mouse_ss_height_pt <- fig2_mouse_ss_width_pt*(mouse_height_px/mouse_width_p
 # Dimensions of human slices in bigpts
 fig2_human_ss_width_pt <- fig2_mouse_ss_width_pt
 fig2_human_ss_height_pt <- fig2_human_ss_width_pt*(human_height_px/human_width_px)
+
+df_polar_palette <- df_polar_palette %>% 
+  arrange(nk, k_new)
 
 # Iterate over nk selection
 fig2_neuro_ss_grobs <- vector(mode = "list", length = length(list_mouse_slices))

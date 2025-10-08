@@ -1,0 +1,113 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-10-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+file <- "pathway_data.csv"
+df_pathways <- read_csv(file)
+```
+
+```{r}
+tmp <- df_pathways %>% 
+  filter(nk == 2) %>% 
+  filter(pathway_root != "Disease") %>% 
+  filter(pathway != "Meiosis") %>% 
+  filter(pathway != "Synthesis of DNA") %>% 
+  select(cluster_id, pathway, NLQ, pathway_level) %>% 
+  filter(pathway_level == 1) %>% 
+  select(-pathway_level) %>% 
+  mutate(cluster_id = paste0("cluster_", str_replace(cluster_id, "-", "_"))) %>% 
+  pivot_wider(id_cols = pathway, names_from = cluster_id, values_from = NLQ)
+
+ggplot(tmp, aes(x = cluster_2_1, y = cluster_2_2)) + 
+  geom_point()
+```
+
+```{r}
+tmp <- tmp %>% 
+  mutate(cluster_2_1_scaled = scale(cluster_2_1),
+         cluster_2_2_scaled = scale(cluster_2_2))
+
+ggplot(tmp, aes(x = cluster_2_1_scaled, y = cluster_2_2_scaled)) + 
+  geom_point()
+```
+
+```{r}
+pathway_mat_nk2 <- tmp %>% 
+  select(cluster_2_1_scaled, cluster_2_2_scaled) %>% 
+  as.matrix()
+
+pca_nk2 <- prcomp(pathway_mat_nk2)
+df_pca_nk2 <- as_tibble(pca_nk2$x) %>% 
+  mutate(PC1 = -1*PC1,
+         pathway = tmp$pathway)
+
+ggplot(df_pca_nk2, aes(x = PC1, y = PC2)) + 
+  geom_point()
+```
+
+```{r}
+df_pca_nk2 %>% 
+  arrange(desc(PC1)) 
+```
+
+
+```{r}
+df_all_clusters <- df_pathways %>%
+  filter(pathway_root != "Disease") %>% 
+  filter(pathway != "Meiosis") %>% 
+  filter(pathway != "Synthesis of DNA") %>% 
+  select(cluster_id, pathway, NLQ, pathway_level) %>% 
+  filter(pathway_level %in% 1:2) %>% 
+  select(-pathway_level)
+
+pathways_exclude <- df_all_clusters %>% 
+  group_by(pathway) %>% 
+  count() %>% 
+  filter(n != 54) %>% 
+  pull(pathway)
+
+df_all_clusters <- df_all_clusters %>% 
+  filter(!(pathway %in% pathways_exclude)) %>% 
+mutate(cluster_id = paste0("cluster_", str_replace(cluster_id, "-", "_"))) %>% 
+  pivot_wider(id_cols = pathway, names_from = cluster_id, values_from = NLQ)
+
+
+mat_all_clusters <- df_all_clusters %>% 
+  select(-pathway) %>% 
+  as.matrix()
+
+pca_all_clusters <- prcomp(mat_all_clusters, center = TRUE, scale = TRUE)
+df_pca_all_clusters <- as_tibble(pca_all_clusters$x) %>% 
+  mutate(PC1 = -1*PC1,
+         pathway = df_all_clusters$pathway)
+
+ggplot(df_pca_all_clusters, aes(x = PC1, y = PC2)) + 
+  geom_point()
+```
+
+```{r}
+df_pca_all_clusters %>% 
+  arrange(desc(PC1)) %>% 
+  select(pathway)
+```
+
+
+```{r}
+file <- "data/mouse/derivatives/v3/107/clusters/resolution_0.2/clusters.csv"
+# 
+clusters <- read_csv(file)
+
+clusters
+```
+

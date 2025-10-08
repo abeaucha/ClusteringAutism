@@ -1,0 +1,439 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-10-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(igraph)
+library(ggraph)
+library(tidygraph)
+```
+
+
+```{r}
+file <- "../../data/mouse/derivatives/v3/107/clusters/resolution_0.2/clusters.csv"
+mouse_clusters <- read_csv(file)
+
+file <- "../../data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv"
+human_clusters <- read_csv(file)
+
+
+
+
+cluster_ids <- c()
+for (nk in 2:10) {
+  for (k in 1:nk) {
+    cluster_ids <- c(cluster_ids, paste(nk, k, sep = "-"))
+  }
+}
+
+df_cluster_hierarchy <- expand_grid(cluster_id = cluster_ids, 
+                                    cluster_id_child = cluster_ids) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE) %>% 
+  separate(col = "cluster_id_child", into = c("nk_child", "k_child"), remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk), k = as.numeric(k),
+         nk_child = as.numeric(nk_child), k_child = as.numeric(k_child)) %>% 
+  filter(nk_child == nk + 1)
+
+```
+
+
+```{r}
+df_mouse_cluster_hierarchy <- df_cluster_hierarchy %>% 
+  mutate(prop_from_parent = 0, n_from_parent = 0)
+for (i in 1:nrow(df_mouse_cluster_hierarchy)) {
+  
+  parent_id <- df_mouse_cluster_hierarchy[[i, "cluster_id"]]
+  child_id <- df_mouse_cluster_hierarchy[[i, "cluster_id_child"]]
+  
+  parent_id_split <- str_split(parent_id, "-")[[1]]
+  child_id_split <- str_split(child_id, "-")[[1]]
+  
+  parent_nk <- parent_id_split[[1]]
+  child_nk <- child_id_split[[1]]
+  
+  parent_k <- as.numeric(parent_id_split[[2]])
+  child_k <- as.numeric(child_id_split[[2]])
+  
+  cols <- paste0("nk", c(parent_nk, child_nk))
+  clusters_nk <- mouse_clusters[,cols]
+  colnames(clusters_nk) <- c("nk_parent", "nk_child")
+  
+  idx_parent <- clusters_nk[["nk_parent"]] == parent_k
+  idx_child <- clusters_nk[["nk_child"]] == child_k
+  idx <- idx_parent & idx_child
+  
+  n <- sum(idx)
+  n_parent <- sum(idx_parent)
+  
+  df_mouse_cluster_hierarchy[[i, "prop_from_parent"]] <- n/n_parent
+  df_mouse_cluster_hierarchy[[i, "n_from_parent"]] <- n
+  
+}
+
+
+df_human_cluster_hierarchy <- df_cluster_hierarchy %>% 
+  mutate(prop_from_parent = 0, n_from_parent = 0)
+for (i in 1:nrow(df_human_cluster_hierarchy)) {
+  
+  parent_id <- df_human_cluster_hierarchy[[i, "cluster_id"]]
+  child_id <- df_human_cluster_hierarchy[[i, "cluster_id_child"]]
+  
+  parent_id_split <- str_split(parent_id, "-")[[1]]
+  child_id_split <- str_split(child_id, "-")[[1]]
+  
+  parent_nk <- parent_id_split[[1]]
+  child_nk <- child_id_split[[1]]
+  
+  parent_k <- as.numeric(parent_id_split[[2]])
+  child_k <- as.numeric(child_id_split[[2]])
+  
+  cols <- paste0("nk", c(parent_nk, child_nk))
+  clusters_nk <- human_clusters[,cols]
+  colnames(clusters_nk) <- c("nk_parent", "nk_child")
+  
+  idx_parent <- clusters_nk[["nk_parent"]] == parent_k
+  idx_child <- clusters_nk[["nk_child"]] == child_k
+  idx <- idx_parent & idx_child
+  
+  n <- sum(idx)
+  n_parent <- sum(idx_parent)
+  
+  df_human_cluster_hierarchy[[i, "prop_from_parent"]] <- n/n_parent
+  df_human_cluster_hierarchy[[i, "n_from_parent"]] <- n
+  
+}
+```
+
+```{r}
+df_cluster_graph <- df_cluster_hierarchy %>% 
+  select(from = cluster_id, to = cluster_id_child)
+```
+
+
+
+
+```{r fig.width = 10, fig.height = 10}
+cluster_graph <- df_cluster_hierarchy %>% 
+  select(from = cluster_id, to = cluster_id_child) %>% 
+  graph_from_data_frame(directed = TRUE) %>% 
+  set_edge_attr("prop", value = df_cluster_hierarchy$prop_from_parent)
+
+# layout <- layout_with_fr(cluster_graph, niter = 1000, grid = "nogrid")
+# layout <- layout_in_circle(cluster_graph)
+layout <- layout_with_sugiyama(cluster_graph, vgap = 2)
+plot(cluster_graph, layout = layout, vertex.size = 10, edge.arrow.size = 0.3, vertex.label.cex = 0.7)
+```
+
+```{r}
+highschool
+```
+
+```{r}
+df_cluster_hierarchy %>% 
+  filter(prop_from_parent > 0)
+```
+
+```{r}
+mouse_cluster_graph_nodes <- mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  group_by(nk, k) %>% 
+  count() %>% 
+  ungroup() %>% 
+  unite(col = "name", nk, k, sep = "-", remove = FALSE) 
+
+mouse_cluster_graph_edges <- df_mouse_cluster_hierarchy %>% 
+  select(from = cluster_id, to = cluster_id_child, 
+         prop_from_parent, n_from_parent) %>% 
+  filter(n_from_parent > 0)
+
+mouse_cluster_graph <- tbl_graph(nodes = mouse_cluster_graph_nodes,
+                                 edges = mouse_cluster_graph_edges)
+```
+
+
+```{r}
+human_cluster_graph_nodes <- human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  group_by(nk, k) %>% 
+  count() %>% 
+  ungroup() %>% 
+  unite(col = "name", nk, k, sep = "-", remove = FALSE) 
+
+human_cluster_graph_edges <- df_human_cluster_hierarchy %>% 
+  select(from = cluster_id, to = cluster_id_child, 
+         prop_from_parent, n_from_parent) %>% 
+  filter(n_from_parent > 0)
+
+human_cluster_graph <- tbl_graph(nodes = human_cluster_graph_nodes,
+                                 edges = human_cluster_graph_edges)
+```
+
+
+```{r fig.width = 10, fig.height = 10}
+# graph_layout <- create_layout(cluster_graph, layout = "igraph", algorithm = "fr")
+# graph_layout <- create_layout(cluster_graph, layout = "igraph", algorithm = "nicely")
+mouse_graph_layout <- create_layout(mouse_cluster_graph, layout = "igraph", algorithm = "sugiyama")
+# graph_layout <- create_layout(cluster_graph, layout = "gem")
+ggraph(mouse_graph_layout) + 
+  geom_node_point(aes(size = n)) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  # geom_edge_link(aes(alpha = n_from_parent)) +
+  geom_edge_link(aes(alpha = prop_from_parent)) +
+  scale_size_binned(breaks = seq(10, 80, by = 10)) +  
+  scale_alpha_continuous(range = c(0.2, 1)) + 
+  theme_void()
+```
+
+
+```{r fig.width = 10, fig.height = 10}
+# graph_layout <- create_layout(cluster_graph, layout = "igraph", algorithm = "fr")
+# graph_layout <- create_layout(cluster_graph, layout = "igraph", algorithm = "nicely")
+human_graph_layout <- create_layout(human_cluster_graph, layout = "igraph", algorithm = "sugiyama")
+# graph_layout <- create_layout(cluster_graph, layout = "gem")
+ggraph(human_graph_layout) + 
+  geom_node_point(aes(size = n)) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  # geom_edge_link(aes(alpha = n_from_parent)) +
+  geom_edge_link(aes(alpha = prop_from_parent)) +
+  scale_size_binned(breaks = seq(10, 80, by = 10)) +  
+  scale_alpha_continuous(range = c(0.2, 1)) + 
+  theme_void()
+```
+
+
+```{r}
+import_similarity <- function(param_id, pipeline_dir = "data/cross_species/v3/", combine_jacobians = TRUE) {
+  
+  input_dir <- file.path(pipeline_dir, param_id, "similarity")
+  input_file <- file.path(input_dir, "similarity.csv")
+  
+  # Import similarity data
+  similarity <- read_csv(input_file, show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_jacobians = img1 %>% 
+             str_extract("absolute|relative"),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_jacobians = img2 %>% 
+             str_extract("absolute|relative")) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE)
+  
+  # Filter similarity data for desired cluster numbers
+  # and combine Jacobians
+  if (combine_jacobians) {
+    similarity <- similarity %>% 
+      group_by(img1_cluster_id, img1_nk, img1_k, 
+               img2_cluster_id, img2_nk, img2_k) %>% 
+      summarise(similarity = mean(similarity),
+                .groups = "drop")
+  }
+  
+  return(similarity)
+  
+}
+
+
+import_similarity_permutations <- function(param_id, pipeline_dir, combine_jacobians = TRUE) {
+  
+  input_dir <- file.path(pipeline_dir, param_id, "permutations", "similarity")
+  input_files <- list.files(input_dir)
+  
+  np <- length(input_files)
+  list_permutations <- vector(mode = "list", length = np)
+  for (i in 1:length(list_permutations)) {
+    
+    # Input file  
+    input_file <- input_files[i]
+    
+    # Permutation number
+    p <- input_file %>% 
+      str_extract("[0-9]+") %>% 
+      as.numeric()
+    
+    input_file <- file.path(input_dir, input_file)
+    
+    # Import permutation i
+    list_permutations[[i]] <- read_csv(input_file, show_col_types = FALSE) %>% 
+      mutate(img1_nk = img1 %>% 
+               basename() %>% 
+               str_extract("_nk_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img1_k = img1 %>% 
+               basename() %>% 
+               str_extract("_k_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img1_jacobians = img1 %>% 
+               str_extract("absolute|relative"),
+             img2_nk = img2 %>% 
+               basename() %>% 
+               str_extract("_nk_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img2_k = img2 %>% 
+               basename() %>% 
+               str_extract("_k_[0-9]+") %>% 
+               str_extract("[0-9]+") %>% 
+               as.numeric(),
+             img2_jacobians = img2 %>% 
+               str_extract("absolute|relative")) %>% 
+      unite(col = "img1_cluster_id", img1_nk, img1_k, 
+            sep = "-", remove = FALSE) %>% 
+      unite(col = "img2_cluster_id", img2_nk, img2_k, 
+            sep = "-", remove = FALSE) %>% 
+      mutate(permutation = p)
+    
+  }
+  
+  df_permutations <- bind_rows(list_permutations)
+  
+  if (combine_jacobians) {
+    df_permutations <- df_permutations %>% 
+      group_by(permutation,
+               img1_cluster_id, img1_nk, img1_k, 
+               img2_cluster_id, img2_nk, img2_k) %>% 
+      summarise(similarity = mean(similarity),
+                .groups = "drop")
+  }
+  
+  return(df_permutations)
+}
+
+compute_similarity_significance <- function(similarity, permutations, off_diag = 1) {
+  
+  nk_max_1 <- max(similarity[["img1_nk"]])
+  nk_max_2 <- max(similarity[["img2_nk"]])
+  
+  significance <- tibble()
+  for (nk_1 in 2:nk_max_1) {
+    for (nk_2 in (nk_1 - off_diag):(nk_1 + off_diag)) {
+      
+      if ((nk_2 > 1) & (nk_2 <= nk_max_2)) {
+        
+        sim_nk <- similarity %>% 
+          select(img1_cluster_id, img1_nk, img1_k,
+                 img2_cluster_id, img2_nk, img2_k,
+                 similarity) %>% 
+          filter(img1_nk == nk_1,
+                 img2_nk == nk_2) %>% 
+          mutate(pval = 0)
+        
+        sim_perm_nk <- permutations %>% 
+          filter(img1_nk == nk_1,
+                 img2_nk == nk_2) %>% 
+          pull(similarity) %>% 
+          sort()
+        
+        for (i in 1:nrow(sim_nk)) {
+          ntail <- sum(sim_perm_nk >= sim_nk[[i, "similarity"]])
+          sim_nk[[i, "pval"]] <- ntail/length(sim_perm_nk)
+        }
+        
+        significance <- bind_rows(significance, sim_nk)
+        
+      }
+    } 
+  }
+  
+  return(significance)
+  
+}
+```
+
+```{r}
+similarity <- import_similarity(param_id = 375, pipeline_dir = "../../data/cross_species/v3/")
+permutations <- import_similarity_permutations(param_id = 375, pipeline_dir = "../../data/cross_species/v3/")
+df_mouse_human <- compute_similarity_significance(similarity = similarity, permutations = permutations)
+```
+
+```{r}
+df_mouse_cluster_hierarchy
+df_human_cluster_hierarchy
+```
+
+```{r}
+mouse_human_cluster_edges <- df_mouse_human %>% 
+  filter(pval < 0.05) %>% 
+  select(human_cluster_id = img1_cluster_id, 
+         mouse_cluster_id = img2_cluster_id) %>% 
+  mutate(human_cluster_id = paste0("H", human_cluster_id),
+         mouse_cluster_id = paste0("M", mouse_cluster_id)) %>% 
+  rename(from = human_cluster_id, to = mouse_cluster_id)
+
+mouse_cluster_graph_edges <- mouse_cluster_graph_edges %>% 
+  mutate(from = paste0("M", from),
+         to = paste0("M", to))
+
+human_cluster_graph_edges <- human_cluster_graph_edges %>% 
+  mutate(from = paste0("H", from),
+         to = paste0("H", to))
+```
+
+```{r}
+mouse_human_cluster_edges
+```
+
+```{r}
+cluster_graph_nodes <- bind_rows(mouse_cluster_graph_nodes %>% 
+                                   mutate(name = paste0("M", name),
+                                          species = "Mouse"),
+                                 human_cluster_graph_nodes %>% 
+                                   mutate(name = paste0("H", name),
+                                          species = "Human"))
+
+cluster_graph_edges <- bind_rows(mouse_cluster_graph_edges %>% 
+                                   select(from, to),
+                                 human_cluster_graph_edges %>% 
+                                   select(from, to),
+                                 mouse_human_cluster_edges)
+
+cluster_graph <- tbl_graph(nodes = cluster_graph_nodes,
+                           edges = cluster_graph_edges)
+```
+
+```{r fig.width = 10, fig.height = 10}
+# graph_layout <- create_layout(cluster_graph, layout = "igraph", algorithm = "fr")
+# graph_layout <- create_layout(cluster_graph, layout = "igraph", algorithm = "nicely")
+# graph_layout <- create_layout(cluster_graph, layout = "igraph", algorithm = "sugiyama")
+graph_layout <- create_layout(cluster_graph, layout = "gem")
+ggraph(graph_layout) + 
+  geom_node_point(aes(size = n, col = species)) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  # geom_edge_link(aes(alpha = n_from_parent)) +
+  geom_edge_link(alpha = 0.1) + 
+  # geom_edge_link(aes(alpha = prop_from_parent)) +
+  scale_size_binned(breaks = seq(10, 80, by = 10)) +  
+  scale_alpha_continuous(range = c(0.2, 1)) + 
+  theme_void()
+```
+

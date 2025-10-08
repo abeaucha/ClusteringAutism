@@ -1,0 +1,390 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-10-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(circlize)
+
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+
+
+```{r}
+set.seed(999)
+mat = matrix(sample(18, 18), 3, 6) 
+rownames(mat) = paste0("S", 1:3)
+colnames(mat) = paste0("E", 1:6)
+mat
+```
+
+
+```{r}
+chordDiagram(mat)
+```
+
+```{r}
+sum(mat[,1])
+```
+
+```{r}
+file <- "../../data/mouse/derivatives/v3/107/clusters/resolution_0.2/clusters.csv"
+mouse_clusters <- read_csv(file, show_col_types = FALSE)
+
+file <- "../../data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv"
+human_clusters <- read_csv(file, show_col_types = FALSE)
+
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
+similarity <- import_similarity(param_id = 375, pipeline_dir = pipeline_dir)
+permutations <- import_similarity_permutations(param_id = 375, pipeline_dir = pipeline_dir)
+df_mouse_human <- compute_similarity_significance(similarity = similarity, permutations = permutations)
+
+colnames(df_mouse_human) <- colnames(df_mouse_human) %>% 
+  str_replace("img1", "human") %>% 
+  str_replace("img2", "mouse")
+
+cluster_ids <- df_mouse_human %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  arrange(human_nk, human_k) %>% 
+  distinct() %>% 
+  pull(human_cluster_id)
+
+df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                               mouse_cluster_id = cluster_ids) 
+
+df_matches <- df_mouse_human %>% 
+  mutate(match = as.numeric(pval < 0.05)) %>% 
+  select(human_cluster_id, mouse_cluster_id, match) %>% 
+  right_join(df_cluster_grid) %>% 
+  mutate(match = ifelse(is.na(match), 0, match))
+
+mat <- df_matches %>% 
+  pivot_wider(id_cols = human_cluster_id, names_from = "mouse_cluster_id", values_from = "match") %>% 
+  column_to_rownames(var = "human_cluster_id") %>% 
+  as.matrix()
+
+rownames(mat) <- paste0("H", rownames(mat))
+colnames(mat) <- paste0("M", colnames(mat))
+
+idx <- 1:nrow(mat)
+mat <- mat[rev(idx),]
+```
+
+```{r fig.width = 10, fig.height = 10}
+chordDiagram(mat, order = union(rownames(mat), colnames(mat)))
+```
+
+```{r}
+library(ggplot2)
+library(ggalluvial)
+
+# Example data
+df <- data.frame(
+  name = c("A", "B", "C", "D"),
+  start = c(5, 10, 7, 3),
+  end = c(8, 6, 9, 2)
+)
+
+# Reshape into long format
+df_long <- data.frame(
+  name = rep(df$name, each = 2),
+  stage = rep(c("Start", "End"), times = nrow(df)),
+  value = c(df$start, df$end)
+)
+
+# Plot as curved slopegraph (Sankey style)
+ggplot(df_long, aes(x = stage, stratum = name, alluvium = name, y = value,
+                    fill = name, label = name)) +
+  geom_flow(alpha = 0.6, curve_type = "quintic") +  # curved ribbons
+  geom_stratum(width = 0.1) +
+  geom_text(stat = "stratum", size = 3, color = "black") +
+  theme_minimal() +
+  ggtitle("Curved Slopegraph (Sankey Style)")
+```
+
+
+
+```{r}
+library(ggforce)
+```
+
+```{r}
+df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                               mouse_cluster_id = cluster_ids) 
+
+df_matches <- df_mouse_human %>% 
+  mutate(match = as.numeric(pval < 0.05)) %>% 
+  select(human_cluster_id, mouse_cluster_id, match, similarity, pval) %>% 
+  right_join(df_cluster_grid) %>% 
+  mutate(match = ifelse(is.na(match), 0, match))
+
+cluster_coords <- tibble(cluster_id = cluster_ids,
+                         cluster_y = 1:length(cluster_ids))
+
+df_segments <- df_matches %>% 
+  filter(match == 1) %>% 
+  mutate(human_cluster_id = factor(human_cluster_id, levels = cluster_ids),
+         mouse_cluster_id = factor(mouse_cluster_id, levels = cluster_ids),
+         x = as.numeric(human_cluster_id),
+         xend = as.numeric(mouse_cluster_id),
+         y = 0, yend = 1) %>% 
+  select(x, y, xend, yend) %>% 
+  mutate(x = x, xend = xend)
+
+df_segments
+```
+
+```{r}
+df <- expand_grid(y = 0:1,
+                  x = 1:54)
+
+plt <- ggplot(df_segments, aes(x = x, y = y)) + 
+  geom_segment(aes(xend = xend, yend = yend), 
+               alpha = 0.5) +
+  # geom_point(data = df, aes(x = x, y = y), size = 5) +
+  geom_tile(data = df, aes(x = x, y = y), width = 0.8, height = 0.05) +
+  scale_x_continuous(breaks = seq(1, 54)) + 
+  theme_bw()
+
+outfile <- "tmp.pdf"
+pdf(file = outfile,
+    width = unit(8.5, "in"),
+    height = unit(3, "in"))
+print(plt)
+dev.off()
+```
+
+
+```{r}
+df_matches %>% 
+  group_by(human_cluster_id) %>% 
+  summarise(nmatch = sum(match)) %>% 
+  ungroup() %>% 
+  arrange(desc(nmatch))
+```
+
+```{r}
+w <- 0.5
+h <- 0.05
+tmp <- tibble(x = 1:3, xmin = x-w/2, xmax = x+w/2,
+       y = 0, ymin = y-h/2, ymax = y + h/2)
+
+ggplot(tmp, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax)) + 
+  geom_rect()
+```
+
+```{r}
+df_cluster_coords <- tibble(cluster_id = cluster_ids) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk), k = as.numeric(k),
+         x = 1:nrow(.))
+
+pad_base = 1
+df_coords_space <- tibble(nk = 2:10, 
+                          pad = pad_base*0:8)
+
+df_cluster_coords <- df_cluster_coords %>% 
+  left_join(df_coords_space, by = "nk") %>% 
+  mutate(x = x + pad)
+```
+
+
+```{r}
+df_human_cluster_counts <- human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  ungroup()
+
+df_mouse_cluster_counts <- mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  ungroup() 
+```
+
+```{r}
+w <- 0.8
+h <- 0.5
+
+df_cluster_coords_human <- df_cluster_coords %>% 
+  select(cluster_id, nk, k, x) %>% 
+  left_join(df_human_cluster_counts, by = "cluster_id") %>% 
+  mutate(xmin = x-w/2, xmax = x+w/2,
+         y = 0, ymin = y, ymax = ymin - n*(h/max(n)))
+
+# df_cluster_coords_human <- df_cluster_coords %>% 
+#   select(cluster_id, x) %>% 
+#   mutate(y = 0, ymin = y, ymax = ymin-h)
+
+df_cluster_coords_mouse <- df_cluster_coords %>% 
+  select(cluster_id, nk, k, x) %>% 
+  left_join(df_mouse_cluster_counts, by = "cluster_id") %>% 
+  mutate(xmin = x-w/2, xmax = x+w/2,
+         y = 1, ymin = y, ymax = ymin + n*(h/max(n)))
+
+# df_cluster_coords_mouse <- df_cluster_coords %>% 
+#   select(cluster_id, x) %>% 
+#   mutate(y = 1, ymin = y, ymax = ymin+h)
+
+df_cluster_bars <- bind_rows(df_cluster_coords_human,
+                              df_cluster_coords_mouse)
+
+df_segments <- df_matches %>% 
+  filter(match == 1) %>% 
+  select(-match) %>% 
+  left_join(df_cluster_coords_human %>% 
+              select(cluster_id, x, y),
+            by = c("human_cluster_id" = "cluster_id")) %>% 
+  left_join(df_cluster_coords_mouse %>% 
+              select(cluster_id, xend = x, yend = y),
+            by = c("mouse_cluster_id" = "cluster_id"))
+```
+
+
+```{r}
+h_block <- 0.1
+
+df_cluster_blocks_human <- df_cluster_coords_human %>% 
+    group_by(nk) %>% 
+  mutate(xmin = min(xmin),
+         xmax = max(xmax)) %>% 
+  ungroup() %>% 
+  select(nk, xmin, xmax, ymin) %>% 
+  mutate(ymax = ymin - h - h_block,
+         xmin = xmin - 0.3*pad_base,
+         xmax = xmax + 0.3*pad_base) %>% 
+  distinct() 
+
+df_cluster_blocks_mouse <- df_cluster_coords_mouse %>% 
+    group_by(nk) %>% 
+  mutate(xmin = min(xmin),
+         xmax = max(xmax)) %>% 
+  ungroup() %>% 
+  select(nk, xmin, xmax, ymin) %>% 
+  mutate(ymax = ymin + h + h_block,
+         xmin = xmin - 0.3*pad_base,
+         xmax = xmax + 0.3*pad_base) %>% 
+  distinct() 
+
+df_cluster_blocks <- bind_rows(df_cluster_blocks_human, df_cluster_blocks_mouse)
+
+
+```
+
+
+```{r}
+plt <- ggplot(df_segments, aes(x = x, y = y)) + 
+  geom_segment(aes(xend = xend, yend = yend, colour = pval), alpha = 1.0) +
+  geom_rect(data = df_cluster_blocks, 
+            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            inherit.aes = FALSE,
+            alpha = 0.2) +
+  geom_rect(data = df_cluster_bars, 
+            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            inherit.aes = FALSE) + 
+  scale_x_continuous(expand = expansion()) + 
+  scale_y_continuous(expand = expansion()) + 
+  theme_bw() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+outfile <- "tmp.pdf"
+pdf(file = outfile,
+    width = unit(8.5, "in"),
+    height = unit(3, "in"))
+print(plt)
+dev.off()
+```
+
+
+```{r}
+cp <- data.frame(
+  x = c(
+    0, -5, -5, 5, 5, 2.5, 5, 7.5, 5, 2.5, 5, 7.5, 5, -2.5, -5, -7.5, -5,
+    -2.5, -5, -7.5, -5
+  ),
+  y = c(
+    0, -5, 5, -5, 5, 5, 7.5, 5, 2.5, -5, -7.5, -5, -2.5, 5, 7.5, 5, 2.5,
+    -5, -7.5, -5, -2.5
+  ),
+  class = sample(letters[1:3], 21, replace = TRUE)
+)
+
+
+paths <- data.frame(
+  ind = c(
+    7, 5, 8, 8, 5, 9, 9, 5, 6, 6, 5, 7, 7, 5, 1, 3, 15, 8, 5, 1, 3, 17, 9, 5,
+    1, 2, 19, 6, 5, 1, 4, 12, 7, 5, 1, 4, 10, 6, 5, 1, 2, 20
+  ),
+  group = c(
+    1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7,
+    7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10
+  )
+)
+
+paths$x <- cp$x[paths$ind]
+paths$y <- cp$y[paths$ind]
+paths$class <- cp$class[paths$ind]
+
+paths %>% filter(group == 10) %>% 
+ggplot() +
+  geom_bspline(aes(x = x, y = y, group = group, colour = after_stat(index))) +
+  geom_point(aes(x = x, y = y), data = cp, color = 'steelblue')
+```
+```{r}
+paths %>% filter(group == 10) %>% arrange(x)
+```
+
+
+```{r}
+library(ggforce)
+
+ggplot(tibble(x = c(1, 2, 3), y = c(0, 0.25, 1)), aes(x = x, y = y)) +
+  geom_bspline() + 
+geom_point()
+```
+
+
+```{r}
+df_human_cluster_counts <- human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(y = n*(h/max(n)))
+
+df_mouse_cluster_counts <- mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(y = n*(h/max(n)))
+```
+
