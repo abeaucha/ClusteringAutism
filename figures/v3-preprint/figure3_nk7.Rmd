@@ -1,0 +1,1714 @@
+---
+title: "Figure 3"
+subtitle: "Clustering Autism"
+author: "Antoine Beauchamp"
+date: "2024-07-22"
+output: html_document
+---
+
+# Initialization
+
+```{r fig4-knitr-setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r fig4-packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(viridisLite))
+# suppressPackageStartupMessages(library(RColorBrewer))
+# suppressPackageStartupMessages(library(rcartocolor))
+# suppressPackageStartupMessages(library(pROC))
+```
+
+```{r fig4-environment}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+```
+
+```{r fig4-functions}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r fig4-pipeline-params}
+# Output directory
+output_dir <- "figure3_nk7/"
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+}
+
+# Plot file prefix
+output_plot_prefix <- "figure3"
+
+# Similarity pipeline
+version <- "v3"
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species")
+pipeline_dir <- file.path(pipeline_dir, version)
+
+# Human parameters
+human_dataset <- "POND-SickKids"
+human_resolution <- 0.8
+human_es_method <- "normative-growth"
+human_es_df <- 3
+human_centroid_method <- "mean"
+
+# Mouse parameters
+mouse_resolution <- 0.2
+
+# Similarity parameters
+metric <- "correlation"
+
+# Fetch parameter set
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                input_1_species = "human",
+                                input_1_id = "700",
+                                input_2_species = "mouse",
+                                input_2_id = "107",
+                                n_latent_spaces = 50,
+                                metric = metric)
+params
+```
+
+```{r fig4-graphical-params}
+# # Number of bigpts in an inch
+# pt_per_in <- 72
+# 
+# # Font family
+# font_family <- "Helvetica"
+# 
+# # Nature suggested font size: 5-7 pt
+# font_size <- 6
+# 
+# # Empty rectangle grob
+# empty_rect_grob <- rectGrob(gp = gpar(fill = NA))
+# 
+# # Black rectangle grob
+black_rect_grob <- rectGrob(gp = gpar(fill = "black"))
+# 
+# # Rectangle with number in it
+# rect_w_num <- function(n) {
+#   out <- gTree(children = gList(empty_rect_grob,
+#                                 textGrob(label = n)))
+#   return(out)
+# }
+# 
+# # Maximal figure dimensions in bigpts
+# fig4_width_pt <- 510
+# fig4_height_pt <- 481
+```
+
+```{r}
+# Max and min similarity values
+similarity_max <- 1.00
+similarity_min <- 0.05
+# similarity_max <- max(df_similarity_nk[["similarity"]])
+# similarity_min <- min(df_similarity_nk[["similarity"]])
+
+# Length of the heatmap palette
+heatmap_palette_length <- 255
+
+# Numerical values for the heatmap scale
+heatmap_scale_values <- seq(similarity_min, similarity_max, length.out = heatmap_palette_length)
+heatmap_scale_values <- (heatmap_scale_values - similarity_min)/(similarity_max - similarity_min)
+
+# Colours for the heatmap palette 
+heatmap_scale_colours <- magma(n = heatmap_palette_length, begin = 0.3)
+
+# Heatmap palette vector
+heatmap_scale_palette <- colorRampPalette(heatmap_scale_colours)(heatmap_palette_length)
+```
+
+# Heatmaps
+
+## PONDSK-MICe
+
+```{r fig4-PONDSK-MICe-heatmap}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/375/")
+
+# Cluster solutions to visualize
+nk_1 <- 2
+nk_2 <- 4
+
+
+# Import similarity ----------------------------------------------------------
+
+# Path to mouse-human similarity directory
+similarity_dir <- file.path(pipeline_dir, "similarity")
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  mutate(img1_nk = img1 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_k = img1 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_jacobians = img1 %>% 
+           str_extract("absolute|relative"),
+         img2_nk = img2 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_k = img2 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_jacobians = img2 %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "img1_cluster_id", img1_nk, img1_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "img2_cluster_id", img2_nk, img2_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity_nk <- similarity %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Import permutations --------------------------------------------------------
+
+# Path to permutations directory
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations_nk <- list_permutations %>% 
+  bind_rows() %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(permutation, img1_nk, img2_nk, img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+
+# Compute p-values -----------------------------------------------------------
+
+# Compute p-values for cluster correlations
+df_similarity_nk[["pval"]] <- 0
+for (i in 1:nrow(df_similarity_nk)) {
+  df_similarity_nk[[i, "pval"]] <- sum(df_permutations_nk[["similarity"]] >= df_similarity_nk[[i, "similarity"]])/nrow(df_permutations_nk)
+}
+
+# Compute q-values and -log10 transforms
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(qval = p.adjust(pval, method = "fdr"),
+         pval_log = -log10(pval),
+         qval_log = -log10(qval),
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+
+# Generate heatmap -----------------------------------------------------------
+
+# # Max and min similarity values
+# similarity_max <- 1.00
+# similarity_min <- 0.10
+# # similarity_max <- max(df_similarity_nk[["similarity"]])
+# # similarity_min <- min(df_similarity_nk[["similarity"]])
+# 
+# # Length of the heatmap palette
+# heatmap_palette_length <- 255
+# 
+# # Numerical values for the heatmap scale
+# heatmap_scale_values <- seq(similarity_min, similarity_max, length.out = heatmap_palette_length)
+# heatmap_scale_values <- (heatmap_scale_values - similarity_min)/(similarity_max - similarity_min)
+# 
+# # Colours for the heatmap palette 
+# heatmap_scale_colours <- magma(n = heatmap_palette_length, begin = 0.3)
+# 
+# # Heatmap palette vector
+# heatmap_scale_palette <- colorRampPalette(heatmap_scale_colours)(heatmap_palette_length)
+
+# Clamp log p-values when infinite
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
+
+# Numerical values for the heatmap scale
+heatmap_scale_values <- seq(similarity_min, similarity_max, length.out = heatmap_palette_length)
+heatmap_scale_values <- (heatmap_scale_values - similarity_min)/(similarity_max - similarity_min)
+
+# Colours for the heatmap palette 
+heatmap_scale_colours <- magma(n = heatmap_palette_length, begin = 0.3)
+
+# Heatmap palette vector
+heatmap_scale_palette <- colorRampPalette(heatmap_scale_colours)(heatmap_palette_length)
+
+# Heatmap plot
+fig4_heatmap_PONDSK_MICe <- ggplot(df_similarity_nk, 
+                                   aes(x = img2_cluster_id, 
+                                       y = fct_rev(img1_cluster_id), 
+                                       fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.6, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
+            size = 1.6, 
+            hjust = "center", 
+            vjust = "center") + 
+  labs(x = "Mouse clusters",
+       y = "POND-SickKids clusters",
+       fill = "Correlation") + 
+  scale_fill_gradientn(colors = heatmap_scale_palette,
+                       values = heatmap_scale_values,
+                       limits = c(similarity_min, similarity_max),
+                       breaks = seq(0, 1, by = 0.2),
+                       guide = guide_colourbar(title.position = "top",
+                                               title.hjust = 0.5)) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
+
+# Export
+outfile <- paste0("figure3_PONDSK_MICe_heatmap_with_legend.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(500/72, "in"),
+    height = unit(500/72, "in"))
+print(fig4_heatmap_PONDSK_MICe)
+dev.off()
+
+
+fig4_heatmap_PONDSK_MICe <- fig4_heatmap_PONDSK_MICe +
+  theme(legend.position = "none")
+
+# Export
+outfile <- paste0("figure3_PONDSK_MICe_heatmap.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(500/72, "in"),
+    height = unit(500/72, "in"))
+print(fig4_heatmap_PONDSK_MICe)
+dev.off()
+```
+
+```{r}
+df_similarity_nk %>% 
+  select(img1_cluster_id, img2_cluster_id, similarity, pval)
+```
+
+```{r}
+df_matches_PONDSK_MICe_opt <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(POND = img1_cluster_id, MICe = img2_cluster_id)
+```
+
+
+```{r}
+outfile <- "PONDSK_MICe_opt.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
+
+
+
+```{r fig4-PONDSK-MICe-nk7-heatmap}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/375/")
+
+# Cluster solutions to visualize
+nk_1 <- 7
+nk_2 <- 7
+
+
+# Import similarity ----------------------------------------------------------
+
+# Path to mouse-human similarity directory
+similarity_dir <- file.path(pipeline_dir, "similarity")
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  mutate(img1_nk = img1 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_k = img1 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_jacobians = img1 %>% 
+           str_extract("absolute|relative"),
+         img2_nk = img2 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_k = img2 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_jacobians = img2 %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "img1_cluster_id", img1_nk, img1_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "img2_cluster_id", img2_nk, img2_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity_nk <- similarity %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Import permutations --------------------------------------------------------
+
+# Path to permutations directory
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations_nk <- list_permutations %>% 
+  bind_rows() %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(permutation, img1_nk, img2_nk, img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+
+# Compute p-values -----------------------------------------------------------
+
+# Compute p-values for cluster correlations
+df_similarity_nk[["pval"]] <- 0
+for (i in 1:nrow(df_similarity_nk)) {
+  df_similarity_nk[[i, "pval"]] <- sum(df_permutations_nk[["similarity"]] >= df_similarity_nk[[i, "similarity"]])/nrow(df_permutations_nk)
+}
+
+# Compute q-values and -log10 transforms
+# df_similarity_nk <- df_similarity_nk %>% 
+#   mutate(qval = p.adjust(pval, method = "fdr"),
+#          pval_log = -log10(pval),
+#          qval_log = -log10(qval),
+#          significant = ifelse(pval <= 0.10, TRUE, FALSE),
+#          pval_lab = case_when(pval > 0.10 ~ "",
+#                               pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+#                               pval < 0.001 ~ "p < 0.001"),
+#          pval_lab = ifelse(img2_cluster_id == "6-5" & img1_cluster_id == "6-4", paste0("p = ", as.character(round(pval, 3))), pval_lab),
+#          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+#          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(qval = p.adjust(pval, method = "fdr"),
+         pval_log = -log10(pval),
+         qval_log = -log10(qval),
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+
+# Generate heatmap -----------------------------------------------------------
+
+# Clamp log p-values when infinite
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
+
+# Heatmap plot
+fig4_heatmap_PONDSK_MICe_nk7 <- ggplot(df_similarity_nk, 
+                                       aes(x = img2_cluster_id, 
+                                           y = fct_rev(img1_cluster_id), 
+                                           fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.4, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
+            size = 1.4, 
+            hjust = "center", 
+            vjust = "center") + 
+  labs(x = "Mouse clusters",
+       y = "POND-SickKids clusters",
+       fill = "Correlation") + 
+  scale_fill_gradientn(colors = heatmap_scale_palette,
+                       values = heatmap_scale_values,
+                       limits = c(similarity_min, similarity_max),
+                       breaks = seq(0, 1, by = 0.2)) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() +
+  theme(legend.position = "none")
+
+# Export
+outfile <- paste0("figure3_PONDSK_MICe_heatmap_nk7.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(500/72, "in"),
+    height = unit(500/72, "in"))
+print(fig4_heatmap_PONDSK_MICe_nk7)
+dev.off()
+```
+
+```{r}
+df_matches_PONDSK_MICe_nk7 <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(POND = img1_cluster_id, MICe = img2_cluster_id)
+```
+
+```{r}
+outfile <- "PONDSK_MICe_nk7.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
+
+
+## HBN-MICe
+
+
+```{r fig4-HBN-MICe-heatmap}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/861/")
+
+# Cluster solutions to visualize
+nk_1 <- 3
+nk_2 <- 4
+
+
+# Import similarity ----------------------------------------------------------
+
+# Path to mouse-human similarity directory
+similarity_dir <- file.path(pipeline_dir, "similarity")
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  mutate(img1_nk = img1 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_k = img1 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_jacobians = img1 %>% 
+           str_extract("absolute|relative"),
+         img2_nk = img2 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_k = img2 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_jacobians = img2 %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "img1_cluster_id", img1_nk, img1_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "img2_cluster_id", img2_nk, img2_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity_nk <- similarity %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Import permutations --------------------------------------------------------
+
+# Path to permutations directory
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations_nk <- list_permutations %>% 
+  bind_rows() %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(permutation, img1_nk, img2_nk, img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+
+# Compute p-values -----------------------------------------------------------
+
+# Compute p-values for cluster correlations
+df_similarity_nk[["pval"]] <- 0
+for (i in 1:nrow(df_similarity_nk)) {
+  df_similarity_nk[[i, "pval"]] <- sum(df_permutations_nk[["similarity"]] >= df_similarity_nk[[i, "similarity"]])/nrow(df_permutations_nk)
+}
+
+# Compute q-values and -log10 transforms
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(qval = p.adjust(pval, method = "fdr"),
+         pval_log = -log10(pval),
+         qval_log = -log10(qval),
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+
+
+# Generate heatmap -----------------------------------------------------------
+
+# Clamp log p-values when infinite
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
+
+# Heatmap plot
+fig4_heatmap_HBN_MICe <- ggplot(df_similarity_nk, 
+                                aes(x = img2_cluster_id, 
+                                    y = fct_rev(img1_cluster_id), 
+                                    fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.6, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
+            size = 1.6, 
+            hjust = "center", 
+            vjust = "center") + 
+  labs(x = "Mouse clusters",
+       y = "HBN clusters",
+       fill = "Correlation") + 
+  scale_fill_gradientn(colors = heatmap_scale_palette,
+                       values = heatmap_scale_values,
+                       limits = c(similarity_min, similarity_max),
+                       breaks = seq(0, 1, by = 0.2)) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() +
+  theme(legend.position = "none",
+        plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
+
+# Export
+outfile <- paste0("figure3_HBN_MICe_heatmap.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(500/72, "in"),
+    height = unit(500/72, "in"))
+print(fig4_heatmap_HBN_MICe)
+dev.off()
+```
+
+
+```{r}
+df_similarity_nk %>% 
+  select(img1_cluster_id, img2_cluster_id, similarity, pval)
+```
+
+```{r}
+df_matches_HBN_MICe_opt <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(HBN = img1_cluster_id, MICe = img2_cluster_id)
+```
+
+```{r}
+outfile <- "HBN_MICe_opt.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
+
+
+```{r fig4-HBN-MICe-nk7-heatmap}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/861/")
+
+# Cluster solutions to visualize
+nk_1 <- 7
+nk_2 <- 7
+
+
+# Import similarity ----------------------------------------------------------
+
+# Path to mouse-human similarity directory
+similarity_dir <- file.path(pipeline_dir, "similarity")
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  mutate(img1_nk = img1 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_k = img1 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_jacobians = img1 %>% 
+           str_extract("absolute|relative"),
+         img2_nk = img2 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_k = img2 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_jacobians = img2 %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "img1_cluster_id", img1_nk, img1_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "img2_cluster_id", img2_nk, img2_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity_nk <- similarity %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Import permutations --------------------------------------------------------
+
+# Path to permutations directory
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations_nk <- list_permutations %>% 
+  bind_rows() %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(permutation, img1_nk, img2_nk, img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+
+# Compute p-values -----------------------------------------------------------
+
+# Compute p-values for cluster correlations
+df_similarity_nk[["pval"]] <- 0
+for (i in 1:nrow(df_similarity_nk)) {
+  df_similarity_nk[[i, "pval"]] <- sum(df_permutations_nk[["similarity"]] >= df_similarity_nk[[i, "similarity"]])/nrow(df_permutations_nk)
+}
+
+# Compute q-values and -log10 transforms
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(qval = p.adjust(pval, method = "fdr"),
+         pval_log = -log10(pval),
+         qval_log = -log10(qval),
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+
+
+# Generate heatmap -----------------------------------------------------------
+
+# Clamp log p-values when infinite
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
+
+# Heatmap plot
+fig4_heatmap_HBN_MICe_nk7 <- ggplot(df_similarity_nk, 
+                                    aes(x = img2_cluster_id, 
+                                        y = fct_rev(img1_cluster_id), 
+                                        fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.4, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
+            size = 1.4, 
+            hjust = "center", 
+            vjust = "center") + 
+  labs(x = "Mouse clusters",
+       y = "HBN clusters",
+       fill = "Correlation") + 
+  scale_fill_gradientn(colors = heatmap_scale_palette,
+                       values = heatmap_scale_values,
+                       limits = c(similarity_min, similarity_max),
+                       breaks = seq(0, 1, by = 0.2)) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() +
+  theme(legend.position = "none")
+
+# Export
+outfile <- paste0("figure3_HBN_MICe_heatmap_nk7.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(500/72, "in"),
+    height = unit(500/72, "in"))
+print(fig4_heatmap_HBN_MICe_nk7)
+dev.off()
+```
+
+
+```{r}
+df_matches_HBN_MICe_nk7 <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(HBN = img1_cluster_id, MICe = img2_cluster_id)
+```
+
+```{r}
+outfile <- "HBN_MICe_nk7.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
+
+
+## PONDSK-HBN
+
+```{r fig4-PONDSK-HBN-heatmap}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/779/")
+
+# Cluster solutions to visualize
+nk_1 <- 2
+nk_2 <- 3
+
+
+# Import similarity ----------------------------------------------------------
+
+# Path to mouse-human similarity directory
+similarity_dir <- file.path(pipeline_dir, "similarity")
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  mutate(img1_nk = img1 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_k = img1 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_jacobians = img1 %>% 
+           str_extract("absolute|relative"),
+         img2_nk = img2 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_k = img2 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_jacobians = img2 %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "img1_cluster_id", img1_nk, img1_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "img2_cluster_id", img2_nk, img2_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity_nk <- similarity %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Import permutations --------------------------------------------------------
+
+# Path to permutations directory
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations_nk <- list_permutations %>% 
+  bind_rows() %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(permutation, img1_nk, img2_nk, img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+
+# Compute p-values -----------------------------------------------------------
+
+# Compute p-values for cluster correlations
+df_similarity_nk[["pval"]] <- 0
+for (i in 1:nrow(df_similarity_nk)) {
+  df_similarity_nk[[i, "pval"]] <- sum(df_permutations_nk[["similarity"]] >= df_similarity_nk[[i, "similarity"]])/nrow(df_permutations_nk)
+}
+
+# Compute q-values and -log10 transforms
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(qval = p.adjust(pval, method = "fdr"),
+         pval_log = -log10(pval),
+         qval_log = -log10(qval),
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"),
+         pval_lab = ifelse(img1_cluster_id == "2-2" & img2_cluster_id == "3-3", paste0("p = ", as.character(round(pval, 3))), pval_lab),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+
+
+# Generate heatmap -----------------------------------------------------------
+
+# Clamp log p-values when infinite
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
+
+# Heatmap plot
+fig4_heatmap_PONDSK_HBN <- ggplot(df_similarity_nk, 
+                                  aes(x = img2_cluster_id, 
+                                      y = fct_rev(img1_cluster_id), 
+                                      fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.6, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
+            size = 1.6, 
+            hjust = "center", 
+            vjust = "center") + 
+  labs(x = "HBN clusters",
+       y = "POND-SickKids clusters",
+       fill = "Correlation") + 
+  scale_fill_gradientn(colors = heatmap_scale_palette,
+                       values = heatmap_scale_values,
+                       limits = c(similarity_min, similarity_max),
+                       breaks = seq(0, 1, by = 0.2)) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() +
+  theme(legend.position = "none",
+        plot.margin = margin(t = 3, r = 3, b = 8, l = 3))
+
+# Export
+outfile <- paste0("figure3_PONDSK_HBN_heatmap.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(500/72, "in"),
+    height = unit(500/72, "in"))
+print(fig4_heatmap_PONDSK_HBN)
+dev.off()
+```
+
+
+```{r}
+df_similarity_nk %>% 
+  select(img1_cluster_id, img2_cluster_id, similarity, pval)
+```
+
+```{r}
+df_matches_PONDSK_HBN_opt <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>% 
+  select(POND = img1_cluster_id, HBN = img2_cluster_id)
+```
+
+```{r}
+outfile <- "PONDSK_HBN_opt.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
+
+
+```{r fig4-PONDSK-HBN-nk7-heatmap}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3/779/")
+
+# Cluster solutions to visualize
+nk_1 <- 7
+nk_2 <- 7
+
+
+# Import similarity ----------------------------------------------------------
+
+# Path to mouse-human similarity directory
+similarity_dir <- file.path(pipeline_dir, "similarity")
+similarity_file <- file.path(similarity_dir, "similarity.csv")
+
+# Import the similarity data and extract cluster information
+similarity <- read_csv(similarity_file, show_col_types = FALSE) %>% 
+  mutate(img1_nk = img1 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_k = img1 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img1_jacobians = img1 %>% 
+           str_extract("absolute|relative"),
+         img2_nk = img2 %>% 
+           basename() %>% 
+           str_extract("_nk_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_k = img2 %>% 
+           basename() %>% 
+           str_extract("_k_[0-9]+") %>% 
+           str_extract("[0-9]+") %>% 
+           as.numeric(),
+         img2_jacobians = img2 %>% 
+           str_extract("absolute|relative"),) %>% 
+  unite(col = "img1_cluster_id", img1_nk, img1_k, 
+        sep = "-", remove = FALSE) %>% 
+  unite(col = "img2_cluster_id", img2_nk, img2_k, 
+        sep = "-", remove = FALSE)
+
+# Filter similarity data for desired cluster numbers
+# and combine Jacobians
+df_similarity_nk <- similarity %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity),
+            .groups = "drop")
+
+
+# Import permutations --------------------------------------------------------
+
+# Path to permutations directory
+permutation_dir <- file.path(pipeline_dir, "permutations", "similarity")
+
+# Permutation file names
+permutation_files <- list.files(permutation_dir)
+
+# Number of permutations
+np <- length(permutation_files)
+list_permutations <- vector(mode = "list", length = np)  
+for (p in 1:np) {
+  
+  # Permutation data to import
+  permutation_file <- permutation_files %>% 
+    str_subset(str_c("similarity_permutation_", p, ".csv"))
+  permutation_file <- file.path(permutation_dir, permutation_file)
+  
+  # Import permutation data
+  list_permutations[[p]] <- read_csv(permutation_file, 
+                                     show_col_types = FALSE) %>% 
+    mutate(img1_nk = img1 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img1_k = img1 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_nk = img2 %>% 
+             basename() %>% 
+             str_extract("_nk_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric(),
+           img2_k = img2 %>% 
+             basename() %>% 
+             str_extract("_k_[0-9]+") %>% 
+             str_extract("[0-9]+") %>% 
+             as.numeric()) %>% 
+    unite(col = "img1_cluster_id", img1_nk, img1_k, 
+          sep = "-", remove = FALSE) %>% 
+    unite(col = "img2_cluster_id", img2_nk, img2_k, 
+          sep = "-", remove = FALSE) %>% 
+    mutate(permutation = p)
+  
+}
+
+# Filter permutations data for desired cluster numbers
+# and combine Jacobians
+df_permutations_nk <- list_permutations %>% 
+  bind_rows() %>% 
+  filter(img1_nk == nk_1,
+         img2_nk == nk_2) %>% 
+  group_by(permutation, img1_nk, img2_nk, img1_cluster_id, img2_cluster_id) %>% 
+  summarise(similarity = mean(similarity), .groups = "drop")
+
+
+# Compute p-values -----------------------------------------------------------
+
+# Compute p-values for cluster correlations
+df_similarity_nk[["pval"]] <- 0
+for (i in 1:nrow(df_similarity_nk)) {
+  df_similarity_nk[[i, "pval"]] <- sum(df_permutations_nk[["similarity"]] >= df_similarity_nk[[i, "similarity"]])/nrow(df_permutations_nk)
+}
+
+# Compute q-values and -log10 transforms
+# df_similarity_nk <- df_similarity_nk %>% 
+#   mutate(qval = p.adjust(pval, method = "fdr"),
+#          pval_log = -log10(pval),
+#          qval_log = -log10(qval),
+#          significant = ifelse(pval <= 0.05, TRUE, FALSE),
+#          pval_lab = case_when(pval > 0.05 ~ "",
+#                               pval >= 0.001 & pval <= 0.05 ~ paste0("p = ", as.character(round(pval, 3))),
+#                               pval < 0.001 ~ "p < 0.001"),
+#          pval_lab = ifelse(img2_cluster_id == "6-4", "", pval_lab),
+#          cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+#          stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(qval = p.adjust(pval, method = "fdr"),
+         pval_log = -log10(pval),
+         qval_log = -log10(qval),
+         significant = ifelse(pval <= 0.10, TRUE, FALSE),
+         pval_lab = case_when(pval > 0.10 ~ "",
+                              pval >= 0.001 & pval <= 0.10 ~ paste0("p = ", as.character(round(pval, 3))),
+                              pval < 0.001 ~ "p < 0.001"),
+         pval_lab = ifelse(img1_cluster_id == "7-1" & img2_cluster_id == "7-2", paste0("p = ", as.character(round(pval, 3))) ,pval_lab),
+         cor_lab = ifelse(pval_lab == "", "", paste0("r = ", as.character(round(similarity, 3)))),
+         stat_lab = ifelse(pval_lab == "", "", paste(pval_lab, cor_lab, sep = "\n")))
+
+
+
+# Generate heatmap -----------------------------------------------------------
+
+# Clamp log p-values when infinite
+df_similarity_nk <- df_similarity_nk %>% 
+  mutate(pval_log = ifelse(is.infinite(pval_log), 3, pval_log))
+
+# Heatmap plot
+fig4_heatmap_PONDSK_HBN_nk7 <- ggplot(df_similarity_nk, 
+                                      aes(x = img2_cluster_id, 
+                                          y = fct_rev(img1_cluster_id), 
+                                          fill = similarity)) + 
+  geom_tile(col = "grey50") + 
+  # geom_text(mapping = aes(label = pval_lab),
+  #           size = 1.4, 
+  #           hjust = "center", 
+  #           vjust = "center") + 
+  geom_text(mapping = aes(label = stat_lab),
+            size = 1.4, 
+            hjust = "center", 
+            vjust = "center") + 
+  labs(x = "HBN clusters",
+       y = "POND-SickKids clusters",
+       fill = "Correlation") + 
+  scale_fill_gradientn(colors = heatmap_scale_palette,
+                       values = heatmap_scale_values,
+                       limits = c(similarity_min, similarity_max),
+                       breaks = seq(0, 1, by = 0.2)) + 
+  scale_x_discrete(expand = expansion(mult = 0), position = "top") + 
+  scale_y_discrete(expand = expansion(mult = 0)) + 
+  theme_bw() +
+  theme(legend.position = "none")
+
+# Export
+outfile <- paste0("figure3_PONDSK_HBN_heatmap_nk7.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(500/72, "in"),
+    height = unit(500/72, "in"))
+print(fig4_heatmap_PONDSK_HBN_nk7)
+dev.off()
+```
+
+```{r}
+df_similarity_nk %>% 
+  filter(img1_cluster_id == "7-1")
+```
+
+
+```{r}
+df_matches_PONDSK_HBN_nk7 <- df_similarity_nk %>% 
+  # filter(significant) %>% 
+  filter(pval_lab != "") %>%  
+  select(POND = img1_cluster_id, HBN = img2_cluster_id)
+```
+
+```{r}
+outfile <- "PONDSK_HBN_nk7.csv"
+outfile <- file.path(output_dir, outfile)
+df_similarity_nk %>% 
+    select(img1_cluster_id, img2_cluster_id, similarity, pval) %>% 
+  write_csv(file = outfile)
+```
+
+
+```{r}
+# Font family
+font_family <- "Helvetica"
+
+# Nature suggested font size: 5-7 pt
+font_size <- 6
+
+fig4_heatmap <- (fig4_heatmap_PONDSK_MICe | fig4_heatmap_HBN_MICe | fig4_heatmap_PONDSK_HBN) /
+  (fig4_heatmap_PONDSK_MICe_nk7 | fig4_heatmap_HBN_MICe_nk7 | fig4_heatmap_PONDSK_HBN_nk7) +
+  plot_layout(heights = c(1, 2)) &
+  theme(axis.text = element_text(size = font_size-1, family = font_family),
+        axis.title = element_text(size = font_size, family = font_family))
+        # plot.margin = margin(t = 3, r = 3, b = 3, l = 3))
+
+outfile <- paste0("figure3_heatmap_nk7.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(510/72, "in"),
+    height = unit(236/72, "in"))
+print(fig4_heatmap)
+dev.off()
+```
+
+
+
+# Brain slices
+
+
+
+```{r}
+df_matches_opt <- df_matches_PONDSK_MICe_opt %>% 
+  inner_join(df_matches_HBN_MICe_opt, by = "MICe")
+
+df_matches_nk7 <- df_matches_PONDSK_MICe_nk7 %>% 
+  inner_join(df_matches_HBN_MICe_nk7, by = "MICe")
+
+df_matches <- bind_rows(df_matches_opt, df_matches_nk7)
+df_matches
+```
+
+
+```{r fig3-ss-mouse-paths}
+# Mouse mask
+# mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/atlas/coronal_50um_coverage_bin0.8.mnc")
+mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_mask_50um.mnc")
+mouse_mask <- mincGetVolume(mouse_mask_file)
+
+# Mouse anatomy
+mouse_anat_file <- file.path(PROJECTPATH, "data/mouse/atlas/DSURQE_CCFv3_average_50um.mnc")
+mouse_anat <- mincGetVolume(mouse_anat_file)
+mouse_anat[mouse_mask < 0.4] <- 0
+mouse_anat_vol <- mincArray(mouse_anat)
+```
+
+```{r fig3-ss-human-paths}
+# Human mask
+human_mask_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/mask_0.8mm.mnc")
+human_mask <- mincGetVolume(human_mask_file)
+
+# Human anatomy
+human_anat_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/model_0.8mm.mnc")
+human_anat <- mincGetVolume(human_anat_file)
+human_anat[human_mask != 1] <- 0
+human_anat_vol <- mincArray(human_anat)
+
+# Cropped human human images
+slices_dim_1 <- 27:220
+slices_dim_2 <- 25:275
+slices_dim_3 <- 1:205
+human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
+```
+
+
+```{r}
+threshold <- "top_n"
+threshold_value <- 0.2
+threshold_symmetric <- TRUE
+```
+
+
+```{r}
+# Mouse slice dimensions in pixels
+mouse_width_px <- dim(mouse_anat_vol)[2]
+mouse_height_px <- dim(mouse_anat_vol)[3]
+
+# Human slice dimensions in pixels
+human_width_px <- dim(human_anat_vol_cropped)[2]
+human_height_px <- dim(human_anat_vol_cropped)[3]
+
+human_slc_height_pt <- 30.23
+human_slc_width_pt <- human_slc_height_pt*(human_width_px/human_height_px)
+
+mouse_slc_height_pt <- human_slc_height_pt
+mouse_slc_width_pt <- mouse_slc_height_pt*(mouse_width_px/mouse_height_px)
+```
+
+
+## POND-SickKids
+
+```{r}
+centroid_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/700/centroids/resolution_0.8/relative/")
+
+# Anatomical plane to display
+# Sagittal: 1
+# Coronal: 2 
+# Transverse: 3
+human_slc_dim <- 1
+
+# Human brain slice to display
+human_slc <- c(50, 82)
+
+for (i in 1:nrow(df_matches)) {
+
+  cluster_id <- df_matches[[i, "POND"]]
+  nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
+  k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
+  
+  print(paste(nk, k, sep = "-"))
+  
+  list_slices <- vector(mode = "list", length = length(human_slc))
+  for (s in 1:length(list_slices)) {
+    
+    # Import centroid image and threshold
+    img <- import_cluster_map(imgdir = centroid_dir,
+                              mask = human_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    # Convert mincSingleDim to mincArray and crop
+    img <- mincArray(img)
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+    # Generate slice series
+    list_slices[[s]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                    dimension = human_slc_dim, 
+                                    slices = human_slc[s]) %>% 
+      anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], 
+              high = overlay_threshold[2], 
+              symmetric = TRUE) %>% 
+      grobify()
+    
+  }
+  
+  ss_widths <- human_slc_width_pt
+  ss_heights <- c(human_slc_height_pt, 2.0, human_slc_height_pt)
+
+  ss <- arrangeGrob(list_slices[[1]],
+                    black_rect_grob,
+                    list_slices[[2]],
+                    layout_matrix = cbind(1:3),
+                    widths = unit(ss_widths, "bigpts"),
+                    heights = unit(ss_heights, "bigpts"))
+  
+  outfile <- paste(output_plot_prefix, "neuro_ss", "PONDSK", cluster_id, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = ss,
+             file = outfile,
+             width = sum(ss_widths),
+             height = sum(ss_heights),
+             units = "bigpts")
+  
+}
+```
+
+## HBN
+
+```{r}
+centroid_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/013/centroids/resolution_0.8/relative/")
+
+
+for (i in 1:nrow(df_matches)) {
+  
+  cluster_id <- df_matches[[i, "HBN"]]
+  nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
+  k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
+  
+  print(paste(nk, k, sep = "-"))
+  
+  list_slices <- vector(mode = "list", length = length(human_slc))
+  for (s in 1:length(list_slices)) {
+    
+    # Import centroid image and threshold
+    img <- import_cluster_map(imgdir = centroid_dir,
+                              mask = human_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    # Convert mincSingleDim to mincArray and crop
+    img <- mincArray(img)
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+    # Generate slice series
+    list_slices[[s]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                    dimension = human_slc_dim, 
+                                    slices = human_slc[s]) %>% 
+      anatomy(human_anat_vol_cropped, low = 40, high = 110) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], 
+              high = overlay_threshold[2], 
+              symmetric = TRUE) %>% 
+      grobify()
+    
+  }
+  
+  ss_widths <- human_slc_width_pt
+  ss_heights <- c(human_slc_height_pt, 2.0, human_slc_height_pt)
+  
+  ss <- arrangeGrob(list_slices[[1]],
+                    black_rect_grob,
+                    list_slices[[2]],
+                    layout_matrix = cbind(1:3),
+                    widths = unit(ss_widths, "bigpts"),
+                    heights = unit(ss_heights, "bigpts"))
+  
+  outfile <- paste(output_plot_prefix, "neuro_ss", "HBN", cluster_id, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = ss,
+             file = outfile,
+             width = sum(ss_widths),
+             height = sum(ss_heights),
+             units = "bigpts")
+  
+}
+```
+
+
+## MICe
+
+```{r}
+centroid_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/107/centroids/resolution_0.05/relative/")
+
+# Anatomical plane to display
+# Sagittal: 1
+# Coronal: 2 
+# Transverse: 3
+mouse_slc_dim <- 1
+
+# Mouse brain slice to display
+mouse_slc <- c(70, 92)
+
+for (i in 1:nrow(df_matches)) {
+  
+  cluster_id <- df_matches[[i, "MICe"]]
+  nk <- str_split(cluster_id, pattern = "-", simplify = TRUE)[1]
+  k <- str_split(cluster_id, pattern = "-", simplify = TRUE)[2]
+  
+  print(paste(nk, k, sep = "-"))
+  
+  list_slices <- vector(mode = "list", length = length(mouse_slc))
+  for (s in 1:length(list_slices)) {
+    
+    # Import centroid image and threshold
+    img <- import_cluster_map(imgdir = centroid_dir,
+                              mask = mouse_mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    # Convert mincSingleDim to mincArray and crop
+    img <- mincArray(img)
+    
+    # Generate slice series
+    list_slices[[s]] <- sliceSeries(nrow = 1, ncol = 1, 
+                                        dimension = mouse_slc_dim, 
+                                        slices = mouse_slc[s]) %>% 
+    anatomy(mouse_anat_vol, low = 700, high = 1400) %>% 
+    overlay(img, 
+            low = overlay_threshold[1], high = overlay_threshold[2], 
+            symmetric = TRUE) %>% 
+    grobify()
+    
+  }
+  
+  ss_widths <- mouse_slc_width_pt
+  ss_heights <- c(mouse_slc_height_pt, 2.0, mouse_slc_height_pt)
+  
+  ss <- arrangeGrob(list_slices[[1]],
+                    black_rect_grob,
+                    list_slices[[2]],
+                    layout_matrix = cbind(1:3),
+                    widths = unit(ss_widths, "bigpts"),
+                    heights = unit(ss_heights, "bigpts"))
+  
+  outfile <- paste(output_plot_prefix, "neuro_ss", "MICe", cluster_id, sep = "_")
+  outfile <- paste0(outfile, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  export_pdf(x = ss,
+             file = outfile,
+             width = sum(ss_widths),
+             height = sum(ss_heights),
+             units = "bigpts")
+  
+}
+```
+

@@ -1,0 +1,226 @@
+---
+title: "Untitled"
+author: "Antoine Beauchamp"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(MRIcrotome))
+```
+
+```{r environment}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+```
+
+```{r functions}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r pipeline-params}
+# Output directory
+output_dir <- "figure_supp_human/"
+if (!(dir.exists(output_dir))) {dir.create(output_dir, recursive = TRUE)}
+
+# Similarity pipeline
+version <- "v3"
+pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/")
+pipeline_dir <- file.path(pipeline_dir, version)
+
+# Parameters
+params_id <- "700"
+
+# Fetch parameter set
+metadata <- file.path(pipeline_dir, "metadata.csv")
+params <- fetch_params_metadata(metadata = metadata,
+                                list(id = params_id))
+
+params
+```
+
+
+```{r}
+pipeline_dir <- file.path(pipeline_dir, params_id)
+
+resolution <- params %>% 
+  filter(id == params_id) %>% 
+  pull(resolution)
+resolution <- sprintf("%.1f", resolution)
+
+cluster_resolution <- params %>% 
+  filter(id == params_id) %>% 
+  pull(cluster_resolution)
+cluster_resolution <- sprintf("%.1f", cluster_resolution)
+
+cluster_dir <- file.path(pipeline_dir, "clusters")
+cluster_dir <- file.path(cluster_dir, paste0("resolution_", cluster_resolution))
+
+centroid_dir <- file.path(pipeline_dir, "centroids")
+
+nk_max <- params %>% 
+  filter(id == params_id) %>% 
+  pull(cluster_nk_max)
+
+pt_per_in <- 72
+```
+
+```{r}
+clusters <- "clusters.csv"
+clusters <- file.path(cluster_dir, clusters)
+clusters <- read_csv(clusters, show_col_types = FALSE)
+
+#Convert cluster information to long format
+clusters_long <- clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+
+#Human cluster Sankey plot
+p_human_alluvial <- ggplot(clusters_long,
+                           aes(x = nk,
+                               stratum = k,
+                               alluvium = ID,
+                               fill = k, 
+                               label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 0.5) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+
+width_pts <- 1003
+height_pts <- 741
+
+width_in <- width_pts/pt_per_in
+height_in <- height_pts/pt_per_in
+
+width_in <- unit(width_in, "in")
+height_in <- unit(height_in, "in")
+
+#Export plot
+outfile <- "human_sankey.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = width_in,
+    height = height_in)
+print(p_human_alluvial)
+dev.off()
+```
+
+```{r}
+mask_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/mask_0.8mm.mnc")
+mask <- mincGetVolume(mask_file)
+
+# Anatomy
+anat_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/model_0.8mm.mnc")
+anat <- mincGetVolume(anat_file)
+anat[mask != 1] <- 0
+anat_vol <- mincArray(anat)
+
+# Cropped human images along sagittal and transverse planes
+slices_dim_1 <- 27:220
+slices_dim_2 <- 10:280
+slices_dim_3 <- 1:220
+anat_vol_cropped <- anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
+
+# Threshold method
+threshold <- "top_n"
+threshold_value <- 0.2
+threshold_symmetric <- TRUE
+
+jacobians <- "relative"
+
+centroid_dir <- file.path(centroid_dir, paste0("resolution_", resolution))
+centroid_dir <- file.path(centroid_dir, jacobians)
+```
+
+```{r}
+slc <- 82
+
+nk_max <- 10
+for (nk in 2:nk_max) {
+  for (k in 1:nk) {
+    
+    img <- import_cluster_map(imgdir = centroid_dir,
+                              mask = mask_file,
+                              nk = nk, k = k,
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    img <- mincArray(img)
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+    ss <- sliceSeries(nrow = 1, ncol = 1, dimension = 1, slices = slc) %>% 
+      anatomy(anat_vol_cropped, low = 40, high = 110) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], 
+              high = overlay_threshold[2], 
+              symmetric = TRUE) 
+    
+    width_px <- dim(anat_vol)[2]
+    height_px <- dim(anat_vol)[3]
+    
+    width_pt <- 44
+    height_pt <- width_pt*(height_px/width_px)
+    
+    width_in <- width_pt/pt_per_in
+    height_in <- height_pt/pt_per_in
+    
+    width_in <- unit(width_in, "in")
+    height_in <- unit(height_in, "in")
+    
+    outfile <- paste("human_cluster_centroid_nk", nk, "k", k, sep = "_")
+    outfile <- paste0(outfile, ".pdf")
+    outfile <- file.path(output_dir, outfile)
+    pdf(file = outfile,
+        width = width_in,
+        height = height_in)
+    draw(ss)
+    dev.off()
+    
+  }
+}
+```
+
+```{r}
+similarity <- import_similarity(param_id = 375, pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/"))
+permutations <- import_similarity_permutations(param_id = 375, pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/"))
+similarity_sig <- compute_similarity_significance(similarity = similarity, permutations = permutations)
+significant_clusters <- similarity_sig %>% 
+  filter(pval < 0.05) %>% 
+  select(contains("img1")) %>% 
+  distinct() %>% 
+  arrange(img1_nk, img1_k) %>% 
+  pull(img1_cluster_id)
+
+similarity_sig %>% 
+  filter(!(img1_cluster_id %in% significant_clusters)) %>% 
+  pull(img1_cluster_id) %>% 
+  unique() %>% 
+  sort()
+```
+
+```{r}
+significant_clusters
+```
+
