@@ -19,7 +19,7 @@ suppressPackageStartupMessages(library(ggalluvial))
 ```{r functions}
 source("../../src/utils.R")
 # source("../../src/processing.R")
-# source("../../src/analysis.R")
+source("../../src/analysis.R")
 ```
 
 ```{r parameters}
@@ -43,10 +43,10 @@ centroid_method <- "mean"
 
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
-                                resolution = resolution,
+                                list(resolution = resolution,
                                 es_method = es_method,
                                 es_df = es_df,
-                                centroid_method = centroid_method)
+                                centroid_method = centroid_method))
 params
 ```
 
@@ -140,6 +140,21 @@ clusters_genetics %>%
 ```
 
 ```{r}
+df_similarity <- compute_similarity_significance(
+  similarity = import_similarity(param_id = "375", 
+                                 pipeline_dir = "../../data/cross_species/v3"), 
+  permutations = import_similarity_permutations(param_id = "375", 
+                                                pipeline_dir = "../../data/cross_species/v3")
+  )
+
+clusters_w_matches <- df_similarity %>% 
+  filter(pval < 0.05) %>% 
+  pull(img1_cluster_id) %>% 
+  unique()
+```
+
+
+```{r}
 df_clusters_long <- clusters_genetics %>% 
   select(ID, contains("nk"), gene_identified) %>% 
   pivot_longer(cols = c(-ID, -gene_identified),names_to = "nk_name", values_to = "k") %>% 
@@ -157,16 +172,6 @@ df_clusters_long <- df_clusters_long %>%
 
 # df_clusters_long <- df_clusters_long %>% 
   # mutate(ngenes = ifelse(ngenes == 0, NA, ngenes))
-
-clusters_w_matches <- c("2-1", "2-2", 
-                        "3-1", "3-3", 
-                        "4-1", "4-2", "4-3", 
-                        "5-2", "5-5", 
-                        "6-2", "6-6",
-                        "7-1", "7-2", "7-4",
-                        "8-1", "8-2", "8-4", "8-6", "8-7",
-                        "9-4", "9-5", "9-7",
-                        "10-10")
 
 df_clusters_long <- df_clusters_long %>% mutate(ngenes = factor(ngenes, levels = 0:15))
 

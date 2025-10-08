@@ -1975,6 +1975,154 @@ data.frame(instance = c(rep(1, 4), rep(2, 5), rep(3, 6), rep(4, 7), rep(5, 8)),
 ```
 
 
+# New pathway subset
+
+```{r params}
+human_params_id <- 700
+human_pipeline_dir <- "data/human/derivatives/v3/"
+human_pipeline_dir <- file.path(PROJECTPATH, human_pipeline_dir)
+
+mouse_params_id <- 107
+mouse_pipeline_dir <- "data/mouse/derivatives/v3/"
+mouse_pipeline_dir <- file.path(PROJECTPATH, mouse_pipeline_dir)
+
+# Gene score for StringDB
+gene_score <- 950
+```
+
+```{r}
+# Import cluster similarity
+similarity <- import_similarity(param_id = 375, 
+                                pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3"))
+
+# Import cluster similarity permutations
+permutations <- import_similarity_permutations(param_id = 375,
+                                               pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3"))
+
+# Compute significance of correlations
+df_sim_pvals <- compute_similarity_significance(similarity = similarity,
+                                                permutations = permutations)
+
+colnames(df_sim_pvals) <- str_replace(colnames(df_sim_pvals), "img1", "human")
+colnames(df_sim_pvals) <- str_replace(colnames(df_sim_pvals), "img2", "mouse")
+```
+
+```{r}
+pathways <- c("Signaling by WNT", "Nervous system development", "ATP-dependent chromatin remodelers", "Signaling by Receptor Tyrosine Kinases", "Epigenetic regulation of gene expression", "Protein-protein interactions at synapses", "Transmission across Chemical Synapses", "Chromatin modifying enzymes", "Intracellular signaling by second messengers", "Signaling by Nuclear Receptors", "Cellular responses to stress", "Signaling by Rho GTPases, Miro GTPases and RHOBTB3")
+
+df_human_cluster_groups <- tibble(A = c("4-2", "5-2", "6-6", "7-2", "8-6", "9-2", "10-3"),
+                                  B = c("4-3", "5-5", "6-2", "7-4", "8-7", "9-4", "10-4"))
+
+df_matches_group_A <- df_sim_pvals %>% 
+  filter(human_cluster_id %in% df_human_cluster_groups$A) %>% 
+  filter(pval < 0.05) %>% 
+  select(human_cluster_id, mouse_cluster_id)
+
+list_enrichment_ROC_AUC <- vector(mode = "list", length = nrow(df_matches_group_A))
+list_enrichment_HG <- vector(mode = "list", length = nrow(df_matches_group_A))
+for (i in 1:nrow(df_matches_group_A)){
+  
+  human_cluster_id <- df_matches_group_A[[i, "human_cluster_id"]]
+  human_cluster_id_split <- str_split(human_cluster_id, pattern = "-")[[1]]
+  nk_human <- as.numeric(human_cluster_id_split)[1]
+  k_human <- as.numeric(human_cluster_id_split)[2]
+  
+  mouse_cluster_id <- df_matches_group_A[[i, "mouse_cluster_id"]]
+  mouse_cluster_id_split <- str_split(mouse_cluster_id, pattern = "-")[[1]]
+  nk_mouse <- as.numeric(mouse_cluster_id_split)[1]
+  k_mouse <- as.numeric(mouse_cluster_id_split)[2]
+  
+  human_enrichment <- import_enrichment_human(params_id = human_params_id, 
+                                              pipeline_dir = human_pipeline_dir, 
+                                              nk = nk_human, k = k_human)
+  
+  mouse_enrichment <- import_enrichment_mouse(params_id = mouse_params_id, 
+                                              pipeline_dir = mouse_pipeline_dir, 
+                                              nk = nk_mouse, k = k_mouse)
+  
+  human_enrichment <- human_enrichment %>% 
+    filter(Title %in% pathways) %>% 
+    arrange(ID)
+  
+  mouse_enrichment <- mouse_enrichment %>% 
+    filter(Title %in% pathways) %>% 
+    arrange(ID)
+  
+  mouse_alpha_seq_auc <- 2:10
+  mouse_alpha_seq_auc <- (1/10)^mouse_alpha_seq_auc
+  mouse_alpha_seq_auc <- c(0.05, mouse_alpha_seq_auc)
+  
+  enrichment_ROC <- compute_enrichment_ROC(mouse_enrichment = mouse_enrichment, 
+                                           human_enrichment = human_enrichment,
+                                           alpha = mouse_alpha_seq_auc)
+  
+  enrichment_ROC <- enrichment_ROC[!is.na(enrichment_ROC)]
+  
+  enrichment_AUC <- map_dbl(enrichment_ROC, pROC::auc)
+  
+  list_enrichment_ROC_AUC[[i]] <- enrichment_AUC %>% 
+    enframe(name = "alpha", value = "AUC") %>% 
+    mutate(human_cluster_id = human_cluster_id, 
+           mouse_cluster_id = mouse_cluster_id)
+  
+  
+  enrichment_HG <- compute_enrichment_HGtest(mouse_enrichment = mouse_enrichment, 
+                                           human_enrichment = human_enrichment,
+                                           alpha_mouse = mouse_alpha_seq_auc)
+  
+  list_enrichment_HG[[i]] <- enrichment_HG %>% 
+    mutate(human_cluster_id = human_cluster_id, 
+           mouse_cluster_id = mouse_cluster_id)
+  
+}
+
+df_enrichment_ROC_AUC <- bind_rows(list_enrichment_ROC_AUC)
+
+df_enrichment_ROC_AUC <- df_enrichment_ROC_AUC %>% 
+  mutate(alpha = as.numeric(alpha))
+
+df_enrichment_HG <- bind_rows(list_enrichment_HG)
+```
+
+
+```{r}
+plt <- df_enrichment_ROC_AUC %>% 
+  ggplot(aes(x = -log10(alpha), y = AUC, group = mouse_cluster_id, col = mouse_cluster_id)) + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") + 
+  geom_line() + 
+  geom_point() + 
+  facet_wrap(~human_cluster_id) +
+  coord_cartesian(ylim = c(0, 1)) +
+  labs(col = "Mouse cluster") + 
+  theme_bw()
+
+outfile <- "human_cluster_group_A_enrichment_compare.pdf"
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+tmp <- df_enrichment_HG %>% 
+  mutate(nlq_mouse = -log10(alpha_mouse),
+         nlq_human = -log10(alpha_human)) %>% 
+  mutate(nlq_mouse = factor(nlq_mouse), 
+         nlq_human = factor(nlq_human)) %>% 
+  mutate(significant = pval < 0.05)
+
+ggplot(tmp, aes(x = nlq_mouse, y = nlq_human, fill = significant)) + 
+  geom_tile() +
+  facet_grid(human_cluster_id~mouse_cluster_id)
+```
+
+```{r}
+df_enrichment_HG %>% 
+  filter(pval < 0.05)
+```
+
+
 
 # Development
 
