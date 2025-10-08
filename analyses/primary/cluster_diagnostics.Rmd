@@ -49,17 +49,17 @@ mouse_centroid_method <- "mean"
 # Identify mouse parameter set ID
 mouse_metadata <- file.path(mouse_pipeline_dir, "metadata.csv")
 mouse_params <- fetch_params_metadata(mouse_metadata, 
-                                      resolution = mouse_resolution,
-                                      centroid_method = mouse_centroid_method)
+                                      list(resolution = mouse_resolution,
+                                      centroid_method = mouse_centroid_method))
 mouse_params
 ```
 
 ```{r human-params}
 dataset <- "POND-SickKids"
 # dataset <- "HBN"
-human_resolution <- 3.0
+human_resolution <- 0.8
 human_es_method <- "normative-growth"
-human_es_group <- "controls"
+human_es_group <- "patients"
 human_es_df <- 3
 human_es_ncontrols <- NA
 human_centroid_method <- mouse_centroid_method
@@ -71,12 +71,12 @@ human_centroid_method <- mouse_centroid_method
 #Identify human parameter set ID
 human_metadata <- file.path(human_pipeline_dir, "metadata.csv")
 human_params <- fetch_params_metadata(metadata = human_metadata,
-                                      resolution = human_resolution,
+                                      list(resolution = human_resolution,
                                       es_method = human_es_method,
                                       es_group = human_es_group,
                                       es_df = human_es_df,
                                       es_ncontrols = human_es_ncontrols,
-                                      centroid_method = human_centroid_method)
+                                      centroid_method = human_centroid_method))
 human_params
 ```
 
@@ -85,7 +85,7 @@ human_params
 mouse_params_id <- 107
 
 # Human parameter set ID
-human_params_id <- "577"
+human_params_id <- "700"
 # human_params_id <- "013"
 # human_params_id <- 256
 # human_params_id <- "547"
@@ -136,10 +136,8 @@ mat_human_affinity <- as.matrix(df_human_affinity)
 rownames(mat_human_affinity) <- colnames(mat_human_affinity)
 
 # Mouse affinity matrix
-mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.RData")
-load(mouse_affinity_file)
-mat_mouse_affinity <- W
-df_mouse_affinity <- as_tibble(mat_mouse_affinity)
+mouse_affinity_file <- file.path(mouse_cluster_dir, "affinity.csv")
+df_mouse_affinity <- read_csv(mouse_affinity_file, show_col_types = FALSE)
 ```
 
 # Mouse and human affinity distributions
