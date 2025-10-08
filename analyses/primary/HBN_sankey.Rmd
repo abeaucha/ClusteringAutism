@@ -1,0 +1,215 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-10-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggalluvial)
+```
+
+
+```{r}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+```
+
+
+```{r}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r}
+file <- "../../data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv"
+clusters <- read_csv(file, show_col_types = FALSE)
+
+# Convert cluster information to long format
+df_human_clusters_long <- clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         nk = factor(nk),
+         k = factor(k))
+```
+
+```{r}
+df_similarity_POND_MICe <- compute_similarity_significance(
+  similarity = import_similarity(param_id = "375", 
+                                 pipeline_dir = "../../data/cross_species/v3/"), 
+  permutations = import_similarity_permutations(param_id = "375", 
+                                                pipeline_dir = "../../data/cross_species/v3/")
+)
+
+df_similarity_HBN_MICe <- compute_similarity_significance(
+  similarity = import_similarity(param_id = "861", 
+                                 pipeline_dir = "../../data/cross_species/v3/"), 
+  permutations = import_similarity_permutations(param_id = "861", 
+                                                pipeline_dir = "../../data/cross_species/v3/")
+)
+
+cluster_ids_match_MICe <- df_similarity_HBN_MICe %>% 
+  filter(pval < 0.05) %>% 
+  pull(img1_cluster_id) %>% 
+  unique()
+
+df_similarity_POND_HBN <- compute_similarity_significance(
+  similarity = import_similarity(param_id = "779", 
+                                 pipeline_dir = "../../data/cross_species/v3/"), 
+  permutations = import_similarity_permutations(param_id = "779", 
+                                                pipeline_dir = "../../data/cross_species/v3/")
+)
+
+cluster_ids_match_POND <- df_similarity_POND_HBN %>% 
+  filter(pval < 0.05) %>% 
+  pull(img2_cluster_id) %>% 
+  unique()
+
+cluster_ids_match_POND
+```
+
+
+```{r}
+df_plt <- df_human_clusters_long %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  mutate(MICe_match = cluster_id %in% cluster_ids_match_MICe,
+         POND_match = cluster_id %in% cluster_ids_match_POND,
+         matches = case_when(MICe_match & POND_match ~ "MICe & POND",
+                             MICe_match & !POND_match ~ "MICe only",
+                             !MICe_match & POND_match ~ "POND only",
+                             !MICe_match & !POND_match ~ "None"),
+         matches = factor(matches, levels = c("MICe & POND", "MICe only", "POND only", "None")))
+```
+
+
+
+```{r}
+# Human cluster Sankey plot
+p_human_alluvial <- ggplot(df_plt,
+                           aes(x = nk,
+                               stratum = k,
+                               alluvium = ID,
+                               fill = matches, 
+                               label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 0.5) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+
+p_human_alluvial
+```
+
+
+```{r}
+df_HBN_MICe <- df_similarity_HBN_MICe %>% 
+  select(HBN_cluster_id = img1_cluster_id, MICe_cluster_id = img2_cluster_id, HBN_MICe_p = pval)
+
+df_POND_MICe <- df_similarity_POND_MICe %>% 
+  select(POND_cluster_id = img1_cluster_id, MICe_cluster_id = img2_cluster_id, POND_MICe_p = pval)
+
+df_POND_HBN <- df_similarity_POND_HBN %>% 
+  select(POND_cluster_id = img1_cluster_id, HBN_cluster_id = img2_cluster_id, POND_HBN_p = pval)
+
+df_HBN_MICe
+```
+
+```{r}
+df_POND_MICe
+```
+
+```{r}
+clusters_three_way_1 <- df_HBN_MICe %>%
+  full_join(df_POND_MICe, by = "MICe_cluster_id") %>% 
+  left_join(df_POND_HBN, by = c("HBN_cluster_id", "POND_cluster_id")) %>% 
+  filter(HBN_MICe_p < 0.05 & POND_MICe_p < 0.05 & POND_HBN_p < 0.05) %>% 
+  pull(HBN_cluster_id) %>% 
+  unique() %>% 
+  sort()
+
+clusters_three_way_1
+```
+
+```{r}
+cluster_ids <- df_similarity_HBN_MICe %>% 
+  pull(img1_cluster_id) %>% 
+  unique()
+
+clusters_three_way <- c()
+for (i in 1:length(cluster_ids)) {
+  
+  matching_MICe_cluster_ids <- df_similarity_HBN_MICe %>% 
+    filter(img1_cluster_id == cluster_ids[i]) %>% 
+    filter(pval < 0.05) %>% 
+    pull(img2_cluster_id)
+  
+  matching_POND_cluster_ids <- df_similarity_POND_HBN %>% 
+    filter(img2_cluster_id == cluster_ids[i]) %>% 
+    filter(pval < 0.05) %>% 
+    pull(img1_cluster_id)
+  
+  n_MICe_match <- length(matching_MICe_cluster_ids)
+  n_POND_match <- length(matching_POND_cluster_ids)
+  
+  if (n_MICe_match > 0 & n_POND_match > 0) {
+    
+    n_POND_MICe_match <- df_similarity_POND_MICe %>% 
+      filter(img1_cluster_id %in% matching_POND_cluster_ids,
+             img2_cluster_id %in% matching_MICe_cluster_ids) %>% 
+      filter(pval < 0.05) %>% 
+      nrow()
+    
+    if (n_POND_MICe_match > 0) {
+      clusters_three_way <- c(clusters_three_way, cluster_ids[i])
+    }
+  }
+}
+
+clusters_three_way <- sort(clusters_three_way)
+```
+
+
+```{r}
+clusters_three_way_1 == clusters_three_way
+```
+
+```{r}
+df_plt_2 <- df_plt %>% 
+  mutate(three_way_match = cluster_id %in% clusters_three_way)
+```
+
+
+```{r}
+# Human cluster Sankey plot
+p_human_alluvial <- ggplot(df_plt_2,
+                           aes(x = nk,
+                               stratum = k,
+                               alluvium = ID,
+                               fill = three_way_match,
+                               label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward") + 
+  geom_stratum(alpha = 1.0) + 
+  scale_fill_manual(values = c("grey50", "red")) + 
+  labs(x = "Number of clusters",
+       y = "Number of patients") + 
+  theme_bw() + 
+  theme(panel.grid.major.x = element_blank())
+
+# Export plot
+outfile <- "HBN_sankey.pdf"
+# outfile <- file.path(output_dir, outfile)
+pdf(file = outfile, 
+    width = unit(10, "in"),
+    height = unit(5, "in"))
+print(p_human_alluvial)
+dev.off()
+```
+
+
