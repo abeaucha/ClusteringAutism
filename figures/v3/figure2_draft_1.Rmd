@@ -285,7 +285,7 @@ mouse_mask <- mincGetVolume(mouse_mask_file)
 
 
 ```{r}
-nk_mouse <- c(2, 5, 10)
+nk_mouse <- c(2, 6, 10)
 
 # Iterate over cluster solutions
 list_mouse_centroids <- vector(mode = "list", length = length(nk_mouse))
@@ -311,6 +311,52 @@ for (nk in nk_mouse) {
 ```
 
 ```{r}
+# Total figure dimensions in pts
+fig_width <- 612
+fig_height <- 792
+
+# Figure border dimensions in pts
+fig_border_padding_width <- 4
+fig_border_padding_height <- fig_border_padding_width
+
+# Vertical padding between panels
+panel_padding_height <- 50
+
+# Total width and height of all panels, excluding padding
+panel_tot_width <- fig_width - 2*border_padding_width
+panel_tot_height <- fig_height - 2*border_padding_height - 2*panel_padding_height
+
+# Individual panel height
+panel_height <- panel_tot_height/3
+
+```
+
+
+```{r}
+# Layout for mouse neuro panel
+mouse_neuro_layout <- rbind(c(1, NA, 2, NA, 3))
+
+# Padding between mouse neuro panels
+mouse_neuro_padding_width <- 10
+
+# Total width of neuro panels, excluding padding
+mouse_neuro_tot_width <- fig_width - 2*fig_border_padding_width - 2*mouse_neuro_padding_width
+
+# Mouse neuro widths
+mouse_neuro_widths <- c(0.2*mouse_neuro_tot_width, 
+                        mouse_neuro_padding_width,
+                        0.3*mouse_neuro_tot_width, 
+                        mouse_neuro_padding_width, 
+                        0.5*mouse_neuro_tot_width)
+
+# Mouse neuro height
+mouse_neuro_height <- panel_height
+```
+
+```{r}
+overlay_low <- 0.19
+overlay_high <- 1.0
+
 # Mouse anatomy thresholds
 mouse_anat_low <- 800
 mouse_anat_high <- 2000
@@ -318,62 +364,110 @@ mouse_anat_high <- 2000
 ss_nslices <- 6
 mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
 
-ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+mouse_nk2_neuro_ss_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
   anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
   overlay(list_mouse_centroids[["2"]][[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   sliceSeries() %>% anatomy() %>% 
   overlay(list_mouse_centroids[["2"]][[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   grobify()
 
-width_pt <- 133
-height_pt <- 268
+mouse_nk2_neuro_title_grob <- gTree(
+  children = gList(rectGrob(gp = gpar(fill = "black")),
+                   textGrob(c("2-1", "2-2"), 
+                            x = c(0.25, 0.75),
+                            gp = gpar(col = "white")))
+)
 
-width_in <- width_pt/72
-height_in <- height_pt/72
+# Mouse neuro layout for nk = 2
+mouse_nk2_neuro_layout <- rbind(1, NA, 2)
 
-outfile <- "mouse_anat_nk_2.pdf"
-outfile <- paste(outfile_prefix, outfile, sep = "_")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-grid.draw(ssgrob)
-dev.off()
+#
+mouse_nk2_neuro_padding_height <- 2
+mouse_nk2_neuro_title_height <- 20
+mouse_nk2_neuro_ss_height <- mouse_neuro_height - mouse_nk2_neuro_title_height - mouse_nk2_neuro_padding_height
+
+mouse_nk2_neuro_widths <- 0.2*mouse_neuro_tot_width
+mouse_nk2_neuro_heights <- c(mouse_nk2_neuro_title_height, mouse_nk2_neuro_padding_height, mouse_nk2_neuro_ss_height)
+
+
+mouse_nk2_neuro_grob <- arrangeGrob(mouse_nk2_neuro_title_grob,
+                                    mouse_nk2_neuro_ss_grob,
+                                    layout_matrix = mouse_nk2_neuro_layout,
+                                    widths = unit(mouse_nk2_neuro_widths, units = "bigpts"),
+                                    heights = unit(mouse_nk2_neuro_heights, units = "bigpts"))
+
+mouse_nk2_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
+                                               mouse_nk2_neuro_grob))
 ```
+
+
 
 ```{r}
-ss_nslices <- 6
+ss_nslices <- 3
 mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
 
-ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+mouse_nk6_neuro_ss_grob_1 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
   anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-  overlay(list_mouse_centroids[["5"]][[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  overlay(list_mouse_centroids[["6"]][[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[["5"]][[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  overlay(list_mouse_centroids[["6"]][[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[["5"]][[3]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[["5"]][[4]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[["5"]][[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  overlay(list_mouse_centroids[["6"]][[3]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   grobify()
 
-width_pt <- 232
-height_pt <- 268
+mouse_nk6_neuro_ss_grob_2 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+  overlay(list_mouse_centroids[["6"]][[4]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["6"]][[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  sliceSeries() %>% anatomy() %>% 
+  overlay(list_mouse_centroids[["6"]][[6]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
+  grobify()
 
-width_in <- width_pt/72
-height_in <- height_pt/72
+mouse_nk6_neuro_title_grob_1 <- gTree(
+  children = gList(rectGrob(gp = gpar(fill = "black")),
+                   textGrob(c("6-1", "6-2", "6-3"), 
+                            x = c(0.25, 0.5, 0.75),
+                            gp = gpar(col = "white")))
+)
 
-outfile <- "mouse_anat_nk_5.pdf"
-outfile <- paste(outfile_prefix, outfile, sep = "_")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-grid.draw(ssgrob)
-dev.off()
+mouse_nk6_neuro_title_grob_2 <- gTree(
+  children = gList(rectGrob(gp = gpar(fill = "black")),
+                   textGrob(c("6-4", "6-5", "6-6"), 
+                            x = c(0.25, 0.5, 0.75),
+                            gp = gpar(col = "white")))
+)
+
+# Mouse neuro layout for nk = 2
+mouse_nk6_neuro_layout <- rbind(1, NA, 2, NA, 3, NA, 4)
+
+#
+mouse_nk6_neuro_padding_height <- mouse_nk2_neuro_padding_height
+mouse_nk6_neuro_padding_height_2 <- 2*mouse_nk6_neuro_padding_height
+mouse_nk6_neuro_title_height <- mouse_nk2_neuro_title_height
+mouse_nk6_neuro_ss_height <- mouse_neuro_height - 2*mouse_nk2_neuro_title_height - 2*mouse_nk2_neuro_padding_height - mouse_nk6_neuro_padding_height_2
+mouse_nk6_neuro_ss_height <- mouse_nk6_neuro_ss_height/2
+
+mouse_nk6_neuro_widths <- 0.3*mouse_neuro_tot_width
+mouse_nk6_neuro_heights <- c(mouse_nk6_neuro_title_height, 
+                             mouse_nk6_neuro_padding_height, 
+                             mouse_nk6_neuro_ss_height, 
+                             mouse_nk6_neuro_padding_height_2, 
+                             mouse_nk6_neuro_title_height,
+                             mouse_nk6_neuro_padding_height, 
+                             mouse_nk6_neuro_ss_height)
+
+mouse_nk6_neuro_grob <- arrangeGrob(mouse_nk6_neuro_title_grob_1,
+                                    mouse_nk6_neuro_ss_grob_1,
+                                    mouse_nk6_neuro_title_grob_2,
+                                    mouse_nk6_neuro_ss_grob_2,
+                                    layout_matrix = mouse_nk6_neuro_layout,
+                                    widths = unit(mouse_nk6_neuro_widths, units = "bigpts"),
+                                    heights = unit(mouse_nk6_neuro_heights, units = "bigpts"))
+
+# mouse_nk6_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
+#                                                mouse_nk6_neuro_grob))
 ```
-
 
 ```{r}
 overlay_low <- 0.1
@@ -382,7 +476,7 @@ overlay_high <- 1
 ss_nslices <- 3
 mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
 
-ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+mouse_nk10_neuro_ss_grob_1 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
   anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
   overlay(list_mouse_centroids[["10"]][[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   sliceSeries() %>% anatomy() %>% 
@@ -395,24 +489,7 @@ ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>%
   overlay(list_mouse_centroids[["10"]][[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   grobify()
 
-width_pt <- 232
-height_pt <- 268/2
-
-width_in <- width_pt/72
-height_in <- height_pt/72
-
-outfile <- "mouse_anat_nk_10_row_1.pdf"
-outfile <- paste(outfile_prefix, outfile, sep = "_")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-grid.draw(ssgrob)
-dev.off()
-```
-
-```{r}
-ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
+mouse_nk10_neuro_ss_grob_2 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
   anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
   overlay(list_mouse_centroids[["10"]][[6]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   sliceSeries() %>% anatomy() %>% 
@@ -425,21 +502,121 @@ ssgrob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>%
   overlay(list_mouse_centroids[["10"]][[10]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
   grobify()
 
-width_pt <- 232
-height_pt <- 268/2
 
-width_in <- width_pt/72
-height_in <- height_pt/72
+mouse_nk10_neuro_title_grob_1 <- gTree(
+  children = gList(rectGrob(gp = gpar(fill = "black")),
+                   textGrob(c("10-1", "10-2", "10-3", "10-4", "10-5"), 
+                            x = seq(0, 1, length.out = 7)[c(-1, -7)],
+                            gp = gpar(col = "white")))
+)
 
-outfile <- "mouse_anat_nk_10_row_2.pdf"
-outfile <- paste(outfile_prefix, outfile, sep = "_")
+mouse_nk10_neuro_title_grob_2 <- gTree(
+  children = gList(rectGrob(gp = gpar(fill = "black")),
+                   textGrob(c("10-6", "10-7", "10-8", "10-9", "10-10"), 
+                            x = seq(0, 1, length.out = 7)[c(-1, -7)],
+                            gp = gpar(col = "white")))
+)
+
+# Mouse neuro layout for nk = 2
+mouse_nk10_neuro_layout <- rbind(1, NA, 2, NA, 3, NA, 4)
+
+#
+mouse_nk10_neuro_padding_height <- mouse_nk6_neuro_padding_height
+mouse_nk10_neuro_padding_height_2 <- 2*mouse_nk10_neuro_padding_height
+mouse_nk10_neuro_title_height <- mouse_nk2_neuro_title_height
+mouse_nk10_neuro_ss_height <- mouse_neuro_height - 2*mouse_nk2_neuro_title_height - 2*mouse_nk2_neuro_padding_height - mouse_nk10_neuro_padding_height_2
+mouse_nk10_neuro_ss_height <- mouse_nk10_neuro_ss_height/2
+
+mouse_nk10_neuro_widths <- 0.5*mouse_neuro_tot_width
+mouse_nk10_neuro_heights <- c(mouse_nk10_neuro_title_height, 
+                             mouse_nk10_neuro_padding_height, 
+                             mouse_nk10_neuro_ss_height, 
+                             mouse_nk10_neuro_padding_height_2, 
+                             mouse_nk10_neuro_title_height,
+                             mouse_nk10_neuro_padding_height, 
+                             mouse_nk10_neuro_ss_height)
+
+mouse_nk10_neuro_grob <- arrangeGrob(mouse_nk10_neuro_title_grob_1,
+                                    mouse_nk10_neuro_ss_grob_1,
+                                    mouse_nk10_neuro_title_grob_2,
+                                    mouse_nk10_neuro_ss_grob_2,
+                                    layout_matrix = mouse_nk10_neuro_layout,
+                                    widths = unit(mouse_nk10_neuro_widths, units = "bigpts"),
+                                    heights = unit(mouse_nk10_neuro_heights, units = "bigpts"))
+
+# mouse_nk10_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
+#                                                mouse_nk10_neuro_grob))
+```
+
+```{r}
+mouse_neuro_grob <- arrangeGrob(mouse_nk2_neuro_grob,
+                                mouse_nk6_neuro_grob,
+                                mouse_nk10_neuro_grob,
+                                layout_matrix = mouse_neuro_layout, 
+                                widths = unit(mouse_neuro_widths, units = "bigpts"),
+                                heights = unit(mouse_neuro_heights, units = "bigpts"))
+
+fig_widths <- c(fig_border_padding_width, panel_tot_width, fig_border_padding_width)
+fig_heights <- c(border_padding_height, panel_height, panel_padding_height, panel_height, panel_padding_height, panel_height, border_padding_height)
+
+fig_layout <- rbind(c(NA, NA, NA),
+                    c(NA,  1, NA),
+                    c(NA, NA, NA),
+                    c(NA,  2, NA),
+                    c(NA, NA, NA),
+                    c(NA,  3, NA),
+                    c(NA, NA, NA))
+
+fig_grob <- arrangeGrob(
+  mouse_neuro_grob,
+  matches_grob,
+  rectGrob(), #
+  layout_matrix = fig_layout,
+  widths = unit(fig_widths, "bigpts"),
+  heights = unit(fig_heights, "bigpts")
+)
+
+fig_width_pt <- sum(fig_widths)
+fig_height_pt <- sum(fig_heights)
+
+fig_width_in <- fig_width_pt/72
+fig_height_in <- fig_height_pt/72
+
+outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
-    width = unit(width_in, "in"),
-    height = unit(height_in, "in"))
-grid.draw(ssgrob)
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
 dev.off()
 ```
+
+```{r}
+mouse_neuro_padding_width <- 10
+
+mouse_neuro_tot_width <- fig_width - 2*fig_border_padding_width - 2*mouse_neuro_padding_width
+
+
+mouse_neuro_layout <- rbind(c(1, NA, 2, NA, 3))
+
+mouse_neuro_widths <- c(0.2*mouse_neuro_tot_width, 
+                        mouse_neuro_padding_width,
+                        0.3*mouse_neuro_tot_width, 
+                        mouse_neuro_padding_width, 
+                        0.5*mouse_neuro_tot_width)
+
+mouse_neuro_heights <- panel_height
+
+mouse_neuro_grob <- arrangeGrob(mouse_ss_grob_nk2,
+                                rectGrob(gp = gpar(fill = "black")),
+                                rectGrob(gp = gpar(fill = "black")),
+                                layout_matrix = mouse_neuro_layout, 
+                                widths = unit(mouse_neuro_widths, units = "bigpts"),
+                                heights = unit(mouse_neuro_heights, units = "bigpts"))
+
+grid.draw(mouse_neuro_grob)
+```
+
 
 
 # Figure
@@ -448,31 +625,30 @@ dev.off()
 fig_width <- 612
 fig_height <- 792
 
-fig_widths <- 612
-fig_heights <- rep(792/3, 3)
+fig_border_padding_width <- 4
+fig_border_padding_height <- fig_border_padding_width
+
+panel_padding_height <- 50
+
+panel_tot_height <- fig_height - 2*border_padding_height - 2*panel_padding_height
+panel_height <- panel_tot_height/3
+
+panel_tot_width <- fig_width - 2*border_padding_height
+
+fig_widths <- c(fig_border_padding_width, panel_tot_width, fig_border_padding_width)
+fig_heights <- c(border_padding_height, panel_height, panel_padding_height, panel_height, panel_padding_height, panel_height, border_padding_height)
 
 fig_layout <- rbind(c(NA, NA, NA),
-                    c())
+                    c(NA,  1, NA),
+                    c(NA, NA, NA),
+                    c(NA,  2, NA),
+                    c(NA, NA, NA),
+                    c(NA,  3, NA),
+                    c(NA, NA, NA))
 
 fig_grob <- arrangeGrob(
-  rectGrob(), #1
-  rectGrob(), #2
-  rectGrob(), # ss 
-  rectGrob(), #4
-  rectGrob(), # ss 
-  rectGrob(), #6
-  rectGrob(), # ss 
-  rectGrob(), #8
-  rectGrob(), #
-  rectGrob(), #
-  rectGrob(), #
-  rectGrob(), #
-  rectGrob(), #
-  rectGrob(), #
-  rectGrob(), #
-  rectGrob(), #
-  rectGrob(), #
-  rectGrob(), #
+  mouse_neuro_grob,
+  matches_grob,
   rectGrob(), #
   layout_matrix = fig_layout,
   widths = unit(fig_widths, "bigpts"),
