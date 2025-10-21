@@ -140,6 +140,54 @@ df_cluster_coords <- tibble(nk = 2:10,
 
 
 ```{r}
+list_nk10 <- vector(mode = "list", length = 8)
+for (nk in 2:9) {
+cols <- paste0("nk", c(nk, 10))
+mouse_clusters_nk <- mouse_clusters[,cols]
+colnames(mouse_clusters_nk) <- c("k", "nk10")
+list_nk10[[nk-1]] <- mouse_clusters_nk %>% 
+  mutate(cluster_id = paste0(nk, "-", k)) %>% 
+  group_by(cluster_id, nk10) %>% 
+  summarise(n_in_10 = n(), .groups = "drop") %>% 
+  left_join(df_mouse_cluster_counts, by = "cluster_id") %>% 
+  mutate(prop_in_10 = n_in_10/n)
+}
+
+df_nk10 <- bind_rows(list_nk10)
+```
+
+```{r}
+tmp <- df_cluster_coords %>% 
+    select(cluster_id, nk, k, x) %>% 
+  left_join(df_nk10, by = "cluster_id") 
+
+ggplot(tmp, aes(x = x, y = n_in_10, fill = factor(nk10))) + 
+  geom_col() +
+  theme_bw()
+```
+
+
+```{r}
+h_max <- 0.5
+
+coords_9 <- df_cluster_coords %>% 
+  filter(nk == 9) %>% 
+  select(cluster_id, nk, k, x) %>% 
+  left_join(tmp, by = "cluster_id") %>% 
+  mutate(xmin = x-w/2, xmax = x+w/2,
+         y = 1, ymin = y, h_tot = ymin + n*(h_max/max(n)))
+  
+ggplot(coords_9, aes(x = x, y = n_in_10, fill = factor(nk10))) + 
+  geom_col()
+```
+
+
+```{r}
+coords_9
+```
+
+
+```{r}
 w <- 0.8
 h <- 0.5
 
@@ -165,7 +213,11 @@ df_cluster_coords_mouse <- df_cluster_coords %>%
 
 df_cluster_bars <- bind_rows(df_cluster_coords_human,
                               df_cluster_coords_mouse)
+```
 
+
+
+```{r}
 df_segments <- df_matches %>% 
   filter(match) %>% 
   select(-match) %>% 
