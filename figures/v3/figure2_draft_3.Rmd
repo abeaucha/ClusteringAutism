@@ -4,11 +4,17 @@ output: html_document
 date: "2025-10-08"
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
 # Initialization
 
 ```{r}
 library(tidyverse)
 library(RMINC)
+library(ggalluvial)
 library(MRIcrotome)
 library(grid)
 library(gridExtra)
@@ -27,8 +33,8 @@ source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r}
-output_dir <- file.path("outputs", "figure2_draft_1")
-outfile_prefix <- "figure2_draft_1"
+output_dir <- file.path("outputs", "figure2_draft_3")
+outfile_prefix <- "figure2_draft_3"
 ```
 
 ```{r}
@@ -62,298 +68,79 @@ mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids", "resolution_0.0
 ```
 
 
-# Mouse-human cluster correspondence
+```{r}
+# Total figure dimensions in pts
+fig_width <- 612
+fig_height <- 792
+
+# Figure border dimensions in pts
+border_padding_width <- 4
+border_padding_height <- border_padding_width
+
+# Vertical padding between panels
+# panel_padding_height <- 50
+panel_padding_height <- border_padding_height
+
+# Total width and height of all panels, excluding padding
+panel_tot_width <- fig_width - 2*border_padding_width
+panel_tot_height <- fig_height - 2*border_padding_height - 2*panel_padding_height
+
+# Individual panel height
+panel_height <- panel_tot_height/3
+```
+
+
+# Mouse Sankey
+
 
 ```{r}
 mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
-mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
 
-df_mouse_cluster_counts <- mouse_clusters %>% 
+# Convert cluster information to long format
+df_mouse_clusters_long <- df_mouse_clusters %>% 
   pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
-  select(-nk_name) %>% 
-  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
-  group_by(cluster_id) %>% 
-  count() %>% 
-  ungroup()
-```
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk)) %>% 
+  filter(nk %in% c(2, 6, 10)) %>% 
+  left_join(df_mouse_clusters %>% 
+              select(ID, nk10), by = "ID")
 
-```{r}
-human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
-human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
+df_mouse_sankey <- df_mouse_clusters_long %>% 
+  mutate(nk = factor(nk), k = factor(k), nk10 = factor(nk10))
 
-df_human_cluster_counts <- human_clusters %>% 
-  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
-  select(-nk_name) %>% 
-  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
-  group_by(cluster_id) %>% 
-  count() %>% 
-  ungroup()
-```
+stratum_width <- 0.4
 
-```{r}
-df_similarity <- compute_similarity_significance(
-  similarity = import_similarity(param_id = params_id, 
-                                 pipeline_dir = pipeline_dir), 
-  permutations = import_similarity_permutations(param_id = params_id, 
-                                                pipeline_dir = pipeline_dir)
-  )
+# Mouse cluster Sankey plot
+plt_mouse_sankey <- ggplot(df_mouse_sankey,
+                           aes(x = nk,
+                               stratum = k,
+                               alluvium = ID,
+                               fill = nk10,
+                               label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward", width = stratum_width) + 
+  geom_stratum(alpha = 1, width = stratum_width, fill = "white") +
+  # scale_x_discrete(position = "top") + 
+  scale_x_discrete(position = "top", expand = expansion(add = c(stratum_width/2+0.020, stratum_width/2+0.005))) +
+  # scale_x_discrete(position = "top", expand = expansion(mult = c(0.0, 0.0))) +
+  scale_y_continuous(breaks = c(seq(0, 130, by = 20), nrow(mouse_clusters))) + 
+  labs(x = "K",
+       y = "Number of models") + 
+  # theme_void() + 
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        panel.border = element_blank(),
+        axis.line.y.left = element_line(colour = "grey50"),
+        panel.ontop = FALSE)
 
-colnames(df_similarity) <- colnames(df_similarity) %>% 
-  str_replace("img1", "human") %>% 
-  str_replace("img2", "mouse")
+mouse_sankey_grob <- ggplotGrob(plt_mouse_sankey)
 
-cluster_ids <- df_similarity %>% 
-  select(human_cluster_id, human_nk, human_k) %>% 
-  arrange(human_nk, human_k) %>% 
-  distinct() %>% 
-  pull(human_cluster_id)
-
-df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
-                               mouse_cluster_id = cluster_ids) 
-
-df_matches <- df_similarity %>% 
-  mutate(match = pval < 0.05) %>% 
-  select(human_cluster_id, mouse_cluster_id, match, similarity, pval) %>% 
-  right_join(df_cluster_grid) %>% 
-  mutate(match = ifelse(is.na(match), FALSE, match))
+plt_mouse_sankey
 ```
 
 
-
-
-```{r}
-df_cluster_coords <- tibble(cluster_id = cluster_ids) %>% 
-  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
-  mutate(nk = as.numeric(nk), k = as.numeric(k),
-         x = 1:nrow(.))
-
-x_gap <- 1
-
-df_cluster_coords <- tibble(nk = 2:10, 
-                            gap = x_gap*0:8) %>% 
-  right_join(df_cluster_coords, by = "nk") %>% 
-  mutate(x = x + gap)
-```
-
-
-
-```{r}
-list_nk10 <- vector(mode = "list", length = 8)
-for (nk in 2:9) {
-cols <- paste0("nk", c(nk, 10))
-mouse_clusters_nk <- mouse_clusters[,cols]
-colnames(mouse_clusters_nk) <- c("k", "nk10")
-list_nk10[[nk-1]] <- mouse_clusters_nk %>% 
-  mutate(cluster_id = paste0(nk, "-", k)) %>% 
-  group_by(cluster_id, nk10) %>% 
-  summarise(n_in_10 = n(), .groups = "drop") %>% 
-  left_join(df_mouse_cluster_counts, by = "cluster_id") %>% 
-  mutate(prop_in_10 = n_in_10/n)
-}
-
-df_nk10 <- bind_rows(list_nk10)
-```
-
-```{r}
-tmp <- df_cluster_coords %>% 
-    select(cluster_id, nk, k, x) %>% 
-  left_join(df_nk10, by = "cluster_id") 
-
-ggplot(tmp, aes(x = x, y = n_in_10, fill = factor(nk10))) + 
-  geom_col() +
-  theme_bw()
-```
-
-
-```{r}
-h_max <- 0.5
-
-coords_9 <- df_cluster_coords %>% 
-  filter(nk == 9) %>% 
-  select(cluster_id, nk, k, x) %>% 
-  left_join(tmp, by = "cluster_id") %>% 
-  mutate(xmin = x-w/2, xmax = x+w/2,
-         y = 1, ymin = y, h_tot = ymin + n*(h_max/max(n)))
-  
-ggplot(coords_9, aes(x = x, y = n_in_10, fill = factor(nk10))) + 
-  geom_col()
-```
-
-
-```{r}
-coords_9
-```
-
-
-```{r}
-w <- 0.8
-h <- 0.5
-
-df_cluster_coords_human <- df_cluster_coords %>% 
-  select(cluster_id, nk, k, x) %>% 
-  left_join(df_human_cluster_counts, by = "cluster_id") %>% 
-  mutate(xmin = x-w/2, xmax = x+w/2,
-         y = 0, ymin = y, ymax = ymin - n*(h/max(n)))
-
-# df_cluster_coords_human <- df_cluster_coords %>% 
-#   select(cluster_id, x) %>% 
-#   mutate(y = 0, ymin = y, ymax = ymin-h)
-
-df_cluster_coords_mouse <- df_cluster_coords %>% 
-  select(cluster_id, nk, k, x) %>% 
-  left_join(df_mouse_cluster_counts, by = "cluster_id") %>% 
-  mutate(xmin = x-w/2, xmax = x+w/2,
-         y = 1, ymin = y, ymax = ymin + n*(h/max(n)))
-
-# df_cluster_coords_mouse <- df_cluster_coords %>% 
-#   select(cluster_id, x) %>% 
-#   mutate(y = 1, ymin = y, ymax = ymin+h)
-
-df_cluster_bars <- bind_rows(df_cluster_coords_human,
-                              df_cluster_coords_mouse)
-```
-
-
-
-```{r}
-df_segments <- df_matches %>% 
-  filter(match) %>% 
-  select(-match) %>% 
-  left_join(df_cluster_coords_human %>% 
-              select(cluster_id, x, y),
-            by = c("human_cluster_id" = "cluster_id")) %>% 
-  left_join(df_cluster_coords_mouse %>% 
-              select(cluster_id, xend = x, yend = y),
-            by = c("mouse_cluster_id" = "cluster_id"))
-
-
-h_block <- 0.3
-
-df_cluster_blocks_human <- df_cluster_coords_human %>% 
-    group_by(nk) %>% 
-  mutate(xmin = min(xmin),
-         xmax = max(xmax)) %>% 
-  ungroup() %>% 
-  select(nk, xmin, xmax, ymin) %>% 
-  mutate(ymax = ymin - h - h_block,
-         xmin = xmin - 0.3*x_gap,
-         xmax = xmax + 0.3*x_gap) %>% 
-  distinct()
-
-df_cluster_labels_human <- df_cluster_blocks_human %>%
-  mutate(label = paste0("K = ", nk),
-         x = (xmin + xmax)/2,
-         y = ymax + 0.1,
-         ymin = y + 0.1) 
-
-df_cluster_blocks_mouse <- df_cluster_coords_mouse %>% 
-    group_by(nk) %>% 
-  mutate(xmin = min(xmin),
-         xmax = max(xmax)) %>% 
-  ungroup() %>% 
-  select(nk, xmin, xmax, ymin) %>% 
-  mutate(ymax = ymin + h + h_block,
-         xmin = xmin - 0.3*x_gap,
-         xmax = xmax + 0.3*x_gap) %>% 
-  distinct()
-
-df_cluster_labels_mouse <- df_cluster_blocks_mouse %>%
-  mutate(label = paste0("K = ", nk),
-         x = (xmin + xmax)/2,
-         y = ymax - 0.1,
-         ymin = y - 0.1) 
-
-
-df_cluster_blocks <- bind_rows(df_cluster_blocks_human, df_cluster_blocks_mouse)
-
-df_cluster_labels <- bind_rows(df_cluster_labels_human, df_cluster_labels_mouse)
-
-plt <- ggplot(df_segments, aes(x = x, y = y)) + 
-  geom_segment(aes(xend = xend, yend = yend, colour = pval), alpha = 1.0) +
-  geom_rect(data = df_cluster_blocks, 
-            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            inherit.aes = FALSE,
-            alpha = 0.2) +
-  geom_rect(data = df_cluster_labels, 
-            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            inherit.aes = FALSE,
-            fill = "white",
-            col = "black",
-            linewidth = 0.3) + 
-  geom_text(data = df_cluster_labels,
-            mapping = aes(x = x, y = y, label = label), 
-            inherit.aes = FALSE, 
-            size = 3) + 
-  geom_rect(data = df_cluster_bars, 
-            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-            inherit.aes = FALSE) + 
-  scale_x_continuous(expand = expansion()) + 
-  scale_y_continuous(expand = expansion()) + 
-  # scale_color_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[c(1:4, 8)])) +
-  scale_color_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[3:9])) +
-  theme_bw()
-
-plt <- plt +
-theme(axis.title = element_blank(),
-      axis.text = element_blank(),
-      axis.ticks = element_blank())
-
-plt <- plt + theme_void()
-
-outfile <- "mouse_human_matches.pdf"
-outfile <- paste(outfile_prefix, outfile, sep = "_")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(8.5, "in"),
-    height = unit(3, "in"))
-print(plt)
-dev.off()
-
-```
-
-
-
-```{r}
-matches_grob <- ggplotGrob(plt)
-```
-
-```{r}
-fig_widths <- c(border_padding_width, panel_tot_width, border_padding_width)
-fig_heights <- c(border_padding_height, panel_height, panel_padding_height, panel_height, panel_padding_height, panel_height, border_padding_height)
-
-fig_layout <- rbind(c(NA, NA, NA),
-                    c(NA,  1, NA),
-                    c(NA, NA, NA),
-                    c(NA,  2, NA),
-                    c(NA, NA, NA),
-                    c(NA,  3, NA),
-                    c(NA, NA, NA))
-
-fig_grob <- arrangeGrob(
-  mouse_neuro_grob,
-  matches_grob,
-  human_neuro_grob, #
-  layout_matrix = fig_layout,
-  widths = unit(fig_widths, "bigpts"),
-  heights = unit(fig_heights, "bigpts")
-)
-
-fig_width_pt <- sum(fig_widths)
-fig_height_pt <- sum(fig_heights)
-
-fig_width_in <- fig_width_pt/72
-fig_height_in <- fig_height_pt/72
-
-outfile <- paste0(outfile_prefix, ".pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig_width_in, "in"),
-    height = unit(fig_height_in, "in"))
-grid.draw(fig_grob)
-dev.off()
-```
 
 
 # Mouse slices
@@ -393,299 +180,138 @@ overlay_low <- 0.19
 overlay_high <- 1.0
 
 # Mouse anatomy thresholds
-mouse_anat_low <- 800
-mouse_anat_high <- 2000
-```
+mouse_anat_low <- 700
+mouse_anat_high <- 1400
 
-```{r}
-# HIGH LEVEL FIG PARAMS
-
-# Total figure dimensions in pts
-fig_width <- 612
-fig_height <- 792
-
-# Figure border dimensions in pts
-border_padding_width <- 4
-border_padding_height <- border_padding_width
-
-# Vertical padding between panels
-panel_padding_height <- 50
-
-# Total width and height of all panels, excluding padding
-panel_tot_width <- fig_width - 2*border_padding_width
-panel_tot_height <- fig_height - 2*border_padding_height - 2*panel_padding_height
-
-# Individual panel height
-panel_height <- panel_tot_height/3
-
+mouse_slc_dim <- 1
+mouse_slc <- 92
 ```
 
 
 ```{r}
-# Layout for mouse neuro panel
-mouse_neuro_layout <- rbind(c(1, NA, 2, NA, 3))
+nk_seq <- c(2, 6, 10)
 
-# Padding between mouse neuro panels
-mouse_neuro_padding_width <- 10
-
-# Total width of neuro panels, excluding padding
-mouse_neuro_tot_width <- fig_width - 2*border_padding_width - 2*mouse_neuro_padding_width
-
-# Mouse neuro widths
-mouse_neuro_widths <- c(0.2*mouse_neuro_tot_width,
-                        mouse_neuro_padding_width,
-                        0.3*mouse_neuro_tot_width,
-                        mouse_neuro_padding_width,
-                        0.5*mouse_neuro_tot_width)
-
-# Mouse neuro height
-mouse_neuro_height <- panel_height
+list_mouse_slc_vps <- list(
+  "2" = list(x = rep(0.15, 2),
+             y = c(0.65, 0.25),
+             w = rep(0.1, 2),
+             h = rep(0.1, 2)),
+  "6" = list(x = rep(0.55, 6),
+             y = seq(0.1, 0.8, length.out = 6),
+             w = rep(0.1, 6),
+             h = rep(0.1, 6)),
+  "10" = list(x = rep(0.9, 10),
+              y = seq(0.1, 0.8, length.out = 10),
+              w = rep(0.1, 10),
+              h = rep(0.1, 10))
+)
 ```
 
 ```{r}
-nk_mouse <- 2
-list_mouse_centroids <- vector(mode = "list", length = nk_mouse)
-for (k in 1:nk_mouse) {
+list_mouse_slices <- vector(mode = "list", length = length(nk_seq))
+names(list_mouse_slices) <- nk_seq
+for (i in 1:length(list_mouse_slices)) {
   
-  # Import centroid
-  img <- import_cluster_map(imgdir = mouse_centroid_dir,
-                            mask = mouse_mask_file,
-                            nk = nk_mouse, k = k, 
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  list_mouse_centroids[[k]] <- mincArray(img)
-  
+  nki <- nk_seq[i]
+  list_mouse_slices[[i]] <- vector(mode = "list", length = nki)
+  for (k in 1:nki) {
+    
+    img <- import_cluster_map(imgdir = mouse_centroid_dir,
+                              mask = mouse_mask_file,
+                              nk = nki, k = k, 
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    img <- mincArray(img)
+    
+    img_grob <- sliceSeries(nrow = 1, ncol = 1, 
+                            dimension = mouse_slc_dim, 
+                            slices = mouse_slc) %>% 
+      anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], high = overlay_threshold[2], 
+              symmetric = TRUE) %>% 
+      grobify()
+    
+    img_grob$vp <- viewport(x = list_mouse_slc_vps[[i]][["x"]][[k]], 
+                            y = list_mouse_slc_vps[[i]][["y"]][[k]], 
+                            width = list_mouse_slc_vps[[i]][["w"]][[k]], 
+                            height = list_mouse_slc_vps[[i]][["h"]][[k]])
+    
+    list_mouse_slices[[i]][[k]] <- img_grob
+    
+  }
 }
 
-
-ss_nslices <- 6
-mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
-
-mouse_nk2_neuro_ss_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-  overlay(list_mouse_centroids[[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
-
-mouse_nk2_neuro_title_grob <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("2-1", "2-2"), 
-                            x = c(0.25, 0.75),
-                            gp = gpar(col = "white")))
-)
-
-# Mouse neuro layout for nk = 2
-mouse_nk2_neuro_layout <- rbind(1, NA, 2)
-
-#
-mouse_nk2_neuro_padding_height <- 2
-mouse_nk2_neuro_title_height <- 20
-mouse_nk2_neuro_ss_height <- mouse_neuro_height - mouse_nk2_neuro_title_height - mouse_nk2_neuro_padding_height
-
-mouse_nk2_neuro_widths <- 0.2*mouse_neuro_tot_width
-mouse_nk2_neuro_heights <- c(mouse_nk2_neuro_title_height, mouse_nk2_neuro_padding_height, mouse_nk2_neuro_ss_height)
-
-
-mouse_nk2_neuro_grob <- arrangeGrob(mouse_nk2_neuro_title_grob,
-                                    mouse_nk2_neuro_ss_grob,
-                                    layout_matrix = mouse_nk2_neuro_layout,
-                                    widths = unit(mouse_nk2_neuro_widths, units = "bigpts"),
-                                    heights = unit(mouse_nk2_neuro_heights, units = "bigpts"))
-
-mouse_nk2_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
-                                               mouse_nk2_neuro_grob))
 ```
 
 
 
-```{r}
-nk_mouse <- 6
-list_mouse_centroids <- vector(mode = "list", length = nk_mouse)
-for (k in 1:nk_mouse) {
-  
-  # Import centroid
-  img <- import_cluster_map(imgdir = mouse_centroid_dir,
-                            mask = mouse_mask_file,
-                            nk = nk_mouse, k = k, 
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  list_mouse_centroids[[k]] <- mincArray(img)
-  
-}
 
-ss_nslices <- 3
-mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
 
-mouse_nk6_neuro_ss_grob_1 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-  overlay(list_mouse_centroids[[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[3]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
+# Human Sankey
 
-mouse_nk6_neuro_ss_grob_2 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-  overlay(list_mouse_centroids[[4]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[6]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
 
-mouse_nk6_neuro_title_grob_1 <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("6-1", "6-2", "6-3"), 
-                            x = c(0.25, 0.5, 0.75),
-                            gp = gpar(col = "white")))
-)
+```{r eval = TRUE}
+human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
+df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
 
-mouse_nk6_neuro_title_grob_2 <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("6-4", "6-5", "6-6"), 
-                            x = c(0.25, 0.5, 0.75),
-                            gp = gpar(col = "white")))
-)
+# Convert cluster information to long format
+df_human_clusters_long <- df_human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk)) %>% 
+  filter(nk %in% c(2, 6, 10)) %>% 
+  left_join(df_human_clusters %>% 
+              select(ID, nk10), by = "ID")
 
-# Mouse neuro layout for nk = 2
-mouse_nk6_neuro_layout <- rbind(1, NA, 2, NA, 3, NA, 4)
+df_human_sankey <- df_human_clusters_long %>% 
+  mutate(nk = factor(nk), k = factor(k), nk10 = factor(nk10))
 
-#
-mouse_nk6_neuro_padding_height <- mouse_nk2_neuro_padding_height
-mouse_nk6_neuro_padding_height_2 <- 2*mouse_nk6_neuro_padding_height
-mouse_nk6_neuro_title_height <- mouse_nk2_neuro_title_height
-mouse_nk6_neuro_ss_height <- mouse_neuro_height - 2*mouse_nk2_neuro_title_height - 2*mouse_nk2_neuro_padding_height - mouse_nk6_neuro_padding_height_2
-mouse_nk6_neuro_ss_height <- mouse_nk6_neuro_ss_height/2
+stratum_width <- 0.4
 
-mouse_nk6_neuro_widths <- 0.3*mouse_neuro_tot_width
-mouse_nk6_neuro_heights <- c(mouse_nk6_neuro_title_height, 
-                             mouse_nk6_neuro_padding_height, 
-                             mouse_nk6_neuro_ss_height, 
-                             mouse_nk6_neuro_padding_height_2, 
-                             mouse_nk6_neuro_title_height,
-                             mouse_nk6_neuro_padding_height, 
-                             mouse_nk6_neuro_ss_height)
+# Human cluster Sankey plot
+plt_human_sankey <- ggplot(df_human_sankey,
+                           aes(x = nk,
+                               stratum = k,
+                               alluvium = ID,
+                               fill = nk10,
+                               label = k)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward", width = stratum_width) + 
+  geom_stratum(alpha = 1, width = stratum_width, fill = "white") +
+  scale_x_discrete(position = "bottom",
+                   expand = expansion(add = c(stratum_width/2+0.020, stratum_width/2+0.005))) +
+  scale_y_continuous(breaks = c(seq(0, 600, by = 100), nrow(human_clusters))) + 
+  labs(x = "K",
+       y = "Number of participants") + 
+  # theme_void() + 
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        panel.border = element_blank(),
+        axis.line.y.left = element_line(colour = "grey50"))
 
-mouse_nk6_neuro_grob <- arrangeGrob(mouse_nk6_neuro_title_grob_1,
-                                    mouse_nk6_neuro_ss_grob_1,
-                                    mouse_nk6_neuro_title_grob_2,
-                                    mouse_nk6_neuro_ss_grob_2,
-                                    layout_matrix = mouse_nk6_neuro_layout,
-                                    widths = unit(mouse_nk6_neuro_widths, units = "bigpts"),
-                                    heights = unit(mouse_nk6_neuro_heights, units = "bigpts"))
 
-# mouse_nk6_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
-#                                                mouse_nk6_neuro_grob))
+human_sankey_grob <- ggplotGrob(plt_human_sankey)
+
+# outfile <- "human_sankey.pdf"
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile,
+#     width = unit(fig_width/72, "in"),
+#     height = unit(panel_height/72, "in"))
+# print(plt_human_sankey)
+# dev.off()
+
+plt_human_sankey
 ```
-
-```{r}
-nk_mouse <- 10
-list_mouse_centroids <- vector(mode = "list", length = nk_mouse)
-for (k in 1:nk_mouse) {
-  
-  # Import centroid
-  img <- import_cluster_map(imgdir = mouse_centroid_dir,
-                            mask = mouse_mask_file,
-                            nk = nk_mouse, k = k, 
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  list_mouse_centroids[[k]] <- mincArray(img)
-  
-}
-
-ss_nslices <- 3
-mouse_slices <- floor(seq(20, 200, length.out = ss_nslices))
-
-mouse_nk10_neuro_ss_grob_1 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-  overlay(list_mouse_centroids[[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[3]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[4]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
-
-mouse_nk10_neuro_ss_grob_2 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = mouse_slices) %>% 
-  anatomy(mouse_anat_vol, low = mouse_anat_low, high = mouse_anat_high) %>% 
-  overlay(list_mouse_centroids[[6]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[7]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[8]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[9]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_mouse_centroids[[10]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
-
-
-mouse_nk10_neuro_title_grob_1 <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("10-1", "10-2", "10-3", "10-4", "10-5"), 
-                            x = seq(0, 1, length.out = 7)[c(-1, -7)],
-                            gp = gpar(col = "white")))
-)
-
-mouse_nk10_neuro_title_grob_2 <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("10-6", "10-7", "10-8", "10-9", "10-10"), 
-                            x = seq(0, 1, length.out = 7)[c(-1, -7)],
-                            gp = gpar(col = "white")))
-)
-
-# Mouse neuro layout for nk = 2
-mouse_nk10_neuro_layout <- rbind(1, NA, 2, NA, 3, NA, 4)
-
-#
-mouse_nk10_neuro_padding_height <- mouse_nk6_neuro_padding_height
-mouse_nk10_neuro_padding_height_2 <- 2*mouse_nk10_neuro_padding_height
-mouse_nk10_neuro_title_height <- mouse_nk2_neuro_title_height
-mouse_nk10_neuro_ss_height <- mouse_neuro_height - 2*mouse_nk2_neuro_title_height - 2*mouse_nk2_neuro_padding_height - mouse_nk10_neuro_padding_height_2
-mouse_nk10_neuro_ss_height <- mouse_nk10_neuro_ss_height/2
-
-mouse_nk10_neuro_widths <- 0.5*mouse_neuro_tot_width
-mouse_nk10_neuro_heights <- c(mouse_nk10_neuro_title_height, 
-                             mouse_nk10_neuro_padding_height, 
-                             mouse_nk10_neuro_ss_height, 
-                             mouse_nk10_neuro_padding_height_2, 
-                             mouse_nk10_neuro_title_height,
-                             mouse_nk10_neuro_padding_height, 
-                             mouse_nk10_neuro_ss_height)
-
-mouse_nk10_neuro_grob <- arrangeGrob(mouse_nk10_neuro_title_grob_1,
-                                    mouse_nk10_neuro_ss_grob_1,
-                                    mouse_nk10_neuro_title_grob_2,
-                                    mouse_nk10_neuro_ss_grob_2,
-                                    layout_matrix = mouse_nk10_neuro_layout,
-                                    widths = unit(mouse_nk10_neuro_widths, units = "bigpts"),
-                                    heights = unit(mouse_nk10_neuro_heights, units = "bigpts"))
-
-# mouse_nk10_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
-#                                                mouse_nk10_neuro_grob))
-```
-
-
-```{r}
-mouse_neuro_grob <- arrangeGrob(mouse_nk2_neuro_grob,
-                                mouse_nk6_neuro_grob,
-                                mouse_nk10_neuro_grob,
-                                layout_matrix = mouse_neuro_layout, 
-                                widths = unit(mouse_neuro_widths, units = "bigpts"),
-                                heights = unit(mouse_neuro_height, units = "bigpts"))
-```
-
 
 # Human slices
 
@@ -732,282 +358,327 @@ overlay_high <- 1.0
 # Human anatomy thresholds
 human_anat_low <- 40
 human_anat_high <- 110
-```
 
-
-```{r}
-# Layout for mouse neuro panel
-human_neuro_layout <- rbind(c(1, NA, 2, NA, 3))
-
-# Padding between human neuro panels
-human_neuro_padding_width <- 10
-
-# Total width of neuro panels, excluding padding
-human_neuro_tot_width <- fig_width - 2*border_padding_width - 2*human_neuro_padding_width
-
-# human neuro widths
-human_neuro_widths <- c(0.2*human_neuro_tot_width,
-                        human_neuro_padding_width,
-                        0.3*human_neuro_tot_width,
-                        human_neuro_padding_width,
-                        0.5*human_neuro_tot_width)
-
-# human neuro height
-human_neuro_height <- panel_height
+human_slc_dim <- 1
+human_slc <- 82
 ```
 
 ```{r}
-nk_human <- 2
-list_human_centroids <- vector(mode = "list", length = nk_human)
-for (k in 1:nk_human) {
-  
-  # Import centroid
-  img <- import_cluster_map(imgdir = human_centroid_dir,
-                            mask = human_mask_file,
-                            nk = nk_human, k = k, 
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  img <- mincArray(img)
-  img <- img[slices_dim_1,,slices_dim_3]
-  
-  list_human_centroids[[k]] <- img
-  
-}
+nk_seq <- c(2, 6, 10)
 
-
-ss_nslices <- 6
-human_slices <- floor(seq(60, 230, length.out = ss_nslices))
-
-
-human_nk2_neuro_ss_grob <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = human_slices) %>% 
-  anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-  overlay(list_human_centroids[[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
-
-human_nk2_neuro_title_grob <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("2-1", "2-2"), 
-                            x = c(0.25, 0.75),
-                            gp = gpar(col = "white")))
+list_human_slc_vps <- list(
+  "2" = list(x = rep(0.15, 2),
+             y = c(0.65, 0.25),
+             w = rep(0.1, 2),
+             h = rep(0.1, 2)),
+  "6" = list(x = rep(0.55, 6),
+             y = seq(0.1, 0.8, length.out = 6),
+             w = rep(0.1, 6),
+             h = rep(0.1, 6)),
+  "10" = list(x = rep(0.9, 10),
+              y = seq(0.1, 0.8, length.out = 10),
+              w = rep(0.1, 10),
+              h = rep(0.1, 10))
 )
-
-# human neuro layout for nk = 2
-human_nk2_neuro_layout <- rbind(1, NA, 2)
-
-#
-human_nk2_neuro_padding_height <- 2
-human_nk2_neuro_title_height <- 20
-human_nk2_neuro_ss_height <- human_neuro_height - human_nk2_neuro_title_height - human_nk2_neuro_padding_height
-
-human_nk2_neuro_widths <- 0.2*human_neuro_tot_width
-human_nk2_neuro_heights <- c(human_nk2_neuro_title_height, human_nk2_neuro_padding_height, human_nk2_neuro_ss_height)
-
-
-human_nk2_neuro_grob <- arrangeGrob(human_nk2_neuro_title_grob,
-                                    human_nk2_neuro_ss_grob,
-                                    layout_matrix = human_nk2_neuro_layout,
-                                    widths = unit(human_nk2_neuro_widths, units = "bigpts"),
-                                    heights = unit(human_nk2_neuro_heights, units = "bigpts"))
-
-human_nk2_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
-                                               human_nk2_neuro_grob))
-```
-
-
-```{r}
-nk_human <- 6
-list_human_centroids <- vector(mode = "list", length = nk_human)
-for (k in 1:nk_human) {
-  
-  # Import centroid
-  img <- import_cluster_map(imgdir = human_centroid_dir,
-                            mask = human_mask_file,
-                            nk = nk_human, k = k, 
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
-  img <- mincArray(img)
-  img <- img[slices_dim_1,,slices_dim_3]
-  list_human_centroids[[k]] <- img
-  
-}
-
-ss_nslices <- 3
-human_slices <- floor(seq(60, 230, length.out = ss_nslices))
-
-human_nk6_neuro_ss_grob_1 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = human_slices) %>% 
-  anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-  overlay(list_human_centroids[[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[3]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
-
-human_nk6_neuro_ss_grob_2 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = human_slices) %>% 
-  anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-  overlay(list_human_centroids[[4]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[6]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
-
-human_nk6_neuro_title_grob_1 <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("6-1", "6-2", "6-3"), 
-                            x = c(0.25, 0.5, 0.75),
-                            gp = gpar(col = "white")))
-)
-
-human_nk6_neuro_title_grob_2 <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("6-4", "6-5", "6-6"), 
-                            x = c(0.25, 0.5, 0.75),
-                            gp = gpar(col = "white")))
-)
-
-# human neuro layout for nk = 2
-human_nk6_neuro_layout <- rbind(1, NA, 2, NA, 3, NA, 4)
-
-#
-human_nk6_neuro_padding_height <- human_nk2_neuro_padding_height
-human_nk6_neuro_padding_height_2 <- 2*human_nk6_neuro_padding_height
-human_nk6_neuro_title_height <- human_nk2_neuro_title_height
-human_nk6_neuro_ss_height <- human_neuro_height - 2*human_nk2_neuro_title_height - 2*human_nk2_neuro_padding_height - human_nk6_neuro_padding_height_2
-human_nk6_neuro_ss_height <- human_nk6_neuro_ss_height/2
-
-human_nk6_neuro_widths <- 0.3*human_neuro_tot_width
-human_nk6_neuro_heights <- c(human_nk6_neuro_title_height, 
-                             human_nk6_neuro_padding_height, 
-                             human_nk6_neuro_ss_height, 
-                             human_nk6_neuro_padding_height_2, 
-                             human_nk6_neuro_title_height,
-                             human_nk6_neuro_padding_height, 
-                             human_nk6_neuro_ss_height)
-
-human_nk6_neuro_grob <- arrangeGrob(human_nk6_neuro_title_grob_1,
-                                    human_nk6_neuro_ss_grob_1,
-                                    human_nk6_neuro_title_grob_2,
-                                    human_nk6_neuro_ss_grob_2,
-                                    layout_matrix = human_nk6_neuro_layout,
-                                    widths = unit(human_nk6_neuro_widths, units = "bigpts"),
-                                    heights = unit(human_nk6_neuro_heights, units = "bigpts"))
-
-# human_nk6_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
-#                                                human_nk6_neuro_grob))
 ```
 
 ```{r}
-nk_human <- 10
-list_human_centroids <- vector(mode = "list", length = nk_human)
-for (k in 1:nk_human) {
+list_human_slices <- vector(mode = "list", length = length(nk_seq))
+names(list_human_slices) <- nk_seq
+for (i in 1:length(list_human_slices)) {
   
-  # Import centroid
-  img <- import_cluster_map(imgdir = human_centroid_dir,
-                            mask = human_mask_file,
-                            nk = nk_human, k = k, 
-                            threshold = threshold,
-                            threshold_value = threshold_value,
-                            threshold_symmetric = threshold_symmetric)
-  
+  nki <- nk_seq[i]
+  list_human_slices[[i]] <- vector(mode = "list", length = nki)
+  for (k in 1:nki) {
+    
+    img <- import_cluster_map(imgdir = human_centroid_dir,
+                              mask = human_mask_file,
+                              nk = nki, k = k, 
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
     img <- mincArray(img)
-  img <- img[slices_dim_1,,slices_dim_3]
-  list_human_centroids[[k]] <- img
-  
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+    img_grob <- sliceSeries(nrow = 1, ncol = 1, 
+                            dimension = human_slc_dim, 
+                            slices = human_slc) %>% 
+      anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
+      overlay(img, 
+              low = overlay_threshold[1], high = overlay_threshold[2], 
+              symmetric = TRUE) %>% 
+      grobify()
+    
+    img_grob$vp <- viewport(x = list_human_slc_vps[[i]][["x"]][[k]], 
+                            y = list_human_slc_vps[[i]][["y"]][[k]], 
+                            width = list_human_slc_vps[[i]][["w"]][[k]], 
+                            height = list_human_slc_vps[[i]][["h"]][[k]])
+    
+    list_human_slices[[i]][[k]] <- img_grob
+    
+  }
 }
 
-ss_nslices <- 3
-human_slices <- floor(seq(60, 230, length.out = ss_nslices))
-
-human_nk10_neuro_ss_grob_1 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = human_slices) %>% 
-  anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-  overlay(list_human_centroids[[1]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[2]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[3]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[4]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[5]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
-
-human_nk10_neuro_ss_grob_2 <- sliceSeries(nrow = ss_nslices, ncol = 1, slices = human_slices) %>% 
-  anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-  overlay(list_human_centroids[[6]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[7]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[8]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[9]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  sliceSeries() %>% anatomy() %>% 
-  overlay(list_human_centroids[[10]], low = overlay_low, high = overlay_high, symmetric = TRUE) %>% 
-  grobify()
+```
 
 
-human_nk10_neuro_title_grob_1 <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("10-1", "10-2", "10-3", "10-4", "10-5"), 
-                            x = seq(0, 1, length.out = 7)[c(-1, -7)],
-                            gp = gpar(col = "white")))
+# Mouse-human cluster correspondence
+
+```{r eval = FALSE}
+mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
+mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
+
+df_mouse_cluster_counts <- mouse_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  ungroup()
+```
+
+```{r eval = FALSE}
+human_cluster_file <- file.path(human_cluster_dir, "clusters.csv")
+human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
+
+df_human_cluster_counts <- human_clusters %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  select(-nk_name) %>% 
+  unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id) %>% 
+  count() %>% 
+  ungroup()
+```
+
+```{r eval = FALSE}
+df_similarity <- compute_similarity_significance(
+  similarity = import_similarity(param_id = params_id, 
+                                 pipeline_dir = pipeline_dir), 
+  permutations = import_similarity_permutations(param_id = params_id, 
+                                                pipeline_dir = pipeline_dir)
 )
 
-human_nk10_neuro_title_grob_2 <- gTree(
-  children = gList(rectGrob(gp = gpar(fill = "black")),
-                   textGrob(c("10-6", "10-7", "10-8", "10-9", "10-10"), 
-                            x = seq(0, 1, length.out = 7)[c(-1, -7)],
-                            gp = gpar(col = "white")))
-)
+colnames(df_similarity) <- colnames(df_similarity) %>% 
+  str_replace("img1", "human") %>% 
+  str_replace("img2", "mouse")
 
-# human neuro layout for nk = 2
-human_nk10_neuro_layout <- rbind(1, NA, 2, NA, 3, NA, 4)
+cluster_ids <- df_similarity %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  arrange(human_nk, human_k) %>% 
+  distinct() %>% 
+  pull(human_cluster_id)
 
-#
-human_nk10_neuro_padding_height <- human_nk6_neuro_padding_height
-human_nk10_neuro_padding_height_2 <- 2*human_nk10_neuro_padding_height
-human_nk10_neuro_title_height <- human_nk2_neuro_title_height
-human_nk10_neuro_ss_height <- human_neuro_height - 2*human_nk2_neuro_title_height - 2*human_nk2_neuro_padding_height - human_nk10_neuro_padding_height_2
-human_nk10_neuro_ss_height <- human_nk10_neuro_ss_height/2
+df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                               mouse_cluster_id = cluster_ids) 
 
-human_nk10_neuro_widths <- 0.5*human_neuro_tot_width
-human_nk10_neuro_heights <- c(human_nk10_neuro_title_height, 
-                             human_nk10_neuro_padding_height, 
-                             human_nk10_neuro_ss_height, 
-                             human_nk10_neuro_padding_height_2, 
-                             human_nk10_neuro_title_height,
-                             human_nk10_neuro_padding_height, 
-                             human_nk10_neuro_ss_height)
+df_matches <- df_similarity %>% 
+  mutate(match = pval < 0.05) %>% 
+  select(human_cluster_id, mouse_cluster_id, match, similarity, pval) %>% 
+  right_join(df_cluster_grid) %>% 
+  mutate(match = ifelse(is.na(match), FALSE, match))
+```
 
-human_nk10_neuro_grob <- arrangeGrob(human_nk10_neuro_title_grob_1,
-                                    human_nk10_neuro_ss_grob_1,
-                                    human_nk10_neuro_title_grob_2,
-                                    human_nk10_neuro_ss_grob_2,
-                                    layout_matrix = human_nk10_neuro_layout,
-                                    widths = unit(human_nk10_neuro_widths, units = "bigpts"),
-                                    heights = unit(human_nk10_neuro_heights, units = "bigpts"))
 
-# human_nk10_neuro_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "black")),
-#                                                human_nk10_neuro_grob))
+
+
+```{r eval = FALSE}
+df_cluster_coords <- tibble(cluster_id = cluster_ids) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk), k = as.numeric(k),
+         x = 1:nrow(.))
+
+x_gap <- 1
+
+df_cluster_coords <- tibble(nk = 2:10, 
+                            gap = x_gap*0:8) %>% 
+  right_join(df_cluster_coords, by = "nk") %>% 
+  mutate(x = x + gap)
+```
+
+
+
+```{r}
+# list_nk10 <- vector(mode = "list", length = 8)
+# for (nk in 2:9) {
+# cols <- paste0("nk", c(nk, 10))
+# mouse_clusters_nk <- mouse_clusters[,cols]
+# colnames(mouse_clusters_nk) <- c("k", "nk10")
+# list_nk10[[nk-1]] <- mouse_clusters_nk %>% 
+#   mutate(cluster_id = paste0(nk, "-", k)) %>% 
+#   group_by(cluster_id, nk10) %>% 
+#   summarise(n_in_10 = n(), .groups = "drop") %>% 
+#   left_join(df_mouse_cluster_counts, by = "cluster_id") %>% 
+#   mutate(prop_in_10 = n_in_10/n)
+# }
+# 
+# df_nk10 <- bind_rows(list_nk10)
+```
+
+```{r}
+# tmp <- df_cluster_coords %>% 
+#     select(cluster_id, nk, k, x) %>% 
+#   left_join(df_nk10, by = "cluster_id") 
+# 
+# ggplot(tmp, aes(x = x, y = n_in_10, fill = factor(nk10))) + 
+#   geom_col() +
+#   theme_bw()
 ```
 
 
 ```{r}
-human_neuro_grob <- arrangeGrob(human_nk2_neuro_grob,
-                                human_nk6_neuro_grob,
-                                human_nk10_neuro_grob,
-                                layout_matrix = human_neuro_layout, 
-                                widths = unit(human_neuro_widths, units = "bigpts"),
-                                heights = unit(human_neuro_height, units = "bigpts"))
+# h_max <- 0.5
+# 
+# coords_9 <- df_cluster_coords %>% 
+#   filter(nk == 9) %>% 
+#   select(cluster_id, nk, k, x) %>% 
+#   left_join(tmp, by = "cluster_id") %>% 
+#   mutate(xmin = x-w/2, xmax = x+w/2,
+#          y = 1, ymin = y, h_tot = ymin + n*(h_max/max(n)))
+#   
+# ggplot(coords_9, aes(x = x, y = n_in_10, fill = factor(nk10))) + 
+#   geom_col()
+```
+
+```{r eval = FALSE}
+w <- 0.8
+h <- 0.5
+
+df_cluster_coords_human <- df_cluster_coords %>% 
+  select(cluster_id, nk, k, x) %>% 
+  left_join(df_human_cluster_counts, by = "cluster_id") %>% 
+  mutate(xmin = x-w/2, xmax = x+w/2,
+         y = 0, ymin = y, ymax = ymin - n*(h/max(n)))
+
+# df_cluster_coords_human <- df_cluster_coords %>% 
+#   select(cluster_id, x) %>% 
+#   mutate(y = 0, ymin = y, ymax = ymin-h)
+
+df_cluster_coords_mouse <- df_cluster_coords %>% 
+  select(cluster_id, nk, k, x) %>% 
+  left_join(df_mouse_cluster_counts, by = "cluster_id") %>% 
+  mutate(xmin = x-w/2, xmax = x+w/2,
+         y = 1, ymin = y, ymax = ymin + n*(h/max(n)))
+
+# df_cluster_coords_mouse <- df_cluster_coords %>% 
+#   select(cluster_id, x) %>% 
+#   mutate(y = 1, ymin = y, ymax = ymin+h)
+
+df_cluster_bars <- bind_rows(df_cluster_coords_human,
+                             df_cluster_coords_mouse)
 ```
 
 
+
+```{r eval = FALSE}
+df_segments <- df_matches %>% 
+  filter(match) %>% 
+  select(-match) %>% 
+  left_join(df_cluster_coords_human %>% 
+              select(cluster_id, x, y),
+            by = c("human_cluster_id" = "cluster_id")) %>% 
+  left_join(df_cluster_coords_mouse %>% 
+              select(cluster_id, xend = x, yend = y),
+            by = c("mouse_cluster_id" = "cluster_id"))
+
+
+h_block <- 0.3
+
+df_cluster_blocks_human <- df_cluster_coords_human %>% 
+  group_by(nk) %>% 
+  mutate(xmin = min(xmin),
+         xmax = max(xmax)) %>% 
+  ungroup() %>% 
+  select(nk, xmin, xmax, ymin) %>% 
+  mutate(ymax = ymin - h - h_block,
+         xmin = xmin - 0.3*x_gap,
+         xmax = xmax + 0.3*x_gap) %>% 
+  distinct()
+
+df_cluster_labels_human <- df_cluster_blocks_human %>%
+  mutate(label = paste0("K = ", nk),
+         x = (xmin + xmax)/2,
+         y = ymax + 0.1,
+         ymin = y + 0.1) 
+
+df_cluster_blocks_mouse <- df_cluster_coords_mouse %>% 
+  group_by(nk) %>% 
+  mutate(xmin = min(xmin),
+         xmax = max(xmax)) %>% 
+  ungroup() %>% 
+  select(nk, xmin, xmax, ymin) %>% 
+  mutate(ymax = ymin + h + h_block,
+         xmin = xmin - 0.3*x_gap,
+         xmax = xmax + 0.3*x_gap) %>% 
+  distinct()
+
+df_cluster_labels_mouse <- df_cluster_blocks_mouse %>%
+  mutate(label = paste0("K = ", nk),
+         x = (xmin + xmax)/2,
+         y = ymax - 0.1,
+         ymin = y - 0.1) 
+
+
+df_cluster_blocks <- bind_rows(df_cluster_blocks_human, df_cluster_blocks_mouse)
+
+df_cluster_labels <- bind_rows(df_cluster_labels_human, df_cluster_labels_mouse)
+
+plt <- ggplot(df_segments, aes(x = x, y = y)) + 
+  geom_segment(aes(xend = xend, yend = yend, colour = pval), alpha = 1.0) +
+  geom_rect(data = df_cluster_blocks, 
+            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            inherit.aes = FALSE,
+            alpha = 0.2) +
+  geom_rect(data = df_cluster_labels, 
+            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            inherit.aes = FALSE,
+            fill = "white",
+            col = "black",
+            linewidth = 0.3) + 
+  geom_text(data = df_cluster_labels,
+            mapping = aes(x = x, y = y, label = label), 
+            inherit.aes = FALSE, 
+            size = 3) + 
+  geom_rect(data = df_cluster_bars, 
+            mapping = aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            inherit.aes = FALSE) + 
+  scale_x_continuous(expand = expansion()) + 
+  scale_y_continuous(expand = expansion()) + 
+  # scale_color_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[c(1:4, 8)])) +
+  scale_color_gradientn(colors = rev(brewer.pal(n = 9, name = "PuBu")[3:9])) +
+  theme_bw()
+
+plt <- plt +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+plt <- plt + theme_void()
+
+outfile <- "mouse_human_matches.pdf"
+outfile <- paste(outfile_prefix, outfile, sep = "_")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8.5, "in"),
+    height = unit(3, "in"))
+print(plt)
+dev.off()
+
+```
+
+
+
+```{r eval = FALSE}
+matches_grob <- ggplotGrob(plt)
+```
 
 
 
@@ -1016,21 +687,30 @@ human_neuro_grob <- arrangeGrob(human_nk2_neuro_grob,
 # Figure
 
 ```{r}
-fig_widths <- c(border_padding_width, panel_tot_width, border_padding_width)
+mouse_grobs_list <- c(list(mouse_sankey_grob), reduce(list_mouse_slices, c))
+human_grobs_list <- c(list(human_sankey_grob), reduce(list_human_slices, c))
+
+mouse_grobs <- do.call(grobTree, mouse_grobs_list)
+human_grobs <- do.call(grobTree, human_grobs_list)
+
+panel_left_width <- 40
+panel_width <- panel_tot_width - panel_left_width
+
+fig_widths <- c(border_padding_width, panel_left_width, panel_width, border_padding_width)
 fig_heights <- c(border_padding_height, panel_height, panel_padding_height, panel_height, panel_padding_height, panel_height, border_padding_height)
 
-fig_layout <- rbind(c(NA, NA, NA),
-                    c(NA,  1, NA),
-                    c(NA, NA, NA),
-                    c(NA,  2, NA),
-                    c(NA, NA, NA),
-                    c(NA,  3, NA),
-                    c(NA, NA, NA))
+fig_layout <- rbind(c(NA, NA, NA, NA),
+                    c(NA, 01, 01, NA),
+                    c(NA, NA, NA, NA),
+                    c(NA, NA, 02, NA),
+                    c(NA, NA, NA, NA),
+                    c(NA, 03, 03, NA),
+                    c(NA, NA, NA, NA))
 
 fig_grob <- arrangeGrob(
-  mouse_neuro_grob,
+  mouse_grobs,
   matches_grob,
-  human_neuro_grob, #
+  human_grobs, #
   layout_matrix = fig_layout,
   widths = unit(fig_widths, "bigpts"),
   heights = unit(fig_heights, "bigpts")
@@ -1051,54 +731,3 @@ grid.draw(fig_grob)
 dev.off()
 ```
 
-
-
-# Misc
-
-
-```{r}
-cp <- data.frame(
-  x = c(
-    0, -5, -5, 5, 5, 2.5, 5, 7.5, 5, 2.5, 5, 7.5, 5, -2.5, -5, -7.5, -5,
-    -2.5, -5, -7.5, -5
-  ),
-  y = c(
-    0, -5, 5, -5, 5, 5, 7.5, 5, 2.5, -5, -7.5, -5, -2.5, 5, 7.5, 5, 2.5,
-    -5, -7.5, -5, -2.5
-  ),
-  class = sample(letters[1:3], 21, replace = TRUE)
-)
-
-
-paths <- data.frame(
-  ind = c(
-    7, 5, 8, 8, 5, 9, 9, 5, 6, 6, 5, 7, 7, 5, 1, 3, 15, 8, 5, 1, 3, 17, 9, 5,
-    1, 2, 19, 6, 5, 1, 4, 12, 7, 5, 1, 4, 10, 6, 5, 1, 2, 20
-  ),
-  group = c(
-    1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7,
-    7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10
-  )
-)
-
-paths$x <- cp$x[paths$ind]
-paths$y <- cp$y[paths$ind]
-paths$class <- cp$class[paths$ind]
-
-paths %>% filter(group == 10) %>% 
-ggplot() +
-  geom_bspline(aes(x = x, y = y, group = group, colour = after_stat(index))) +
-  geom_point(aes(x = x, y = y), data = cp, color = 'steelblue')
-```
-```{r}
-paths %>% filter(group == 10) %>% arrange(x)
-```
-
-
-```{r}
-library(ggforce)
-
-ggplot(tibble(x = c(1, 2, 3), y = c(0, 0.25, 1)), aes(x = x, y = y)) +
-  geom_bspline() + 
-geom_point()
-```
