@@ -222,6 +222,8 @@ list_cluster_groups <- list("A" = c("5-1", "6-1", "7-1", "8-1", "9-1", "10-1"),
                             # "E" = c("5-1", "6-6", "7-6", "8-7", "9-9", "10-9"),
                             # "F" = c("5-2", "6-2", "7-2", "8-8", "9-6", "10-2"))
 
+
+
 df_cluster_groups <- as_tibble(list_cluster_groups) %>% 
   pivot_longer(cols = everything(), names_to = "group", values_to = "mouse_cluster_id")
 
@@ -229,6 +231,11 @@ df_cluster_groups <- bind_rows(tibble(group = c("A", "D"), mouse_cluster_id = c(
                                df_cluster_groups) %>% 
   separate(col = "mouse_cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
   mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+
+df_cluster_groups <- df_cluster_groups %>% 
+  semi_join(df_matches %>% 
+  filter(match), by = "mouse_cluster_id")
 ```
 
 
@@ -269,19 +276,6 @@ df_cluster_bars <- bind_rows(df_cluster_coords_human,
 ```
 
 ```{r}
-df_matches_groups <- df_matches %>% 
-  filter(match, human_nk == mouse_nk) %>% 
-  filter((human_nk %in% nk_subset) | (mouse_nk %in% nk_subset)) %>% 
-  group_by(mouse_cluster_id) %>% 
-  filter(pval == min(pval)) %>% 
-  ungroup() %>% 
-  mutate(group = c("A", "B", "C", "D", "F")) %>% 
-  select(human_cluster_id, mouse_cluster_id, group)
-
-df_matches_groups
-```
-
-```{r}
 col2hex <- function(x, alpha = FALSE) {
   args <- as.data.frame(t(col2rgb(x, alpha = alpha)))
   args <- c(args, list(names = x, maxColorValue = 255))
@@ -289,6 +283,8 @@ col2hex <- function(x, alpha = FALSE) {
 }
 
 col2hex("springgreen4")
+col2hex("darkorchid1")
+col2hex("seagreen2")
 ```
 
 
@@ -350,6 +346,11 @@ palette <- c("A" = "springgreen4",
              "C" = "seagreen2",
              "D" = "darkorchid1")
 
+# palette <- c("A" = "springgreen4",
+#              "B" = "seagreen2",
+#              "C" = "#446F87",
+#              "D" = "darkorchid1")
+
 plt <- ggplot(df_segments, aes(x = x, y = y)) + 
   geom_segment(aes(xend = xend, yend = yend, col = group), alpha = 1.0) +
   geom_rect(data = df_cluster_blocks, 
@@ -378,13 +379,14 @@ plt <- ggplot(df_segments, aes(x = x, y = y)) +
   scale_colour_manual(values = palette) + 
   theme_bw()
 
+plt <- plt + theme_void()
+
 plt <- plt +
   theme(axis.title = element_blank(),
         axis.text = element_blank(),
         axis.ticks = element_blank(),
         legend.position = "none")
 
-plt <- plt + theme_void()
 
 outfile <- "mouse_human_matches.pdf"
 outfile <- paste(outfile_prefix, outfile, sep = "_")
@@ -436,6 +438,11 @@ palette <- c("A" = "springgreen4",
              "B" = "sienna2",
              "C" = "seagreen2",
              "D" = "darkorchid1")
+
+# palette <- c("A" = "springgreen4",
+#              "B" = "seagreen2",
+#              "C" = "#446F87",
+#              "D" = "darkorchid1")
 
 # Mouse cluster Sankey plot
 plt_mouse_sankey <- ggplot(df_mouse_sankey,
@@ -513,6 +520,11 @@ palette <- c("A" = "springgreen4",
              "B" = "sienna2",
              "C" = "seagreen2",
              "D" = "darkorchid1")
+
+# palette <- c("A" = "springgreen4",
+#              "B" = "seagreen2",
+#              "C" = "#446F87",
+#              "D" = "darkorchid1")
 
 # Human cluster Sankey plot
 plt_human_sankey <- ggplot(df_human_sankey,
@@ -744,17 +756,17 @@ for (i in 1:length(list_human_slices)) {
 ```{r}
 list_mouse_slc_vps <- list(
   # K = 2
-  list(x = rep(52, 2)/fig_width,
+  list(x = rep(54, 2)/fig_width,
        y = (fig_height - c(91, 208))/fig_height,
        w = rep(0.15, 2),
        h = rep(0.07, 2)),
   # K = 7
-  list(x = c(277, 277, 302, 252, 277, 277, 277)/fig_width,
-       y = (fig_height - c(52, 88, 116, 135, 173, 218, 259))/fig_height,
+  list(x = (24+c(277, 277, 248, 303, 277, 277, 277))/fig_width,
+       y = (fig_height - c(52, 88, 116, 135.5, 173, 218, 259))/fig_height,
        w = rep(0.08, 7),
        h = rep(0.03, 7)),
   # K = 10
-  list(x = c(480, 504, 455, 504, 455, 504, 455, 480, 480, 480)/fig_width,
+  list(x = (40+c(480, 504, 455, 504, 455, 504, 455, 480, 480, 480))/fig_width,
        y = (fig_height - c(52, 80, 101, 117, 135, 153, 172, 205, 241, 272))/fig_height,
        w = rep(0.08, 10),
        h = rep(0.03, 10))
