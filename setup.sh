@@ -75,7 +75,7 @@ export PROJECTPATH="$PWD"
 export SRCPATH="\$PROJECTPATH/src"
 export PYTHONPATH="\${SRCPATH}"
 export PATH_PREFIX="\${SRCPATH}:\${SRCPATH}/drivers:\${SRCPATH}/pipelines:\${MINC_TOOLKIT}/pipeline:\${MINC_TOOLKIT}/bin"
-export PATH="\${PATH_PREFIX}:\$PATH"
+export PATH="\${CONDA_PREFIX}/bin:\${PATH_PREFIX}:\$PATH"
 EOF
 
 # Build hook to unset environment paths upon deactivation
