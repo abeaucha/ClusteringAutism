@@ -69,7 +69,8 @@ consolidate_visits <- function(df, cols) {
 }
 
 
-bootstrap_sample_estimate <- function(x, groups = NULL, estimate = "mean", B = 1000, set_seed = TRUE) {
+bootstrap_sample_estimate <- function(x, groups = NULL, estimate = "mean", 
+                                      B = 1000, set_seed = TRUE) {
   
   if (estimate == "mean") {
     estimator <- mean
@@ -113,7 +114,8 @@ bootstrap_sample_estimate <- function(x, groups = NULL, estimate = "mean", B = 1
 bootstrap_sample_estimate_ci <- function(x, groups = NULL, estimate = "mean", 
                                          interval = c(0.025, 0.975), B = 1000, 
                                          set_seed = TRUE) {
-  bootstrap_samples <- bootstrap_sample_estimate(x = x, groups = groups, estimate = estimate,
+  bootstrap_samples <- bootstrap_sample_estimate(x = x, groups = groups, 
+                                                 estimate = estimate,
                                                  B = B, set_seed = set_seed)
   bootstrap_ci <- apply(bootstrap_samples, MARGIN = 2, quantile, interval)
   bootstrap_ci <- t(bootstrap_ci)
@@ -223,6 +225,8 @@ human_clusters_match <- df_matches %>%
 
 
 # Process clinical data
+
+## Process POND data
 
 ```{r import-pond-db}
 # Import full POND database
