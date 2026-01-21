@@ -6,7 +6,6 @@
 #
 # Fetch AHBA microarray sample coordinates from Gabe Devenyi's GitHub
 
-
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(optparse))
@@ -16,63 +15,70 @@ suppressPackageStartupMessages(library(tidyverse))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option("--metadata",
-              type = "character",
-              help = "Path to .csv file containing AHBA sample metadata."),
-  make_option("--outfile",
-              type = "character",
-              help = "Path to the .csv file in which to save coordinates."),
-  make_option("--labels",
-              type = "character",
-              default = "true",
-              help = "Option to add labels."),
-  make_option("--verbose",
-              type = "character",
-              default = "true",
-              help = paste("Verbosity option. [default %default]"))
-) 
+  make_option(
+    "--metadata",
+    type = "character",
+    help = "Path to .csv file containing AHBA sample metadata."
+  ),
+  make_option(
+    "--outfile",
+    type = "character",
+    help = "Path to the .csv file in which to save coordinates."
+  ),
+  make_option(
+    "--labels",
+    type = "character",
+    default = "true",
+    help = "Option to add labels."
+  ),
+  make_option(
+    "--verbose",
+    type = "character",
+    default = "true",
+    help = paste("Verbosity option. [default %default]")
+  )
+)
 
 
 # Functions ------------------------------------------------------------------
 
 #' Fetch microarray sample coordinates
 #'
-#' @param metadata (character scalar) Path to the .csv file containing 
+#' @param metadata (character scalar) Path to the .csv file containing
 #' AHBA sample metadata.
 #'
 #' @return (tibble) Table of microarray sample coordinates
 fetch_microarray_coordinates <- function(metadata) {
-  
   metadata <- suppressMessages(read_csv(metadata))
   donors <- unique(metadata[["Donor"]])
   for (i in 1:length(donors)) {
-    
-    url <- paste0("https://raw.githubusercontent.com/gdevenyi/",
-                  "AllenHumanGeneMNI/master/transformed-points/recombine/", 
-                  donors[i], 
-                  "_SampleAnnot.csv")
-    
-    coords_tmp <- suppressMessages(read_csv(url)) %>% 
-      unite(label, 
-            structure_id, slab_num, well_id, 
-            sep = "-", remove = TRUE) %>%
-      mutate(t = 0) %>% 
-      select(x = mni_nlin_x,
-             y = mni_nlin_y,
-             z = mni_nlin_z,
-             t,
-             label)
-      
+    url <- paste0(
+      "https://raw.githubusercontent.com/gdevenyi/",
+      "AllenHumanGeneMNI/master/transformed-points/recombine/",
+      donors[i],
+      "_SampleAnnot.csv"
+    )
+
+    coords_tmp <- suppressMessages(read_csv(url)) %>%
+      unite(
+        label,
+        structure_id,
+        slab_num,
+        well_id,
+        sep = "-",
+        remove = TRUE
+      ) %>%
+      mutate(t = 0) %>%
+      select(x = mni_nlin_x, y = mni_nlin_y, z = mni_nlin_z, t, label)
+
     if (i == 1) {
       coords <- coords_tmp
     } else {
-      coords <- rbind(coords,
-                      coords_tmp)
+      coords <- rbind(coords, coords_tmp)
     }
   }
-  
+
   return(coords)
-  
 }
 
 #' Make labels for microarray samples
@@ -81,20 +87,16 @@ fetch_microarray_coordinates <- function(metadata) {
 #'
 #' @return (list)
 make_labels <- function(coords) {
-  
   coords <- coords %>%
-    mutate(sample_id = label,
-           label = 1:nrow(.))
-  
-  defs <- coords %>% 
+    mutate(sample_id = label, label = 1:nrow(.))
+
+  defs <- coords %>%
     select(sample_id, label)
-  
-  coords <- coords %>% 
+
+  coords <- coords %>%
     select(-sample_id)
-  
-  return(list(coords = coords,
-              defs = defs))
-  
+
+  return(list(coords = coords, defs = defs))
 }
 
 
@@ -112,7 +114,9 @@ if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 }
 
-if (verbose) {message("Downloading AHBA microarray sample coordinates...")}
+if (verbose) {
+  message("Downloading AHBA microarray sample coordinates...")
+}
 
 coords <- fetch_microarray_coordinates(metadata = metadata)
 
@@ -122,7 +126,7 @@ if (labels) {
   defs <- label_list[["defs"]]
   write_csv(x = defs, file = str_replace(outfile, ".csv", "_defs.csv"))
 } else {
-  coords <- coords %>% 
+  coords <- coords %>%
     mutate(label = 0)
 }
 

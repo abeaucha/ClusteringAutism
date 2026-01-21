@@ -12,7 +12,6 @@
 # file. The centroid images are computed by aggregating the voxel-wise values
 # for all images in a cluster.
 
-
 # Packages -------------------------------------------------------------------
 
 suppressPackageStartupMessages(library(optparse))
@@ -23,53 +22,85 @@ suppressPackageStartupMessages(library(batchtools))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option("--imgdir",
-              type = "character",
-              help = paste("Path to the directory containing the individual",
-                           "images (.mnc).")),
-  make_option("--cluster-file",
-              type = "character",
-              help = "Path to the file (.csv) containing cluster assignments."),
-  make_option("--mask",
-              type = "character",
-              help = "Path to a mask image (.mnc)."),
-  make_option("--outdir",
-              type = "character",
-              help = "Path to the output directory."),
-  make_option("--method",
-              type = "character",
-              default = "mean",
-              help = paste("One of {mean, median} specifying how to",
-                           "compute the centroids.",
-                           "[default %default]")),
-  make_option("--execution",
-              type = "character",
-              default = "local",
-              help = paste("[default %default]")),
-  make_option("--nproc",
-              type = "numeric",
-              default = 1,
-              help = paste("Number of processors to use in parallel.",
-                           "Executed serially if 1.",
-                           "[default %default]")),
-  make_option("--registry-name",
-              type = "character",
-              help = "Name of the registry directory for batched jobs."),
-  make_option("--registry-cleanup",
-              type = "character",
-              default = "true",
-              help = paste("Option to clean up registry after completion",
-                           "of batched jobs. [default %default]")),
-  make_option("--slurm-mem",
-              type = "character",
-              help = paste("Memory per CPU core")),
-  make_option("--slurm-time",
-              type = "numeric",
-              help = paste("Walltime in minutes")),
-  make_option("--verbose",
-              type = "character",
-              default = "true",
-              help = paste("Verbosity option. [default %default]"))
+  make_option(
+    "--imgdir",
+    type = "character",
+    help = paste(
+      "Path to the directory containing the individual",
+      "images (.mnc)."
+    )
+  ),
+  make_option(
+    "--cluster-file",
+    type = "character",
+    help = "Path to the file (.csv) containing cluster assignments."
+  ),
+  make_option(
+    "--mask",
+    type = "character",
+    help = "Path to a mask image (.mnc)."
+  ),
+  make_option(
+    "--outdir",
+    type = "character",
+    help = "Path to the output directory."
+  ),
+  make_option(
+    "--method",
+    type = "character",
+    default = "mean",
+    help = paste(
+      "One of {mean, median} specifying how to",
+      "compute the centroids.",
+      "[default %default]"
+    )
+  ),
+  make_option(
+    "--execution",
+    type = "character",
+    default = "local",
+    help = paste("[default %default]")
+  ),
+  make_option(
+    "--nproc",
+    type = "numeric",
+    default = 1,
+    help = paste(
+      "Number of processors to use in parallel.",
+      "Executed serially if 1.",
+      "[default %default]"
+    )
+  ),
+  make_option(
+    "--registry-name",
+    type = "character",
+    help = "Name of the registry directory for batched jobs."
+  ),
+  make_option(
+    "--registry-cleanup",
+    type = "character",
+    default = "true",
+    help = paste(
+      "Option to clean up registry after completion",
+      "of batched jobs. [default %default]"
+    )
+  ),
+  make_option(
+    "--slurm-mem",
+    type = "character",
+    help = paste("Memory per CPU core")
+  ),
+  make_option(
+    "--slurm-time",
+    type = "numeric",
+    help = paste("Walltime in minutes")
+  ),
+  make_option(
+    "--verbose",
+    type = "character",
+    default = "true",
+    help = paste("Verbosity option. [default %default]")
+  )
 )
 
 
@@ -107,15 +138,13 @@ for (arg in args_req) {
 
 # Check that cluster file is a CSV
 if (tools::file_ext(clusterfile) != "csv") {
-  stop(paste("Clusters file must be a CSV:",
-             clusterfile))
+  stop(paste("Clusters file must be a CSV:", clusterfile))
 }
 
 # Check that imgdir contains images
 imgfiles <- list.files(imgdir, full.names = TRUE, pattern = "*.mnc")
 if (length(imgfiles) == 0) {
-  stop(paste("No MINC files were found in the image directory:",
-             imgdir))
+  stop(paste("No MINC files were found in the image directory:", imgdir))
 }
 
 # Create outdir if needed
@@ -124,15 +153,16 @@ if (!dir.exists(outdir)) {
 }
 
 # Import cluster information
-if (verbose) { message("Importing cluster information...") }
+if (verbose) {
+  message("Importing cluster information...")
+}
 clusters <- as_tibble(data.table::fread(clusterfile, header = TRUE)) %>%
   mutate(ID = file.path(imgdir, ID)) %>%
   column_to_rownames("ID")
 
 # Registry options
 registry_name <- args[["registry-name"]]
-registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true",
-                             TRUE, FALSE)
+registry_cleanup <- ifelse(args[["registry-cleanup"]] == "true", TRUE, FALSE)
 
 # Execution options
 if (execution == "local") {
@@ -147,28 +177,36 @@ if (execution == "local") {
   # conf_file <- getOption("RMINC_BATCH_CONF")
   resources <- list(cores = nproc)
   conf_file <- NA
-  cluster_functions <- makeClusterFunctionsMulticore(nproc*ncol(clusters))
+  cluster_functions <- makeClusterFunctionsMulticore(nproc * ncol(clusters))
 } else {
   stop()
 }
 
 # Create centroid images for all clusters
-if (verbose) { message("Creating centroid images...") }
-reg <- makeRegistry(file.dir = ifelse(is.null(registry_name),
-                                      "registry_centroid",
-                                      registry_name),
-                    packages = "RMINC",
-                    conf.file = conf_file,
-                    seed = 1)
+if (verbose) {
+  message("Creating centroid images...")
+}
+reg <- makeRegistry(
+  file.dir = ifelse(is.null(registry_name), "registry_centroid", registry_name),
+  packages = "RMINC",
+  conf.file = conf_file,
+  seed = 1
+)
 reg$cluster.functions <- cluster_functions
-jobs <- batchMap(fun = compute_cluster_centroids,
-                 1:ncol(clusters),
-                 more.args = list(clusters = clusters,
-                                  mask = mask,
-                                  outdir = outdir,
-                                  method = method,
-                                  nproc = nproc))
+jobs <- batchMap(
+  fun = compute_cluster_centroids,
+  1:ncol(clusters),
+  more.args = list(
+    clusters = clusters,
+    mask = mask,
+    outdir = outdir,
+    method = method,
+    nproc = nproc
+  )
+)
 submitJobs(jobs, resources = resources, reg = reg)
 waitForJobs(reg = reg)
 centroids <- reduceResults(c)
-if (registry_cleanup) {removeRegistry(reg = reg)}
+if (registry_cleanup) {
+  removeRegistry(reg = reg)
+}

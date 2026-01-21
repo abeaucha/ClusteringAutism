@@ -14,34 +14,44 @@ suppressPackageStartupMessages(library(optparse))
 # Command line arguments -----------------------------------------------------
 
 option_list <- list(
-  make_option("--infile",
-              type = "character",
-              help = paste("Path to CSV file containing labelled expression",
-                           "matrix.")),
-  make_option("--transpose",
-              type = "character",
-              default = "false",
-              help = paste("Transpose expression matrix.",
-                           "[default %default]")),
-  make_option("--scale",
-              type = "character",
-              default = "true",
-              help = paste("Scale expression matrix.",
-                           "[default %default]")),
-  make_option("--aggregate",
-              type = "character",
-              default = "false",
-              help = paste("Aggregate expression data under a set of",
-                           "atlas labels. [default %default]")),
-  make_option("--outdir",
-              default = "data/",
-              type = "character",
-              help = paste("Output directory.",
-                           "[default %default]")),
-  make_option("--verbose",
-              default = "true",
-              type = "character",
-              help = "[default %default]")
+  make_option(
+    "--infile",
+    type = "character",
+    help = paste("Path to CSV file containing labelled expression", "matrix.")
+  ),
+  make_option(
+    "--transpose",
+    type = "character",
+    default = "false",
+    help = paste("Transpose expression matrix.", "[default %default]")
+  ),
+  make_option(
+    "--scale",
+    type = "character",
+    default = "true",
+    help = paste("Scale expression matrix.", "[default %default]")
+  ),
+  make_option(
+    "--aggregate",
+    type = "character",
+    default = "false",
+    help = paste(
+      "Aggregate expression data under a set of",
+      "atlas labels. [default %default]"
+    )
+  ),
+  make_option(
+    "--outdir",
+    default = "data/",
+    type = "character",
+    help = paste("Output directory.", "[default %default]")
+  ),
+  make_option(
+    "--verbose",
+    default = "true",
+    type = "character",
+    help = "[default %default]"
+  )
 )
 
 args <- parse_args(OptionParser(option_list = option_list))
@@ -63,15 +73,17 @@ if (!(args[["aggregate"]] %in% c("true", "false"))) {
 
 working_dir <- getwd()
 
-script_dir <- commandArgs() %>% 
-  str_subset('--file=') %>% 
-  str_remove('--file=') %>% 
+script_dir <- commandArgs() %>%
+  str_subset('--file=') %>%
+  str_remove('--file=') %>%
   dirname()
 
-path_processing_tools <- file.path(working_dir,
-                                   script_dir,
-                                   'functions',
-                                   'processing_tools.R')
+path_processing_tools <- file.path(
+  working_dir,
+  script_dir,
+  'functions',
+  'processing_tools.R'
+)
 source(path_processing_tools)
 
 
@@ -89,18 +101,21 @@ if (!dir.exists(outdir)) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 }
 
-if (!transpose & !normalize & !aggregate){
+if (!transpose & !normalize & !aggregate) {
   stop("One of {--transpose, --scale, --aggregate} must be true.")
 }
 
 
-if (verbose) {message("Processing data from file: ", infile)}
+if (verbose) {
+  message("Processing data from file: ", infile)
+}
 
-if(verbose){message("Importing...")}
+if (verbose) {
+  message("Importing...")
+}
 
 #Import data
-dfExpression <- suppressMessages(data.table::fread(infile,
-                                                   header = TRUE)) %>%
+dfExpression <- suppressMessages(data.table::fread(infile, header = TRUE)) %>%
   as_tibble()
 
 if (('Gene' %in% colnames(dfExpression)) & !transpose) {
@@ -108,14 +123,15 @@ if (('Gene' %in% colnames(dfExpression)) & !transpose) {
 }
 
 if (transpose) {
-  
-  if(verbose){message("Transposing...")}
-  
-  dfExpression <- dfExpression %>% 
-    column_to_rownames('Gene') %>% 
-    as.matrix() %>% 
-    t() %>% 
-    as_tibble() 
+  if (verbose) {
+    message("Transposing...")
+  }
+
+  dfExpression <- dfExpression %>%
+    column_to_rownames('Gene') %>%
+    as.matrix() %>%
+    t() %>%
+    as_tibble()
 }
 
 #Extract genes list from data
@@ -125,56 +141,57 @@ genes <- colnames(dfExpression)[!str_detect(colnames(dfExpression), 'Region')]
 containsLabels <- any(str_detect(colnames(dfExpression), 'Region'))
 
 if (normalize) {
-  
-  if(verbose){message("Normalizing...")}
-  
+  if (verbose) {
+    message("Normalizing...")
+  }
+
   #Extract labels from data frame
   if (containsLabels) {
     dfLabels <- dfExpression %>% select(contains('Region'))
   }
-  
+
   #Normalize data
-  dfExpression <- dfExpression %>% 
-    select(all_of(genes)) %>% 
-    as.matrix() %>% 
-    scaler(axis = 'rows') %>% 
-    scaler(scale = FALSE, axis = 'columns') %>% 
+  dfExpression <- dfExpression %>%
+    select(all_of(genes)) %>%
+    as.matrix() %>%
+    scaler(axis = 'rows') %>%
+    scaler(scale = FALSE, axis = 'columns') %>%
     as_tibble()
-  
+
   if (containsLabels) {
-    dfExpression <- dfExpression %>% 
+    dfExpression <- dfExpression %>%
       bind_cols(dfLabels)
   }
-  
-  outfile <- infile %>% 
-    basename() %>% 
+
+  outfile <- infile %>%
+    basename() %>%
     str_replace('.csv', '_scaled.csv')
-  
 }
 
 if (aggregate) {
-  
-  if(verbose){message("Aggregating...")}
-  
+  if (verbose) {
+    message("Aggregating...")
+  }
+
   # #Aggregate mouse expression data under label set
-  dfExpression <- dfExpression %>% 
-    group_by(Region) %>% 
-    summarise_all(mean) %>% 
+  dfExpression <- dfExpression %>%
+    group_by(Region) %>%
+    summarise_all(mean) %>%
     ungroup()
-    
-  outfile <- infile %>% 
-    basename() %>% 
+
+  outfile <- infile %>%
+    basename() %>%
     str_replace('voxel', 'ROI')
-  
+
   if (normalize) {
     outfile <- str_replace(outfile, ".csv", "_scaled.csv")
   }
-  
 }
 
 outfile <- file.path(outdir, outfile)
 
-if (verbose) {message(paste("Writing to file:", outfile, "..."))}
+if (verbose) {
+  message(paste("Writing to file:", outfile, "..."))
+}
 
-data.table::fwrite(dfExpression,
-                   file = outfile)
+data.table::fwrite(dfExpression, file = outfile)

@@ -33,19 +33,25 @@ params_id <- 375
 pipeline_dir <- "data/cross_species/v3/"
 
 # Import cluster similarity
-similarity <- import_similarity(param_id = params_id, 
-                                pipeline_dir = pipeline_dir)
+similarity <- import_similarity(
+  param_id = params_id,
+  pipeline_dir = pipeline_dir
+)
 
 # Import cluster similarity permutations
-permutations <- import_similarity_permutations(param_id = params_id,
-                                               pipeline_dir = pipeline_dir)
+permutations <- import_similarity_permutations(
+  param_id = params_id,
+  pipeline_dir = pipeline_dir
+)
 
 # Compute significance of correlations
-df_sim_pvals <- compute_similarity_significance(similarity = similarity,
-                                                permutations = permutations)
+df_sim_pvals <- compute_similarity_significance(
+  similarity = similarity,
+  permutations = permutations
+)
 
 # Identify matching clusters
-df_matching <- df_sim_pvals %>% 
+df_matching <- df_sim_pvals %>%
   filter(pval < 0.05)
 
 # Export matching clusters

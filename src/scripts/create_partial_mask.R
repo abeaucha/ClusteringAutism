@@ -14,12 +14,14 @@ mask_partial[ind_nvoxels] <- 1
 attributes(mask_partial) <- attributes(mask)
 
 outfile <- basename(maskfile) %>%
-  str_remove(".mnc") %>% 
-  str_c("partial", "nvox", nvoxels, sep = "_") %>% 
+  str_remove(".mnc") %>%
+  str_c("partial", "nvox", nvoxels, sep = "_") %>%
   str_c(".mnc")
 outfile <- file.path(dirname(maskfile), outfile)
 
-mincWriteVolume(buffer = mask_partial,
-                output.filename = outfile,
-                like.filename = maskfile,
-                clobber = TRUE)
+mincWriteVolume(
+  buffer = mask_partial,
+  output.filename = outfile,
+  like.filename = maskfile,
+  clobber = TRUE
+)
