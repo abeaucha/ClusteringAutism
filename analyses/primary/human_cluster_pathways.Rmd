@@ -2122,7 +2122,297 @@ df_enrichment_HG %>%
   filter(pval < 0.05)
 ```
 
+```{r}
+df_matches_group_A
+```
 
+```{r}
+df_matches_group_B <- df_sim_pvals %>% 
+  filter(human_cluster_id %in% df_human_cluster_groups$B) %>% 
+  filter(pval < 0.05) %>% 
+  select(human_cluster_id, mouse_cluster_id)
+
+df_matches_group_B
+```
+
+
+```{r}
+human_enrichment <- import_enrichment_human(params_id = human_params_id, 
+                                            pipeline_dir = human_pipeline_dir, 
+                                            nk = 5, k = 5)
+
+human_enrichment <- human_enrichment %>% 
+  filter(Title %in% pathways) %>% 
+  arrange(ID)
+
+df_radar <- human_enrichment %>% 
+  select(Title, NLQ) %>% 
+  pivot_wider(names_from = Title, values_from = NLQ) %>% 
+  mutate(group = "Human 5-5")
+
+tmp <- df_matches_group_B %>% 
+  filter(human_cluster_id == "5-5")
+for (i in 1:nrow(tmp)) {
+  
+  mouse_cluster_id <- df_matches_group_A[[i, "mouse_cluster_id"]]
+  mouse_cluster_id_split <- str_split(mouse_cluster_id, pattern = "-")[[1]]
+  nk_mouse <- as.numeric(mouse_cluster_id_split)[1]
+  k_mouse <- as.numeric(mouse_cluster_id_split)[2]
+  
+  mouse_enrichment <- import_enrichment_mouse(params_id = mouse_params_id, 
+                                              pipeline_dir = mouse_pipeline_dir, 
+                                              nk = nk_mouse, k = k_mouse)
+  
+  mouse_enrichment <- mouse_enrichment %>% 
+    filter(Title %in% pathways) %>% 
+    arrange(ID) %>% 
+    select(Title, NLQ) %>% 
+    pivot_wider(names_from = Title, values_from = NLQ) %>% 
+    mutate(group = paste("Mouse", mouse_cluster_id))
+  
+  df_radar <- bind_rows(df_radar, mouse_enrichment)
+  
+}
+
+# df_radar <- df_radar %>% 
+#   mutate_at(vars(-group), scales::rescale) 
+
+df_radar <- df_radar[,c("group", colnames(df_radar)[1:12])]
+
+ggradar::ggradar(df_radar)
+```
+
+```{r}
+mtcars %>%
+  as_tibble(rownames = "group") %>%
+  mutate_at(vars(-group), scales::rescale) %>%
+  tail(4) %>%
+  select(1:10)
+```
+
+```{r}
+df_radar
+```
+
+
+```{r}
+human_enrichment <- import_enrichment_human(params_id = human_params_id, 
+                                            pipeline_dir = human_pipeline_dir, 
+                                            nk = 4, k = 2)
+
+mouse_enrichment <- import_enrichment_mouse(params_id = mouse_params_id, 
+                                            pipeline_dir = mouse_pipeline_dir, 
+                                            nk = 4, k = 4)
+
+human_enrichment <- human_enrichment %>% 
+  filter(Title %in% pathways) %>% 
+  arrange(ID)
+
+mouse_enrichment <- mouse_enrichment %>% 
+  filter(Title %in% pathways) %>% 
+  arrange(ID)
+```
+
+```{r}
+human_enrichment %>% 
+  select(Title, NLQ) %>% 
+  pivot_wider(names_from = Title, values_from = NLQ) %>% 
+  ggradar::ggradar()
+```
+
+
+```{r fig2-pathways-mouse-plot}
+# An additional empty level must be added to close the polar plot
+polar_plot_lvls <- c(" ", pathways)
+
+df_pathways <- bind_rows(mouse_enrichment %>% 
+                           mutate(cluster_id = paste(nk, k, sep = "-"),
+                                  cluster_id = paste("Mouse", cluster_id)),
+                         human_enrichment %>% 
+                           mutate(cluster_id = paste(nk, k, sep = "-"),
+                                  cluster_id = paste("Human", cluster_id))) %>% 
+  rename(pathway = Title)
+```
+
+
+```{r fig2-pathways-mouse-plot}
+# Create a temp df for the additional empty factor level
+df_polar_plot_tmp <- df_pathways %>% 
+  mutate(pathway = as.character(pathway)) %>% 
+  filter(pathway == polar_plot_lvls[length(polar_plot_lvls)]) %>% 
+  mutate(pathway = " ")
+
+# Join the empty factor level to the true factors
+df_polar_plot <- df_pathways %>% 
+  bind_rows(df_polar_plot_tmp) %>% 
+  mutate(pathway = factor(pathway, levels = polar_plot_lvls))
+
+# Clamp q-values to threshold
+NLQ_threshold <- 8
+df_polar_plot <- df_polar_plot %>% 
+  mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+# Polar plot parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+breaks_start <- 0
+breaks_end <- NLQ_threshold
+breaks_step <- 2
+polar_breaks <- seq(breaks_start, breaks_end, by = breaks_step)
+polar_labels <- tibble(pathway = polar_plot_lvls[2],
+                       breaks = polar_breaks)
+
+ggplot(df_polar_plot, 
+       aes(x = pathway, 
+           ymin = 0, ymax = NLQ, 
+           group = cluster_id, 
+           fill = cluster_id, 
+           col = cluster_id)) + 
+  geom_ribbon(alpha = 0.1) + 
+  geom_text(data = polar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = pathway,
+                          y = breaks,
+                          label = breaks)) +
+            # size = font_size*0.36) +
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_continuous(breaks = polar_breaks) +
+  # scale_colour_manual(values = pathways_mouse_palette,
+  #                     guide = guide_legend(title.position = "bottom",
+  #                                          hjust = 0)) + 
+  # scale_fill_manual(values = pathways_mouse_palette,
+  #                   guide = guide_legend(title.position = "bottom",
+  #                                        hjust = 0)) +
+  # scale_size_manual(values = c(0.6, 0.4, 0.4, 0.6)) +
+  # scale_alpha_manual(values = pathways_mouse_alpha) +
+  labs(x = NULL,
+       fill = "Mouse cluster",
+       col = "Mouse cluster") + 
+  theme_bw()
+```
+
+
+```{r fig2-pathways-mouse-plot}
+# Palette for mouse pathway plot
+# pathways_mouse_palette <- c(carto_pal(12, "Prism")[2],
+#                             carto_pal(12, "Vivid")[1],
+#                             carto_pal(12, "Safe")[4],
+#                             carto_pal(12, "Prism")[8])
+# pathways_mouse_palette <- c("#008CFF",
+#                             carto_pal(12, "Vivid")[1],
+#                             "green3",
+#                             "#E63716")
+# pathways_mouse_palette <- c("darkorchid1",
+#                             "seashell4",
+#                             "sienna2",
+#                             "green3")
+# pathways_mouse_palette <- c("darkorchid1",
+#                             "seashell4",
+#                             "sienna2",
+#                             "springgreen4")
+
+# Transparency for mouse pathway plot
+pathways_mouse_alpha <- c(0.4, 0.3, 0.6, 0.4)
+
+# Theme for polar plots
+theme_pathways <- theme(axis.ticks.x = element_blank(),
+                        axis.line.x = element_blank(),
+                        axis.text.x = element_text(size = font_size-1,
+                                                   family = font_family),
+                        axis.text.y = element_blank(),
+                        axis.ticks.y = element_blank(),
+                        axis.title.y = element_blank(),
+                        panel.border = element_blank(),
+                        legend.position = "bottom",
+                        legend.key.size = unit(12, "bigpts"),
+                        legend.title = element_text(size = font_size,
+                                                    family = font_family,
+                                                    hjust = 0.5),
+                        legend.text = element_text(size = font_size,
+                                                   family = font_family),
+                        legend.margin = margin(b = 5)
+)
+
+# Generate polar plot
+fig2_pathways_mouse <- ggplot(df_polar_plot, 
+                              aes(x = pathway, 
+                                  ymin = 0, ymax = NLQ, 
+                                  group = cluster_id, 
+                                  fill = cluster_id, 
+                                  col = cluster_id)) + 
+  geom_ribbon(mapping = aes(alpha = cluster_id,
+                            size = cluster_id)) + 
+  geom_text(data = polar_labels,
+            inherit.aes = FALSE,
+            mapping = aes(x = pathway,
+                          y = breaks,
+                          label = breaks),
+            family = font_family,
+            size = font_size*0.36) +
+  coord_radar(start = theta_start, clip = "off") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_continuous(breaks = polar_breaks) +
+  scale_colour_manual(values = pathways_mouse_palette,
+                      guide = guide_legend(title.position = "bottom",
+                                           hjust = 0)) + 
+  scale_fill_manual(values = pathways_mouse_palette,
+                    guide = guide_legend(title.position = "bottom",
+                                         hjust = 0)) +
+  scale_size_manual(values = c(0.6, 0.4, 0.4, 0.6)) + 
+  scale_alpha_manual(values = pathways_mouse_alpha) +
+  labs(x = NULL,
+       fill = "Mouse cluster",
+       col = "Mouse cluster") + 
+  theme_bw() + 
+  theme_pathways
+```
+
+
+```{r fig2-pathways-mouse-plot}
+# Extract legend grob
+fig2_pathways_mouse_legend_grob <- fig2_pathways_mouse %>% 
+  ggplotGrob() %>% 
+  grid.force() %>% 
+  getGrob("guides.3-3-3-3")
+
+# Remove legend
+fig2_pathways_mouse <- fig2_pathways_mouse +
+  theme(legend.position = "none")
+
+# Plot grob
+fig2_pathways_mouse_grob <- grid.force(ggplotGrob(fig2_pathways_mouse))
+
+# Fix polar axis labels
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["label"]] <- pathway_label_lvls_clustered
+
+# Get initial label positions
+fig2_pathways_mouse_labels_x <- fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]]
+fig2_pathways_mouse_labels_y <- fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]]
+
+# Nudge label positions
+fig2_pathways_mouse_labels_x_nudge <- c(0.00, 0.00, 0.00, 0.00, 0.00, 
+                                        0.00, 0.00, 0.00, 0.00, 0.00, 
+                                        0.00, 0.00, 0.00, 0.00, 0.00, 
+                                        0.00, 0.00, 0.00, 0.00, 0.00)
+
+fig2_pathways_mouse_labels_y_nudge <- c(0.00, 0.00, 0.00, 0.00, 0.00, 
+                                        0.00, 0.00, 0.00, 0.00, 0.00, 
+                                        0.00, 0.00, 0.00, 0.00, 0.00, 
+                                        0.00, 0.00, 0.00, 0.00, 0.00)
+
+# Add units to nudge values
+fig2_pathways_mouse_labels_x_nudge <- unit(fig2_pathways_mouse_labels_x_nudge, "native")
+fig2_pathways_mouse_labels_y_nudge <- unit(fig2_pathways_mouse_labels_y_nudge, "native")
+
+# Update label positions
+fig2_pathways_mouse_labels_x <- fig2_pathways_mouse_labels_x + fig2_pathways_mouse_labels_x_nudge
+fig2_pathways_mouse_labels_y <- fig2_pathways_mouse_labels_y + fig2_pathways_mouse_labels_y_nudge
+
+# Set new label positions
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["x"]] <- fig2_pathways_mouse_labels_x
+fig2_pathways_mouse_grob[["children"]][["panel.7-5-7-5"]][["children"]][[6]][["children"]][[1]][["children"]][[1]][["y"]] <- fig2_pathways_mouse_labels_y
+```
 
 # Development
 
