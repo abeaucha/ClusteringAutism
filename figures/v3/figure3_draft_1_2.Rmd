@@ -1,0 +1,772 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-11-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Initialization
+
+```{r}
+library(tidyverse)
+# library(RMINC)
+# library(ggalluvial)
+library(patchwork)
+# library(MRIcrotome)
+library(grid)
+library(gridExtra)
+library(RColorBrewer)
+# library(ggnewscale)
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+source(file.path(SRCPATH, "enrichment.R"))
+```
+
+```{r}
+outfile_prefix <- "figure3_draft_1_1"
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
+```
+
+```{r}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
+
+human_datasets <- c("POND", "HBN")
+
+params_ids <- c("POND" = "375", "HBN" = "861")
+# params_ids <- c("POND" = "852", "HBN" = "021")
+metadata <- file.path(pipeline_dir, "metadata.csv")
+human_params_ids <- character(2)
+for (i in 1:length(params_ids)) {
+  pipeline_params <- fetch_params_metadata(metadata = metadata,
+                                           params = list(id = params_ids[i]))
+  
+  human_params_ids[i] <- pipeline_params[["input_1_id"]]
+}
+mouse_params_id <- pipeline_params[["input_2_id"]]
+```
+
+```{r}
+human_pipeline_dirs <- file.path(PROJECTPATH, "data/human/derivatives/v3/", human_params_ids)
+
+human_cluster_dirs <- file.path(human_pipeline_dirs, "clusters", "resolution_3.0")
+human_centroid_dirs <- file.path(human_pipeline_dirs, "centroids", "resolution_0.8")
+```
+
+```{r}
+mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/", mouse_params_id)
+
+mouse_enrichment_dir <- file.path(mouse_pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025", "950", "NeighbourhoodEnrichment")
+```
+
+
+```{r}
+# Total figure dimensions in pts
+fig_width <- 612
+fig_height <- 792
+
+# # Figure border dimensions in pts
+# border_padding_width <- 4
+# border_padding_height <- border_padding_width
+# 
+# # Vertical padding between panels
+# # panel_padding_height <- 50
+# panel_padding_height <- border_padding_height
+# 
+# # Total width and height of all panels, excluding padding
+# panel_tot_width <- fig_width - 2*border_padding_width
+# panel_tot_height <- fig_height - 2*border_padding_height - 2*panel_padding_height
+# 
+# # Individual panel height
+# panel_height <- panel_tot_height/3
+```
+
+
+# Cluster similarity
+
+
+```{r eval = TRUE}
+list_similarity <- vector(mode = "list", length = length(human_datasets))
+names(list_similarity) <- human_datasets
+for (i in 1:length(list_similarity)) {
+  
+  df_similarity <- compute_similarity_significance(
+    similarity = import_similarity(param_id = params_ids[i], 
+                                   pipeline_dir = pipeline_dir), 
+    permutations = import_similarity_permutations(param_id = params_ids[i], 
+                                                  pipeline_dir = pipeline_dir)
+  )
+  
+  colnames(df_similarity) <- colnames(df_similarity) %>% 
+    str_replace("img1", "human") %>% 
+    str_replace("img2", "mouse")
+  
+  cluster_ids <- df_similarity %>% 
+    select(human_cluster_id, human_nk, human_k) %>% 
+    arrange(human_nk, human_k) %>% 
+    distinct() %>% 
+    pull(human_cluster_id)
+  
+  df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                                 mouse_cluster_id = cluster_ids) 
+  
+  df_matches <- df_similarity %>% 
+    mutate(match = pval < 0.05) %>% 
+    right_join(df_cluster_grid) %>% 
+    mutate(match = ifelse(is.na(match), FALSE, match))
+  
+  list_similarity[[i]] <- df_matches
+  
+}
+```
+
+
+```{r}
+mouse_clusters_match <- list_similarity$POND %>% 
+  filter(match) %>% 
+  select(mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  distinct() %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  pull(mouse_cluster_id)
+```
+
+
+
+```{r}
+list_cluster_groups <- list("A" = c("5-1", "6-1", "7-1", "8-1", "9-1", "10-1"),
+                            "B" = c("5-3", "6-3", "7-3", "8-5", "9-4", "10-3"),
+                            "C" = c("5-5", "6-4", "7-4", "8-2", "9-5", "10-5"),
+                            "D" = c("5-4", "6-5", "7-7", "8-6", "9-2", "10-4"))
+# "E" = c("5-1", "6-6", "7-6", "8-7", "9-9", "10-9"),
+# "F" = c("5-2", "6-2", "7-2", "8-8", "9-6", "10-2"))
+
+
+df_cluster_groups <- as_tibble(list_cluster_groups) %>% 
+  pivot_longer(cols = everything(), names_to = "group", values_to = "mouse_cluster_id")
+
+df_cluster_groups <- bind_rows(tibble(group = c("A", "D"), 
+                                      mouse_cluster_id = c("2-1", "2-2")),
+                               tibble(group = c("D", "A"), 
+                                      mouse_cluster_id = c("3-1", "3-3")),
+                               tibble(group = c("D", "B", "A"),
+                                      mouse_cluster_id = c("4-1", "4-3", "4-4")),
+                               df_cluster_groups) %>% 
+  separate(col = "mouse_cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+has_match_pond <- list_similarity[[1]] %>% 
+  filter(match) %>% 
+  pull(mouse_cluster_id) %>% 
+  unique()
+
+has_match_hbn <- list_similarity[[2]] %>% 
+  filter(match) %>% 
+  pull(mouse_cluster_id) %>% 
+  unique()
+
+df_cluster_groups <- df_cluster_groups %>% 
+  mutate(pond_match = mouse_cluster_id %in% has_match_pond,
+         hbn_match = mouse_cluster_id %in% has_match_hbn,
+         has_match = pond_match | hbn_match)
+
+df_cluster_groups_matches <- df_cluster_groups %>% 
+  filter(has_match) %>% 
+  select(mouse_cluster_id, nk, k, group)
+```
+
+```{r}
+col2hex <- function(x, alpha = FALSE) {
+  args <- as.data.frame(t(col2rgb(x, alpha = alpha)))
+  args <- c(args, list(names = x, maxColorValue = 255))
+  do.call(rgb, args)
+}
+
+col2hex("springgreen4")
+col2hex("darkorchid1")
+col2hex("seagreen2")
+```
+
+
+
+
+```{r}
+enrichment_dir <- file.path(PROJECTPATH, "data", "enrichment")
+
+# Path to Reactome hierarchy file
+reactome_hierarchy <- file.path(enrichment_dir, "reactome_hierarchy.csv")
+
+# Import Reactome hierarchy
+df_reactome_hierarchy <- read_csv(reactome_hierarchy, show_col_types = FALSE)
+
+# Initialize tree levels for root pathways
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(level = ifelse(is.na(ParentID), 0, NA))
+
+# Iterate lvl down the tree
+nmissing <- sum(is.na(df_reactome_hierarchy$level))
+lvl <- 0
+while (nmissing > 0) {
+  
+  df_reactome_lvl <- df_reactome_hierarchy %>% 
+    filter(level == lvl)
+  
+  # Iterate over nodes at given level
+  for (i in 1:nrow(df_reactome_lvl)){
+    
+    node <- df_reactome_lvl[[i, "Name"]]
+    
+    df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+      mutate(level = ifelse(is.na(Parent), 0, 
+                            ifelse(Parent == node, lvl+1, level)))
+    
+  }
+  
+  nmissing <- sum(is.na(df_reactome_hierarchy$level))
+  lvl <- lvl + 1
+  
+}
+
+# Clean up names
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(Name = str_replace_all(Name, "  ", " "),
+         Name = str_replace_all(Name, "/", " "))
+
+# Bader Reactome gene sets
+module_file <- file.path(enrichment_dir, "Human_Reactome_June_01_2025_symbol.gmt")
+
+# Import Bader sets
+df_modules <- get_module_sizes(modules = module_file)
+
+df_modules <- df_modules %>% 
+  rename(IDBader = ID) %>% 
+  mutate(ID = IDBader %>% 
+           str_split_i("%", i = -1) %>% 
+           str_remove("R-HSA-") %>% 
+           str_remove("\\.[0-9]+"),
+         ID = paste0("R-HSA-", ID)) %>% 
+  mutate(Title = str_replace_all(Title, "  ", " "))
+
+df_reactome <- inner_join(df_reactome_hierarchy,
+                          df_modules,
+                          by = "ID")
+
+# Pathways to keep
+pathway_ids_keep <- df_reactome %>% 
+  filter(B > 10) %>% 
+  pull(IDBader)
+```
+
+```{r fig2-heatmap-pathways-import}
+# Prefix for pathway data files
+pathways_file_prefix <- "cluster_pathway_enrichment"
+
+nk_max <- 10
+stringdb_threshold <- 950
+
+# Iterate over cluster solutions and import mouse pathway enrichment files
+list_pathways <- vector(mode = "list", length = nk_max-1)
+names(list_pathways) <- 2:nk_max
+for (nk in 2:nk_max) {
+  
+  # Iterate over cluster number
+  list_pathways[[nk-1]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    pathways_file <- paste(pathways_file_prefix, nk, k, stringdb_threshold, sep = "_")
+    pathways_file <- paste0(pathways_file, ".csv")
+    pathways_file <- file.path(mouse_enrichment_dir, pathways_file)
+    list_pathways[[nk-1]][[k]] <- read_csv(pathways_file, show_col_types = FALSE)  %>% 
+      semi_join(df_reactome, by = c("ID" = "IDBader")) %>% 
+      left_join(df_reactome %>% 
+                  select(ID = IDBader, level, Parent, Root), by = "ID") %>% 
+      filter(ID %in% pathway_ids_keep) %>% 
+      filter(!(Root == "Signal Transduction" & Title == "Integrin signaling"))
+  }
+  
+  # Combine clusters per solution
+  list_pathways[[nk-1]] <- bind_rows(list_pathways[[nk-1]]) %>% 
+    mutate(nk = nk) 
+  
+}
+
+# Reduce all pathway data frames into one
+df_pathways_all <- bind_rows(list_pathways)
+
+df_pathways_all <- df_pathways_all %>% 
+  rename(pathway = Title) %>% 
+  mutate(NLQ = -log10(adj.P.Val)) %>% 
+  mutate(pathway = ifelse(pathway == "Signaling Pathways", "Signal Transduction", pathway)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+df_pathways_all <- df_pathways_all %>% 
+  filter(Root != "Disease")
+```
+
+```{r}
+df_pca_in <- df_pathways_all %>%
+  filter(!(pathway %in% c("Meiosis", "Synthesis of DNA"))) %>% 
+  select(cluster_id, pathway, NLQ, level) %>% 
+  filter(level == 1) 
+
+pca_pathways_exclude <- df_pca_in %>% 
+  group_by(pathway) %>% 
+  count() %>% 
+  filter(n != 54) %>% 
+  pull(pathway)
+
+df_pca_in <- df_pca_in %>% 
+  filter(!(pathway %in% pca_pathways_exclude)) %>% 
+  mutate(cluster_id = paste0("cluster_", str_replace(cluster_id, "-", "_"))) %>% 
+  pivot_wider(id_cols = c("pathway", "level"), names_from = cluster_id, values_from = NLQ)
+
+mat_pca_in <- df_pca_in %>% 
+  select(-pathway, -level) %>% 
+  as.matrix()
+
+pca_out <- prcomp(mat_pca_in, center = TRUE, scale = TRUE)
+df_pca <- as_tibble(pca_out$x) %>% 
+  mutate(PC1 = -1*PC1,
+         pathway = df_pca_in$pathway,
+         level = df_pca_in$level)
+
+ggplot(df_pca, aes(x = PC1, y = PC2)) + 
+  geom_point()
+```
+
+```{r}
+pathways_subset <- df_pca %>% 
+  filter(PC1 > 5) %>% 
+  pull(pathway)
+
+# pathways_subset <- df_pca %>% 
+#   select(pathway, level, PC1) %>% 
+#   slice_max(order_by = PC1, n = 10) %>% 
+#   pull(pathway)
+
+pathways_subset
+```
+
+```{r}
+df_pathways_subset <- df_pathways_all %>% 
+  filter(pathway %in% pathways_subset) %>% 
+  group_by(pathway) %>% 
+  mutate(NLQ_norm = NLQ/max(NLQ)) %>% 
+  ungroup() %>% 
+  mutate(NLQ_norm = ifelse(is.nan(NLQ_norm), 0, NLQ_norm))
+
+mat_pathways_subset <- df_pathways_subset %>% 
+  select(pathway, cluster_id, NLQ_norm) %>% 
+  pivot_wider(id_cols = pathway, names_from = "cluster_id", values_from = "NLQ_norm") %>% 
+  column_to_rownames("pathway") %>% 
+  as.matrix()
+
+# 
+# mat_pathways_subset <- df_pca %>% 
+#   filter(pathway %in% pathways_subset) %>% 
+#   select(-level) %>% 
+#   column_to_rownames("pathway") %>% 
+#   as.matrix()
+
+mat_pathways_subset %>% 
+  t() %>% 
+  hclust_wcss() %>% 
+  as_tibble() %>% 
+  mutate(nk = 1:nrow(.)) %>% 
+  ggplot(mapping = aes(nk, y = value)) + 
+  geom_line() + 
+  geom_point() + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  labs(x = "Number of clusters",
+       y = "Within-cluster sum of squared distance") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+
+
+
+```{r}
+pathway_hc <- hclust(d = dist(mat_pathways_subset, 
+                              method = "euclidean"))
+
+# Extract pathway order according to clustering
+pathway_lvls <- pathway_hc[["labels"]]
+pathway_order <- pathway_hc[["order"]]
+pathway_lvls_clustered <- pathway_lvls[pathway_order]
+
+# Obtain pathway cluster order at selected solution
+df_pathway_hclust <- cutree(pathway_hc, k = 4) %>% 
+  enframe(name = "pathway", value = "pathway_cluster") 
+
+# Relevel pathways to follow dendrogram order
+df_pathway_cluster_lvls <- df_pathway_hclust %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
+  arrange(pathway) %>% 
+  select(pathway_cluster) %>% 
+  distinct() %>% 
+  mutate(pathway_cluster_new = 1:nrow(.))
+
+df_pathway_hclust <- df_pathway_hclust %>% 
+  left_join(df_pathway_cluster_lvls, by = "pathway_cluster") %>% 
+  select(-pathway_cluster, pathway_cluster = pathway_cluster_new)
+
+df_pathways_heatmap <- df_pathways_subset %>% 
+  left_join(df_pathway_hclust, by = "pathway") 
+
+# %>% 
+#   mutate(pathway = factor(pathway, levels = pathway_lvls_clustered))
+
+# df_pathway_labels <- tibble(pathway = pathway_lvls_clustered,
+#                             pathway_label = c("DAP12 interactions",
+#                                               "Neurexins and neuroligins",
+#                                               "Protein-protein interactions at synapses",
+#                                               "Transmission across chemical synapses",
+#                                               "Postsynaptic signal transmission",
+#                                               "Epigenetic regulation of gene expression",
+#                                               "Chromatin modifying enzymes",
+#                                               "RNA Polymerase II transcription",
+#                                               "Generic transcription pathway",
+#                                               "Signaling by WNT",
+#                                               "TCF dependent signaling",
+#                                               "Signaling by Rho GTPases",
+#                                               "Signaling by Rho, Miro and RHOBTB3",
+#                                               "Axon guidance",
+#                                               "Nervous system development",
+#                                               "FCGR dependent phagocytosis",
+#                                               "Signaling by VEGF",
+#                                               "Signaling by Receptor Tyrosine Kinases",
+#                                               "Cellular response to stress",
+#                                               "Cellular response to chemical stress",
+#                                               "ESR-mediated signaling",
+#                                               "Signaling by nuclear receptors",
+#                                               "Adaptive immune system",
+#                                               "Neddylation",
+#                                               "MAPK family signaling",
+#                                               "ERK1 ERK2 pathway",
+#                                               "Signaling by EGFR",
+#                                               "Cytokine signaling",
+#                                               "Signaling by second messengers",
+#                                               "PI3K AKT signaling"))
+
+df_pathway_labels <- tibble(pathway = pathway_lvls_clustered,
+                            pathway_label = pathway_lvls_clustered)
+
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  left_join(df_pathway_labels, by = "pathway") %>% 
+  mutate(pathway_label = factor(pathway_label, levels = df_pathway_labels$pathway_label))
+
+
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  filter(cluster_id %in% mouse_clusters_match)
+
+NLQ_threshold <- 30
+tmp <- df_pathways_heatmap %>% 
+  select(cluster_id, pathway, pathway_label, pathway_cluster, NLQ) %>% 
+  left_join(df_cluster_groups, by = c("cluster_id" = "mouse_cluster_id")) %>% 
+  mutate(intensity = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+heatmap_limits <- c(2, NLQ_threshold)
+heatmap_fill_lab <- "Enrichment (-log10(q))"
+
+# Heatmap palette
+heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
+```
+
+
+```{r}
+ggplot(tmp, 
+       aes(x = factor(nk), 
+           y = fct_rev(pathway_label), 
+           fill = intensity)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(pathway_cluster~group, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion(), position = "left") +
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = heatmap_limits,
+                       breaks = c(2, 10, 20, 30),
+                       na.value = "grey85") +
+  labs(y = NULL,
+       x = "Mouse cluster",
+       fill = heatmap_fill_lab) +
+  theme_bw() +
+  theme(strip.background.y = element_blank(),
+        strip.text.y = element_blank(),
+        axis.text.y = element_text(size = 8),
+        legend.position = "bottom",
+        legend.direction = "horizontal")
+```
+
+
+```{r}
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  mutate(nk_label = paste0("K = ", nk))
+
+nk_label_lvls <- df_pathways_heatmap %>% 
+  select(nk_label, nk) %>% 
+  distinct() %>% 
+  arrange(nk) %>% 
+  pull(nk_label)
+
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  mutate(nk_label = factor(nk_label, levels = nk_label_lvls))
+
+# Clamped enrichment statistic
+NLQ_threshold <- 30
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  mutate(intensity = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+heatmap_limits <- c(2, NLQ_threshold)
+heatmap_fill_lab <- "Enrichment (-log10(q))"
+
+# Heatmap palette
+heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")
+heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
+
+
+plt_heatmap <- ggplot(df_pathways_heatmap, 
+                      aes(x = factor(k), 
+                          y = fct_rev(pathway_label), 
+                          fill = intensity)) + 
+  geom_tile(col = "grey60") +
+  facet_grid(pathway_cluster~nk_label, scales = "free", space = "free") + 
+  scale_x_discrete(expand = expansion()) + 
+  scale_y_discrete(expand = expansion(), position = "left") +
+  scale_fill_gradientn(colors = heatmap_palette,
+                       limits = heatmap_limits,
+                       breaks = c(2, 10, 20, 30),
+                       na.value = "grey85") +
+  labs(y = NULL,
+       x = "Mouse cluster",
+       fill = heatmap_fill_lab) +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        strip.text = element_blank(),
+        axis.text.y = element_text(size = 8),
+        legend.position = "bottom",
+        legend.direction = "horizontal")
+
+heatmap_grob <- ggplotGrob(plt_heatmap)
+
+
+df_pathways_groups <- df_pathways_heatmap %>% 
+  select(mouse_cluster_id = cluster_id, nk_label) %>% 
+  distinct() %>% 
+  left_join(df_cluster_groups, by = "mouse_cluster_id") %>% 
+  mutate(y = "y")
+
+palette <- c("A" = "springgreen4",
+             "B" = "sienna2",
+             "C" = "seagreen2",
+             "D" = "darkorchid1")
+
+plt_heatmap_groups <- ggplot(df_pathways_groups, aes(x = factor(k), y = 1, fill = group)) + 
+  geom_tile() +
+  facet_grid(.~nk_label, scales = "free", space = "free") +
+  scale_x_discrete(expand = expansion()) +
+  scale_y_discrete(expand = expansion()) +
+  scale_fill_manual(values = palette) +
+  theme_bw() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        legend.position = "none")
+
+plt_heatmap_patchwork <- (plt_heatmap_groups / plot_spacer() / plt_heatmap) +
+  plot_layout(heights = c(0.05, 0.015, 0.935)) &
+  theme(plot.margin = margin(l = 0))
+
+heatmap_patchwork_grob <- patchworkGrob(plt_heatmap_patchwork)
+```
+
+
+```{r}
+plt_heatmap
+```
+
+
+```{r}
+# df_polar_subset <- tibble(pathway = c("Protein-protein interactions at synapses",
+#                                         "Transmission across Chemical Synapses",
+#                                       "Chromatin modifying enzymes",
+#                                         "Generic Transcription Pathway",
+#                                         "Signaling by WNT",
+#                                         "Signaling by Rho GTPases",
+#                                         "Axon guidance",
+#                                         "Signaling by Nuclear Receptors",
+#                                         "Adaptive Immune System",
+#                                         "MAPK family signaling cascades"),
+#                             acronym = c("PPI", "TACS", "Chromatin", "Transcription", "WNT", "Rho GTPases", 
+#                                         "Axon guidance", "Nuclear Receptors", "Immune", "MAPK"))
+
+df_polar_subset <- tibble(pathway = c("Protein-protein interactions at synapses",
+                                      "Adaptive Immune System",
+                                      "Intracellular signaling by second messengers",
+                                      "Signaling by Nuclear Receptors",
+                                      "Epigenetic regulation of gene expression",
+                                      "Signaling by Receptor Tyrosine Kinases",
+                                      "MAPK family signaling cascades",
+                                      "Signaling by WNT",
+                                      "Nervous system development",
+                                      "Signaling by Rho GTPases, Miro GTPases and RHOBTB3"),
+                            acronym = c("PPI", "Immune", "Second messengers", "Nuclear Receptors", "Epigenetic regulation",
+                                        "Receptor Tyrosine Kinases", "MAPK", "WNT", "NSD", "GTPases"))
+
+# df_pathways_polar <- df_pathways_heatmap %>%
+#   right_join(df_polar_subset, by = "pathway")
+df_pathways_polar <- df_pathways_heatmap
+
+# Polar plot pathway order
+# polar_plot_lvls <- c(" ", df_polar_subset$acronym)
+polar_plot_lvls <- c(" ", pathway_lvls_clustered)
+
+# Polar plot parameters
+nspokes <- length(polar_plot_lvls) - 1
+theta_start <- -(2*pi)/nspokes
+polar_threshold <- 15
+
+nk_subset <- c(2, 4, 8)
+
+list_polar_palettes <- list(
+  c("2-1" = "springgreen4",
+       "2-2" = "darkorchid1"),
+  c("4-1" = "darkorchid1",
+       "4-3" = "sienna2",
+       "4-4" = "springgreen4"),
+  c("8-1" = "springgreen4",
+       "8-2" = "seagreen2",
+       "8-5" = "sienna2",
+       "8-6" = "darkorchid1")
+)
+
+list_polar_grobs <- vector(mode = "list", length = length(nk_subset))
+names(list_polar_grobs) <- nk_subset
+for (i in 1:length(nk_subset)) {
+  
+  df_pathways_nk <- df_pathways_polar %>% 
+    filter(nk == nk_subset[i]) %>% 
+    mutate(label = as.character(pathway))
+    # mutate(label = as.character(acronym))
+  
+  # Create a temp df for the additional empty factor level
+  df_polar_plot_tmp <- df_pathways_nk %>%
+    filter(label == polar_plot_lvls[length(polar_plot_lvls)]) %>%
+    mutate(label = " ")
+  
+  df_polar_plot <- df_pathways_nk %>%
+    bind_rows(df_polar_plot_tmp) %>%
+    mutate(label = factor(label, levels = polar_plot_lvls))
+  # mutate(NLQ = ifelse(NLQ > polar_threshold, polar_threshold, NLQ))
+  
+  plt_polar <- ggplot(df_polar_plot, 
+                      aes(x = label, 
+                          ymin = 0,
+                          ymax = NLQ, 
+                          group = cluster_id, 
+                          fill = cluster_id, 
+                          col = cluster_id)) +
+    geom_ribbon(alpha = 0.3, show.legend = FALSE) +
+    coord_radar(start = theta_start, clip = "off") +
+    scale_x_discrete(expand = expansion()) +
+    scale_fill_manual(values = list_polar_palettes[[i]]) + 
+    scale_colour_manual(values = list_polar_palettes[[i]]) +
+    theme_bw() +
+    theme(panel.border = element_blank(),
+          axis.title = element_blank(),
+          axis.text.y = element_blank(),
+          axis.text.x = element_text(size = 7),
+          axis.ticks = element_blank())
+  
+  list_polar_grobs[[i]] <- gTree(children = gList(ggplotGrob(plt_polar),
+                                                  rectGrob()))
+  
+}
+
+
+list_polar_label_grobs <- vector(mode = "list", length = length(nk_subset))
+names(list_polar_label_grobs) <- nk_subset
+for (i in 1:length(nk_subset)) {
+  
+  label_grob <- textGrob(label = paste0("K = ", nk_subset[i]),
+                         gp = gpar(fontsize = 9))
+  
+  background_grob <- rectGrob(gp = gpar(fill = "grey85"))
+  
+  list_polar_label_grobs[[i]] <- gTree(children = gList(background_grob,
+                                                        label_grob))
+  
+}
+
+
+polar_padding_width <- 15
+polar_panel_tot_width <- fig_width - 2*polar_padding_width
+polar_panel_width <- polar_panel_tot_width/3
+
+polar_widths <- c(polar_panel_width, polar_padding_width, polar_panel_width, polar_padding_width, polar_panel_width)
+polar_heights <- c(20, 3, 158)
+
+
+polar_layout <- rbind(1:5, 6, 7:11)
+
+
+polar_grobs <- arrangeGrob(list_polar_label_grobs[["2"]],
+                           zeroGrob(),
+                           list_polar_label_grobs[["4"]],
+                           zeroGrob(),
+                           list_polar_label_grobs[["8"]],
+                           zeroGrob(),
+                           list_polar_grobs[["2"]],
+                           zeroGrob(),
+                           list_polar_grobs[["4"]],
+                           zeroGrob(),
+                           list_polar_grobs[["8"]],
+                           layout_matrix = polar_layout,
+                           widths = unit(polar_widths, "bigpts"),
+                           heights = unit(polar_heights, "bigpts"))
+
+polar_height <- sum(polar_heights)
+
+
+
+fig_layout <- cbind(1:4)
+
+fig_widths <- fig_width
+
+heatmap_height <- 0.5*fig_height
+panel_padding_height <- 10
+empty_height <- fig_height - heatmap_height - polar_height - panel_padding_height
+
+fig_heights <- c(polar_height, panel_padding_height, heatmap_height, empty_height)
+
+fig_grob <- arrangeGrob(polar_grobs,
+                        zeroGrob(),
+                        heatmap_patchwork_grob, 
+                        zeroGrob(),
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"),
+                        heights = unit(fig_heights, "bigpts"))
+
+fig_width_in <- sum(fig_widths)/72
+fig_height_in <- sum(fig_heights)/72
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+dev.off()
+```
+

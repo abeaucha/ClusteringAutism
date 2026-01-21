@@ -1,0 +1,440 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-11-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Initialization
+
+```{r}
+library(tidyverse)
+# library(RMINC)
+# library(ggalluvial)
+library(patchwork)
+# library(MRIcrotome)
+library(grid)
+library(gridExtra)
+library(RColorBrewer)
+# library(ggnewscale)
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+source(file.path(SRCPATH, "enrichment.R"))
+```
+
+```{r}
+outfile_prefix <- "figure3_draft_test"
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
+```
+
+```{r}
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
+
+human_datasets <- c("POND", "HBN")
+
+params_ids <- c("POND" = "375", "HBN" = "861")
+# params_ids <- c("POND" = "852", "HBN" = "021")
+metadata <- file.path(pipeline_dir, "metadata.csv")
+human_params_ids <- character(2)
+for (i in 1:length(params_ids)) {
+  pipeline_params <- fetch_params_metadata(metadata = metadata,
+                                           params = list(id = params_ids[i]))
+  
+  human_params_ids[i] <- pipeline_params[["input_1_id"]]
+}
+mouse_params_id <- pipeline_params[["input_2_id"]]
+```
+
+```{r}
+human_pipeline_dirs <- file.path(PROJECTPATH, "data/human/derivatives/v3/", human_params_ids)
+
+human_cluster_dirs <- file.path(human_pipeline_dirs, "clusters", "resolution_3.0")
+human_centroid_dirs <- file.path(human_pipeline_dirs, "centroids", "resolution_0.8")
+```
+
+```{r}
+mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/", mouse_params_id)
+
+mouse_enrichment_dir <- file.path(mouse_pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025", "950", "NeighbourhoodEnrichment")
+```
+
+
+```{r}
+# Total figure dimensions in pts
+fig_width <- 612
+fig_height <- 792
+
+# # Figure border dimensions in pts
+# border_padding_width <- 4
+# border_padding_height <- border_padding_width
+# 
+# # Vertical padding between panels
+# # panel_padding_height <- 50
+# panel_padding_height <- border_padding_height
+# 
+# # Total width and height of all panels, excluding padding
+# panel_tot_width <- fig_width - 2*border_padding_width
+# panel_tot_height <- fig_height - 2*border_padding_height - 2*panel_padding_height
+# 
+# # Individual panel height
+# panel_height <- panel_tot_height/3
+```
+
+
+# Cluster similarity
+
+
+```{r eval = TRUE}
+list_similarity <- vector(mode = "list", length = length(human_datasets))
+names(list_similarity) <- human_datasets
+for (i in 1:length(list_similarity)) {
+  
+  df_similarity <- compute_similarity_significance(
+    similarity = import_similarity(param_id = params_ids[i], 
+                                   pipeline_dir = pipeline_dir), 
+    permutations = import_similarity_permutations(param_id = params_ids[i], 
+                                                  pipeline_dir = pipeline_dir)
+  )
+  
+  colnames(df_similarity) <- colnames(df_similarity) %>% 
+    str_replace("img1", "human") %>% 
+    str_replace("img2", "mouse")
+  
+  cluster_ids <- df_similarity %>% 
+    select(human_cluster_id, human_nk, human_k) %>% 
+    arrange(human_nk, human_k) %>% 
+    distinct() %>% 
+    pull(human_cluster_id)
+  
+  df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                                 mouse_cluster_id = cluster_ids) 
+  
+  df_matches <- df_similarity %>% 
+    mutate(match = pval < 0.05) %>% 
+    right_join(df_cluster_grid) %>% 
+    mutate(match = ifelse(is.na(match), FALSE, match))
+  
+  list_similarity[[i]] <- df_matches
+  
+}
+```
+
+
+```{r}
+mouse_clusters_match <- list_similarity$POND %>% 
+  filter(match) %>% 
+  select(mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  distinct() %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  pull(mouse_cluster_id)
+```
+
+
+
+```{r}
+list_cluster_groups <- list("A" = c("5-1", "6-1", "7-1", "8-1", "9-1", "10-1"),
+                            "B" = c("5-3", "6-3", "7-3", "8-5", "9-4", "10-3"),
+                            "C" = c("5-5", "6-4", "7-4", "8-2", "9-5", "10-5"),
+                            "D" = c("5-4", "6-5", "7-7", "8-6", "9-2", "10-4"))
+# "E" = c("5-1", "6-6", "7-6", "8-7", "9-9", "10-9"),
+# "F" = c("5-2", "6-2", "7-2", "8-8", "9-6", "10-2"))
+
+
+df_cluster_groups <- as_tibble(list_cluster_groups) %>% 
+  pivot_longer(cols = everything(), names_to = "group", values_to = "mouse_cluster_id")
+
+df_cluster_groups <- bind_rows(tibble(group = c("A", "D"), 
+                                      mouse_cluster_id = c("2-1", "2-2")),
+                               tibble(group = c("D", "A"), 
+                                      mouse_cluster_id = c("3-1", "3-3")),
+                               tibble(group = c("D", "B", "A"),
+                                      mouse_cluster_id = c("4-1", "4-3", "4-4")),
+                               df_cluster_groups) %>% 
+  separate(col = "mouse_cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+has_match_pond <- list_similarity[[1]] %>% 
+  filter(match) %>% 
+  pull(mouse_cluster_id) %>% 
+  unique()
+
+has_match_hbn <- list_similarity[[2]] %>% 
+  filter(match) %>% 
+  pull(mouse_cluster_id) %>% 
+  unique()
+
+df_cluster_groups <- df_cluster_groups %>% 
+  mutate(pond_match = mouse_cluster_id %in% has_match_pond,
+         hbn_match = mouse_cluster_id %in% has_match_hbn,
+         has_match = pond_match | hbn_match)
+
+df_cluster_groups_matches <- df_cluster_groups %>% 
+  filter(has_match) %>% 
+  select(mouse_cluster_id, nk, k, group)
+```
+
+```{r}
+col2hex <- function(x, alpha = FALSE) {
+  args <- as.data.frame(t(col2rgb(x, alpha = alpha)))
+  args <- c(args, list(names = x, maxColorValue = 255))
+  do.call(rgb, args)
+}
+
+col2hex("springgreen4")
+col2hex("darkorchid1")
+col2hex("seagreen2")
+```
+
+
+
+
+```{r}
+enrichment_dir <- file.path(PROJECTPATH, "data", "enrichment")
+
+# Path to Reactome hierarchy file
+reactome_hierarchy <- file.path(enrichment_dir, "reactome_hierarchy.csv")
+
+# Import Reactome hierarchy
+df_reactome_hierarchy <- read_csv(reactome_hierarchy, show_col_types = FALSE)
+
+# Initialize tree levels for root pathways
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(level = ifelse(is.na(ParentID), 0, NA))
+
+# Iterate lvl down the tree
+nmissing <- sum(is.na(df_reactome_hierarchy$level))
+lvl <- 0
+while (nmissing > 0) {
+  
+  df_reactome_lvl <- df_reactome_hierarchy %>% 
+    filter(level == lvl)
+  
+  # Iterate over nodes at given level
+  for (i in 1:nrow(df_reactome_lvl)){
+    
+    node <- df_reactome_lvl[[i, "Name"]]
+    
+    df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+      mutate(level = ifelse(is.na(Parent), 0, 
+                            ifelse(Parent == node, lvl+1, level)))
+    
+  }
+  
+  nmissing <- sum(is.na(df_reactome_hierarchy$level))
+  lvl <- lvl + 1
+  
+}
+
+# Clean up names
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(Name = str_replace_all(Name, "  ", " "),
+         Name = str_replace_all(Name, "/", " "))
+
+# Bader Reactome gene sets
+module_file <- file.path(enrichment_dir, "Human_Reactome_June_01_2025_symbol.gmt")
+
+# Import Bader sets
+df_modules <- get_module_sizes(modules = module_file)
+
+df_modules <- df_modules %>% 
+  rename(IDBader = ID) %>% 
+  mutate(ID = IDBader %>% 
+           str_split_i("%", i = -1) %>% 
+           str_remove("R-HSA-") %>% 
+           str_remove("\\.[0-9]+"),
+         ID = paste0("R-HSA-", ID)) %>% 
+  mutate(Title = str_replace_all(Title, "  ", " "))
+
+df_reactome <- inner_join(df_reactome_hierarchy,
+                          df_modules,
+                          by = "ID")
+
+# Pathways to keep
+pathway_ids_keep <- df_reactome %>% 
+  filter(B > 10) %>% 
+  pull(IDBader)
+```
+
+```{r fig2-heatmap-pathways-import}
+# Prefix for pathway data files
+pathways_file_prefix <- "cluster_pathway_enrichment"
+
+nk_max <- 10
+stringdb_threshold <- 950
+
+# Iterate over cluster solutions and import mouse pathway enrichment files
+list_pathways <- vector(mode = "list", length = nk_max-1)
+names(list_pathways) <- 2:nk_max
+for (nk in 2:nk_max) {
+  
+  # Iterate over cluster number
+  list_pathways[[nk-1]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    pathways_file <- paste(pathways_file_prefix, nk, k, stringdb_threshold, sep = "_")
+    pathways_file <- paste0(pathways_file, ".csv")
+    pathways_file <- file.path(mouse_enrichment_dir, pathways_file)
+    list_pathways[[nk-1]][[k]] <- read_csv(pathways_file, show_col_types = FALSE)  %>% 
+      semi_join(df_reactome, by = c("ID" = "IDBader")) %>% 
+      left_join(df_reactome %>% 
+                  select(ID = IDBader, level, Parent, Root), by = "ID") %>% 
+      filter(ID %in% pathway_ids_keep) %>% 
+      filter(!(Root == "Signal Transduction" & Title == "Integrin signaling"))
+  }
+  
+  # Combine clusters per solution
+  list_pathways[[nk-1]] <- bind_rows(list_pathways[[nk-1]]) %>% 
+    mutate(nk = nk) 
+  
+}
+
+# Reduce all pathway data frames into one
+df_pathways_all <- bind_rows(list_pathways)
+
+df_pathways_all <- df_pathways_all %>% 
+  rename(pathway = Title) %>% 
+  mutate(NLQ = -log10(adj.P.Val)) %>% 
+  mutate(pathway = ifelse(pathway == "Signaling Pathways", "Signal Transduction", pathway)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+df_pathways_all <- df_pathways_all %>% 
+  filter(Root != "Disease")
+```
+
+
+```{r}
+df_pca_in <- df_pathways_all %>%
+  filter(!(pathway %in% c("Meiosis", "Synthesis of DNA"))) %>% 
+  select(cluster_id, pathway, NLQ, level) %>% 
+  filter(level == 1) 
+
+pca_pathways_exclude <- df_pca_in %>% 
+  group_by(pathway) %>% 
+  count() %>% 
+  filter(n != 54) %>% 
+  pull(pathway)
+
+df_pca_in <- df_pca_in %>% 
+  filter(!(pathway %in% pca_pathways_exclude)) %>% 
+  mutate(cluster_id = paste0("cluster_", str_replace(cluster_id, "-", "_"))) %>% 
+  pivot_wider(id_cols = c("pathway", "level"), names_from = cluster_id, values_from = NLQ)
+
+mat_pca_in <- df_pca_in %>% 
+  select(-pathway, -level) %>% 
+  as.matrix()
+
+pca_out <- prcomp(mat_pca_in, center = TRUE, scale = TRUE)
+df_pca <- as_tibble(pca_out$x) %>% 
+  mutate(PC1 = -1*PC1,
+         pathway = df_pca_in$pathway,
+         level = df_pca_in$level)
+
+pathways_subset <- df_pca %>% 
+  filter(PC1 > 5) %>% 
+  pull(pathway)
+
+
+pathways_subset
+```
+
+```{r}
+pathway_lvls <- c("Signaling by Nuclear Receptors",
+                  "Cellular responses to stress",
+                  "Adaptive Immune System",
+                  "Signaling by Receptor Tyrosine Kinases",
+                  "MAPK family signaling cascades",
+                  "Intracellular signaling by second messengers",
+                  "Cytokine Signaling in Immune system",
+                  "Protein-protein interactions at synapses",
+                  "Transmission across Chemical Synapses",
+                  "RNA Polymerase II Transcription",
+                  "Epigenetic regulation of gene expression",
+                  "Chromatin modifying enzymes",
+                  "Signaling by WNT",
+                  "Nervous system development",
+                  "Signaling by Rho GTPases, Miro GTPases and RHOBTB3")
+
+NLQ_threshold <- 15
+
+tmp_2 <- df_pathways_all %>% 
+  filter(pathway %in% pathways_subset) %>% 
+  filter(nk == 2) %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls),
+         NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+plt_2 <- ggplot(tmp_2, aes(x = NLQ, y = pathway, fill = factor(k))) + 
+  geom_col(position = "dodge") +
+  geom_vline(xintercept = 1.3) +
+  facet_grid(.~k) +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(), 
+        legend.position = "none")
+
+tmp_4 <- df_pathways_all %>% 
+  filter(pathway %in% pathways_subset) %>% 
+  filter(nk == 4, k %in% c(1, 4)) %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls)) %>% 
+  mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+plt_4 <- ggplot(tmp_4, aes(x = NLQ, y = pathway, fill = factor(k))) + 
+  geom_col(position = "dodge") +
+  geom_vline(xintercept = 1.3) +
+    facet_grid(.~k) +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(), 
+        legend.position = "none")
+
+tmp_6 <- df_pathways_all %>% 
+  filter(pathway %in% pathways_subset) %>% 
+  filter(nk == 6, k %in% c(1, 4, 5)) %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls)) %>% 
+  mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+plt_6 <- ggplot(tmp_6, aes(x = NLQ, y = pathway, fill = factor(k))) + 
+  geom_col(position = "dodge") +
+  geom_vline(xintercept = 1.3) +
+  facet_grid(.~k) +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(), 
+        legend.position = "none")
+
+tmp_8 <- df_pathways_all %>% 
+  filter(pathway %in% pathways_subset) %>% 
+  filter(nk == 8, k %in% c(1, 2, 5, 6)) %>% 
+  mutate(pathway = factor(pathway, levels = pathway_lvls)) %>% 
+  mutate(NLQ = ifelse(NLQ > NLQ_threshold, NLQ_threshold, NLQ))
+
+plt_8 <- ggplot(tmp_8, aes(x = NLQ, y = pathway, fill = factor(k))) + 
+  geom_col(position = "dodge") +
+  geom_vline(xintercept = 1.3) +
+  facet_grid(.~k) +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(), 
+        legend.position = "none")
+```
+
+```{r}
+plt_2 | plt_4 | plt_6 | plt_8
+```
+

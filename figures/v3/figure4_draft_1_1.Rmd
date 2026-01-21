@@ -1,0 +1,3443 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-12-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Initialization
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(rcartocolor))
+suppressPackageStartupMessages(library(candisc))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+```
+
+```{r env}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+source(file.path(SRCPATH, "enrichment.R"))
+```
+
+```{r functions}
+consolidate_visits <- function(df, cols) {
+  
+  subject_ids <- df %>% 
+    pull(subject_id) %>% 
+    unique()
+  
+  df_init <- df %>% 
+    select(subject_id, visit_instance, all_of(cols)) %>% 
+    mutate(n_missing = rowSums(!is.na(across(all_of(cols)))))
+  
+  df_complete <- df_init %>% 
+    filter(n_missing > 0) %>% 
+    group_by(subject_id) %>% 
+    filter(visit_instance == max(visit_instance)) %>% 
+    ungroup() %>% 
+    select(subject_id, all_of(cols))
+  
+  # Participants with completed ABAS
+  ids_complete <- df_complete %>% 
+    pull(subject_id) %>% 
+    unique()
+  
+  # Participants with no ABAS scores
+  ids_missing <- setdiff(subject_ids, ids_complete)
+  
+  # Create a data frame of NAs for particpants with no scores
+  df_missing <- matrix(nrow = length(ids_missing), ncol = length(cols))
+  rownames(df_missing) <- ids_missing
+  colnames(df_missing) <- cols
+  df_missing <- as_tibble(df_missing, rownames = "subject_id")
+  
+  df_out <- bind_rows(df_complete, df_missing)
+  
+  return(df_out)
+  
+}
+
+
+bootstrap_sample_estimate <- function(x, groups = NULL, estimate = "mean", B = 1000, set_seed = TRUE) {
+  
+  if (estimate == "mean") {
+    estimator <- mean
+  } else if (estimate == "median") {
+    estimator <- median
+  } else if (estimate == "sd") {
+    estimator <- sd
+  } else {
+    stop()
+  }
+  
+  n_groups <- ifelse(is.null(groups), 1, length(unique(groups)))
+  if (n_groups > 1) {
+    if (!is.factor(groups)) {
+      stop("groups must be factor")
+    }
+  }
+  groups_lvls <- levels(groups)
+  
+  bootstrap_samples <- matrix(data = 0, nrow = B, ncol = n_groups)
+  colnames(bootstrap_samples) <- groups_lvls
+  for (i in 1:nrow(bootstrap_samples)) {
+    if (n_groups == 1) {
+      if (set_seed) {set.seed(i)}
+      bootstrap_samples[[i]] <- estimator(sample(x = x, size = length(x), 
+                                                 replace = TRUE))
+    } else {
+      x_split <- split(x = x, f = groups)
+      n_split <- lapply(x_split, length)
+      if (set_seed) {set.seed(i)}
+      x_split_sample <- mapply(FUN = sample, x = x_split, size = n_split, 
+                               MoreArgs = list(replace = TRUE))
+      bootstrap_samples[i,] <- sapply(X = x_split_sample, FUN = estimator)
+    }
+  }
+  
+  return(bootstrap_samples)
+  
+}
+
+bootstrap_sample_estimate_ci <- function(x, groups = NULL, estimate = "mean", 
+                                         interval = c(0.025, 0.975), B = 1000, 
+                                         set_seed = TRUE) {
+  bootstrap_samples <- bootstrap_sample_estimate(x = x, groups = groups, estimate = estimate,
+                                                 B = B, set_seed = set_seed)
+  bootstrap_ci <- apply(bootstrap_samples, MARGIN = 2, quantile, interval)
+  bootstrap_ci <- t(bootstrap_ci)
+  colnames(bootstrap_ci) <- c("lower", "upper")
+  return(bootstrap_ci)
+}
+
+group_summary <- function(x, groups, B = 1000) {
+  
+  means <- split(x = x, f = groups) %>% 
+    sapply(mean) %>% 
+    matrix(ncol = 1, nrow = length(levels(groups)))
+  colnames(means) <- "mu"
+  
+  ci <- bootstrap_sample_estimate_ci(x = x, groups = groups, B = B)
+  
+  out <- cbind(means, ci)
+  rownames(out) <- levels(groups)
+  
+  return(out)
+  
+}
+```
+
+```{r outputs}
+outfile_prefix <- "figure4_draft_1_1"
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
+```
+
+```{r pipeline-paths}
+# Pipeline directory
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
+
+# Parameter set ID
+params_id <- "375"
+
+# Fetch pipeline parameters
+metadata <- file.path(pipeline_dir, "metadata.csv")
+pipeline_params <- fetch_params_metadata(metadata = metadata,
+                                         params = list(id = params_id))
+
+# Human and mouse parameter set IDs
+human_params_id <- pipeline_params[["input_1_id"]]
+mouse_params_id <- pipeline_params[["input_2_id"]]
+
+# Human pipeline directory
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/", human_params_id)
+
+# Human cluster and centroid directories
+human_cluster_dir <- file.path(human_pipeline_dir, "clusters", "resolution_3.0")
+human_centroid_dir <- file.path(human_pipeline_dir, "centroids", "resolution_0.8")
+
+# Human registration directory
+human_registration_dir <- file.path(PROJECTPATH, "data/human/registration/v3/")
+```
+
+```{r fig-params}
+# Total figure dimensions in pts
+fig_width <- 612
+fig_height <- 792
+```
+
+
+# Mouse-human cluster similarity
+
+```{r mouse-human-similarity}
+# Import similarity and compute significance
+df_similarity <- compute_similarity_significance(
+  similarity = import_similarity(param_id = params_id, 
+                                 pipeline_dir = pipeline_dir), 
+  permutations = import_similarity_permutations(param_id = params_id, 
+                                                pipeline_dir = pipeline_dir)
+)
+
+# Rename columns
+colnames(df_similarity) <- colnames(df_similarity) %>% 
+  str_replace("img1", "human") %>% 
+  str_replace("img2", "mouse")
+
+# Extract full set of cluster IDs
+cluster_ids <- df_similarity %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  arrange(human_nk, human_k) %>% 
+  distinct() %>% 
+  pull(human_cluster_id)
+
+# Human and mouse cluster grid
+df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                               mouse_cluster_id = cluster_ids) 
+
+# Identify cross-species matches
+df_matches <- df_similarity %>% 
+  mutate(match = pval < 0.05) %>% 
+  right_join(df_cluster_grid,
+             by = c("human_cluster_id", "mouse_cluster_id")) %>% 
+  mutate(match = ifelse(is.na(match), FALSE, match))
+
+# Extract human clusters with mouse matches
+human_clusters_match <- df_matches %>% 
+  filter(match) %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  distinct() %>% 
+  arrange(human_nk, human_k) %>% 
+  pull(human_cluster_id)
+```
+
+
+# Process clinical data
+
+```{r import-pond-db}
+# Import full POND database
+pond_db_file <- "POND_database_export_20251210.csv"
+pond_db_file <- file.path(human_registration_dir, "subject_info/POND", pond_db_file)
+df_pond_db <- read_csv(pond_db_file, show_col_types = FALSE)
+```
+
+```{r clean-pond-db}
+# List of database data columns
+list_data_cols <- list(
+  CBCL = c("cb68ipts", "cb68epts", "cbipts", "cbepts"),
+  ABAS = c("ab05gccs", "ab21gccs", "ab89gccs"),
+  BOT2 = c("bot2_bltc_ss", "bot2_bal_ss", "bot2_bdyc_stds"),
+  KINDL = c("kkid_tot", "kkdo_tot", "kkdy_tot"),
+  NEPSY = c("nepsyii_a516_ar_ss", "nepsyii_a516_mf_ss", "nepsyii_a516_mfd_ss", 
+            "nepsyii_a516_mf_mfd_ccs", "nepsyii_a516_tm_ss",
+            "nepsyii_a716_as_tcssc", "nepsyii_a716_as_css"),
+  OWL = c("owllcss", "owloess", "owlocss"),
+  OWL2 = c("owl2lcss", "owl2oess", "owl2olcss"),
+  RBS = "rbsallt",
+  SCQ = "scqtot",
+  SSP = c("ssp_tactile_rs", "ssp_taste_smell_rs", "ssp_movement_rs", "ssp_underresp_seeks_rs",
+          "ssp_aud_filter_rs", "ssp_low_enrgy_weak_rs", "ssp_vis_aud_rs", "ssp_total_rs"),
+  SpatialNBack = c("s0b_tgt_accuracy", "s0b_nontgt_accuracy", "s1b_tgt_accuracy", "s1b_nontgt_accuracy",
+                   "s2b_tgt_accuracy", "s2b_nontgt_accuracy"),
+  StopTask = c("mt_st_pcrt", "mt_st_mcrtt", "mt_st_crtsdt", "mt_st_psit", "mt_st_ssrtt",
+               "mt_st_itssrt", "mt_st_psrrt"),
+  SWAN = c("adhd_i_sub", "adhd_hi_sub"),
+  TOCS = "tpocs_tot",
+  IQ = c("wasi_ii_fsiq_4", "wasi_fsiq_4", "wisc_v_fsiq", "wisc_iv_fsiq",
+         "sbfulliq", "wppsi47_full", "wppsi_iv47_fsiq_cs", "wasi_ii_fsiq_2",
+         "wasi_fsiq_2")
+)
+
+# Reduce data columns into a vector
+pond_db_data_cols <- reduce(list_data_cols, c)
+
+# Database columns to include
+pond_db_cols <- c("subject_id", "sub_id", "redcap_event_name", "redcap_repeat_instance",
+                  "site", "dob", "primary_diagnosis", "research_confirm_diag", 
+                  pond_db_data_cols)
+
+# Subset for desired columns
+df_pond_db_subset <- df_pond_db[,pond_db_cols]
+
+# Remove deprecated and cross-visit arms
+events_exclude <- c("deprecated_arm_1", "cross_visit_arm_1")
+df_pond_db_subset <- df_pond_db_subset %>% 
+  filter(!(redcap_event_name %in% events_exclude)) %>% 
+  filter(str_detect(subject_id, "deprecated", negate = TRUE))
+
+# Dictionary for site codes
+df_site_codes <- tibble(site_acronym = c("HBK", "HSC", "LHR", "MCU", "QNS"),
+                        site_code = c("105", "088", "113", "114", "394"))
+
+# Redefine site codes based on subject site acronym
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(site_acronym = subject_id %>% 
+           str_trunc(9, ellipsis = "") %>% 
+           str_trunc(3, side = "left", ellipsis = "")) %>% 
+  left_join(df_site_codes, by = "site_acronym") 
+
+# Clean up IDs
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(subject_id_test = str_trunc(subject_id, 4, side = "left", ellipsis = "")) %>% 
+  mutate(pond_id = paste0(site_code, subject_id_test)) %>% 
+  select(-subject_id_test, -sub_id, -site) %>% 
+  rename(site = site_code,
+         redcap_id = subject_id,
+         subject_id = pond_id)  
+
+# Clean up visits information
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(redcap_repeat_instance = ifelse(is.na(redcap_repeat_instance), 0, redcap_repeat_instance)) %>% 
+  mutate(visit_type = ifelse(redcap_event_name == "baseline_arm_1", "baseline", "longitudinal")) %>% 
+  rename(visit_instance = redcap_repeat_instance) %>% 
+  select(-redcap_event_name)
+
+# Correct ABAS values 
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(ab21gccs = ifelse(ab21gccs == "<40", NA, ab21gccs),
+         ab21gccs = as.numeric(ab21gccs))  
+
+# Consolidate missing values
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(across(all_of(pond_db_data_cols), ~ ifelse(.x %in% c(-9999, 999), NA, .x)))
+```
+
+```{r consolidate-clinical-scores}
+# Initialize data frame for POND clinical scores
+df_clinical_scores <- df_pond_db_subset %>% 
+  select(redcap_id, subject_id) %>% 
+  distinct()
+
+
+# Consolidate CBCL scores -----------------------------------------------------
+
+# If cb68 scores present, use those. If not, use cb scores
+df_cbcl_init <- df_pond_db_subset %>% 
+  select(subject_id, visit_instance, starts_with("cb")) %>% 
+  mutate(cbcl_ep_ts = ifelse(!is.na(cb68epts), cb68epts, cbepts),
+         cbcl_ip_ts = ifelse(!is.na(cb68ipts), cb68ipts, cbipts)) %>% 
+  select(subject_id, visit_instance, cbcl_ep_ts, cbcl_ip_ts)
+
+df_cbcl <- consolidate_visits(df = df_cbcl_init, cols = c("cbcl_ep_ts", "cbcl_ip_ts"))
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_cbcl, by = "subject_id")
+
+
+# Consolidate ABAS scores -----------------------------------------------------
+# Unsure of the order to use scales here, when they have multiple in the same visit
+
+df_abas_init <- df_pond_db_subset %>%
+  select(subject_id, visit_instance, starts_with("ab")) %>% 
+  mutate(abas_gccs = ifelse(!is.na(ab89gccs), ab89gccs,
+                            ifelse(!is.na(ab21gccs), ab21gccs, ab05gccs))) %>% 
+  select(subject_id, visit_instance, abas_gccs)
+
+df_abas <- consolidate_visits(df = df_abas_init, cols = "abas_gccs")
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_abas, by = "subject_id")
+
+
+# Consolidate KINDL scores ----------------------------------------------------
+# Not sure if I can compare scores here?
+# Some scores are 0. What is the range? Scores above 100.
+
+df_kindl_init <- df_pond_db_subset %>%
+  select(subject_id, visit_instance, kkid_tot, kkdo_tot, kkdy_tot) %>% 
+  mutate(kindl_tot = ifelse(!is.na(kkdo_tot), kkdo_tot, 
+                            ifelse(!is.na(kkid_tot), kkid_tot, kkdy_tot))) %>% 
+  select(subject_id, visit_instance, kindl_tot)
+
+df_kindl <- consolidate_visits(df = df_kindl_init, cols = "kindl_tot")
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_kindl, by = "subject_id")
+
+
+# Consolidate OWL scores ------------------------------------------------------
+
+df_owl_init <- df_pond_db_subset %>%
+  select(subject_id, visit_instance, starts_with("owl")) %>% 
+  mutate(owl_lc_ss = ifelse(!is.na(owl2lcss), owl2lcss, owllcss),
+         owl_oe_ss = ifelse(!is.na(owl2oess), owl2oess, owloess),
+         owl_olc_ss = ifelse(!is.na(owl2olcss), owl2olcss, owllcss)) %>% 
+  select(subject_id, visit_instance, starts_with("owl"))  
+
+df_owl <- consolidate_visits(df = df_owl_init, cols = c("owl_lc_ss", "owl_oe_ss", "owl_olc_ss"))
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_owl, by = "subject_id")
+
+
+# Consolidate IQ scores ------------------------------------------------------
+
+df_fsiq_init <- df_pond_db_subset %>% 
+  select(subject_id, visit_instance, all_of(list_data_cols[["IQ"]])) %>% 
+  mutate(fsiq = ifelse(!is.na(wasi_ii_fsiq_4), wasi_ii_fsiq_4,
+                       ifelse(!is.na(wasi_fsiq_4), wasi_fsiq_4,
+                              ifelse(!is.na(wisc_v_fsiq), wisc_v_fsiq,
+                                     ifelse(!is.na(wisc_iv_fsiq), wisc_iv_fsiq,
+                                            ifelse(!is.na(sbfulliq), sbfulliq,
+                                                   ifelse(!is.na(wppsi47_full), wppsi47_full,
+                                                          ifelse(!is.na(wppsi_iv47_fsiq_cs), wppsi_iv47_fsiq_cs,
+                                                                 ifelse(!is.na(wasi_ii_fsiq_2), wasi_ii_fsiq_2,
+                                                                        ifelse(!is.na(wasi_fsiq_2), wasi_fsiq_2, NA)))))))))) %>% 
+  select(subject_id, visit_instance, fsiq)
+
+
+df_fsiq <- consolidate_visits(df = df_fsiq_init, cols = "fsiq")
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_fsiq, by = "subject_id")
+
+
+# Consolidate remaining variables ---------------------------------------------
+
+idx_vars <- !(names(list_data_cols) %in% c("CBCL", "ABAS", "KINDL", "OWL", "OWL2", "IQ"))
+list_data_cols_sub <- list_data_cols[idx_vars]
+for (cols in list_data_cols[idx_vars]) {
+  df_clinical_scores <- df_clinical_scores %>% 
+    left_join(consolidate_visits(df = df_pond_db_subset, cols = cols),
+              by = "subject_id")
+}
+
+# Update subject IDs to match clusters and demographics
+df_clinical_scores <- df_clinical_scores %>% 
+  mutate(subject_id = paste0("sub-", subject_id))
+```
+
+
+# Clinical scores analysis
+
+## Import cluster information
+
+```{r import-clusters}
+# Import POND+ clusters
+clusters_file <- file.path(human_cluster_dir, "clusters.csv")
+df_clusters <- read_csv(clusters_file, show_col_types = FALSE)
+
+# Import demographics
+demographics_file <- file.path(human_registration_dir, "subject_info", "demographics.csv")
+df_demographics <- read_csv(demographics_file, show_col_types = FALSE)
+
+# Filter demographics for POND participants
+df_demographics <- df_demographics %>% 
+  filter(Dataset == "POND") %>% 
+  select(file, subject_id = Subject_ID, 
+         age = Age, sex = Sex, dx = DX)
+
+# Join demographics and cluster information
+df_clusters_POND <- df_clusters %>% 
+  inner_join(df_demographics, by = c("ID" = "file"))
+
+# Join clinical scores and cluster information
+df_clusters_clinical <- df_clusters_POND %>% 
+  left_join(df_clinical_scores, by = "subject_id")
+```
+
+```{r clinical-score-completion}
+# Compute completion numbers for each clinical assessment
+df_clinical_completion <- df_clinical_scores %>% 
+  semi_join(df_clusters_POND, by = "subject_id") %>% 
+  select(-redcap_id) %>% 
+  pivot_longer(cols = -subject_id, names_to = "variable", values_to = "score") %>% 
+  mutate(complete = !is.na(score)) %>% 
+  group_by(variable) %>% 
+  summarise(n_completed = sum(complete)) %>% 
+  ungroup() %>% 
+  arrange(desc(n_completed))
+
+df_clinical_completion
+```
+
+```{r cluster-sizes}
+# Compute cluster sizes
+df_cluster_sizes <- df_clusters_clinical %>% 
+  select(ID, contains("nk")) %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id, nk, k) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(nk, k)
+
+df_cluster_sizes
+```
+
+
+```{r}
+clinical_labels <- c("scqtot" = "SCQ Total",
+                     "rbsallt" = "RBS-R Total",
+                     "tpocs_tot" = "TOCS Total",
+                     "adhd_i_sub" = "SWAN Inattentive",
+                     "adhd_hi_sub" = "SWAN Hyperactive/Impulsive",
+                     "fsiq" = "Full-Scale IQ",
+                     "abas_gccs" = "ABAS General Adaptive Composite",
+                     "cbcl_ep_ts" = "CBCL Externalizing",
+                     "cbcl_ip_ts" = "CBCL Internalizing",
+                     "ssp_total_rs" = "SSP Total",
+                     "ssp_aud_filter_rs" = "SSP Auditory Filtering",
+                     "ssp_low_enrgy_weak_rs" = "SSP Low Energy/Weak",
+                     "ssp_movement_rs" = "SSP Movement Sensitivity",
+                     "ssp_tactile_rs" = "SSP Tactile",
+                     "ssp_taste_smell_rs" = "SSP Taste/Smell Sensitivity",
+                     "ssp_underresp_seeks_rs" = "SSP Underresponsive/Seeks Sensation",
+                     "ssp_vis_aud_rs" = "SSP Visual/Auditory Sensitivity",
+                     "owl_lc_ss" = "OWLS Listening Comprehension",
+                     "owl_oe_ss" = "OWLS Oral Expression",
+                     "owl_olc_ss" = "OWLS Oral Language Composite",
+                     "nepsyii_a516_ar_ss" = "NEPSY Affect Recognition",
+                     "nepsyii_a516_mf_ss" = "NEPSY Memory for Faces",
+                     "nepsyii_a516_mfd_ss" = "NEPSY Memory for Faces (Delayed)",
+                     "nepsyii_a516_mf_mfd_ccs" = "NEPSY MF vs. MFD contrast",
+                     "bot2_bal_ss" = "BOT 2 Balance",
+                     "bot2_bltc_ss" = "BOT 2 Bilateral Coordination",
+                     "bot2_bdyc_stds" = "BOT 2 Body Coordination")
+
+df_clinical_labels <- enframe(clinical_labels, name = "variable", value = "label")
+```
+
+
+
+## Univariate analyses
+
+### Differences between clusters
+
+```{r}
+# Minimal cluster size for inclusion
+min_cluster_n <- 30
+
+# Minimal completion number for inclusion
+min_completion_n <- 200
+
+# Select questionnaires to analyze 
+clinical_vars <- df_clinical_completion %>% 
+  filter(n_completed > min_completion_n) %>% 
+  pull(variable)
+
+# Run KW tests for each combination of nk and questionnaire
+df_kw_clusters <- expand_grid(nk = 2:10,
+                              variable = clinical_vars) %>% 
+  mutate(H = 0, p = 0)
+for (i in 1:nrow(df_kw_clusters)) {
+  
+  nki <- df_kw_clusters[[i, "nk"]]
+  variable <- df_kw_clusters[[i, "variable"]]
+  
+  # Fetch cluster sizes for current nk
+  df_cluster_sizes_nk <- df_cluster_sizes %>% 
+    filter(nk == nki) %>% 
+    select(k, n)
+  
+  # Subset variables for analysis
+  cols <- c(paste0("nk", nki), variable)
+  df_model <- df_clusters_clinical[,cols]
+  colnames(df_model) <- c("k", "y")
+  
+  # Filter clusters based on size threshold
+  df_model <- df_model %>% 
+    left_join(df_cluster_sizes_nk, by = "k") %>% 
+    filter(n > min_cluster_n)
+  
+  # Remove participants with missing scores
+  df_model <- df_model %>% 
+    filter(!is.na(y))
+  
+  # Convert cluster number to factor
+  df_model <- df_model %>% 
+    mutate(k = factor(k))
+  
+  # Evaluate KW test
+  kw_out <- kruskal.test(x = df_model[["y"]], g = df_model[["k"]])
+  
+  df_kw_clusters[[i, "H"]] <- kw_out[["statistic"]]
+  df_kw_clusters[[i, "p"]] <- kw_out[["p.value"]]
+  
+}
+
+# Correct p-values using FDR
+df_kw_clusters <- df_kw_clusters %>%
+  group_by(nk) %>% 
+  mutate(q = p.adjust(p, method = "fdr")) %>% 
+  ungroup() 
+
+
+df_kw_clusters <- df_kw_clusters %>% 
+  left_join(df_clinical_labels, by = "variable") %>% 
+  mutate(label = factor(label, levels = df_clinical_labels$label))
+```
+
+
+```{r}
+palette <- magma(n = 9, direction = -1, begin = 0.25, end = 0.85)
+
+pval_labs <- c("[0, 0.05)", "[0.05, 0.1)", "[0.1, 1]")
+
+p_threshold <- 0.1
+df_kw_plt <- df_kw_clusters %>% 
+  mutate(H_threshold = ifelse(p < p_threshold, H, NA),
+         p_group = ifelse(p < 0.05, "low", 
+                          ifelse(p < 0.10, "mid", "high")),
+         p_group = factor(p_group, levels = c("low", "mid", "high"))) 
+
+plt <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = H, fill = H_threshold, size = p_group)) + 
+  geom_point(shape = 21, stroke = 1.2) +
+  scale_fill_gradientn(colors = palette, limits = c(0, 14), na.value = "white", guide = "none") +
+  scale_colour_gradientn(colors = palette, limits = c(0, 14)) + 
+  scale_size_manual(values = c(5, 3.5, 2), 
+                    labels = pval_labs) + 
+  labs(x = "POND+ cluster solution (K)",
+       y = "Clinical scale",
+       col = "H-statistic",
+       size = "p-value") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank())
+
+outfile <- "univariate_1_p_0.1.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+p_threshold <- 0.05
+df_kw_plt <- df_kw_clusters %>% 
+  mutate(H_threshold = ifelse(p < p_threshold, H, NA),
+         significant = ifelse(p < p_threshold, "Yes", "No"),
+         significant = factor(significant, levels = c("Yes", "No")))
+
+plt <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = H, fill = H_threshold, size = significant)) + 
+  geom_point(shape = 21, stroke = 1.2) +
+  scale_fill_gradientn(colors = palette, limits = c(0, 14), na.value = "white", guide = "none") +
+  scale_colour_gradientn(colors = palette, limits = c(0, 14)) + 
+  scale_size_manual(values = c(5, 2),
+                    labels = expression(p < 0.05, p >= 0.05)) + 
+  labs(x = "POND+ cluster solution (K)",
+       y = "Clinical scale",
+       col = "H-statistic",
+       size = "p-value") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank())
+
+outfile <- "univariate_1_p_0.05.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+
+
+```{r}
+df_kw_plt <- df_kw_clusters %>% 
+  mutate(p_group = ifelse(p < 0.05, "low", 
+                          ifelse(p < 0.10, "mid", "high")),
+         p_group = factor(p_group, levels = c("low", "mid", "high"))) 
+
+plt <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = p_group, fill = p_group, size = p_group)) + 
+  geom_point(shape = 21, stroke = 1.2) +
+  scale_fill_manual(values = c(palette[length(palette)], palette[5], "white"), labels = pval_labs, name = "p-value") + 
+  scale_colour_manual(values = c(palette[length(palette)], palette[5], palette[2]), labels = pval_labs, name = "p-value") + 
+  # scale_fill_gradientn(colors = palette, limits = c(0, 14), na.value = "white", guide = "none") +
+  # scale_colour_gradientn(colors = palette, limits = c(0, 14)) + 
+  scale_size_manual(values = c(5, 3.5, 2), 
+                    labels = pval_labs,
+                    name = "p-value") + 
+  labs(x = "POND+ cluster solution (K)",
+       y = "Clinical scale",
+       title = "Comparison between clusters") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank())
+
+
+outfile <- "univariate_2.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+df_clinical_labels
+```
+
+
+```{r}
+variable <- "bot2_bltc_ss"
+nk_subset <- 4:6
+outfile <- "plt_bot2_bltc.pdf"
+
+list_clinical_var <- vector(mode = "list", length = length(nk_subset))
+for (i in 1:length(nk_subset)) {
+  
+  df_inclusion <- df_cluster_sizes %>% 
+    filter(nk == nk_subset[i]) %>% 
+    mutate(included = n > min_cluster_n) %>% 
+    select(k, included)
+  
+  # Subset variables for analysis
+  cols <- c(paste0("nk", nk_subset[i]), variable)
+  df_var_nk <- df_clusters_clinical[,cols]
+  colnames(df_var_nk) <- c("k", "score")
+  
+  df_var_nk <- df_var_nk %>% 
+    left_join(df_inclusion, by = "k") %>% 
+    filter(!is.na(score)) %>% 
+    mutate(k = factor(k))
+  
+  df_var_nk_summary <- group_summary(x = df_var_nk$score, groups = df_var_nk$k)
+  colnames(df_var_nk_summary) <- c("score", "score_min", "score_max")
+  df_var_nk_summary <- df_var_nk_summary %>% 
+    as_tibble(rownames = "k") %>% 
+    mutate(k = as.numeric(k)) %>% 
+    left_join(df_inclusion, by = "k") %>% 
+    # filter(included) %>% 
+    mutate(k = factor(k, levels = 1:nk_subset[i]),
+           nk = nk_subset[i])
+  
+  list_clinical_var[[i]] <- df_var_nk_summary
+  
+}
+
+df_clinical_var <- bind_rows(list_clinical_var)
+
+df_clinical_var <- df_clinical_var %>% 
+  mutate(nk_label = paste0("K = ", nk),
+         nk_label = factor(nk_label))
+
+plt_clinical_var <- ggplot(df_clinical_var, aes(x = k, y = score, ymin = score_min, ymax = score_max, col = included)) + 
+  geom_pointrange() +
+  facet_grid(.~nk_label, scales = "free_x") + 
+  scale_colour_manual(values = c("grey70", "black")) + 
+  # scale_y_discrete(labels = paste0(nki, "-", 1:nki)) + 
+  labs(x = "POND+ cluster (k)",
+       col = "Included in KW test",
+       y = clinical_labels[variable]) +
+  theme_bw()
+
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt_clinical_var)
+dev.off()
+```
+
+```{r}
+variable <- "ssp_underresp_seeks_rs"
+nk_subset <- 7:9
+outfile <- "plt_ssp_underresp.pdf"
+
+list_clinical_var <- vector(mode = "list", length = length(nk_subset))
+for (i in 1:length(nk_subset)) {
+  
+  df_inclusion <- df_cluster_sizes %>% 
+    filter(nk == nk_subset[i]) %>% 
+    mutate(included = n > min_cluster_n) %>% 
+    select(k, included)
+  
+  # Subset variables for analysis
+  cols <- c(paste0("nk", nk_subset[i]), variable)
+  df_var_nk <- df_clusters_clinical[,cols]
+  colnames(df_var_nk) <- c("k", "score")
+  
+  df_var_nk <- df_var_nk %>% 
+    left_join(df_inclusion, by = "k") %>% 
+    filter(!is.na(score)) %>% 
+    mutate(k = factor(k))
+  
+  df_var_nk_summary <- group_summary(x = df_var_nk$score, groups = df_var_nk$k)
+  colnames(df_var_nk_summary) <- c("score", "score_min", "score_max")
+  df_var_nk_summary <- df_var_nk_summary %>% 
+    as_tibble(rownames = "k") %>% 
+    mutate(k = as.numeric(k)) %>% 
+    left_join(df_inclusion, by = "k") %>% 
+    # filter(included) %>% 
+    mutate(k = factor(k, levels = 1:nk_subset[i]),
+           nk = nk_subset[i])
+  
+  list_clinical_var[[i]] <- df_var_nk_summary
+  
+}
+
+df_clinical_var <- bind_rows(list_clinical_var)
+
+df_clinical_var <- df_clinical_var %>% 
+  mutate(nk_label = paste0("K = ", nk),
+         nk_label = factor(nk_label))
+
+plt_clinical_var <- ggplot(df_clinical_var, aes(x = k, y = score, ymin = score_min, ymax = score_max, col = included)) + 
+  geom_pointrange() +
+  facet_grid(.~nk_label, scales = "free_x") + 
+  scale_colour_manual(values = c("grey70", "black")) + 
+  labs(x = "POND+ cluster (k)",
+       col = "Included in KW test",
+       y = clinical_labels[variable]) +
+  theme_bw()
+
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt_clinical_var)
+dev.off()
+```
+
+```{r}
+variable <- "ssp_aud_filter_rs"
+nk_subset <- 8:9
+outfile <- "plt_ssp_aud_filter.pdf"
+
+list_clinical_var <- vector(mode = "list", length = length(nk_subset))
+for (i in 1:length(nk_subset)) {
+  
+  df_inclusion <- df_cluster_sizes %>% 
+    filter(nk == nk_subset[i]) %>% 
+    mutate(included = n > min_cluster_n) %>% 
+    select(k, included)
+  
+  # Subset variables for analysis
+  cols <- c(paste0("nk", nk_subset[i]), variable)
+  df_var_nk <- df_clusters_clinical[,cols]
+  colnames(df_var_nk) <- c("k", "score")
+  
+  df_var_nk <- df_var_nk %>% 
+    left_join(df_inclusion, by = "k") %>% 
+    filter(!is.na(score)) %>% 
+    mutate(k = factor(k))
+  
+  df_var_nk_summary <- group_summary(x = df_var_nk$score, groups = df_var_nk$k)
+  colnames(df_var_nk_summary) <- c("score", "score_min", "score_max")
+  df_var_nk_summary <- df_var_nk_summary %>% 
+    as_tibble(rownames = "k") %>% 
+    mutate(k = as.numeric(k)) %>% 
+    left_join(df_inclusion, by = "k") %>% 
+    # filter(included) %>% 
+    mutate(k = factor(k, levels = 1:nk_subset[i]),
+           nk = nk_subset[i])
+  
+  list_clinical_var[[i]] <- df_var_nk_summary
+  
+}
+
+df_clinical_var <- bind_rows(list_clinical_var)
+
+df_clinical_var <- df_clinical_var %>% 
+  mutate(nk_label = paste0("K = ", nk),
+         nk_label = factor(nk_label))
+
+plt_clinical_var <- ggplot(df_clinical_var, aes(x = k, y = score, ymin = score_min, ymax = score_max, col = included)) + 
+  geom_pointrange() +
+  facet_grid(.~nk_label, scales = "free_x") + 
+  scale_colour_manual(values = c("grey70", "black")) + 
+  labs(x = "POND+ cluster (k)",
+       col = "Included in KW test",
+       y = clinical_labels[variable]) +
+  theme_bw()
+
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt_clinical_var)
+dev.off()
+```
+
+
+### Differences between clusters with mouse matches and those without
+
+```{r}
+df_cluster_matches <- df_clusters_clinical %>% 
+  select(ID, contains("nk")) %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  mutate(has_match = cluster_id %in% human_clusters_match) %>% 
+  select(-nk_name)
+
+df_cluster_sizes_match <- df_cluster_matches %>% 
+  group_by(nk, has_match) %>%
+  count() %>% 
+  ungroup()  
+
+df_cluster_sizes_match
+```
+
+
+```{r}
+# Minimal cluster size for inclusion
+# min_cluster_n <- 30
+
+# Minimal completion number for inclusion
+min_completion_n <- 200
+
+# Select questionnaires to analyze 
+clinical_vars <- df_clinical_completion %>% 
+  filter(n_completed > min_completion_n) %>% 
+  pull(variable)
+
+# Run KW tests for each combination of nk and questionnaire
+df_kw_matches <- expand_grid(nk = 2:10,
+                             variable = clinical_vars) %>% 
+  mutate(H = 0, p = 0)
+for (i in 1:nrow(df_kw_matches)) {
+  
+  nki <- df_kw_matches[[i, "nk"]]
+  variable <- df_kw_matches[[i, "variable"]]
+  
+  # Fetch cluster sizes for current nk
+  # df_cluster_sizes_nk <- df_cluster_sizes %>% 
+  #   filter(nk == nki) %>% 
+  #   select(k, n)
+  
+  # Subset variables for analysis
+  cols <- c("ID", paste0("nk", nki), variable)
+  df_model <- df_clusters_clinical[,cols]
+  colnames(df_model) <- c("ID", "k", "y")
+  
+  df_model <- df_model %>% 
+    left_join(df_cluster_matches %>% 
+                filter(nk == nki) %>% 
+                select(ID, has_match), 
+              by = "ID") %>% 
+    mutate(has_match = ifelse(has_match, "Yes", "No"),
+           has_match = factor(has_match))
+  
+  # Filter clusters based on size threshold
+  # df_model <- df_model %>% 
+  #   left_join(df_cluster_sizes_nk, by = "k") %>% 
+  #   filter(n > min_cluster_n)
+  
+  # Remove participants with missing scores
+  df_model <- df_model %>% 
+    filter(!is.na(y))
+  
+  # Evaluate KW test
+  kw_out <- kruskal.test(x = df_model[["y"]], g = df_model[["has_match"]])
+  
+  df_kw_matches[[i, "H"]] <- kw_out[["statistic"]]
+  df_kw_matches[[i, "p"]] <- kw_out[["p.value"]]
+  
+}
+
+# Correct p-values using FDR
+df_kw_matches <- df_kw_matches %>%
+  group_by(nk) %>% 
+  mutate(q = p.adjust(p, method = "fdr")) %>% 
+  ungroup() 
+
+df_kw_matches <- df_kw_matches %>% 
+  left_join(df_clinical_labels, by = "variable") %>% 
+  mutate(label = factor(label, levels = df_clinical_labels$label))
+```
+
+
+```{r}
+palette <- magma(n = 9, direction = -1, begin = 0.25, end = 0.85)
+
+pval_labs <- c("[0, 0.05)", "[0.05, 0.1)", "[0.1, 1]")
+
+p_threshold <- 0.1
+df_kw_plt <- df_kw_matches %>% 
+  mutate(H_threshold = ifelse(p < p_threshold, H, NA),
+         p_group = ifelse(p < 0.05, "low", 
+                          ifelse(p < 0.10, "mid", "high")),
+         p_group = factor(p_group, levels = c("low", "mid", "high"))) 
+
+plt <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = H, fill = H_threshold, size = p_group)) + 
+  geom_point(shape = 21, stroke = 1.2) +
+  scale_fill_gradientn(colors = palette, limits = c(0, 14), na.value = "white", guide = "none") +
+  scale_colour_gradientn(colors = palette, limits = c(0, 14)) + 
+  scale_size_manual(values = c(5, 3.5, 2), 
+                    labels = pval_labs) + 
+  labs(x = "POND+ cluster solution (K)",
+       y = "Clinical scale",
+       col = "H-statistic",
+       size = "p-value") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank())
+
+outfile <- "univariate_matches_p_0.1.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+p_threshold <- 0.05
+df_kw_plt <- df_kw_matches %>% 
+  mutate(H_threshold = ifelse(p < p_threshold, H, NA),
+         significant = ifelse(p < p_threshold, "Yes", "No"),
+         significant = factor(significant, levels = c("Yes", "No")))
+
+plt <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = H, fill = H_threshold, size = significant)) + 
+  geom_point(shape = 21, stroke = 1.2) +
+  scale_fill_gradientn(colors = palette, limits = c(0, 14), na.value = "white", guide = "none") +
+  scale_colour_gradientn(colors = palette, limits = c(0, 14)) + 
+  scale_size_manual(values = c(5, 2),
+                    labels = expression(p < 0.05, p >= 0.05)) + 
+  labs(x = "POND+ cluster solution (K)",
+       y = "Clinical scale",
+       col = "H-statistic",
+       size = "p-value") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank())
+
+outfile <- "univariate_matches_p_0.05.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+
+```{r}
+variable <- "ssp_underresp_seeks_rs"
+nk_subset <- 8:9
+outfile <- "plt_matches_ssp_underresp.pdf"
+
+list_clinical_var <- vector(mode = "list", length = length(nk_subset))
+list_clinical_var_summary <- vector(mode = "list", length = length(nk_subset))
+for (i in 1:length(nk_subset)) {
+  
+  # Subset variables for analysis
+  cols <- c("ID", paste0("nk", nk_subset[i]), variable)
+  df_var_nk <- df_clusters_clinical[,cols]
+  colnames(df_var_nk) <- c("ID", "k", "score")
+  
+  df_var_nk <- df_var_nk %>% 
+    left_join(df_cluster_matches %>% 
+                filter(nk == nk_subset[i]) %>% 
+                select(ID, has_match), 
+              by = "ID") %>% 
+    mutate(has_match = ifelse(has_match, "Yes", "No"),
+           has_match = factor(has_match))
+  
+  df_var_nk <- df_var_nk %>% 
+    filter(!is.na(score))  
+  
+  df_var_nk <- df_var_nk %>% 
+    mutate(nk = nk_subset[i])
+  
+  df_var_nk_summary <- group_summary(x = df_var_nk$score, groups = df_var_nk$has_match)
+  colnames(df_var_nk_summary) <- c("score", "score_min", "score_max")
+  df_var_nk_summary <- df_var_nk_summary %>% 
+    as_tibble(rownames = "has_match") %>% 
+    mutate(has_match = factor(has_match),
+           nk = nk_subset[i])
+  
+  list_clinical_var[[i]] <- df_var_nk
+  list_clinical_var_summary[[i]] <- df_var_nk_summary
+  
+}
+
+df_clinical_var <- bind_rows(list_clinical_var)
+df_clinical_var_summary <- bind_rows(list_clinical_var_summary)
+
+df_clinical_var <- df_clinical_var %>% 
+  mutate(nk_label = paste0("K = ", nk),
+         nk_label = factor(nk_label))
+
+df_clinical_var_summary <- df_clinical_var_summary %>% 
+  mutate(nk_label = paste0("K = ", nk),
+         nk_label = factor(nk_label))
+
+plt_clinical_var <- ggplot(df_clinical_var, aes(x = has_match, y = score)) + 
+  geom_jitter() + 
+  geom_crossbar(data = df_clinical_var_summary,
+                mapping = aes(ymin = score_min, ymax = score_max),
+                col = "red", fill = "red", alpha = 0.1) + 
+  facet_grid(.~nk_label, scales = "free_x") + 
+  labs(x = "Cluster matches mouse",
+       col = "Included in KW test",
+       y = clinical_labels[variable]) +
+  theme_bw()
+
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt_clinical_var)
+dev.off()
+```
+
+
+```{r}
+clinical_labels
+```
+
+
+```{r}
+variable <- "nepsyii_a516_mfd_ss"
+nk_subset <- 4:7
+outfile <- "plt_matches_nepsyii_mfd.pdf"
+
+list_clinical_var <- vector(mode = "list", length = length(nk_subset))
+list_clinical_var_summary <- vector(mode = "list", length = length(nk_subset))
+for (i in 1:length(nk_subset)) {
+  
+  # Subset variables for analysis
+  cols <- c("ID", paste0("nk", nk_subset[i]), variable)
+  df_var_nk <- df_clusters_clinical[,cols]
+  colnames(df_var_nk) <- c("ID", "k", "score")
+  
+  df_var_nk <- df_var_nk %>% 
+    left_join(df_cluster_matches %>% 
+                filter(nk == nk_subset[i]) %>% 
+                select(ID, has_match), 
+              by = "ID") %>% 
+    mutate(has_match = ifelse(has_match, "Yes", "No"),
+           has_match = factor(has_match))
+  
+  df_var_nk <- df_var_nk %>% 
+    filter(!is.na(score))  
+  
+  df_var_nk <- df_var_nk %>% 
+    mutate(nk = nk_subset[i])
+  
+  df_var_nk_summary <- group_summary(x = df_var_nk$score, groups = df_var_nk$has_match)
+  colnames(df_var_nk_summary) <- c("score", "score_min", "score_max")
+  df_var_nk_summary <- df_var_nk_summary %>% 
+    as_tibble(rownames = "has_match") %>% 
+    mutate(has_match = factor(has_match),
+           nk = nk_subset[i])
+  
+  list_clinical_var[[i]] <- df_var_nk
+  list_clinical_var_summary[[i]] <- df_var_nk_summary
+  
+}
+
+df_clinical_var <- bind_rows(list_clinical_var)
+df_clinical_var_summary <- bind_rows(list_clinical_var_summary)
+
+df_clinical_var <- df_clinical_var %>% 
+  mutate(nk_label = paste0("K = ", nk),
+         nk_label = factor(nk_label))
+
+df_clinical_var_summary <- df_clinical_var_summary %>% 
+  mutate(nk_label = paste0("K = ", nk),
+         nk_label = factor(nk_label))
+
+plt_clinical_var <- ggplot(df_clinical_var, aes(x = has_match, y = score)) + 
+  geom_jitter() + 
+  geom_crossbar(data = df_clinical_var_summary,
+                mapping = aes(ymin = score_min, ymax = score_max),
+                col = "red", fill = "red", alpha = 0.1) + 
+  facet_grid(.~nk_label, scales = "free_x") + 
+  labs(x = "Cluster matches mouse",
+       col = "Included in KW test",
+       y = clinical_labels[variable]) +
+  theme_bw()
+
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt_clinical_var)
+dev.off()
+```
+
+
+## Multivariate analyses
+
+### Complete case analysis
+
+```{r}
+df_complete_cases <- df_clinical_completion %>% 
+  mutate(n_complete = 0, n_included = 0)
+
+for (i in 1:nrow(df_complete_cases)) {
+  
+  variables <- df_clinical_completion %>% 
+    slice_max(order_by = n_completed, n = i) %>% 
+    pull(variable)
+  
+  df_clinical_subset <- df_clusters_clinical[, variables]
+  
+  df_complete_cases[[i, "n_complete"]]  <- sum(complete.cases(df_clinical_subset))
+  df_complete_cases[[i, "n_included"]] <- i
+  
+}
+
+plt_complete_cases <- ggplot(df_complete_cases, aes(x = n_included, y = n_complete)) + 
+  geom_line() + 
+  geom_point() +
+  geom_vline(xintercept = c(9, 12, 20, 23, 27)+0.5,
+             linetype = "dashed", col = "red") + 
+  annotate(geom = "text", 
+           x = c(4, 11, 16, 22, 25.5), y = 600, 
+           label = c("CBCL, ABAS, RBS,\nSCQ, TOCS, SWAN, IQ",
+                     "OWLS", "SSP", "BOT2", "NEPSY")) + 
+  scale_x_continuous(breaks = seq(0, 50, by = 2)) + 
+  scale_y_continuous(breaks = seq(0, 1000, by = 50)) + 
+  labs(x = "Number of variables included",
+       y = "Number of complete cases") +
+  theme_bw()
+
+outfile <- "questionnaire_completion.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt_complete_cases)
+dev.off()
+```
+
+```{r}
+df_complete_cases
+```
+
+
+### Differences between clusters
+
+#### MANOVA
+
+```{r}
+# Relevant thresholds are
+# 9: Basic scores
+# 12: Includes OWL
+# 20: Includes SSP
+# 23: Includes BOT2
+# 27: Includes NEPSY
+
+# Initialize output data frame
+df_manova <- expand_grid(nk = 2:10, 
+                         n_variables = c(9, 12, 20, 23, 27),
+                         wilks_stat = 0, wilks_p = 0,
+                         pillai_stat = 0, pillai_p = 0)
+for (i in 1:nrow(df_manova)) {
+  
+  n_variables <- df_manova[[i, "n_variables"]]
+  nki <- df_manova[[i, "nk"]]
+  
+  # Extract variables at the given completion level
+  variables <- df_complete_cases %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract cluster labels and variables 
+  cols <- c("ID", paste0("nk", nki), variables)
+  df_multivariate <- df_clusters_clinical[,cols]
+  colnames(df_multivariate) <- c("ID", "k", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  # Convert cluster labels to factor
+  df_multivariate <- df_multivariate %>% 
+    mutate(k = factor(k))
+  
+  # Generate multivariate output matrix
+  Y <- as.matrix(df_multivariate[,variables])
+  
+  # Evaluate MANOVA
+  manova_out <- manova(Y ~ k, data = df_multivariate)
+  
+  # Run statistical tests on MANOVA output
+  manova_pillai <- summary(manova_out, test = "Pillai")
+  manova_wilks <- summary(manova_out, test = "Wilks")
+  
+  # Store Pillai test outputs
+  df_manova[[i, "pillai_stat"]] <- manova_pillai[["stats"]][1, "Pillai"]
+  df_manova[[i, "pillai_p"]] <- manova_pillai[["stats"]][1, "Pr(>F)"]
+  
+  # Store Wilks test outputs
+  df_manova[[i, "wilks_stat"]] <- manova_wilks[["stats"]][1, "Wilks"]
+  df_manova[[i, "wilks_p"]] <- manova_wilks[["stats"]][1, "Pr(>F)"]
+  
+}
+
+df_manova %>% 
+  filter(wilks_p < 0.05) %>% 
+  arrange(n_variables, nk)
+```
+
+```{r}
+variables <- df_complete_cases %>% 
+  slice_max(order_by = n_complete, n = 27) %>% 
+  pull(variable)
+
+nki <- 8
+
+cols <- c("ID", paste0("nk", nki), variables)
+df_multivariate <- df_clusters_clinical[,cols]
+colnames(df_multivariate) <- c("ID", "k", variables)
+
+df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+
+df_cluster_sizes <- df_multivariate %>% 
+  group_by(k) %>% 
+  count() %>% 
+  ungroup() %>% 
+  filter(n > 10)
+```
+
+```{r}
+# Relevant thresholds are 9, 12, 27
+
+df_manova_size_lim <- expand_grid(nk = 2:10, 
+                                  n_variables = c(9, 12, 20, 23, 27),
+                                  wilks_stat = 0, wilks_p = 0,
+                                  pillai_stat = 0, pillai_p = 0)
+for (i in 1:nrow(df_manova)) {
+  
+  n_variables <- df_manova[[i, "n_variables"]]
+  nki <- df_manova[[i, "nk"]]
+  
+  variables <- df_complete_cases %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  cols <- c("ID", paste0("nk", nki), variables)
+  df_multivariate <- df_clusters_clinical[,cols]
+  colnames(df_multivariate) <- c("ID", "k", variables)
+  
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  df_cluster_sizes <- df_multivariate %>% 
+    group_by(k) %>% 
+    count() %>% 
+    ungroup() %>% 
+    filter(n > 10)
+  
+  df_multivariate <- df_multivariate %>% 
+    semi_join(df_cluster_sizes, by = "k")
+  
+  df_multivariate <- df_multivariate %>% 
+    mutate(k = factor(k))
+  
+  Y <- as.matrix(df_multivariate[,variables])
+  
+  manova_out <- manova(Y ~ k, data = df_multivariate)
+  
+  manova_pillai <- summary(manova_out, test = "Pillai")
+  manova_wilks <- summary(manova_out, test = "Wilks")
+  
+  df_manova_size_lim[[i, "pillai_stat"]] <- manova_pillai[["stats"]][1, "Pillai"]
+  df_manova_size_lim[[i, "pillai_p"]] <- manova_pillai[["stats"]][1, "Pr(>F)"]
+  
+  df_manova_size_lim[[i, "wilks_stat"]] <- manova_wilks[["stats"]][1, "Wilks"]
+  df_manova_size_lim[[i, "wilks_p"]] <- manova_wilks[["stats"]][1, "Pr(>F)"]
+  
+}
+```
+
+```{r}
+df_manova_size_lim %>% 
+  filter(wilks_p < 0.05) %>% 
+  arrange(n_variables, nk)
+```
+
+#### LDA for K = 2
+
+```{r}
+# Relevant thresholds are
+# 9: Basic scores
+# 12: Includes OWL
+# 20: Includes SSP
+# 23: Includes BOT2
+# 27: Includes NEPSY
+
+nk <- 2
+
+df_mv_nk_2 <- expand_grid(nk = 2,
+                          n_variables = c(9, 12, 20, 23, 27),
+                          n_participants = 0,
+                          lda_auc = 0)
+list_mv_nk_2_input <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_lda_nk_2_fit <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_lda_nk_2_roc <- vector(mode = "list", length = nrow(df_mv_nk_2))
+for (i in 1:nrow(df_mv_nk_2)) {
+  
+  n_variables <- df_mv_nk_2[[i, "n_variables"]]
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", paste0("nk", nk), variables)
+  df_multivariate <- df_clusters_clinical[,cols]
+  colnames(df_multivariate) <- c("ID", "k", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  # Convert cluster labels to factor
+  df_multivariate <- df_multivariate %>% 
+    mutate(k = factor(k))
+  
+  # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_nk_2[[i, "n_participants"]] <- nrow(df_multivariate)
+  
+  list_mv_nk_2_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$k
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y, prior = c(No = 0.5, Yes = 0.5))
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+
+  # Run LDA ROC analysis
+  lda_roc <- pROC::roc(response = y,
+                       predictor = lda_pred_prob,
+                       direction = "<", 
+                       quiet = TRUE)
+  
+  # Store LDA outputs
+  list_lda_nk_2_fit[[i]] <- lda_fit
+  list_lda_nk_2_roc[[i]] <- lda_roc
+  df_mv_nk_2[[i, "lda_auc"]] <- pROC::auc(lda_roc)[1]
+  
+}
+
+df_mv_nk_2 <- df_mv_nk_2 %>% 
+  mutate(index = 1:nrow(.))
+```
+
+```{r}
+df_mv_nk_2
+```
+
+```{r}
+vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
+
+list_mv_nk_2_scores_plt <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_mv_nk_2_loadings_plt <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_mv_nk_2_roc_plt <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_mv_nk_2_header <- vector(mode = "list", length = nrow(df_mv_nk_2))
+for (i in 1:nrow(df_mv_nk_2)) {
+  
+  df_mv_nk_2_i <- df_mv_nk_2[i,] 
+  
+  X <- list_mv_nk_2_input[[i]] %>% 
+    select(-ID, -k) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  y <- list_mv_nk_2_input[[i]] %>% 
+    pull(k)
+  
+  lda_pred <- predict(list_lda_nk_2_fit[[i]], X)
+  lda_pred_y <- lda_pred[["class"]]
+  
+  df_mv_scores <- lda_pred[["x"]] %>% 
+    as_tibble() %>% 
+    mutate(y = y,
+           y_pred = lda_pred_y,
+           index = i) %>% 
+    left_join(df_mv_nk_2_i, by = "index")
+    
+  df_mv_scores <- df_mv_scores %>%
+      mutate(LD1 = -1*LD1)
+  
+  df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(LD1 = V1) %>% 
+    mutate(index = i) %>%  
+    left_join(df_mv_nk_2_i, by = "index") %>% 
+    mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
+  
+  #   if (i %in% c(1, 3, 5)) {
+  #   
+    # df_mv_loadings <- df_mv_loadings %>%
+    #   mutate(CV1 = -1*LD1)
+  # }
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(variable = factor(variable, levels = variable[order(LD1)]))
+  
+    lda_roc <- list_lda_nk_2_roc[[i]]
+  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                       fpr = 1-lda_roc$specificities,
+                       thresholds = lda_roc$thresholds) %>% 
+    arrange(tpr) %>% 
+    mutate(index = i) %>% 
+    left_join(df_mv_nk_2_i, by = "index")
+  
+    lda_roc_auc <- lda_roc$auc[1]
+  
+  set.seed(123)
+  plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+    geom_jitter(height = 0) +
+    coord_cartesian(ylim = c(-4, 4)) + 
+    scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+    labs(col = "LDA predicted class",
+         y = "Linear discriminant scores",
+         x = "POND+ cluster (k)") + 
+    theme_bw() +
+    theme(legend.position = "bottom")
+  
+    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = variable)) +
+    geom_vline(xintercept = 0) + 
+    geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+    geom_point() +
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+    labs(x = "Linear discriminant loadings",
+         y = "Variable") + 
+    theme_bw()
+    
+    
+      plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+    annotate(geom = "segment", 
+             x = 0, y = 0, 
+             xend = 1, yend = 1, 
+             linetype = "dashed") +
+    annotate(geom = "text",
+             x = 0.8, y = 0.2,
+             label = paste0("AUC = ", round(lda_roc_auc, 3))) + 
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    labs(x = "False positive rate",
+         y = "True positive rate") + 
+    theme_bw()
+  
+  list_mv_nk_2_scores_plt[[i]] <- ggplotGrob(plt_mv_scores)
+  list_mv_nk_2_loadings_plt[[i]] <- ggplotGrob(plt_mv_loadings)
+  list_mv_nk_2_roc_plt[[i]] <- ggplotGrob(plt_mv_roc)
+  list_mv_nk_2_header[[i]] <- gTree(children = gList(rectGrob(gp = gpar(fill = NA)),
+                                                     textGrob(label = paste0("Number of variables: ",
+                                                                             df_mv_nk_2_i$n_variables, 
+                                                                             "\nNumber of participants: ", 
+                                                                             df_mv_nk_2_i$n_participants))))
+  
+}
+
+list_grobs <- c(list(textGrob(label = paste0("K = ", nk))),
+                list_mv_nk_2_header,
+                list_mv_nk_2_scores_plt,
+                list_mv_nk_2_roc_plt,
+                list_mv_nk_2_loadings_plt)
+
+layout <- rbind(rep(1, 5),
+                2:6,
+                7:11,
+                12:16,
+                17:21)
+
+title_height <- 0.05
+header_height <- 0.05
+roc_height <- 0.25
+scores_height <- 0.25
+loadings_height <- 1 - title_height - header_height - roc_height - scores_height
+plt_heights <- c(title_height,header_height, scores_height, roc_height, loadings_height)
+
+plt_grob <- arrangeGrob(grobs = list_grobs,
+                        layout_matrix = layout,
+                        heights = unit(plt_heights, units = "npc"))
+
+outfile <- paste0("behavioural_mv_nk_", nk, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(20, "in"),
+    height = unit(12, "in"))
+grid.draw(plt_grob)
+dev.off()
+```
+
+
+```{r}
+i <- 5
+variable <- "tpocs_tot"
+
+df_mv_nk_2_i <- df_mv_nk_2[i,] 
+
+X <- list_mv_nk_2_input[[i]] %>% 
+  select(-ID, -k) %>% 
+  as.matrix() %>% 
+  scale()
+
+y <- list_mv_nk_2_input[[i]] %>% 
+  pull(k)
+
+lda_pred <- predict(list_lda_nk_2_fit[[i]], X)
+lda_pred_y <- lda_pred[["class"]]
+
+df_mv_scores <- lda_pred[["x"]] %>% 
+  as_tibble() %>% 
+  mutate(y = y,
+         y_pred = lda_pred_y,
+         var = X[,variable],
+         prob = lda_pred$posterior[,2]) %>% 
+  mutate(LD1 = -1*LD1) 
+
+ggplot(df_mv_scores, aes(x = var, y = LD1, col = prob)) + 
+  geom_point() +
+  labs(x = variable) +
+  scale_colour_viridis_c()
+```
+
+
+```{r}
+X <- list_mv_nk_2_input[[5]]
+X <- X %>% 
+  select(-ID, -k) %>% 
+  select(starts_with("nepsy")) %>% 
+  as.matrix() %>% 
+  scale()
+
+cor(X)
+```
+
+
+##### Participants with 27 variables
+
+```{r}
+n_variables <- 27
+
+# Fetch variables with the desired completion level
+variables <- df_complete_cases %>% 
+  slice_max(order_by = n_complete, n = n_variables) %>% 
+  pull(variable)
+
+# Extract variable scores
+cols <- c("ID", paste0("nk", nk), variables)
+df_multivariate <- df_clusters_clinical[,cols]
+colnames(df_multivariate) <- c("ID", "k", variables)
+
+# Filter for complete cases
+df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+
+ids_all_vars <- df_multivariate$ID
+```
+
+
+```{r}
+# Relevant thresholds are
+# 9: Basic scores
+# 12: Includes OWL
+# 20: Includes SSP
+# 23: Includes BOT2
+# 27: Includes NEPSY
+
+nk <- 2
+
+df_mv_nk_2 <- expand_grid(nk = 2,
+                          n_variables = c(9, 12, 20, 23, 27),
+                          n_participants = 0,
+                          lda_auc = 0)
+list_mv_nk_2_input <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_lda_nk_2_fit <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_lda_nk_2_roc <- vector(mode = "list", length = nrow(df_mv_nk_2))
+for (i in 1:nrow(df_mv_nk_2)) {
+  
+  n_variables <- df_mv_nk_2[[i, "n_variables"]]
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", paste0("nk", nk), variables)
+  df_multivariate <- df_clusters_clinical[,cols]
+  colnames(df_multivariate) <- c("ID", "k", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  df_multivariate <- df_multivariate %>% 
+    filter(ID %in% ids_all_vars)
+  
+  # Convert cluster labels to factor
+  df_multivariate <- df_multivariate %>% 
+    mutate(k = factor(k))
+  
+  # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_nk_2[[i, "n_participants"]] <- nrow(df_multivariate)
+  
+  list_mv_nk_2_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$k
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y, prior = c(No = 0.5, Yes = 0.5))
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+
+  # Run LDA ROC analysis
+  lda_roc <- pROC::roc(response = y,
+                       predictor = lda_pred_prob,
+                       direction = "<", 
+                       quiet = TRUE)
+  
+  # Store LDA outputs
+  list_lda_nk_2_fit[[i]] <- lda_fit
+  list_lda_nk_2_roc[[i]] <- lda_roc
+  df_mv_nk_2[[i, "lda_auc"]] <- pROC::auc(lda_roc)[1]
+  
+}
+
+df_mv_nk_2 <- df_mv_nk_2 %>% 
+  mutate(index = 1:nrow(.))
+```
+
+
+```{r}
+vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
+
+list_mv_nk_2_scores_plt <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_mv_nk_2_loadings_plt <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_mv_nk_2_roc_plt <- vector(mode = "list", length = nrow(df_mv_nk_2))
+list_mv_nk_2_header <- vector(mode = "list", length = nrow(df_mv_nk_2))
+for (i in 1:nrow(df_mv_nk_2)) {
+  
+  df_mv_nk_2_i <- df_mv_nk_2[i,] 
+  
+  X <- list_mv_nk_2_input[[i]] %>% 
+    select(-ID, -k) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  y <- list_mv_nk_2_input[[i]] %>% 
+    pull(k)
+  
+  lda_pred <- predict(list_lda_nk_2_fit[[i]], X)
+  lda_pred_y <- lda_pred[["class"]]
+  
+  df_mv_scores <- lda_pred[["x"]] %>% 
+    as_tibble() %>% 
+    mutate(y = y,
+           y_pred = lda_pred_y,
+           index = i) %>% 
+    left_join(df_mv_nk_2_i, by = "index")
+    
+  df_mv_scores <- df_mv_scores %>%
+      mutate(LD1 = -1*LD1)
+  
+  df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(LD1 = V1) %>% 
+    mutate(index = i) %>%  
+    left_join(df_mv_nk_2_i, by = "index") %>% 
+    mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
+  
+  #   if (i %in% c(1, 3, 5)) {
+  #   
+    # df_mv_loadings <- df_mv_loadings %>%
+    #   mutate(CV1 = -1*LD1)
+  # }
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(variable = factor(variable, levels = variable[order(LD1)]))
+  
+    lda_roc <- list_lda_nk_2_roc[[i]]
+  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                       fpr = 1-lda_roc$specificities,
+                       thresholds = lda_roc$thresholds) %>% 
+    arrange(tpr) %>% 
+    mutate(index = i) %>% 
+    left_join(df_mv_nk_2_i, by = "index")
+  
+    lda_roc_auc <- lda_roc$auc[1]
+  
+  set.seed(123)
+  plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+    geom_jitter(height = 0) +
+    coord_cartesian(ylim = c(-4, 4)) + 
+    scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+    labs(col = "LDA predicted class",
+         y = "Linear discriminant scores",
+         x = "POND+ cluster (k)") + 
+    theme_bw() +
+    theme(legend.position = "bottom")
+  
+    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = variable)) +
+    geom_vline(xintercept = 0) + 
+    geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+    geom_point() +
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+    labs(x = "Linear discriminant loadings",
+         y = "Variable") + 
+    theme_bw()
+    
+    
+      plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+    annotate(geom = "segment", 
+             x = 0, y = 0, 
+             xend = 1, yend = 1, 
+             linetype = "dashed") +
+    annotate(geom = "text",
+             x = 0.8, y = 0.2,
+             label = paste0("AUC = ", round(lda_roc_auc, 3))) + 
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    labs(x = "False positive rate",
+         y = "True positive rate") + 
+    theme_bw()
+  
+  list_mv_nk_2_scores_plt[[i]] <- ggplotGrob(plt_mv_scores)
+  list_mv_nk_2_loadings_plt[[i]] <- ggplotGrob(plt_mv_loadings)
+  list_mv_nk_2_roc_plt[[i]] <- ggplotGrob(plt_mv_roc)
+  list_mv_nk_2_header[[i]] <- gTree(children = gList(rectGrob(gp = gpar(fill = NA)),
+                                                     textGrob(label = paste0("Number of variables: ",
+                                                                             df_mv_nk_2_i$n_variables, 
+                                                                             "\nNumber of participants: ", 
+                                                                             df_mv_nk_2_i$n_participants))))
+  
+}
+
+list_grobs <- c(list(textGrob(label = paste0("K = ", nk))),
+                list_mv_nk_2_header,
+                list_mv_nk_2_scores_plt,
+                list_mv_nk_2_roc_plt,
+                list_mv_nk_2_loadings_plt)
+
+layout <- rbind(rep(1, 5),
+                2:6,
+                7:11,
+                12:16,
+                17:21)
+
+title_height <- 0.05
+header_height <- 0.05
+roc_height <- 0.25
+scores_height <- 0.25
+loadings_height <- 1 - title_height - header_height - roc_height - scores_height
+plt_heights <- c(title_height,header_height, scores_height, roc_height, loadings_height)
+
+plt_grob <- arrangeGrob(grobs = list_grobs,
+                        layout_matrix = layout,
+                        heights = unit(plt_heights, units = "npc"))
+
+outfile <- paste0("behavioural_mv_nk_2_all_vars_subset.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(20, "in"),
+    height = unit(12, "in"))
+grid.draw(plt_grob)
+dev.off()
+```
+
+##### Neuroanatomy UMAP
+
+```{r}
+file <- file.path(PROJECTPATH, "data/human/derivatives/v3/700/effect_sizes/resolution_3.0/relative/effect_sizes.csv")
+
+df_es <- read_csv(file)
+```
+
+
+```{r}
+demographics <- file.path(PROJECTPATH, "data/human/registration/v3/subject_info/demographics.csv")
+
+df_demographics <- read_csv(demographics)
+
+df_demographics <- df_demographics %>% 
+  filter(file %in% df_es$file) %>% 
+  arrange(file)
+
+```
+
+
+```{r}
+mat_es <- df_es %>% 
+  select(-file) %>% 
+  as.matrix()
+
+set.seed(1)
+umap_out <- uwot::umap(X = mat_es, scale = TRUE)
+```
+
+```{r}
+colnames(umap_out) <- paste0("U", 1:2)
+df_umap <- umap_out %>% 
+  as_tibble() %>% 
+  mutate(ID = df_es$file)
+
+df_umap <- df_umap %>% 
+  left_join(df_clusters %>% 
+  select(ID, k = nk2), by = "ID") %>% 
+  mutate(k = factor(k))
+```
+
+```{r}
+i <- 1
+
+ids <- list_mv_nk_2_input[[i]] %>% 
+  pull(ID)
+
+X <- list_mv_nk_2_input[[i]] %>% 
+  select(-ID, -k) %>% 
+  as.matrix() %>% 
+  scale()
+
+y <- list_mv_nk_2_input[[i]] %>% 
+  pull(k)
+
+lda_pred <- predict(list_lda_nk_2_fit[[i]], X)
+lda_pred_y <- lda_pred[["class"]]
+
+df_mv_scores <- lda_pred[["x"]] %>% 
+  as_tibble() %>% 
+  mutate(y = y,
+         y_pred = lda_pred_y) 
+
+df_mv_scores <- df_mv_scores %>%
+  mutate(LD1 = -1*LD1,
+         ID = ids)
+
+df_mv_scores
+```
+
+```{r}
+df_umap <- df_umap %>% 
+  left_join(df_mv_scores, by = "ID")
+```
+
+
+```{r}
+df_umap %>% 
+  filter(!is.na(LD1)) %>% 
+  ggplot(aes(x = U1, y = U2, col = LD1)) + 
+  geom_point() +
+  scale_colour_viridis_c()
+```
+
+
+
+### Differences between clusters with mouse matches and those without
+
+```{r}
+# Relevant thresholds are
+# 9: Basic scores
+# 12: Includes OWL
+# 20: Includes SSP
+# 23: Includes BOT2
+# 27: Includes NEPSY
+
+df_mv_matches <- expand_grid(nk = 2:10, 
+                             n_variables = c(9, 12, 20, 23, 27),
+                             n_participants = 0,
+                             n_participants_match = 0,
+                             lda_auc = 0)
+list_mv_matches_input <- vector(mode = "list", length = nrow(df_mv_matches))
+list_lda_matches_fit <- vector(mode = "list", length = nrow(df_mv_matches))
+list_lda_matches_roc <- vector(mode = "list", length = nrow(df_mv_matches))
+for (i in 1:nrow(df_mv_matches)) {
+  
+  n_variables <- df_mv_matches[[i, "n_variables"]]
+  nki <- df_mv_matches[[i, "nk"]]
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", variables)
+  df_multivariate <- df_clusters_clinical[,cols]
+  colnames(df_multivariate) <- c("ID", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  # Include information about mouse match
+  df_multivariate <- df_multivariate %>% 
+    left_join(df_cluster_matches %>% 
+                filter(nk == nki) %>% 
+                select(ID, has_match), 
+              by = "ID") %>% 
+    mutate(has_match = ifelse(has_match, "Yes", "No"),
+           has_match = factor(has_match))
+  
+  # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_matches[[i, "n_participants"]] <- nrow(df_multivariate)
+  df_mv_matches[[i, "n_participants_match"]] <- df_multivariate %>% 
+    group_by(has_match) %>% 
+    count() %>% 
+    ungroup() %>% 
+    filter(has_match == "Yes") %>% 
+    pull(n)
+  
+  list_mv_matches_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$has_match
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y, prior = c(No = 0.5, Yes = 0.5))
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+  
+  # Run LDA ROC analysis
+  lda_roc <- pROC::roc(response = y,
+                       predictor = lda_pred_prob,
+                       direction = "<", 
+                       quiet = TRUE)
+  
+  # Store LDA outputs
+  list_lda_matches_fit[[i]] <- lda_fit
+  list_lda_matches_roc[[i]] <- lda_roc
+  df_mv_matches[[i, "lda_auc"]] <- pROC::auc(lda_roc)[1]
+  
+}
+
+df_mv_matches <- df_mv_matches %>% 
+  mutate(index = 1:nrow(.),
+         prop_participants_match = n_participants_match/n_participants)
+```
+
+```{r}
+df_mv_matches
+```
+
+```{r}
+nk_seq <- df_mv_matches %>% 
+  pull(nk) %>% 
+  unique()
+
+for (nki in nk_seq) {
+  
+  indices <- df_mv_matches %>% 
+    filter(nk == nki) %>% 
+    pull(index)
+  
+  list_mv_matches_scores_plt <- vector(mode = "list", length = length(indices))
+  list_mv_matches_loadings_plt <- vector(mode = "list", length = length(indices))
+  list_mv_matches_roc_plt <- vector(mode = "list", length = length(indices))
+  list_mv_matches_header <- vector(mode = "list", length = length(indices))
+  for (i in 1:length(indices)) {
+    
+    idx <- indices[i]
+    
+    df_mv_matches_idx <- df_mv_matches %>% 
+      filter(index == idx) 
+    
+    X <- list_mv_matches_input[[idx]] %>% 
+      select(-ID, -has_match) %>% 
+      as.matrix() %>% 
+      scale()
+    
+    y <- list_mv_matches_input[[idx]] %>% 
+      pull(has_match)
+    
+    lda_pred <- predict(list_lda_matches_fit[[idx]], X)
+    lda_pred_y <- lda_pred[["class"]]
+    
+    
+    df_mv_scores <- lda_pred[["x"]] %>% 
+      as_tibble() %>% 
+      mutate(y = y,
+             y_pred = lda_pred_y,
+             index = idx) %>% 
+      left_join(df_mv_matches_idx, by = "index")
+    
+    df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+      as_tibble(rownames = "variable") %>% 
+      rename(LD1 = V1) %>% 
+      mutate(index = idx) %>%  
+      left_join(df_mv_matches_idx, by = "index")
+    
+    df_mv_loadings <- df_mv_loadings %>% 
+      mutate(variable = factor(variable, levels = variable[order(LD1)]))
+    
+    lda_roc <- list_lda_matches_roc[[idx]]
+    df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                         fpr = 1-lda_roc$specificities,
+                         thresholds = lda_roc$thresholds) %>% 
+      arrange(tpr) %>% 
+      mutate(index = idx) %>% 
+      left_join(df_mv_matches_idx, by = "index")
+    
+    lda_roc_auc <- lda_roc$auc[1]
+    
+    set.seed(123)
+    plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+      geom_jitter(height = 0) +
+      coord_cartesian(ylim = c(-4, 4)) + 
+      scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+      labs(col = "LDA predicted class",
+           y = "Linear discriminant scores",
+           x = "Cluster matches mouse") + 
+      theme_bw() +
+      theme(legend.position = "bottom")
+    
+    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = variable)) +
+      geom_vline(xintercept = 0) + 
+      geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+      geom_point() +
+      scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+      labs(x = "Linear discriminant loadings",
+           y = "Variable") + 
+      theme_bw()
+    
+    plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+      annotate(geom = "segment", 
+               x = 0, y = 0, 
+               xend = 1, yend = 1, 
+               linetype = "dashed") +
+      annotate(geom = "text",
+               x = 0.8, y = 0.2,
+               label = paste0("AUC = ", round(lda_roc_auc, 3))) + 
+      geom_line() +
+      scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+      scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+      labs(x = "False positive rate",
+           y = "True positive rate") + 
+      theme_bw()
+    
+    list_mv_matches_scores_plt[[i]] <- ggplotGrob(plt_mv_scores)
+    list_mv_matches_loadings_plt[[i]] <- ggplotGrob(plt_mv_loadings)
+    list_mv_matches_roc_plt[[i]] <- ggplotGrob(plt_mv_roc)
+    list_mv_matches_header[[i]] <- gTree(children = gList(rectGrob(gp = gpar(fill = NA)),
+                                                          textGrob(label = paste0("Number of variables: ",
+                                                                                  df_mv_matches_idx$n_variables, 
+                                                                                  "\nNumber of participants: ", 
+                                                                                  df_mv_matches_idx$n_participants))))
+    
+  }
+  
+  list_grobs <- c(list(textGrob(label = paste0("K = ", nki))),
+                  list_mv_matches_header,
+                  list_mv_matches_scores_plt,
+                  list_mv_matches_roc_plt,
+                  list_mv_matches_loadings_plt)
+  
+  layout <- rbind(rep(1, 5),
+                  2:6,
+                  7:11,
+                  12:16,
+                  17:21)
+  
+  title_height <- 0.05
+  header_height <- 0.05
+  roc_height <- 0.25
+  scores_height <- 0.25
+  loadings_height <- 1 - title_height - header_height - roc_height - scores_height
+  plt_heights <- c(title_height,header_height, scores_height, roc_height, loadings_height)
+  
+  plt_grob <- arrangeGrob(grobs = list_grobs,
+                          layout_matrix = layout,
+                          heights = unit(plt_heights, units = "npc"))
+  
+  outfile <- paste0("behavioural_mv_matches_nk_", nki, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(20, "in"),
+      height = unit(12, "in"))
+  grid.draw(plt_grob)
+  dev.off()
+  
+}
+```
+
+
+```{r}
+# df_mv_matches_roc_plt <- df_mv_matches_roc_plt %>% 
+#   mutate(n_vars_lab = paste(n_variables, "variables"))
+# 
+# ggplot(df_mv_matches_roc_plt, aes(x = fpr, y = tpr)) + 
+#   annotate(geom = "segment", 
+#            x = 0, y = 0, 
+#            xend = 1, yend = 1, 
+#            linetype = "dashed") +
+#   geom_line() +
+#   facet_grid(.~n_vars_lab) + 
+#   scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+#   scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+#   labs(x = "False positive rate",
+#        y = "True positive rate") + 
+#   theme_bw()
+
+```
+
+
+
+
+```{r}
+ggplot(df_mv_matches, aes(x = factor(nk), fill = factor(n_variables), y = lda_auc)) + 
+  geom_col(position = "dodge") + 
+  geom_hline(yintercept = 0.5) + 
+  coord_cartesian(ylim = c(0.5, 1.0)) + 
+  labs(x = "POND+ cluster solutions (K)",
+       y = "ROC AUC", 
+       fill = "Number of variables\nincluded in analysis") + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(df_mv_matches, aes(x = nk, y = lda_auc, group = factor(n_variables), col = factor(n_variables))) + 
+  geom_line() + 
+  geom_point(aes(size = prop_participants_match)) + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") + 
+  labs(x = "POND+ cluster solutions (K)",
+       y = "ROC AUC", 
+       col = "Number of variables\nincluded in analysis",
+       size = "Proportion of participants\nin clusters with mouse matches") + 
+  scale_x_continuous(breaks = seq(1, 10, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+
+### Differences between clusters matching to different mouse groups
+
+
+```{r}
+palette <- c("A" = "springgreen4",
+             "B" = "sienna2",
+             "C" = "seagreen2",
+             "D" = "darkorchid1")
+```
+
+
+```{r}
+list_human_cluster_groups <- list(
+  "A" = c("3-3", "4-2", "5-2", "6-6", "7-2", "8-6"),
+  "B" = c("8-4", "9-5"),
+  "C" = c("4-3", "5-5", "6-2", "7-4", "8-7", "9-4"),
+  "D" = c("3-1", "4-1", "7-1", "8-1", "8-2", "9-7")
+)
+
+
+df_human_cluster_groups <- map_dfr(list_human_cluster_groups, 
+                                   .f = tibble, .id = "group")
+colnames(df_human_cluster_groups) <- c("group", "cluster_id")
+
+df_human_cluster_groups <- df_human_cluster_groups %>% 
+  separate(col = "cluster_id", c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk), k = as.numeric(k))
+```
+
+Need all comparisons within a nk
+
+```{r}
+nk_seq <- df_human_cluster_groups %>% 
+  pull(nk) %>% 
+  unique() %>% 
+  sort()
+
+df_group_combs <- map_dfr(.x = nk_seq, .f = function(nki, df = df_human_cluster_groups) {
+  groups_nk <- df %>% 
+    filter(nk == nki) %>% 
+    pull(group) %>% 
+    unique()
+  
+  group_combs <- t(combn(groups_nk, m = 2))
+  colnames(group_combs) <- paste0("group", 1:2)
+  df_group_combs <- as_tibble(group_combs) 
+  df_group_combs %>% 
+    mutate(nk = nki)
+} )
+
+df_group_combs
+
+```
+
+```{r}
+df_cluster_groups <- df_cluster_matches %>% 
+  select(-has_match) %>% 
+  left_join(df_human_cluster_groups, by = c("cluster_id", "nk", "k")) %>% 
+  filter(!is.na(group))
+
+df_mv_groups <- expand_grid(nk = nk_seq, 
+                            n_variables = c(9, 12, 20, 23, 27),
+                            n_participants = 0,
+                            n_participants_group2 = 0,
+                            manova_lambda = 0, manova_p = 0, 
+                            lda_auc = 0, error = FALSE)
+
+df_mv_groups <- df_group_combs %>% 
+  left_join(df_mv_groups, by = "nk", 
+            relationship = "many-to-many")
+
+
+list_mv_groups_input <- vector(mode = "list", length = nrow(df_mv_groups))
+list_manova_groups_fit <- vector(mode = "list", length = nrow(df_mv_groups))
+list_lda_groups_fit <- vector(mode = "list", length = nrow(df_mv_groups))
+list_lda_groups_roc <- vector(mode = "list", length = nrow(df_mv_groups))
+for (i in 1:nrow(df_mv_groups)) {
+  
+  n_variables <- df_mv_groups[[i, "n_variables"]]
+  nki <- df_mv_groups[[i, "nk"]]
+  groups <- c(df_mv_groups[[i, "group1"]], 
+              df_mv_groups[[i, "group2"]])
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", variables)
+  df_multivariate <- df_clusters_clinical[,cols]
+  colnames(df_multivariate) <- c("ID", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  # Include information about mouse match
+  df_multivariate <- df_multivariate %>% 
+    left_join(df_cluster_groups %>% 
+                filter(nk == nki) %>% 
+                select(ID, group), 
+              by = "ID") %>% 
+    filter(!is.na(group)) %>% 
+    filter(group %in% groups)
+  
+  # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_groups[[i, "n_participants"]] <- nrow(df_multivariate)
+  df_mv_groups[[i, "n_participants_group2"]] <- df_multivariate %>%
+    group_by(group) %>% 
+    count() %>% 
+    ungroup() %>% 
+    filter(group == df_mv_groups[[i, "group2"]]) %>% 
+    pull(n)
+  
+  list_mv_groups_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$group
+  
+  # Fit MANOVA
+  manova_fit <- manova(X ~ y)
+  
+  # Evaluate hypothesis test
+  manova_test <- tryCatch(
+  {
+    summary(manova_fit, test = "Wilks")
+  },
+  error = function(e) {
+    message("Error: ", e$message)
+    NA
+  }
+)
+  
+  # Store MANOVA outputs
+  list_manova_groups_fit[[i]] <- manova_fit
+  if (class(manova_test) == "summary.manova") {
+    df_mv_groups[[i, "manova_lambda"]] <- manova_test[["stats"]][1, "Wilks"]
+    df_mv_groups[[i, "manova_p"]] <- manova_test[["stats"]][1, "Pr(>F)"]
+  } else {
+    df_mv_groups[[i, "manova_lambda"]] <- NA
+    df_mv_groups[[i, "manova_p"]] <- NA
+    df_mv_groups[[i, "error"]] <- TRUE
+  }
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y)
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+  
+  # Run LDA ROC analysis
+  lda_roc <- pROC::roc(response = y,
+                       predictor = lda_pred_prob,
+                       direction = "<", 
+                       quiet = TRUE)
+  
+  # Store LDA outputs
+  list_lda_groups_fit[[i]] <- lda_fit
+  list_lda_groups_roc[[i]] <- lda_roc
+  df_mv_groups[[i, "lda_auc"]] <- pROC::auc(lda_roc)[1]
+  
+}
+
+
+df_mv_groups <- df_mv_groups %>% 
+  mutate(index = 1:nrow(.),
+         prop_participants_group2 = n_participants_group2/n_participants)
+```
+
+```{r}
+df_mv_groups %>% 
+  filter(manova_p < 0.05)
+```
+
+
+#### Group A vs. Group D
+
+```{r}
+df_mv_groups %>% 
+  filter(group1 == "A", group2 == "D")
+```
+
+
+```{r}
+df_mv_groups_A_D <- df_mv_groups %>% 
+  filter(group1 == "A",
+         group2 == "D")
+```
+
+
+```{r}
+ggplot(df_mv_groups_A_D, aes(x = nk, y = lda_auc, group = factor(n_variables), col = factor(n_variables))) + 
+  geom_line() + 
+  geom_point(aes(size = prop_participants_group2)) + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") + 
+  coord_cartesian(ylim = c(0.5, 1.0)) + 
+  scale_x_continuous(breaks = seq(1, 10, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  labs(x = "POND+ cluster solutions (K)",
+       y = "ROC AUC", 
+       col = "Number of variables\nincluded in analysis",
+       size = "Proportion of participants\nin target group") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+
+```{r}
+df_mv_groups_A_D %>% 
+  filter(n_variables == 23)
+```
+
+Looking at comparisons between A and D.
+
+```{r}
+# indices <- c(5, 15, 40, 60)
+indices <- c(4, 14, 39, 59)
+
+list_mv_groups_scores_plt <- vector(mode = "list", length = length(indices))
+list_mv_groups_loadings_plt <- vector(mode = "list", length = length(indices))
+list_mv_groups_roc_plt <- vector(mode = "list", length = length(indices))
+for (i in 1:length(indices)) {
+  
+  idx <- indices[i]
+  
+  df_mv_groups_idx <- df_mv_groups %>% 
+    filter(index == idx) 
+  
+  X <- list_mv_groups_input[[idx]] %>% 
+    select(-ID, -group) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  lda_pred <- predict(list_lda_groups_fit[[idx]], X)[["class"]]
+  
+  manova_cv <- candisc(list_manova_groups_fit[[idx]])
+  
+  df_mv_scores <- manova_cv$scores %>% 
+    rename(CV1 = Can1) %>% 
+    mutate(y_pred = lda_pred,
+           index = idx) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  df_mv_loadings <- manova_cv$structure %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(CV1 = Can1) %>% 
+    mutate(index = idx, 
+           variable = factor(variable, levels = variable[order(CV1)])) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  lda_roc <- list_lda_groups_roc[[idx]]
+  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                       fpr = 1-lda_roc$specificities,
+                       thresholds = lda_roc$thresholds) %>% 
+    arrange(tpr) %>% 
+    mutate(index = idx) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  
+  list_mv_groups_scores_plt[[i]] <- df_mv_scores
+  list_mv_groups_loadings_plt[[i]] <- df_mv_loadings
+  list_mv_groups_roc_plt[[i]] <- df_lda_roc
+}
+
+df_mv_groups_scores_plt <- bind_rows(list_mv_groups_scores_plt)
+df_mv_groups_roc_plt <- bind_rows(list_mv_groups_roc_plt)
+# df_mv_matches_loadings_plt <- bind_rows(list_mv_matches_loadings_plt)
+```
+
+
+```{r}
+df_mv_groups_scores_plt <- df_mv_groups_scores_plt %>% 
+  mutate(nk_lab = paste0("K = ", nk))
+
+set.seed(123)
+ggplot(df_mv_groups_scores_plt, aes(x = y, y = CV1, col = y_pred)) +
+  geom_jitter(height = 0) +
+  facet_grid(.~nk_lab) + 
+  scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+  labs(col = "LDA predicted class",
+       y = "Canonical variate scores",
+       x = "Cluster matches mouse") + 
+  theme_bw()
+```
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[1]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[3]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[4]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+Seem to be finding similar results than the K = 2 situation. Good?
+
+
+
+
+#### Group A vs. Group C
+
+```{r}
+df_mv_groups %>% 
+  filter(group1 == "A", group2 == "C")
+```
+
+
+```{r}
+df_mv_groups_A_C <- df_mv_groups %>% 
+  filter(group1 == "A",
+         group2 == "C")
+```
+
+
+```{r}
+ggplot(df_mv_groups_A_C, aes(x = nk, y = lda_auc, group = factor(n_variables), col = factor(n_variables))) + 
+  geom_line() + 
+  geom_point(aes(size = prop_participants_group2)) + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") + 
+  coord_cartesian(ylim = c(0.5, 1.0)) + 
+  scale_x_continuous(breaks = seq(1, 10, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  labs(x = "POND+ cluster solutions (K)",
+       y = "ROC AUC", 
+       col = "Number of variables\nincluded in analysis",
+       size = "Proportion of participants\nin target group") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+
+```{r}
+df_mv_groups_A_C %>% 
+  filter(n_variables == 23)
+```
+
+Looking at comparisons between A and D.
+
+```{r}
+indices <- c(9, 24, 29, 34, 54)
+# indices <- c(4, 14, 39, 59)
+
+list_mv_groups_scores_plt <- vector(mode = "list", length = length(indices))
+list_mv_groups_loadings_plt <- vector(mode = "list", length = length(indices))
+list_mv_groups_roc_plt <- vector(mode = "list", length = length(indices))
+for (i in 1:length(indices)) {
+  
+  idx <- indices[i]
+  
+  df_mv_groups_idx <- df_mv_groups %>% 
+    filter(index == idx) 
+  
+  X <- list_mv_groups_input[[idx]] %>% 
+    select(-ID, -group) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  lda_pred <- predict(list_lda_groups_fit[[idx]], X)[["class"]]
+  
+  manova_cv <- candisc(list_manova_groups_fit[[idx]])
+  
+  df_mv_scores <- manova_cv$scores %>% 
+    rename(CV1 = Can1) %>% 
+    mutate(y_pred = lda_pred,
+           index = idx) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  df_mv_loadings <- manova_cv$structure %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(CV1 = Can1) %>% 
+    mutate(index = idx, 
+           variable = factor(variable, levels = variable[order(CV1)])) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  lda_roc <- list_lda_groups_roc[[idx]]
+  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                       fpr = 1-lda_roc$specificities,
+                       thresholds = lda_roc$thresholds) %>% 
+    arrange(tpr) %>% 
+    mutate(index = idx) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  
+  list_mv_groups_scores_plt[[i]] <- df_mv_scores
+  list_mv_groups_loadings_plt[[i]] <- df_mv_loadings
+  list_mv_groups_roc_plt[[i]] <- df_lda_roc
+}
+
+df_mv_groups_scores_plt <- bind_rows(list_mv_groups_scores_plt)
+df_mv_groups_roc_plt <- bind_rows(list_mv_groups_roc_plt)
+# df_mv_matches_loadings_plt <- bind_rows(list_mv_matches_loadings_plt)
+```
+
+
+```{r}
+df_mv_groups_scores_plt <- df_mv_groups_scores_plt %>% 
+  mutate(nk_lab = paste0("K = ", nk))
+
+set.seed(123)
+ggplot(df_mv_groups_scores_plt, aes(x = y, y = CV1, col = y_pred)) +
+  geom_jitter(height = 0) +
+  facet_grid(.~nk_lab) + 
+  scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+  labs(col = "LDA predicted class",
+       y = "Canonical variate scores",
+       x = "Cluster matches mouse") + 
+  theme_bw()
+```
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[1]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[2]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[3]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+
+
+
+
+
+
+#### Group C vs. Group D
+
+```{r}
+df_mv_groups %>% 
+  filter(group1 == "C", group2 == "D")
+```
+
+
+```{r}
+df_mv_groups_C_D <- df_mv_groups %>% 
+  filter(group1 == "C",
+         group2 == "D")
+```
+
+
+```{r}
+ggplot(df_mv_groups_C_D, aes(x = nk, y = lda_auc, group = factor(n_variables), col = factor(n_variables))) + 
+  geom_line() + 
+  geom_point(aes(size = prop_participants_group2)) + 
+  geom_hline(yintercept = 0.5, linetype = "dashed") + 
+  coord_cartesian(ylim = c(0.5, 1.0)) + 
+  scale_x_continuous(breaks = seq(1, 10, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  labs(x = "POND+ cluster solutions (K)",
+       y = "ROC AUC", 
+       col = "Number of variables\nincluded in analysis",
+       size = "Proportion of participants\nin target group") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+
+```{r}
+df_mv_groups_C_D %>% 
+  filter(n_variables == 23)
+```
+
+Looking at comparisons between A and D.
+
+```{r}
+indices <- c(19, 74, 89)
+# indices <- c(4, 14, 39, 59)
+
+list_mv_groups_scores_plt <- vector(mode = "list", length = length(indices))
+list_mv_groups_loadings_plt <- vector(mode = "list", length = length(indices))
+list_mv_groups_roc_plt <- vector(mode = "list", length = length(indices))
+for (i in 1:length(indices)) {
+  
+  idx <- indices[i]
+  
+  df_mv_groups_idx <- df_mv_groups %>% 
+    filter(index == idx) 
+  
+  X <- list_mv_groups_input[[idx]] %>% 
+    select(-ID, -group) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  lda_pred <- predict(list_lda_groups_fit[[idx]], X)[["class"]]
+  
+  manova_cv <- candisc(list_manova_groups_fit[[idx]])
+  
+  df_mv_scores <- manova_cv$scores %>% 
+    rename(CV1 = Can1) %>% 
+    mutate(y_pred = lda_pred,
+           index = idx) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  df_mv_loadings <- manova_cv$structure %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(CV1 = Can1) %>% 
+    mutate(index = idx, 
+           variable = factor(variable, levels = variable[order(CV1)])) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  lda_roc <- list_lda_groups_roc[[idx]]
+  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                       fpr = 1-lda_roc$specificities,
+                       thresholds = lda_roc$thresholds) %>% 
+    arrange(tpr) %>% 
+    mutate(index = idx) %>% 
+    left_join(df_mv_groups_idx, by = "index")
+  
+  
+  list_mv_groups_scores_plt[[i]] <- df_mv_scores
+  list_mv_groups_loadings_plt[[i]] <- df_mv_loadings
+  list_mv_groups_roc_plt[[i]] <- df_lda_roc
+}
+
+df_mv_groups_scores_plt <- bind_rows(list_mv_groups_scores_plt)
+df_mv_groups_roc_plt <- bind_rows(list_mv_groups_roc_plt)
+# df_mv_matches_loadings_plt <- bind_rows(list_mv_matches_loadings_plt)
+```
+
+
+```{r}
+df_mv_groups_scores_plt <- df_mv_groups_scores_plt %>% 
+  mutate(nk_lab = paste0("K = ", nk))
+
+set.seed(123)
+ggplot(df_mv_groups_scores_plt, aes(x = y, y = CV1, col = y_pred)) +
+  geom_jitter(height = 0) +
+  facet_grid(.~nk_lab) + 
+  scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+  labs(col = "LDA predicted class",
+       y = "Canonical variate scores",
+       x = "Cluster matches mouse") + 
+  theme_bw()
+```
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[1]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[2]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(list_mv_groups_loadings_plt[[3]], aes(x = CV1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Canonical variate loadings",
+       y = "Variable") + 
+  theme_bw()
+```
+
+
+#### Three-way analysis
+
+```{r}
+nki <- 4
+
+df_mv_groups_triplet <- expand_grid(nk = nki, 
+                                    n_variables = c(9, 12, 20, 23, 27),
+                                    n_participants = 0,
+                                    manova_lambda = 0, manova_p = 0, 
+                                    error = FALSE)
+
+groups_subset <- c("A", "C", "D")
+
+
+list_mv_groups_triplet_input <- vector(mode = "list", length = nrow(df_mv_groups_triplet))
+list_manova_groups_triplet_fit <- vector(mode = "list", length = nrow(df_mv_groups_triplet))
+list_lda_groups_triplet_fit <- vector(mode = "list", length = nrow(df_mv_groups_triplet))
+list_lda_groups_triplet_roc <- vector(mode = "list", length = nrow(df_mv_groups_triplet))
+for (i in 1:nrow(df_mv_groups_triplet)) {
+  
+  n_variables <- df_mv_groups_triplet[[i, "n_variables"]]
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", variables)
+  df_multivariate <- df_clusters_clinical[,cols]
+  colnames(df_multivariate) <- c("ID", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  # Include information about mouse match
+  df_multivariate <- df_multivariate %>% 
+    left_join(df_cluster_groups %>% 
+                filter(nk == nki) %>% 
+                select(ID, group), 
+              by = "ID") %>% 
+    filter(!is.na(group)) %>% 
+    filter(group %in% groups_subset)
+  
+  # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_groups_triplet[[i, "n_participants"]] <- nrow(df_multivariate)
+  
+  list_mv_groups_triplet_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$group
+  
+  # Fit MANOVA
+  manova_fit <- manova(X ~ y)
+  
+  # Evaluate hypothesis test
+  manova_test <- tryCatch(
+  {
+    summary(manova_fit, test = "Wilks")
+  },
+  error = function(e) {
+    message("Error: ", e$message)
+    NA
+  }
+)
+  
+  # Store MANOVA outputs
+  list_manova_groups_triplet_fit[[i]] <- manova_fit
+  if (class(manova_test) == "summary.manova") {
+    df_mv_groups_triplet[[i, "manova_lambda"]] <- manova_test[["stats"]][1, "Wilks"]
+    df_mv_groups_triplet[[i, "manova_p"]] <- manova_test[["stats"]][1, "Pr(>F)"]
+  } else {
+    df_mv_groups_triplet[[i, "manova_lambda"]] <- NA
+    df_mv_groups_triplet[[i, "manova_p"]] <- NA
+    df_mv_groups_triplet[[i, "error"]] <- TRUE
+  }
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y)
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+  
+  # Store LDA outputs
+  list_lda_groups_triplet_fit[[i]] <- lda_fit
+  
+}
+
+
+df_mv_groups_triplet <- df_mv_groups_triplet %>% 
+  mutate(index = 1:nrow(.))
+```
+
+```{r}
+df_mv_groups_triplet
+```
+
+```{r}
+idx <- 2
+  
+df_mv_groups_triplet_idx <- df_mv_groups_triplet %>% 
+  filter(index == idx) 
+  
+X <- list_mv_groups_triplet_input[[idx]] %>% 
+  select(-ID, -group) %>% 
+  as.matrix() %>% 
+  scale()
+  
+lda_pred <- predict(list_lda_groups_triplet_fit[[idx]], X)[["class"]]
+  
+manova_cv <- candisc(list_manova_groups_triplet_fit[[idx]])
+  
+df_mv_scores <- manova_cv$scores %>% 
+  rename(CV1 = Can1, CV2 = Can2) %>% 
+  mutate(index = idx) %>% 
+  left_join(df_mv_groups_triplet_idx, by = "index")
+  
+df_mv_loadings <- manova_cv$structure %>% 
+  as_tibble(rownames = "variable") %>% 
+  rename(CV1 = Can1, CV2 = Can2) %>% 
+  mutate(index = idx, 
+         variable = factor(variable, levels = variable[order(CV1)])) %>% 
+  left_join(df_mv_groups_triplet_idx, by = "index")
+
+
+```
+
+```{r}
+df_mv_scores
+```
+
+
+```{r}
+ggplot(df_mv_scores, aes(x = CV1, y = CV2, col = y)) + 
+  geom_point()
+```
+
+
+```{r}
+ggplot(df_mv_loadings, aes(x = CV1, y = CV2)) + 
+  geom_segment(aes(xend = 0, yend = 0), col = "grey50") + 
+  geom_text(aes(label = variable), size = 2) +
+  coord_fixed(xlim = c(-0.5, 0.5),
+                  ylim = c(-0.5, 0.5)) +
+  theme_bw()
+```
+
+
+```{r}
+filt <- df_mv_scores$CV1 < -4 
+tmp <- list_mv_groups_triplet_input[[idx]]
+
+tmp <- tmp %>% 
+  mutate(outliers = filt)
+
+id_outliers <- tmp %>% 
+  filter(outliers) %>% 
+  pull(ID)
+```
+
+```{r}
+ggplot(tmp, aes(x = owl_oe_ss, y = owl_olc_ss, col = outliers)) + 
+  geom_point()
+```
+
+
+```{r}
+df_pond_db_subset %>% 
+  filter(subject_id %in% c(1050692, 1050896)) %>% 
+  select(redcap_id, contains("owl"))
+```
+
+Something weird with these scores
+
+
+```{r}
+tmp <- df_clinical_scores %>% 
+  select(redcap_id, contains("owl")) %>% 
+  filter(!is.na(owl_lc_ss))
+```
+
+```{r}
+ggplot(tmp, aes(x = owl_lc_ss, owl_oe_ss)) + 
+  geom_point()
+```
+
+```{r}
+ggplot(tmp, aes(x = owl_lc_ss, owl_olc_ss)) + 
+  geom_point()
+```
+
+```{r}
+ggplot(tmp, aes(x = owl_oe_ss, owl_olc_ss)) + 
+  geom_point()
+```
+
+```{r}
+X <- df_multivariate %>% 
+  select(-ID, -group) %>% 
+  as.matrix() %>% 
+  scale()
+
+X_cor <- cor(X)
+
+df_X_cor <- X_cor %>% 
+  as_tibble(rownames = "var1") %>% 
+  pivot_longer(cols = -var1, names_to = "var2", values_to = "correlation")
+
+ggplot(df_X_cor, aes(x = var1, y = var2, fill = correlation)) +
+  geom_tile() +
+  scale_fill_distiller(palette = "RdYlBu")
+```
+
+
+### Synaptic vs. chromatin
+
+That's light green (synaptic, group C) vs. purple (chromatin, group D)
+
+K = 6: 6-2 vs. 
+
+```{r}
+synaptic <- c("6-2", "7-4", "8-7", "9-4")
+chromatin <- c("6-1", "7-1", "8-1", "8-2", "9-7")
+
+df_synaptic <- tibble(cluster_id = synaptic) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k),
+         group = "synaptic")
+
+df_chromatin <- tibble(cluster_id = chromatin) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k),
+         group = "chromatin")
+
+df_pathway <- bind_rows(df_synaptic, df_chromatin)
+
+```
+
+
+```{r}
+# Relevant thresholds are
+# 9: Basic scores
+# 12: Includes OWL
+# 20: Includes SSP
+# 23: Includes BOT2
+# 27: Includes NEPSY
+
+df_mv_syn_chrom <- expand_grid(nk = 6:9, 
+                            n_variables = c(9, 12, 20, 23, 27),
+                            n_participants = 0,
+                            n_participants_syn = 0,
+                            lda_auc = 0, error = FALSE)
+list_mv_syn_chrom_input <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+list_lda_syn_chrom_fit <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+list_lda_syn_chrom_roc <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+for (i in 1:nrow(df_mv_syn_chrom)) {
+  
+  n_variables <- df_mv_syn_chrom[[i, "n_variables"]]
+  nki <- df_mv_syn_chrom[[i, "nk"]]
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", paste0("nk", nki), variables)
+  df_multivariate <- df_clusters_clinical[,cols]
+  colnames(df_multivariate) <- c("ID", "k", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+
+  # Include information about pathway
+  df_multivariate <- df_multivariate %>% 
+    inner_join(df_pathway %>% 
+                 filter(nk == nki) %>% 
+                 select(k, group), by = "k") %>% 
+    mutate(group = factor(group)) %>% 
+    select(-k)
+  
+    # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_syn_chrom[[i, "n_participants"]] <- nrow(df_multivariate)
+  df_mv_syn_chrom[[i, "n_participants_syn"]] <-
+    df_multivariate %>% 
+    group_by(group) %>% 
+    count() %>% 
+    ungroup() %>%
+    filter(group == "synaptic") %>% 
+    pull(n)
+  
+  list_mv_syn_chrom_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$group
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+  
+  # Run LDA ROC analysis
+  lda_roc <- pROC::roc(response = y,
+                       predictor = lda_pred_prob,
+                       direction = "<", 
+                       quiet = TRUE)
+  
+    # Store LDA outputs
+  list_lda_syn_chrom_fit[[i]] <- lda_fit
+  list_lda_syn_chrom_roc[[i]] <- lda_roc
+  df_mv_syn_chrom[[i, "lda_auc"]] <- pROC::auc(lda_roc)[1]
+  
+  
+}
+
+df_mv_syn_chrom <- df_mv_syn_chrom %>% 
+  mutate(index = 1:nrow(.),
+         prop_participants_syn = n_participants_syn/n_participants)
+```
+
+```{r}
+df_mv_syn_chrom
+```
+
+```{r}
+vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
+
+nk_seq <- df_mv_syn_chrom %>% 
+  pull(nk) %>% 
+  unique()
+
+for (nki in nk_seq) {
+  
+  print(paste0("nk = ", nki))
+  
+  indices <- df_mv_syn_chrom %>% 
+    filter(nk == nki) %>% 
+    pull(index)
+  
+  list_mv_syn_chrom_scores_plt <- vector(mode = "list", length = length(indices))
+  list_mv_syn_chrom_loadings_plt <- vector(mode = "list", length = length(indices))
+  list_mv_syn_chrom_roc_plt <- vector(mode = "list", length = length(indices))
+  list_mv_syn_chrom_header <- vector(mode = "list", length = length(indices))
+  for (i in 1:length(indices)) {
+    
+    print(paste0("i = ", i))
+    
+    idx <- indices[i]
+    
+    df_mv_syn_chrom_idx <- df_mv_syn_chrom %>% 
+      filter(index == idx) 
+    
+    X <- list_mv_syn_chrom_input[[idx]] %>% 
+      select(-ID, -group) %>% 
+      as.matrix() %>% 
+      scale()
+    
+    y <- list_mv_syn_chrom_input[[idx]] %>% 
+      pull(group)
+    
+    lda_pred <- predict(list_lda_syn_chrom_fit[[idx]], X)
+    lda_pred_y <- lda_pred[["class"]]
+    
+    df_mv_scores <- lda_pred[["x"]] %>% 
+      as_tibble() %>% 
+      mutate(y = y,
+             y_pred = lda_pred_y,
+             index = idx) %>% 
+      left_join(df_mv_syn_chrom_idx, by = "index")
+    
+    df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+      as_tibble(rownames = "variable") %>% 
+      rename(LD1 = V1) %>% 
+      mutate(index = idx) %>%  
+      left_join(df_mv_syn_chrom_idx, by = "index") %>% 
+      mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
+    
+    df_mv_loadings <- df_mv_loadings %>% 
+      mutate(variable = factor(variable, levels = variable[order(LD1)]))
+    
+    lda_roc <- list_lda_syn_chrom_roc[[idx]]
+    df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                         fpr = 1-lda_roc$specificities,
+                         thresholds = lda_roc$thresholds) %>% 
+      arrange(tpr) %>% 
+      mutate(index = idx) %>% 
+      left_join(df_mv_syn_chrom_idx, by = "index")
+    
+    lda_roc_auc <- lda_roc$auc[1]
+    
+    set.seed(123)
+    plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+      geom_jitter(height = 0) +
+      coord_cartesian(ylim = c(-4, 4)) + 
+      scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+      labs(col = "LDA predicted class",
+           y = "Linear discriminant scores",
+           x = "Molecular cluster group") + 
+      theme_bw() +
+      theme(legend.position = "bottom")
+    
+    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = variable)) +
+      geom_vline(xintercept = 0) + 
+      geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+      geom_point() +
+      scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+      labs(x = "Linear discriminant loadings",
+           y = "Variable") + 
+      theme_bw()
+    
+    plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+      annotate(geom = "segment", 
+               x = 0, y = 0, 
+               xend = 1, yend = 1, 
+               linetype = "dashed") +
+      annotate(geom = "text",
+               x = 0.8, y = 0.2,
+               label = paste0("AUC = ", round(lda_roc_auc, 3))) + 
+      geom_line() +
+      scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+      scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+      labs(x = "False positive rate",
+           y = "True positive rate") + 
+      theme_bw()
+    
+    list_mv_syn_chrom_scores_plt[[i]] <- ggplotGrob(plt_mv_scores)
+    list_mv_syn_chrom_loadings_plt[[i]] <- ggplotGrob(plt_mv_loadings)
+    list_mv_syn_chrom_roc_plt[[i]] <- ggplotGrob(plt_mv_roc)
+    list_mv_syn_chrom_header[[i]] <- gTree(children = gList(rectGrob(gp = gpar(fill = NA)),
+                                                          textGrob(label = paste0("Number of variables: ",
+                                                                                  df_mv_syn_chrom_idx$n_variables, 
+                                                                                  "\nNumber of participants: ", 
+                                                                                  df_mv_syn_chrom_idx$n_participants))))
+    
+  }
+  
+  list_grobs <- c(list(textGrob(label = paste0("K = ", nki))),
+                  list_mv_syn_chrom_header,
+                  list_mv_syn_chrom_scores_plt,
+                  list_mv_syn_chrom_roc_plt,
+                  list_mv_syn_chrom_loadings_plt)
+  
+  layout <- rbind(rep(1, 5),
+                  2:6,
+                  7:11,
+                  12:16,
+                  17:21)
+  
+  title_height <- 0.05
+  header_height <- 0.05
+  roc_height <- 0.25
+  scores_height <- 0.25
+  loadings_height <- 1 - title_height - header_height - roc_height - scores_height
+  plt_heights <- c(title_height,header_height, scores_height, roc_height, loadings_height)
+  
+  plt_grob <- arrangeGrob(grobs = list_grobs,
+                          layout_matrix = layout,
+                          heights = unit(plt_heights, units = "npc"))
+  
+  outfile <- paste0("behavioural_mv_synaptic_chromatin_nk_", nki, ".pdf")
+  outfile <- file.path(output_dir, outfile)
+  pdf(file = outfile,
+      width = unit(20, "in"),
+      height = unit(12, "in"))
+  grid.draw(plt_grob)
+  dev.off()
+  
+}
+```
+
+
+```{r}
+nki <- 6
+n_variables <- 20
+  
+# Fetch variables with the desired completion level
+variables <- df_complete_cases %>% 
+  slice_max(order_by = n_complete, n = n_variables) %>% 
+  pull(variable)
+  
+# Extract variable scores
+cols <- c("ID", paste0("nk", nki), variables)
+df_multivariate <- df_clusters_clinical[,cols]
+colnames(df_multivariate) <- c("ID", "k", variables)
+  
+# Filter for complete cases
+df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+
+# Include information about pathway
+df_multivariate <- df_multivariate %>% 
+  inner_join(df_pathway %>% 
+               filter(nk == nki) %>% 
+               select(k, group), by = "k") %>% 
+  mutate(group = factor(group)) %>% 
+  select(-k)
+  
+
+# Extract feature matrix and labels
+X <- as.matrix(df_multivariate[,variables])
+X <- scale(X)
+y <- df_multivariate$group
+
+# Fit LDA
+lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+
+# Extract class probabilities
+lda_pred <- predict(lda_fit, X)
+lda_pred_prob <- lda_pred[["posterior"]][,2]
+lda_pred_y <- lda_pred[["class"]]
+
+df_lda_scores <- lda_pred[["x"]] %>% 
+  as_tibble() 
+
+df_lda_scores <- df_lda_scores %>% 
+  mutate(group = df_multivariate$group, 
+         fsiq = X[,"fsiq"],
+         scqtot = X[,"scqtot"])
+
+```
+
+```{r}
+plt <- ggplot(df_lda_scores, aes(x = fsiq, y = LD1, col = group)) +
+  geom_point() +
+  theme_bw()
+
+outfile <- "lda_fsiq_nk_6_synaptic_chromatin.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+plt <- ggplot(df_lda_scores, aes(x = scqtot, y = LD1, col = group)) +
+  geom_point() +
+  theme_bw()
+
+outfile <- "lda_scq_nk_6_synaptic_chromatin.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(4, "in"))
+print(plt)
+dev.off()
+```
+
+
+
+```{r}
+
+X <- list_mv_syn_chrom_input[[idx]] %>% 
+  select(-ID, -group) %>% 
+  as.matrix() %>% 
+  scale()
+
+y <- list_mv_syn_chrom_input[[idx]] %>% 
+  pull(group)
+
+lda_pred <- predict(list_lda_syn_chrom_fit[[idx]], X)
+lda_pred_y <- lda_pred[["class"]]
+
+df_mv_scores <- lda_pred[["x"]] %>% 
+  as_tibble() %>% 
+  mutate(y = y,
+         y_pred = lda_pred_y,
+         index = idx) %>% 
+  left_join(df_mv_syn_chrom_idx, by = "index")
+
+df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+  as_tibble(rownames = "variable") %>% 
+  rename(LD1 = V1) %>% 
+  mutate(index = idx) %>%  
+  left_join(df_mv_syn_chrom_idx, by = "index")
+
+```
+
+
+# Behavioural assessment directions
+
+SCQ: Higher scores mean more social communication difficulties
+RBS: Higher scores mean more repetitive behaviours
+CBCL: Higher scores mean more symptomatic burden
+
+SWAN: Higher scores mean fewer ADHD symptoms
+NEPSY: Higher scores are better
+OWLS: Higher scores are better
+BOT2: Higher scores are better
+SSP: Higher scores are better
+ABAS: Higher scores are better
+
