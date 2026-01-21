@@ -1045,7 +1045,6 @@ neuro_legend_grob <- gTree(children = gList(neuro_legend_pos_raster,
                                             neuro_legend_title))
 ```
 
-
 ```{r}
 panel_padding_height <- 20
 sankey_height <- sum(sankey_heights)
@@ -1053,11 +1052,11 @@ dx_height <- sum(dx_heights)
 fig_base_heights <- c(sankey_height, panel_padding_height, dx_height)
 
 empty_height <- fig_height - sum(fig_base_heights)
+# empty_height <- 20
 
 fig_base_widths <- c(8, fig_width - 8)
 fig_base_heights <- c(fig_base_heights, empty_height)
 
-# fig_base_layout <- cbind(1, 2:5)
 fig_base_layout <- rbind(c(01, 01),
                          c(02, 02),
                          c(03, 04),
@@ -1080,8 +1079,12 @@ fig_grobs_list <- c(list(fig_base_grob),
                     list(dx_yaxis))
 fig_grobs <- do.call(grobTree, fig_grobs_list)
 
-fig_width_in <- sum(fig_base_widths)/72
-fig_height_in <- sum(fig_base_heights)/72
+fig_width_pt <- sum(fig_base_widths)
+fig_height_pt <- sum(fig_base_heights)
+
+fig_width_in <- fig_width_pt/72
+fig_height_in <- fig_height_pt/72
+
 
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
@@ -1092,8 +1095,20 @@ grid.draw(fig_grobs)
 pushViewport(neuro_legend_vp)
 grid.draw(neuro_legend_grob)
 popViewport()
-# grid.segments(x0 = 0, x1 = 1, y0 = seq(0, 1, by = 0.1), y1 = seq(0, 1, by = 0.1))
-# grid.segments(x0 = 0, x1 = 1, y0 = seq(0.05, 0.95, by = 0.1), y1 = seq(0.05, 0.95, by = 0.1), gp = gpar(lty = "dashed"))
+
+grid.rect(x = unit(c(5, 235, 427), "bigpts"),
+          y = unit(fig_height_pt-487, "bigpts"),
+          width = unit(c(223, 186, 183), "bigpts"),
+          height = unit(223, "bigpts"),
+          just = c("left", "top"), 
+          gp = gpar(fill = NA, lty = "dotted", lwd = 1.5))
+
+grid.segments(x0 = unit(c(115, 325, 533), "bigpts"),
+              x1 = unit(c(115, 325, 533), "bigpts"),
+              y0 = unit(fig_height_pt - 486, "bigpts"),
+              y1 = unit(fig_height_pt - 470, "bigpts"),
+              gp = gpar(lty = "dotted", lwd = 1.5))
+
 dev.off()
 ```
 
