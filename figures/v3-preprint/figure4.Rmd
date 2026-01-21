@@ -66,12 +66,12 @@ metric <- "correlation"
 # Fetch parameter set
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(metadata = metadata,
-                                input_1_species = "human",
+                                list(input_1_species = "human",
                                 input_1_id = "700",
                                 input_2_species = "mouse",
                                 input_2_id = "107",
                                 n_latent_spaces = 50,
-                                metric = metric)
+                                metric = metric))
 params
 ```
 
