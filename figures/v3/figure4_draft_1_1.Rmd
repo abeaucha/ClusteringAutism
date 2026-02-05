@@ -3432,6 +3432,496 @@ df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>%
 ```
 
 
+# HBN data
+
+```{r}
+files <- c("9994_CBCL_Pre_20220728.csv",
+           "9994_CBCL_20220728.csv",
+           "9994_SWAN_20220728.csv",
+           "9994_SCQ_20220728.csv",
+           "9994_RBS_20220728.csv",
+           "9994_Vineland_20220728.csv",
+           "9994_CELF_Full_5to8_20220728.csv",
+           "9994_CELF_Full_9to21_20220728.csv",
+           "9994_WISC_20220728.csv",
+           "9994_WASI_20220728.csv")
+
+path <- "/Users/abeauchamp/Documents/Projects/ClusteringAutism/repository/main/data/human/registration/v3/subject_info/HBN/assessment_data"
+```
+
+## Clusters
+
+```{r}
+# Import POND+ clusters
+clusters_file <- "/Users/abeauchamp/Documents/Projects/ClusteringAutism/repository/main/data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv"
+df_clusters <- read_csv(clusters_file, show_col_types = FALSE)
+
+# Import demographics
+demographics_file <- file.path(human_registration_dir, "subject_info", "demographics.csv")
+df_demographics <- read_csv(demographics_file, show_col_types = FALSE)
+
+# Filter demographics for POND participants
+df_demographics_hbn <- df_demographics %>% 
+  filter(Dataset == "HBN") %>% 
+  select(file, subject_id = Subject_ID, 
+         age = Age, sex = Sex, dx = DX)
+
+# Join demographics and cluster information
+df_clusters_hbn <- df_clusters %>% 
+  inner_join(df_demographics_hbn, by = c("ID" = "file"))
+
+df_clusters_clinical_hbn <- df_clusters_hbn
+
+
+## CBCL
+
+file <- file.path(path, "9994_CBCL_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df_cbcl <- df %>% 
+  select(subject_id = EID, cbcl_ip_ts = CBCL_Int_T, cbcl_ep_ts = CBCL_Ext_T)
+
+file <- file.path(path, "9994_CBCL_Pre_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_cbcl_pre <- df %>% 
+  select(subject_id = EID, cbcl_ip_ts = CBCL_Pre_Int_T, cbcl_ep_ts = CBCL_Pre_Ext_T) %>% 
+  mutate(cbcl_ip_ts = as.numeric(cbcl_ip_ts),
+         cbcl_ep_ts = as.numeric(cbcl_ep_ts))
+
+df_cbcl <- bind_rows(df_cbcl, df_cbcl_pre)
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_cbcl, by = "subject_id")
+
+
+
+## SWAN
+
+file <- file.path(path, "9994_SWAN_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_swan <- df %>% 
+  select(subject_id = EID, adhd_i_sub = ADHD_I, adhd_hi_sub = ADHD_HI) %>% 
+  mutate(adhd_i_sub = as.numeric(adhd_i_sub),
+         adhd_hi_sub = as.numeric(adhd_hi_sub))
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_swan, by = "subject_id")
+
+
+
+## SCQ
+
+file <- file.path(path, "9994_SCQ_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_scq <- df %>% 
+  select(subject_id = EID, scqtot = SCQ_Total) %>% 
+  mutate(scqtot = as.numeric(scqtot))
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_scq, by = "subject_id")
+
+
+## RBS
+
+file <- file.path(path, "9994_RBS_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_rbs <- df %>% 
+  select(subject_id = EID, rbsallt = Score_Total) %>% 
+  mutate(rbsallt = as.numeric(rbsallt))
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_rbs, by = "subject_id")
+
+
+## IQ
+
+file <- file.path(path, "9994_WISC_20220728.csv")
+df_wisc <- read_csv(file, show_col_types = FALSE)
+
+df_wisc <- df_wisc[2:nrow(df_wisc),]
+
+df_wisc <- df_wisc %>% 
+  select(subject_id = EID, WISC_FSIQ) %>% 
+  mutate(WISC_FSIQ = as.numeric(WISC_FSIQ)) %>% 
+  group_by(subject_id) %>% 
+  mutate(WISC_FSIQ_MEAN = mean(WISC_FSIQ)) %>% 
+  ungroup() %>% 
+  select(subject_id, WISC_FSIQ = WISC_FSIQ_MEAN) %>% 
+  distinct()
+
+file <- file.path(path, "9994_WASI_20220728.csv")
+df_wasi <- read_csv(file, show_col_types = FALSE)
+
+df_wasi <- df_wasi[2:nrow(df_wasi),]
+
+df_wasi <- df_wasi %>% 
+  select(subject_id = EID, WASI_FSIQ) %>% 
+  mutate(WASI_FSIQ = as.numeric(WASI_FSIQ))
+
+df_fsiq <- full_join(df_wisc, df_wasi, by = "subject_id")
+
+df_fsiq <- df_fsiq %>% 
+  mutate(fsiq = ifelse(!is.na(WASI_FSIQ), WASI_FSIQ, WISC_FSIQ)) %>% 
+  select(subject_id, fsiq)
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_fsiq, by = "subject_id")
+
+
+
+## CELF
+
+file <- file.path(path, "9994_CELF_Full_5to8_20220728.csv")
+df_celf_5to8 <- read_csv(file, show_col_types = FALSE)
+
+df_celf_5to8 <- df_celf_5to8[2:nrow(df_celf_5to8),]
+
+df_celf_5to8 <- df_celf_5to8 %>% 
+  select(subject_id = EID, CELF_CLS_Stnd, CELF_RLI_Stnd, CELF_ELI_Stnd, CELF_LCI_Stnd) %>% 
+  mutate(CELF_CLS_Stnd = as.numeric(CELF_CLS_Stnd),
+         CELF_RLI_Stnd = as.numeric(CELF_RLI_Stnd),
+         CELF_ELI_Stnd = as.numeric(CELF_ELI_Stnd),
+         CELF_LCI_Stnd = as.numeric(CELF_LCI_Stnd))
+
+
+file <- file.path(path, "9994_CELF_Full_9to21_20220728.csv")
+df_celf_9to21 <- read_csv(file, show_col_types = FALSE)
+
+df_celf_9to21 <- df_celf_9to21[2:nrow(df_celf_9to21),]
+
+df_celf_9to21 <- df_celf_9to21 %>% 
+  select(subject_id = EID, CELF_CLS_Stnd, CELF_RLI_Stnd, CELF_ELI_Stnd, CELF_LCI_Stnd) %>% 
+  mutate(CELF_CLS_Stnd = as.numeric(CELF_CLS_Stnd),
+         CELF_RLI_Stnd = as.numeric(CELF_RLI_Stnd),
+         CELF_ELI_Stnd = as.numeric(CELF_ELI_Stnd),
+         CELF_LCI_Stnd = as.numeric(CELF_LCI_Stnd))
+
+
+df_celf <- bind_rows(df_celf_5to8, df_celf_9to21)
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_celf, by = "subject_id")
+
+df_clusters_clinical_hbn
+```
+
+```{r}
+df_clinical_completion_hbn <- df_clusters_clinical_hbn %>% 
+  select(subject_id, cbcl_ip_ts:CELF_LCI_Stnd) %>% 
+  pivot_longer(cols = -subject_id, names_to = "variable", values_to = "score") %>% 
+  mutate(complete = !is.na(score)) %>% 
+  group_by(variable) %>% 
+  summarise(n_completed = sum(complete)) %>% 
+  ungroup() %>% 
+  arrange(desc(n_completed))
+
+
+df_complete_cases_hbn <- df_clinical_completion_hbn %>% 
+  mutate(n_complete = 0, n_included = 0)
+
+for (i in 1:nrow(df_complete_cases_hbn)) {
+  
+  variables <- df_clinical_completion_hbn %>% 
+    slice_max(order_by = n_completed, n = i) %>% 
+    pull(variable)
+  
+  df_clinical_subset <- df_clusters_clinical_hbn[, variables]
+  
+  df_complete_cases_hbn[[i, "n_complete"]]  <- sum(complete.cases(df_clinical_subset))
+  df_complete_cases_hbn[[i, "n_included"]] <- i
+  
+}
+
+plt_complete_cases <- ggplot(df_complete_cases_hbn, aes(x = n_included, y = n_complete)) + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(0, 12, by = 2)) + 
+  scale_y_continuous(breaks = seq (0, 1000, by = 50)) + 
+  labs(x = "Number of variables included",
+       y = "Number of complete cases") +
+  theme_bw()
+
+outfile <- "questionnaire_completion_HBN.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt_complete_cases)
+dev.off()
+```
+
+There's really not much behavioural data for HBN.
+
+## LDA K = 2
+
+```{r}
+# Fetch variables with the desired completion level
+variables <- df_complete_cases_hbn %>% 
+  slice_max(order_by = n_complete, n = 7) %>% 
+  pull(variable)
+
+# Extract variable scores
+cols <- c("ID", "nk2", variables)
+df_multivariate <- df_clusters_clinical_hbn[,cols]
+colnames(df_multivariate) <- c("ID", "k", variables)
+  
+# Filter for complete cases
+df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+# Convert cluster labels to factor
+df_multivariate <- df_multivariate %>% 
+  mutate(k = factor(k))
+
+# Extract feature matrix and labels
+X <- as.matrix(df_multivariate[,variables])
+X <- scale(X)
+y <- df_multivariate$k
+
+# Fit LDA
+lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+
+
+lda_pred <- predict(lda_fit, X)
+lda_pred_y <- lda_pred[["class"]]
+lda_pred_prob <- lda_pred[["posterior"]][,2]
+  
+df_mv_scores <- lda_pred[["x"]] %>% 
+  as_tibble() %>% 
+  mutate(y = y,
+         y_pred = lda_pred_y)  %>% 
+  mutate(LD1 = -1*LD1)
+
+set.seed(123)
+plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+  geom_jitter(height = 0) +
+  coord_cartesian(ylim = c(-4, 4)) + 
+  scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+  labs(col = "LDA predicted class",
+       y = "Linear discriminant scores",
+       x = "HBN cluster (k)") + 
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+outfile <- paste0("HBN_behavioural_mv_nk_2_scores.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt_mv_scores)
+dev.off()
+```
+
+
+```{r}
+vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
+
+df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+  as_tibble(rownames = "variable") %>% 
+  rename(LD1 = V1) %>% 
+  mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
+
+df_mv_loadings <- df_mv_loadings %>% 
+  mutate(variable = factor(variable, levels = variable[order(LD1)]))
+
+plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Linear discriminant loadings",
+       y = "Variable") + 
+  theme_bw()
+
+outfile <- paste0("HBN_behavioural_mv_nk_2_loadings.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt_mv_loadings)
+dev.off()
+```
+
+
+```{r}
+# Run LDA ROC analysis
+lda_roc <- pROC::roc(response = y,
+                     predictor = lda_pred_prob,
+                     direction = "<", 
+                     quiet = TRUE)
+
+df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                     fpr = 1-lda_roc$specificities,
+                     thresholds = lda_roc$thresholds) %>% 
+  arrange(tpr) 
+  
+  lda_roc_auc <- lda_roc$auc[1]
+
+
+
+plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+  annotate(geom = "segment", 
+           x = 0, y = 0, 
+           xend = 1, yend = 1, 
+           linetype = "dashed") +
+  annotate(geom = "text",
+           x = 0.8, y = 0.2,
+           label = paste0("AUC = ", round(lda_roc_auc, 3))) + 
+  geom_line() +
+  scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  labs(x = "False positive rate",
+       y = "True positive rate") + 
+  theme_bw()
+
+outfile <- paste0("HBN_behavioural_mv_nk_2_roc.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt_mv_roc)
+dev.off()
+```
+
+
+### POND comparison
+
+
+```{r}
+# Extract variable scores
+cols <- c("ID", "nk2", variables)
+df_multivariate <- df_clusters_clinical[,cols]
+colnames(df_multivariate) <- c("ID", "k", variables)
+  
+# Filter for complete cases
+df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+# Convert cluster labels to factor
+df_multivariate <- df_multivariate %>% 
+  mutate(k = factor(k))
+
+# Extract feature matrix and labels
+X <- as.matrix(df_multivariate[,variables])
+X <- scale(X)
+y <- df_multivariate$k
+
+# Fit LDA
+lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+
+
+lda_pred <- predict(lda_fit, X)
+lda_pred_y <- lda_pred[["class"]]
+lda_pred_prob <- lda_pred[["posterior"]][,2]
+  
+df_mv_scores <- lda_pred[["x"]] %>% 
+  as_tibble() %>% 
+  mutate(y = y,
+         y_pred = lda_pred_y)  %>% 
+  mutate(LD1 = -1*LD1)
+
+set.seed(123)
+plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+  geom_jitter(height = 0) +
+  coord_cartesian(ylim = c(-4, 4)) + 
+  scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+  labs(col = "LDA predicted class",
+       y = "Linear discriminant scores",
+       x = "POND+ cluster (k)") + 
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+outfile <- paste0("POND_behavioural_mv_nk_2_scores.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt_mv_scores)
+dev.off()
+```
+
+
+```{r}
+vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
+
+df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+  as_tibble(rownames = "variable") %>% 
+  rename(LD1 = V1) %>% 
+  mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
+
+df_mv_loadings <- df_mv_loadings %>% 
+  mutate(variable = factor(variable, levels = variable[order(LD1)]))
+
+plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = variable)) +
+  geom_vline(xintercept = 0) + 
+  geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  labs(x = "Linear discriminant loadings",
+       y = "Variable") + 
+  theme_bw()
+
+outfile <- paste0("POND_behavioural_mv_nk_2_loadings.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt_mv_loadings)
+dev.off()
+```
+
+
+```{r}
+# Run LDA ROC analysis
+lda_roc <- pROC::roc(response = y,
+                     predictor = lda_pred_prob,
+                     direction = "<", 
+                     quiet = TRUE)
+
+df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                     fpr = 1-lda_roc$specificities,
+                     thresholds = lda_roc$thresholds) %>% 
+  arrange(tpr) 
+  
+  lda_roc_auc <- lda_roc$auc[1]
+
+
+
+plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+  annotate(geom = "segment", 
+           x = 0, y = 0, 
+           xend = 1, yend = 1, 
+           linetype = "dashed") +
+  annotate(geom = "text",
+           x = 0.8, y = 0.2,
+           label = paste0("AUC = ", round(lda_roc_auc, 3))) + 
+  geom_line() +
+  scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  labs(x = "False positive rate",
+       y = "True positive rate") + 
+  theme_bw()
+
+outfile <- paste0("POND_behavioural_mv_nk_2_roc.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt_mv_roc)
+dev.off()
+```
+
+
 # Behavioural assessment directions
 
 SCQ: Higher scores mean more social communication difficulties
