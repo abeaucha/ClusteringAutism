@@ -1,0 +1,1696 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-12-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Initialization
+
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+# suppressPackageStartupMessages(library(viridis))
+# suppressPackageStartupMessages(library(rcartocolor))
+# suppressPackageStartupMessages(library(candisc))
+```
+
+```{r env}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+source(file.path(SRCPATH, "enrichment.R"))
+```
+
+```{r functions}
+consolidate_visits <- function(df, cols) {
+  
+  subject_ids <- df %>% 
+    pull(subject_id) %>% 
+    unique()
+  
+  df_init <- df %>% 
+    select(subject_id, visit_instance, all_of(cols)) %>% 
+    mutate(n_missing = rowSums(!is.na(across(all_of(cols)))))
+  
+  df_complete <- df_init %>% 
+    filter(n_missing > 0) %>% 
+    group_by(subject_id) %>% 
+    filter(visit_instance == max(visit_instance)) %>% 
+    ungroup() %>% 
+    select(subject_id, all_of(cols))
+  
+  # Participants with completed ABAS
+  ids_complete <- df_complete %>% 
+    pull(subject_id) %>% 
+    unique()
+  
+  # Participants with no ABAS scores
+  ids_missing <- setdiff(subject_ids, ids_complete)
+  
+  # Create a data frame of NAs for particpants with no scores
+  df_missing <- matrix(nrow = length(ids_missing), ncol = length(cols))
+  rownames(df_missing) <- ids_missing
+  colnames(df_missing) <- cols
+  df_missing <- as_tibble(df_missing, rownames = "subject_id")
+  
+  df_out <- bind_rows(df_complete, df_missing)
+  
+  return(df_out)
+  
+}
+
+
+bootstrap_sample_estimate <- function(x, groups = NULL, estimate = "mean", 
+                                      B = 1000, set_seed = TRUE) {
+  
+  if (estimate == "mean") {
+    estimator <- mean
+  } else if (estimate == "median") {
+    estimator <- median
+  } else if (estimate == "sd") {
+    estimator <- sd
+  } else {
+    stop()
+  }
+  
+  n_groups <- ifelse(is.null(groups), 1, length(unique(groups)))
+  if (n_groups > 1) {
+    if (!is.factor(groups)) {
+      stop("groups must be factor")
+    }
+  }
+  groups_lvls <- levels(groups)
+  
+  bootstrap_samples <- matrix(data = 0, nrow = B, ncol = n_groups)
+  colnames(bootstrap_samples) <- groups_lvls
+  for (i in 1:nrow(bootstrap_samples)) {
+    if (n_groups == 1) {
+      if (set_seed) {set.seed(i)}
+      bootstrap_samples[[i]] <- estimator(sample(x = x, size = length(x), 
+                                                 replace = TRUE))
+    } else {
+      x_split <- split(x = x, f = groups)
+      n_split <- lapply(x_split, length)
+      if (set_seed) {set.seed(i)}
+      x_split_sample <- mapply(FUN = sample, x = x_split, size = n_split, 
+                               MoreArgs = list(replace = TRUE))
+      bootstrap_samples[i,] <- sapply(X = x_split_sample, FUN = estimator)
+    }
+  }
+  
+  return(bootstrap_samples)
+  
+}
+
+bootstrap_sample_estimate_ci <- function(x, groups = NULL, estimate = "mean", 
+                                         interval = c(0.025, 0.975), B = 1000, 
+                                         set_seed = TRUE) {
+  bootstrap_samples <- bootstrap_sample_estimate(x = x, groups = groups, 
+                                                 estimate = estimate,
+                                                 B = B, set_seed = set_seed)
+  bootstrap_ci <- apply(bootstrap_samples, MARGIN = 2, quantile, interval)
+  bootstrap_ci <- t(bootstrap_ci)
+  colnames(bootstrap_ci) <- c("lower", "upper")
+  return(bootstrap_ci)
+}
+
+group_summary <- function(x, groups, B = 1000) {
+  
+  means <- split(x = x, f = groups) %>% 
+    sapply(mean) %>% 
+    matrix(ncol = 1, nrow = length(levels(groups)))
+  colnames(means) <- "mu"
+  
+  ci <- bootstrap_sample_estimate_ci(x = x, groups = groups, B = B)
+  
+  out <- cbind(means, ci)
+  rownames(out) <- levels(groups)
+  
+  return(out)
+  
+}
+```
+
+```{r outputs}
+outfile_prefix <- "figure4_draft_2_2_HBN"
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
+```
+
+```{r pipeline-paths}
+# Pipeline directory
+pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
+
+# Parameter set ID
+params_id <- "861"
+
+# Fetch pipeline parameters
+metadata <- file.path(pipeline_dir, "metadata.csv")
+pipeline_params <- fetch_params_metadata(metadata = metadata,
+                                         params = list(id = params_id))
+
+# Human and mouse parameter set IDs
+human_params_id <- pipeline_params[["input_1_id"]]
+mouse_params_id <- pipeline_params[["input_2_id"]]
+
+# Human pipeline directory
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/", human_params_id)
+
+# Human cluster and centroid directories
+human_cluster_dir <- file.path(human_pipeline_dir, "clusters", "resolution_3.0")
+human_centroid_dir <- file.path(human_pipeline_dir, "centroids", "resolution_0.8")
+
+# Human registration directory
+human_registration_dir <- file.path(PROJECTPATH, "data/human/registration/v3/")
+```
+
+```{r fig-params}
+# Total figure dimensions in pts
+fig_width <- 612
+fig_height <- 792
+```
+
+
+# Mouse-human cluster similarity
+
+```{r mouse-human-similarity}
+# Import similarity and compute significance
+df_similarity <- compute_similarity_significance(
+  similarity = import_similarity(param_id = params_id, 
+                                 pipeline_dir = pipeline_dir), 
+  permutations = import_similarity_permutations(param_id = params_id, 
+                                                pipeline_dir = pipeline_dir)
+)
+
+# Rename columns
+colnames(df_similarity) <- colnames(df_similarity) %>% 
+  str_replace("img1", "human") %>% 
+  str_replace("img2", "mouse")
+
+# Extract full set of cluster IDs
+cluster_ids <- df_similarity %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  arrange(human_nk, human_k) %>% 
+  distinct() %>% 
+  pull(human_cluster_id)
+
+# Human and mouse cluster grid
+df_cluster_grid <- expand_grid(human_cluster_id = cluster_ids,
+                               mouse_cluster_id = cluster_ids) 
+
+# Identify cross-species matches
+df_matches <- df_similarity %>% 
+  mutate(match = pval < 0.05) %>% 
+  right_join(df_cluster_grid,
+             by = c("human_cluster_id", "mouse_cluster_id")) %>% 
+  mutate(match = ifelse(is.na(match), FALSE, match))
+
+# Extract human clusters with mouse matches
+human_clusters_match <- df_matches %>% 
+  filter(match) %>% 
+  select(human_cluster_id, human_nk, human_k) %>% 
+  distinct() %>% 
+  arrange(human_nk, human_k) %>% 
+  pull(human_cluster_id)
+```
+
+```{r}
+df_group_A <- tibble(mouse_cluster_id = c("2-1", "3-3", "4-4", "5-1", "6-1", "7-1", "8-1"),
+                     group = "A", colour = "springgreen4")
+
+df_group_B <- tibble(mouse_cluster_id = c("7-3", "8-5", "9-4", "10-3"),
+                     group = "B", colour = "sienna2")
+
+df_group_C <- tibble(mouse_cluster_id = c("6-4", "7-4", "8-2", "9-2", "10-5"),
+                     group = "C", colour = "seagreen2")
+
+df_group_D <- tibble(mouse_cluster_id = c("2-2", "3-1", "4-1", "5-4", "6-5", "7-7", "8-6", "10-4"),
+                     group = "D", colour = "darkorchid1")
+
+df_groups <- bind_rows(df_group_A, df_group_B, df_group_C, df_group_D)
+
+tmp <- df_matches %>% 
+  filter(match) %>% 
+  select(-match) %>% 
+  left_join(df_groups, by = "mouse_cluster_id") %>% 
+  mutate(colour = ifelse(is.na(colour), "grey80", colour)) %>% 
+  arrange(human_nk, human_k) %>% 
+  select(human_cluster_id, group, colour, similarity, pval) %>% 
+  distinct()
+
+tmp_ids <- tmp %>% 
+  pull(human_cluster_id) %>% 
+  unique()
+
+for (i in 1:length(tmp_ids)) {
+  
+  tmp_i <- tmp %>% 
+    filter(human_cluster_id == tmp_ids[i])
+  
+  print(tmp_i)
+  
+  readline()
+}
+```
+
+
+```{r}
+group_chromatin <- c("6-5", "7-7", "8-6", "10-4")
+group_synaptic <- c("6-4", "7-4", "8-2", "9-2", "10-5")
+
+df_matches %>% 
+  filter(human_nk %in% 7:9,
+         mouse_cluster_id %in% c(group_chromatin, group_synaptic),
+         match) %>% 
+  mutate(group = ifelse(mouse_cluster_id %in% group_chromatin, "chromatin", "synaptic")) %>% 
+  arrange(group, human_nk, mouse_nk)
+```
+
+```{r}
+df_clusters_hbn_long <- df_clusters_hbn %>% 
+  select(ID, contains("nk")) %>% 
+  pivot_longer(cols = c(-ID), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         cluster_id = paste0(nk, "-", k))
+
+df_clusters_hbn_long
+```
+
+```{r}
+df_sankey_palette <- readxl::read_excel("resources/human_cluster_colours_HBN.xlsx")
+sankey_palette <- df_sankey_palette$colour
+names(sankey_palette) <- df_sankey_palette$cluster_id
+
+df_human_sankey <- df_clusters_hbn_long %>% 
+  mutate(nk = factor(nk), k = factor(k)) %>% 
+  left_join(df_sankey_palette, by = "cluster_id") %>% 
+  rename(group = colour)
+
+```
+
+
+```{r}
+library(ggalluvial)
+
+ggplot(df_clusters_hbn_long, 
+       aes(x = factor(nk), stratum = k,
+           alluvium = ID, fill = cluster_id)) + 
+  geom_flow(stat = "alluvium", aes.flow = "forward",
+            linewidth = 0.15) +
+  geom_stratum() + 
+  scale_fill_manual(values = sankey_palette, guide = "none") + 
+  theme_bw()
+```
+
+
+# Process clinical data
+
+## Process HBN data
+
+```{r}
+path <- "/Users/abeauchamp/Documents/Projects/ClusteringAutism/repository/main/data/human/registration/v3/subject_info/HBN/assessment_data"
+
+# Import POND+ clusters
+clusters_file <- "/Users/abeauchamp/Documents/Projects/ClusteringAutism/repository/main/data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv"
+df_clusters <- read_csv(clusters_file, show_col_types = FALSE)
+
+# Import demographics
+demographics_file <- file.path(human_registration_dir, "subject_info", "demographics.csv")
+df_demographics <- read_csv(demographics_file, show_col_types = FALSE)
+
+# Filter demographics for POND participants
+df_demographics_hbn <- df_demographics %>% 
+  filter(Dataset == "HBN") %>% 
+  select(file, subject_id = Subject_ID, 
+         age = Age, sex = Sex, dx = DX)
+
+# Join demographics and cluster information
+df_clusters_hbn <- df_clusters %>% 
+  inner_join(df_demographics_hbn, by = c("ID" = "file"))
+
+df_clusters_clinical_hbn <- df_clusters_hbn
+
+
+## CBCL
+
+file <- file.path(path, "9994_CBCL_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df_cbcl <- df %>% 
+  select(subject_id = EID, cbcl_ip_ts = CBCL_Int_T, cbcl_ep_ts = CBCL_Ext_T)
+
+file <- file.path(path, "9994_CBCL_Pre_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_cbcl_pre <- df %>% 
+  select(subject_id = EID, cbcl_ip_ts = CBCL_Pre_Int_T, cbcl_ep_ts = CBCL_Pre_Ext_T) %>% 
+  mutate(cbcl_ip_ts = as.numeric(cbcl_ip_ts),
+         cbcl_ep_ts = as.numeric(cbcl_ep_ts))
+
+df_cbcl <- bind_rows(df_cbcl, df_cbcl_pre)
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_cbcl, by = "subject_id")
+
+
+
+## SWAN
+
+file <- file.path(path, "9994_SWAN_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_swan <- df %>% 
+  select(subject_id = EID, adhd_i_sub = ADHD_I, adhd_hi_sub = ADHD_HI) %>% 
+  mutate(adhd_i_sub = as.numeric(adhd_i_sub),
+         adhd_hi_sub = as.numeric(adhd_hi_sub))
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_swan, by = "subject_id")
+
+
+
+## SCQ
+
+file <- file.path(path, "9994_SCQ_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_scq <- df %>% 
+  select(subject_id = EID, scqtot = SCQ_Total) %>% 
+  mutate(scqtot = as.numeric(scqtot))
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_scq, by = "subject_id")
+
+
+## RBS
+
+file <- file.path(path, "9994_RBS_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_rbs <- df %>% 
+  select(subject_id = EID, rbsallt = Score_Total) %>% 
+  mutate(rbsallt = as.numeric(rbsallt))
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_rbs, by = "subject_id")
+
+
+## IQ
+
+file <- file.path(path, "9994_WISC_20220728.csv")
+df_wisc <- read_csv(file, show_col_types = FALSE)
+
+df_wisc <- df_wisc[2:nrow(df_wisc),]
+
+df_wisc <- df_wisc %>% 
+  select(subject_id = EID, WISC_FSIQ) %>% 
+  mutate(WISC_FSIQ = as.numeric(WISC_FSIQ)) %>% 
+  group_by(subject_id) %>% 
+  mutate(WISC_FSIQ_MEAN = mean(WISC_FSIQ)) %>% 
+  ungroup() %>% 
+  select(subject_id, WISC_FSIQ = WISC_FSIQ_MEAN) %>% 
+  distinct()
+
+file <- file.path(path, "9994_WASI_20220728.csv")
+df_wasi <- read_csv(file, show_col_types = FALSE)
+
+df_wasi <- df_wasi[2:nrow(df_wasi),]
+
+df_wasi <- df_wasi %>% 
+  select(subject_id = EID, WASI_FSIQ) %>% 
+  mutate(WASI_FSIQ = as.numeric(WASI_FSIQ))
+
+df_fsiq <- full_join(df_wisc, df_wasi, by = "subject_id")
+
+df_fsiq <- df_fsiq %>% 
+  mutate(fsiq = ifelse(!is.na(WASI_FSIQ), WASI_FSIQ, WISC_FSIQ)) %>% 
+  select(subject_id, fsiq)
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_fsiq, by = "subject_id")
+
+
+
+## CELF
+
+file <- file.path(path, "9994_CELF_Full_5to8_20220728.csv")
+df_celf_5to8 <- read_csv(file, show_col_types = FALSE)
+
+df_celf_5to8 <- df_celf_5to8[2:nrow(df_celf_5to8),]
+
+df_celf_5to8 <- df_celf_5to8 %>% 
+  select(subject_id = EID, CELF_CLS_Stnd, CELF_RLI_Stnd, CELF_ELI_Stnd, CELF_LCI_Stnd) %>% 
+  mutate(CELF_CLS_Stnd = as.numeric(CELF_CLS_Stnd),
+         CELF_RLI_Stnd = as.numeric(CELF_RLI_Stnd),
+         CELF_ELI_Stnd = as.numeric(CELF_ELI_Stnd),
+         CELF_LCI_Stnd = as.numeric(CELF_LCI_Stnd))
+
+
+file <- file.path(path, "9994_CELF_Full_9to21_20220728.csv")
+df_celf_9to21 <- read_csv(file, show_col_types = FALSE)
+
+df_celf_9to21 <- df_celf_9to21[2:nrow(df_celf_9to21),]
+
+df_celf_9to21 <- df_celf_9to21 %>% 
+  select(subject_id = EID, CELF_CLS_Stnd, CELF_RLI_Stnd, CELF_ELI_Stnd, CELF_LCI_Stnd) %>% 
+  mutate(CELF_CLS_Stnd = as.numeric(CELF_CLS_Stnd),
+         CELF_RLI_Stnd = as.numeric(CELF_RLI_Stnd),
+         CELF_ELI_Stnd = as.numeric(CELF_ELI_Stnd),
+         CELF_LCI_Stnd = as.numeric(CELF_LCI_Stnd))
+
+
+df_celf <- bind_rows(df_celf_5to8, df_celf_9to21)
+
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  left_join(df_celf, by = "subject_id")
+
+df_clusters_clinical_hbn
+```
+
+# Clinical scores analysis
+
+## Import cluster information
+
+
+```{r}
+df_clinical_completion_hbn <- df_clusters_clinical_hbn %>% 
+  select(subject_id, cbcl_ip_ts:CELF_LCI_Stnd) %>% 
+  pivot_longer(cols = -subject_id, names_to = "variable", values_to = "score") %>% 
+  mutate(complete = !is.na(score)) %>% 
+  group_by(variable) %>% 
+  summarise(n_completed = sum(complete)) %>% 
+  ungroup() %>% 
+  arrange(desc(n_completed))
+
+
+df_complete_cases_hbn <- df_clinical_completion_hbn %>% 
+  mutate(n_complete = 0, n_included = 0)
+
+for (i in 1:nrow(df_complete_cases_hbn)) {
+  
+  variables <- df_clinical_completion_hbn %>% 
+    slice_max(order_by = n_completed, n = i) %>% 
+    pull(variable)
+  
+  df_clinical_subset <- df_clusters_clinical_hbn[, variables]
+  
+  df_complete_cases_hbn[[i, "n_complete"]]  <- sum(complete.cases(df_clinical_subset))
+  df_complete_cases_hbn[[i, "n_included"]] <- i
+  
+}
+
+plt_complete_cases <- ggplot(df_complete_cases_hbn, aes(x = n_included, y = n_complete)) + 
+  geom_line() + 
+  geom_point() +
+  scale_x_continuous(breaks = seq(0, 12, by = 2)) + 
+  scale_y_continuous(breaks = seq (0, 1000, by = 50)) + 
+  labs(x = "Number of variables included",
+       y = "Number of complete cases") +
+  theme_bw()
+
+outfile <- "questionnaire_completion_HBN.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt_complete_cases)
+dev.off()
+```
+
+```{r}
+df_clusters_clinical_hbn
+```
+
+
+```{r}
+clinical_acronyms <- c("scqtot" = "SCQ",
+                       "rbsallt" = "RBS-R",
+                       "adhd_i_sub" = "SWAN I",
+                       "adhd_hi_sub" = "SWAN HI",
+                       "fsiq" = "FSIQ",
+                       "cbcl_ep_ts" = "CBCL EP",
+                       "cbcl_ip_ts" = "CBCL IP",
+                       "CELF_CLS_Stnd" = "CELF CLS",
+                       "CELF_RLI_Stnd" = "CELF RLI",
+                       "CELF_ELI_Stnd" = "CELF ELI",
+                       "CELF_LCI_Stnd" = "CELF LCI")
+
+df_clinical_acronyms <- enframe(clinical_acronyms, name = "variable", value = "acronym")
+
+```
+
+
+
+## Multivariate analysis of synaptic vs. chromatin
+
+
+That's light green (synaptic, group C) vs. purple (chromatin, group D)
+
+
+### Pathway grouping v1
+ 
+```{r}
+synaptic <- c("7-1", "7-2", "7-7", "8-3", "8-8", "9-1")
+chromatin <- c("7-6", "8-2", "9-6")
+
+df_synaptic <- tibble(cluster_id = synaptic) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k),
+         group = "synaptic")
+
+df_chromatin <- tibble(cluster_id = chromatin) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k),
+         group = "chromatin")
+
+df_pathway_1 <- bind_rows(df_synaptic, df_chromatin)
+
+```
+
+```{r}
+# Relevant thresholds are
+# 9: Basic scores
+# 12: Includes OWL
+# 20: Includes SSP
+# 23: Includes BOT2
+# 27: Includes NEPSY
+
+df_mv_syn_chrom <- expand_grid(nk = 7:9, 
+                               n_variables = 7,
+                               n_participants = 0,
+                               n_participants_syn = 0,
+                               lda_auc = 0, error = FALSE)
+list_mv_syn_chrom_input <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+list_lda_syn_chrom_fit <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+list_lda_syn_chrom_roc <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+for (i in 1:nrow(df_mv_syn_chrom)) {
+  
+  n_variables <- df_mv_syn_chrom[[i, "n_variables"]]
+  nki <- df_mv_syn_chrom[[i, "nk"]]
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases_hbn %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", paste0("nk", nki), variables)
+  df_multivariate <- df_clusters_clinical_hbn[,cols]
+  colnames(df_multivariate) <- c("ID", "k", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  # Include information about pathway
+  df_multivariate <- df_multivariate %>% 
+    inner_join(df_pathway_1 %>% 
+                 filter(nk == nki) %>% 
+                 select(k, group), by = "k") %>% 
+    mutate(group = factor(group)) %>% 
+    select(-k)
+  
+  # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_syn_chrom[[i, "n_participants"]] <- nrow(df_multivariate)
+  df_mv_syn_chrom[[i, "n_participants_syn"]] <-
+    df_multivariate %>% 
+    group_by(group) %>% 
+    count() %>% 
+    ungroup() %>%
+    filter(group == "synaptic") %>% 
+    pull(n)
+  
+  list_mv_syn_chrom_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$group
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+  
+  # Run LDA ROC analysis
+  lda_roc <- pROC::roc(response = y,
+                       predictor = lda_pred_prob,
+                       direction = "<", 
+                       quiet = TRUE)
+  
+  # Store LDA outputs
+  list_lda_syn_chrom_fit[[i]] <- lda_fit
+  list_lda_syn_chrom_roc[[i]] <- lda_roc
+  df_mv_syn_chrom[[i, "lda_auc"]] <- pROC::auc(lda_roc)[1]
+  
+  
+}
+
+df_mv_syn_chrom <- df_mv_syn_chrom %>% 
+  mutate(index = 1:nrow(.),
+         prop_participants_syn = n_participants_syn/n_participants)
+```
+
+
+```{r}
+library(ggbeeswarm)
+```
+
+
+```{r}
+nk_seq <- 7:9
+n_vars <- 7
+vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
+
+cex_vals <- c(4.0, 4.0, 4.0)
+
+palette_binary <- c("synaptic" = "seagreen2",
+                    "chromatin" = "darkorchid1")
+
+
+
+list_panel_grobs <- vector(mode = "list", length = length(nk_seq))
+for (i in 1:length(nk_seq)) {
+
+# i <- 1
+  
+  nki <- nk_seq[i]
+  
+  idx <- df_mv_syn_chrom %>% 
+    filter(nk == nki, n_variables == n_vars) %>% 
+    pull(index)
+  
+  X <- list_mv_syn_chrom_input[[idx]] %>% 
+    select(-ID, -group) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  y <- list_mv_syn_chrom_input[[idx]] %>% 
+    pull(group)
+  
+  lda_pred <- predict(list_lda_syn_chrom_fit[[idx]], X)
+  lda_pred_y <- lda_pred[["class"]]
+  lda_pred_prob <- lda_pred[["posterior"]][,2]
+  
+  df_mv_scores <- lda_pred[["x"]] %>% 
+    as_tibble() %>% 
+    mutate(y = y,
+           y_pred = lda_pred_y,
+           y_pred_prob = lda_pred_prob) 
+
+  df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(LD1 = V1) %>% 
+    mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    left_join(df_clinical_acronyms, by = "variable")
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(variable = factor(variable, levels = variable[order(LD1)]),
+           acronym = factor(acronym, levels = acronym[order(LD1)]))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(group = ifelse(LD1 >= 0, "synaptic", "chromatin"))
+
+
+  lda_roc <- list_lda_syn_chrom_roc[[idx]]
+  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                       fpr = 1-lda_roc$specificities,
+                       thresholds = lda_roc$thresholds) %>% 
+    arrange(tpr) 
+  
+  lda_roc_auc <- lda_roc$auc[1]
+  
+  set.seed(123)
+  # plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+  #   geom_jitter(height = 0) +
+  #   coord_cartesian(ylim = c(-4, 4)) + 
+  #   scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+  #   labs(col = "LDA predicted class",
+  #        y = "Linear discriminant scores",
+  #        x = "Molecular cluster group") + 
+  #   theme_bw() +
+  #   theme(legend.position = "bottom")
+  
+  plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, fill = y_pred_prob)) +
+    # geom_jitter(height = 0, width = 0.2) +
+    geom_beeswarm(cex = cex_vals[i], 
+                  shape = 21, 
+                  size = 1.5,
+                  col = "grey50") + 
+    coord_cartesian(ylim = c(-3.5, 4.5)) + 
+    scale_x_discrete(labels = c("Chromatin", "Synaptic"), expand = expansion(add = 0.8)) + 
+    scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+    scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
+                           values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                         limits  = c(0, 1),
+                         breaks = c(0, 0.5, 1.0),
+                         guide = guide_colourbar(barwidth = unit(15, "bigpts"),
+                                                 barheight = unit(100, "bigpts"),
+                                                 label.theme = element_text(margin = margin(l = 2)))) +
+    labs(col = "LDA predicted class",
+         y = "Linear discriminant scores",
+         x = "Molecular cluster group",
+         fill = "Probability (Synaptic)") + 
+    theme_bw() +
+    theme(legend.margin = margin(),
+          legend.title = element_blank(),
+          axis.title = element_text(size = 9),
+          axis.text.y = element_text(size = 9),
+          axis.text.x = element_text(size = 9, colour = c("darkorchid1", "seagreen2")))
+  
+  if (i == 1) {
+    plt_mv_scores_legend_grob <- plt_mv_scores %>% 
+      ggplotGrob() %>% 
+      grid.force() %>% 
+      getGrob("guides.3-3-3-3")
+  }
+
+  plt_mv_scores <- plt_mv_scores + 
+    theme(legend.position = "none",
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
+
+# plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
+  #   geom_vline(xintercept = 0) + 
+  #   geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
+  #   geom_point() +
+  #   scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  #   scale_colour_gradientn(colours = c("darkorchid1", "seagreen2"),
+  #                          values  = scales::rescale(c(-1, 1), from = c(-1, 1)),
+  #                          limits  = c(-1, 1)) + 
+  #   labs(x = "Linear discriminant loadings",
+  #        y = "Variable") + 
+  #   theme_bw()
+  
+    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) + 
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
+      geom_point() +
+      coord_cartesian(xlim = c(-0.5, 0.5)) + 
+      scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
+      scale_colour_manual(values = palette_binary) + 
+      labs(x = "Linear discriminant loadings",
+           y = "Clinical variable") + 
+      theme_bw() +
+      theme(legend.position = "none") +
+      theme(axis.title = element_text(size = 9),
+            axis.text = element_text(size = 8),
+            plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
+  
+  plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+    annotate(geom = "segment", 
+             x = 0, y = 0, 
+             xend = 1, yend = 1, 
+             linetype = "dashed") +
+    annotate(geom = "text",
+             x = 0.8, y = 0.2,
+             label = paste0("AUC = ", round(lda_roc_auc, 3)),
+             size = 9 * 0.3527) + 
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    labs(x = "False positive rate",
+         y = "True positive rate") + 
+    theme_bw() +
+    theme(axis.title = element_text(size = 9),
+          axis.text = element_text(size = 9),
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
+  
+  plt_mv_scores_grob <- ggplotGrob(plt_mv_scores)
+  plt_mv_loadings_grob <- ggplotGrob(plt_mv_loadings)
+  plt_mv_roc_grob <- ggplotGrob(plt_mv_roc)
+  
+  plt_mv_title <- paste0("K = ", nki)
+  plt_mv_title_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "grey85")),
+                                              textGrob(label = plt_mv_title, 
+                                                       gp = gpar(fontsize = 9))))
+
+
+plt_scores_height <- 150
+plt_roc_height <- 140
+plt_loadings_height <- 316
+panel_title_height <- 20
+panel_padding_height <- 10
+panel_heights <- c(panel_title_height, 
+                   plt_scores_height,
+                   panel_padding_height, 
+                   plt_roc_height,
+                   panel_padding_height,
+                   plt_loadings_height)
+  panel_layout <- cbind(1:6)
+  
+  
+  panel_grob <- arrangeGrob(plt_mv_title_grob,
+                            plt_mv_scores_grob,
+                            zeroGrob(),
+                            plt_mv_roc,
+                            zeroGrob(),
+                            plt_mv_loadings,
+                            layout_matrix = panel_layout,
+                            heights = unit(panel_heights, "bigpts"))
+  
+  panel_height_pt <- sum(panel_heights)
+  panel_width_pt <- fig_width/3
+  
+  panel_height_in <- panel_height_pt/72
+  panel_width_in <- panel_width_pt/72
+  
+  # outfile <- paste0("panel_", nki, ".pdf")
+  # outfile <- file.path(output_dir, outfile)
+  # pdf(file = outfile,
+  #     width = unit(panel_width_in, "in"),
+  #     height = unit(panel_height_in, "in"))
+  # grid.draw(panel_grob)
+  # dev.off()
+  
+  list_panel_grobs[[i]] <- panel_grob
+  
+}
+```
+
+```{r}
+fig_layout <- rbind(1:6)
+
+padding_width <- 15
+legend_width <- 55
+panel_width <- (fig_width - 2*padding_width - legend_width)/3
+
+fig_widths <- c(panel_width, padding_width, panel_width, padding_width, panel_width, legend_width)
+
+fig_grob <- arrangeGrob(list_panel_grobs[[1]],
+                        zeroGrob(),
+                        list_panel_grobs[[2]],
+                        zeroGrob(),
+                        list_panel_grobs[[3]],
+                        zeroGrob(),
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"))
+
+fig_width_pt <- sum(fig_widths)
+fig_height_pt <- panel_height_pt
+
+fig_width_in <- fig_width_pt/72
+fig_height_in <- fig_height_pt/72
+
+
+outfile <- paste0(outfile_prefix, "_1.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+
+pushViewport(viewport(x = unit(560, "bigpts"),
+                      y = unit(560, "bigpts"),
+                      width = unit(50, "bigpts"),
+                      height = unit(132, "bigpts"),
+                      just = "left"))
+# grid.rect(gp = gpar(fill = "white"))
+grid.draw(plt_mv_scores_legend_grob)
+grid.text(label = "Probability (Synaptic)",
+          x = 0.78, y = 0.5,
+          rot = 270,
+          gp = gpar(fontsize = 9))
+# grid.text(label = c("0.0", "1.0"),
+#           x = c(0.06, 0.94), y = 0.8, 
+#           gp = gpar(fontsize = 9))
+popViewport()
+
+dev.off()
+
+
+```
+
+
+
+
+### Pathway grouping v2
+ 
+
+```{r}
+synaptic <- c("7-1", "7-7", "8-3", "9-1")
+chromatin <- c("7-2", "7-6", "8-2", "8-8", "9-6")
+
+df_synaptic <- tibble(cluster_id = synaptic) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k),
+         group = "synaptic")
+
+df_chromatin <- tibble(cluster_id = chromatin) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k),
+         group = "chromatin")
+
+df_pathway_2 <- bind_rows(df_synaptic, df_chromatin)
+
+```
+
+```{r}
+# Relevant thresholds are
+# 9: Basic scores
+# 12: Includes OWL
+# 20: Includes SSP
+# 23: Includes BOT2
+# 27: Includes NEPSY
+
+df_mv_syn_chrom <- expand_grid(nk = 7:9, 
+                               n_variables = 7,
+                               n_participants = 0,
+                               n_participants_syn = 0,
+                               lda_auc = 0, error = FALSE)
+list_mv_syn_chrom_input <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+list_lda_syn_chrom_fit <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+list_lda_syn_chrom_roc <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+for (i in 1:nrow(df_mv_syn_chrom)) {
+  
+  n_variables <- df_mv_syn_chrom[[i, "n_variables"]]
+  nki <- df_mv_syn_chrom[[i, "nk"]]
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases_hbn %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", paste0("nk", nki), variables)
+  df_multivariate <- df_clusters_clinical_hbn[,cols]
+  colnames(df_multivariate) <- c("ID", "k", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  # Include information about pathway
+  df_multivariate <- df_multivariate %>% 
+    inner_join(df_pathway_2 %>% 
+                 filter(nk == nki) %>% 
+                 select(k, group), by = "k") %>% 
+    mutate(group = factor(group)) %>% 
+    select(-k)
+  
+  # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_syn_chrom[[i, "n_participants"]] <- nrow(df_multivariate)
+  df_mv_syn_chrom[[i, "n_participants_syn"]] <-
+    df_multivariate %>% 
+    group_by(group) %>% 
+    count() %>% 
+    ungroup() %>%
+    filter(group == "synaptic") %>% 
+    pull(n)
+  
+  list_mv_syn_chrom_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$group
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+  
+  # Run LDA ROC analysis
+  lda_roc <- pROC::roc(response = y,
+                       predictor = lda_pred_prob,
+                       direction = "<", 
+                       quiet = TRUE)
+  
+  # Store LDA outputs
+  list_lda_syn_chrom_fit[[i]] <- lda_fit
+  list_lda_syn_chrom_roc[[i]] <- lda_roc
+  df_mv_syn_chrom[[i, "lda_auc"]] <- pROC::auc(lda_roc)[1]
+  
+  
+}
+
+df_mv_syn_chrom <- df_mv_syn_chrom %>% 
+  mutate(index = 1:nrow(.),
+         prop_participants_syn = n_participants_syn/n_participants)
+```
+
+```{r}
+nk_seq <- 7:9
+n_vars <- 7
+vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
+
+cex_vals <- c(4.0, 4.0, 4.0)
+
+palette_binary <- c("synaptic" = "seagreen2",
+                    "chromatin" = "darkorchid1")
+
+
+
+list_panel_grobs <- vector(mode = "list", length = length(nk_seq))
+for (i in 1:length(nk_seq)) {
+
+# i <- 1
+  
+  nki <- nk_seq[i]
+  
+  idx <- df_mv_syn_chrom %>% 
+    filter(nk == nki, n_variables == n_vars) %>% 
+    pull(index)
+  
+  X <- list_mv_syn_chrom_input[[idx]] %>% 
+    select(-ID, -group) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  y <- list_mv_syn_chrom_input[[idx]] %>% 
+    pull(group)
+  
+  lda_pred <- predict(list_lda_syn_chrom_fit[[idx]], X)
+  lda_pred_y <- lda_pred[["class"]]
+  lda_pred_prob <- lda_pred[["posterior"]][,2]
+  
+  df_mv_scores <- lda_pred[["x"]] %>% 
+    as_tibble() %>% 
+    mutate(y = y,
+           y_pred = lda_pred_y,
+           y_pred_prob = lda_pred_prob) 
+
+  df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(LD1 = V1) %>% 
+    mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    left_join(df_clinical_acronyms, by = "variable")
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(variable = factor(variable, levels = variable[order(LD1)]),
+           acronym = factor(acronym, levels = acronym[order(LD1)]))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(group = ifelse(LD1 >= 0, "synaptic", "chromatin"))
+
+
+  lda_roc <- list_lda_syn_chrom_roc[[idx]]
+  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                       fpr = 1-lda_roc$specificities,
+                       thresholds = lda_roc$thresholds) %>% 
+    arrange(tpr) 
+  
+  lda_roc_auc <- lda_roc$auc[1]
+  
+  set.seed(123)
+  # plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+  #   geom_jitter(height = 0) +
+  #   coord_cartesian(ylim = c(-4, 4)) + 
+  #   scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+  #   labs(col = "LDA predicted class",
+  #        y = "Linear discriminant scores",
+  #        x = "Molecular cluster group") + 
+  #   theme_bw() +
+  #   theme(legend.position = "bottom")
+  
+  plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, fill = y_pred_prob)) +
+    # geom_jitter(height = 0, width = 0.2) +
+    geom_beeswarm(cex = cex_vals[i], 
+                  shape = 21, 
+                  size = 1.5,
+                  col = "grey50") + 
+    coord_cartesian(ylim = c(-3.5, 4.5)) + 
+    scale_x_discrete(labels = c("Chromatin", "Synaptic"), expand = expansion(add = 0.8)) + 
+    scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+    scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
+                           values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                         limits  = c(0, 1),
+                         breaks = c(0, 0.5, 1.0),
+                         guide = guide_colourbar(barwidth = unit(15, "bigpts"),
+                                                 barheight = unit(100, "bigpts"),
+                                                 label.theme = element_text(margin = margin(l = 2)))) +
+    labs(col = "LDA predicted class",
+         y = "Linear discriminant scores",
+         x = "Molecular cluster group",
+         fill = "Probability (Synaptic)") + 
+    theme_bw() +
+    theme(legend.margin = margin(),
+          legend.title = element_blank(),
+          axis.title = element_text(size = 9),
+          axis.text.y = element_text(size = 9),
+          axis.text.x = element_text(size = 9, colour = c("darkorchid1", "seagreen2")))
+  
+  if (i == 1) {
+    plt_mv_scores_legend_grob <- plt_mv_scores %>% 
+      ggplotGrob() %>% 
+      grid.force() %>% 
+      getGrob("guides.3-3-3-3")
+  }
+
+  plt_mv_scores <- plt_mv_scores + 
+    theme(legend.position = "none",
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
+
+# plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
+  #   geom_vline(xintercept = 0) + 
+  #   geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
+  #   geom_point() +
+  #   scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  #   scale_colour_gradientn(colours = c("darkorchid1", "seagreen2"),
+  #                          values  = scales::rescale(c(-1, 1), from = c(-1, 1)),
+  #                          limits  = c(-1, 1)) + 
+  #   labs(x = "Linear discriminant loadings",
+  #        y = "Variable") + 
+  #   theme_bw()
+  
+    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) + 
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
+      geom_point() +
+      coord_cartesian(xlim = c(-0.5, 0.5)) + 
+      scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
+      scale_colour_manual(values = palette_binary) + 
+      labs(x = "Linear discriminant loadings",
+           y = "Clinical variable") + 
+      theme_bw() +
+      theme(legend.position = "none") +
+      theme(axis.title = element_text(size = 9),
+            axis.text = element_text(size = 8),
+            plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
+  
+  plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+    annotate(geom = "segment", 
+             x = 0, y = 0, 
+             xend = 1, yend = 1, 
+             linetype = "dashed") +
+    annotate(geom = "text",
+             x = 0.8, y = 0.2,
+             label = paste0("AUC = ", round(lda_roc_auc, 3)),
+             size = 9 * 0.3527) + 
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    labs(x = "False positive rate",
+         y = "True positive rate") + 
+    theme_bw() +
+    theme(axis.title = element_text(size = 9),
+          axis.text = element_text(size = 9),
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
+  
+  plt_mv_scores_grob <- ggplotGrob(plt_mv_scores)
+  plt_mv_loadings_grob <- ggplotGrob(plt_mv_loadings)
+  plt_mv_roc_grob <- ggplotGrob(plt_mv_roc)
+  
+  plt_mv_title <- paste0("K = ", nki)
+  plt_mv_title_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "grey85")),
+                                              textGrob(label = plt_mv_title, 
+                                                       gp = gpar(fontsize = 9))))
+
+
+plt_scores_height <- 150
+plt_roc_height <- 140
+plt_loadings_height <- 316
+panel_title_height <- 20
+panel_padding_height <- 10
+panel_heights <- c(panel_title_height, 
+                   plt_scores_height,
+                   panel_padding_height, 
+                   plt_roc_height,
+                   panel_padding_height,
+                   plt_loadings_height)
+  panel_layout <- cbind(1:6)
+  
+  
+  panel_grob <- arrangeGrob(plt_mv_title_grob,
+                            plt_mv_scores_grob,
+                            zeroGrob(),
+                            plt_mv_roc,
+                            zeroGrob(),
+                            plt_mv_loadings,
+                            layout_matrix = panel_layout,
+                            heights = unit(panel_heights, "bigpts"))
+  
+  panel_height_pt <- sum(panel_heights)
+  panel_width_pt <- fig_width/3
+  
+  panel_height_in <- panel_height_pt/72
+  panel_width_in <- panel_width_pt/72
+  
+  # outfile <- paste0("panel_", nki, ".pdf")
+  # outfile <- file.path(output_dir, outfile)
+  # pdf(file = outfile,
+  #     width = unit(panel_width_in, "in"),
+  #     height = unit(panel_height_in, "in"))
+  # grid.draw(panel_grob)
+  # dev.off()
+  
+  list_panel_grobs[[i]] <- panel_grob
+  
+}
+```
+
+```{r}
+fig_layout <- rbind(1:6)
+
+padding_width <- 15
+legend_width <- 55
+panel_width <- (fig_width - 2*padding_width - legend_width)/3
+
+fig_widths <- c(panel_width, padding_width, panel_width, padding_width, panel_width, legend_width)
+
+fig_grob <- arrangeGrob(list_panel_grobs[[1]],
+                        zeroGrob(),
+                        list_panel_grobs[[2]],
+                        zeroGrob(),
+                        list_panel_grobs[[3]],
+                        zeroGrob(),
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"))
+
+fig_width_pt <- sum(fig_widths)
+fig_height_pt <- panel_height_pt
+
+fig_width_in <- fig_width_pt/72
+fig_height_in <- fig_height_pt/72
+
+
+outfile <- paste0(outfile_prefix, "_2.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+
+pushViewport(viewport(x = unit(560, "bigpts"),
+                      y = unit(560, "bigpts"),
+                      width = unit(50, "bigpts"),
+                      height = unit(132, "bigpts"),
+                      just = "left"))
+# grid.rect(gp = gpar(fill = "white"))
+grid.draw(plt_mv_scores_legend_grob)
+grid.text(label = "Probability (Synaptic)",
+          x = 0.78, y = 0.5,
+          rot = 270,
+          gp = gpar(fontsize = 9))
+# grid.text(label = c("0.0", "1.0"),
+#           x = c(0.06, 0.94), y = 0.8, 
+#           gp = gpar(fontsize = 9))
+popViewport()
+
+dev.off()
+
+
+```
+
+
+
+
+### Pathway grouping v3
+ 
+
+```{r}
+synaptic <- c("7-1", "7-7", "8-3", "9-1")
+chromatin <- c("7-6", "8-2", "9-6")
+
+df_synaptic <- tibble(cluster_id = synaptic) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k),
+         group = "synaptic")
+
+df_chromatin <- tibble(cluster_id = chromatin) %>% 
+  separate(col = cluster_id, into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk),
+         k = as.numeric(k),
+         group = "chromatin")
+
+df_pathway_3 <- bind_rows(df_synaptic, df_chromatin)
+
+```
+
+```{r}
+# Relevant thresholds are
+# 9: Basic scores
+# 12: Includes OWL
+# 20: Includes SSP
+# 23: Includes BOT2
+# 27: Includes NEPSY
+
+df_mv_syn_chrom <- expand_grid(nk = 7:9, 
+                               n_variables = 7,
+                               n_participants = 0,
+                               n_participants_syn = 0,
+                               lda_auc = 0, error = FALSE)
+list_mv_syn_chrom_input <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+list_lda_syn_chrom_fit <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+list_lda_syn_chrom_roc <- vector(mode = "list", length = nrow(df_mv_syn_chrom))
+for (i in 1:nrow(df_mv_syn_chrom)) {
+  
+  n_variables <- df_mv_syn_chrom[[i, "n_variables"]]
+  nki <- df_mv_syn_chrom[[i, "nk"]]
+  
+  # Fetch variables with the desired completion level
+  variables <- df_complete_cases_hbn %>% 
+    slice_max(order_by = n_complete, n = n_variables) %>% 
+    pull(variable)
+  
+  # Extract variable scores
+  cols <- c("ID", paste0("nk", nki), variables)
+  df_multivariate <- df_clusters_clinical_hbn[,cols]
+  colnames(df_multivariate) <- c("ID", "k", variables)
+  
+  # Filter for complete cases
+  df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+  
+  # Include information about pathway
+  df_multivariate <- df_multivariate %>% 
+    inner_join(df_pathway_3 %>% 
+                 filter(nk == nki) %>% 
+                 select(k, group), by = "k") %>% 
+    mutate(group = factor(group)) %>% 
+    select(-k)
+  
+  # Compute number of participants and number of participants with 
+  # mouse match
+  df_mv_syn_chrom[[i, "n_participants"]] <- nrow(df_multivariate)
+  df_mv_syn_chrom[[i, "n_participants_syn"]] <-
+    df_multivariate %>% 
+    group_by(group) %>% 
+    count() %>% 
+    ungroup() %>%
+    filter(group == "synaptic") %>% 
+    pull(n)
+  
+  list_mv_syn_chrom_input[[i]] <- df_multivariate
+  
+  # Extract feature matrix and labels
+  X <- as.matrix(df_multivariate[,variables])
+  X <- scale(X)
+  y <- df_multivariate$group
+  
+  # Fit LDA
+  lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+  
+  # Extract class probabilities
+  lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+  
+  # Run LDA ROC analysis
+  lda_roc <- pROC::roc(response = y,
+                       predictor = lda_pred_prob,
+                       direction = "<", 
+                       quiet = TRUE)
+  
+  # Store LDA outputs
+  list_lda_syn_chrom_fit[[i]] <- lda_fit
+  list_lda_syn_chrom_roc[[i]] <- lda_roc
+  df_mv_syn_chrom[[i, "lda_auc"]] <- pROC::auc(lda_roc)[1]
+  
+  
+}
+
+df_mv_syn_chrom <- df_mv_syn_chrom %>% 
+  mutate(index = 1:nrow(.),
+         prop_participants_syn = n_participants_syn/n_participants)
+```
+
+```{r}
+nk_seq <- 7:9
+n_vars <- 7
+vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
+
+cex_vals <- c(4.0, 4.0, 4.0)
+
+palette_binary <- c("synaptic" = "seagreen2",
+                    "chromatin" = "darkorchid1")
+
+
+
+list_panel_grobs <- vector(mode = "list", length = length(nk_seq))
+for (i in 1:length(nk_seq)) {
+
+# i <- 1
+  
+  nki <- nk_seq[i]
+  
+  idx <- df_mv_syn_chrom %>% 
+    filter(nk == nki, n_variables == n_vars) %>% 
+    pull(index)
+  
+  X <- list_mv_syn_chrom_input[[idx]] %>% 
+    select(-ID, -group) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  y <- list_mv_syn_chrom_input[[idx]] %>% 
+    pull(group)
+  
+  lda_pred <- predict(list_lda_syn_chrom_fit[[idx]], X)
+  lda_pred_y <- lda_pred[["class"]]
+  lda_pred_prob <- lda_pred[["posterior"]][,2]
+  
+  df_mv_scores <- lda_pred[["x"]] %>% 
+    as_tibble() %>% 
+    mutate(y = y,
+           y_pred = lda_pred_y,
+           y_pred_prob = lda_pred_prob) 
+
+  df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(LD1 = V1) %>% 
+    mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    left_join(df_clinical_acronyms, by = "variable")
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(variable = factor(variable, levels = variable[order(LD1)]),
+           acronym = factor(acronym, levels = acronym[order(LD1)]))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(group = ifelse(LD1 >= 0, "synaptic", "chromatin"))
+
+
+  lda_roc <- list_lda_syn_chrom_roc[[idx]]
+  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
+                       fpr = 1-lda_roc$specificities,
+                       thresholds = lda_roc$thresholds) %>% 
+    arrange(tpr) 
+  
+  lda_roc_auc <- lda_roc$auc[1]
+  
+  set.seed(123)
+  # plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, col = y_pred)) +
+  #   geom_jitter(height = 0) +
+  #   coord_cartesian(ylim = c(-4, 4)) + 
+  #   scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+  #   labs(col = "LDA predicted class",
+  #        y = "Linear discriminant scores",
+  #        x = "Molecular cluster group") + 
+  #   theme_bw() +
+  #   theme(legend.position = "bottom")
+  
+  plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, fill = y_pred_prob)) +
+    # geom_jitter(height = 0, width = 0.2) +
+    geom_beeswarm(cex = cex_vals[i], 
+                  shape = 21, 
+                  size = 1.5,
+                  col = "grey50") + 
+    coord_cartesian(ylim = c(-3.5, 4.5)) + 
+    scale_x_discrete(labels = c("Chromatin", "Synaptic"), expand = expansion(add = 0.8)) + 
+    scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
+    scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
+                           values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                         limits  = c(0, 1),
+                         breaks = c(0, 0.5, 1.0),
+                         guide = guide_colourbar(barwidth = unit(15, "bigpts"),
+                                                 barheight = unit(100, "bigpts"),
+                                                 label.theme = element_text(margin = margin(l = 2)))) +
+    labs(col = "LDA predicted class",
+         y = "Linear discriminant scores",
+         x = "Molecular cluster group",
+         fill = "Probability (Synaptic)") + 
+    theme_bw() +
+    theme(legend.margin = margin(),
+          legend.title = element_blank(),
+          axis.title = element_text(size = 9),
+          axis.text.y = element_text(size = 9),
+          axis.text.x = element_text(size = 9, colour = c("darkorchid1", "seagreen2")))
+  
+  if (i == 1) {
+    plt_mv_scores_legend_grob <- plt_mv_scores %>% 
+      ggplotGrob() %>% 
+      grid.force() %>% 
+      getGrob("guides.3-3-3-3")
+  }
+
+  plt_mv_scores <- plt_mv_scores + 
+    theme(legend.position = "none",
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
+
+# plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
+  #   geom_vline(xintercept = 0) + 
+  #   geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
+  #   geom_point() +
+  #   scale_x_continuous(breaks = seq(-1, 1, by = 0.1)) + 
+  #   scale_colour_gradientn(colours = c("darkorchid1", "seagreen2"),
+  #                          values  = scales::rescale(c(-1, 1), from = c(-1, 1)),
+  #                          limits  = c(-1, 1)) + 
+  #   labs(x = "Linear discriminant loadings",
+  #        y = "Variable") + 
+  #   theme_bw()
+  
+    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) + 
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
+      geom_point() +
+      coord_cartesian(xlim = c(-0.5, 0.5)) + 
+      scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
+      scale_colour_manual(values = palette_binary) + 
+      labs(x = "Linear discriminant loadings",
+           y = "Clinical variable") + 
+      theme_bw() +
+      theme(legend.position = "none") +
+      theme(axis.title = element_text(size = 9),
+            axis.text = element_text(size = 8),
+            plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
+  
+  plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
+    annotate(geom = "segment", 
+             x = 0, y = 0, 
+             xend = 1, yend = 1, 
+             linetype = "dashed") +
+    annotate(geom = "text",
+             x = 0.8, y = 0.2,
+             label = paste0("AUC = ", round(lda_roc_auc, 3)),
+             size = 9 * 0.3527) + 
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+    labs(x = "False positive rate",
+         y = "True positive rate") + 
+    theme_bw() +
+    theme(axis.title = element_text(size = 9),
+          axis.text = element_text(size = 9),
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
+  
+  plt_mv_scores_grob <- ggplotGrob(plt_mv_scores)
+  plt_mv_loadings_grob <- ggplotGrob(plt_mv_loadings)
+  plt_mv_roc_grob <- ggplotGrob(plt_mv_roc)
+  
+  plt_mv_title <- paste0("K = ", nki)
+  plt_mv_title_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "grey85")),
+                                              textGrob(label = plt_mv_title, 
+                                                       gp = gpar(fontsize = 9))))
+
+
+plt_scores_height <- 150
+plt_roc_height <- 140
+plt_loadings_height <- 316
+panel_title_height <- 20
+panel_padding_height <- 10
+panel_heights <- c(panel_title_height, 
+                   plt_scores_height,
+                   panel_padding_height, 
+                   plt_roc_height,
+                   panel_padding_height,
+                   plt_loadings_height)
+  panel_layout <- cbind(1:6)
+  
+  
+  panel_grob <- arrangeGrob(plt_mv_title_grob,
+                            plt_mv_scores_grob,
+                            zeroGrob(),
+                            plt_mv_roc,
+                            zeroGrob(),
+                            plt_mv_loadings,
+                            layout_matrix = panel_layout,
+                            heights = unit(panel_heights, "bigpts"))
+  
+  panel_height_pt <- sum(panel_heights)
+  panel_width_pt <- fig_width/3
+  
+  panel_height_in <- panel_height_pt/72
+  panel_width_in <- panel_width_pt/72
+  
+  # outfile <- paste0("panel_", nki, ".pdf")
+  # outfile <- file.path(output_dir, outfile)
+  # pdf(file = outfile,
+  #     width = unit(panel_width_in, "in"),
+  #     height = unit(panel_height_in, "in"))
+  # grid.draw(panel_grob)
+  # dev.off()
+  
+  list_panel_grobs[[i]] <- panel_grob
+  
+}
+
+
+fig_layout <- rbind(1:6)
+
+padding_width <- 15
+legend_width <- 55
+panel_width <- (fig_width - 2*padding_width - legend_width)/3
+
+fig_widths <- c(panel_width, padding_width, panel_width, padding_width, panel_width, legend_width)
+
+fig_grob <- arrangeGrob(list_panel_grobs[[1]],
+                        zeroGrob(),
+                        list_panel_grobs[[2]],
+                        zeroGrob(),
+                        list_panel_grobs[[3]],
+                        zeroGrob(),
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"))
+
+fig_width_pt <- sum(fig_widths)
+fig_height_pt <- panel_height_pt
+
+fig_width_in <- fig_width_pt/72
+fig_height_in <- fig_height_pt/72
+
+
+outfile <- paste0(outfile_prefix, "_3.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+
+pushViewport(viewport(x = unit(560, "bigpts"),
+                      y = unit(560, "bigpts"),
+                      width = unit(50, "bigpts"),
+                      height = unit(132, "bigpts"),
+                      just = "left"))
+# grid.rect(gp = gpar(fill = "white"))
+grid.draw(plt_mv_scores_legend_grob)
+grid.text(label = "Probability (Synaptic)",
+          x = 0.78, y = 0.5,
+          rot = 270,
+          gp = gpar(fontsize = 9))
+# grid.text(label = c("0.0", "1.0"),
+#           x = c(0.06, 0.94), y = 0.8, 
+#           gp = gpar(fontsize = 9))
+popViewport()
+
+dev.off()
+
+
+```
+
