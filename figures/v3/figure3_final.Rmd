@@ -21,10 +21,9 @@ suppressPackageStartupMessages(library(grid))
 suppressPackageStartupMessages(library(gridExtra))
 suppressPackageStartupMessages(library(pheatmap))
 suppressPackageStartupMessages(library(RColorBrewer))
-
-# suppressPackageStartupMessages(library(ggnewscale))
+suppressPackageStartupMessages(library(rcartocolor))
+suppressPackageStartupMessages(library(ggnewscale))
 # suppressPackageStartupMessages(library(viridis))
-# suppressPackageStartupMessages(library(rcartocolor))
 ```
 
 ```{r env}
@@ -496,7 +495,7 @@ df_pathway_hclust <- df_pathway_hclust %>%
 ```
 
 
-# Enrichment polar plots and neuroanatomy
+# Mouse enrichment polar plots and neuroanatomy
 
 ## Enrichment polar plots
 
@@ -598,9 +597,37 @@ for (i in 1:length(nk_subset)) {
           axis.text.x = element_text(size = 7),
           axis.ticks = element_blank())
   
+  polar_plot_grob <- grid.force(ggplotGrob(plt_polar))
+  
+  polar_plot_grob[["children"]][["panel.9-7-9-7"]][["children"]][[1]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["label"]] <- df_pathway_labels$acronym
+  
+  polar_plot_labels_x_nudge <- c(0.00, 0.01, 0.01, 0.05, 0.04,
+                                 0.05, 0.05, 0.02, -0.01, -0.02,
+                                 -0.05, -0.04, -0.04, -0.05, -0.06)
+  
+  polar_plot_labels_y_nudge <- c(0.01, 0.01, 0.01, 0.00, 0.00,
+                                 0.00, 0.00, -0.02, -0.02, -0.02,
+                                 -0.02, 0.00, 0.00, 0.00, 0.01)
+  
+  polar_plot_labels_x_nudge <- unit(polar_plot_labels_x_nudge, "native")
+  polar_plot_labels_y_nudge <- unit(polar_plot_labels_y_nudge, "native")
+  
+  polar_plot_labels_x <- polar_plot_grob[["children"]][["panel.9-7-9-7"]][["children"]][[1]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]]
+  
+  polar_plot_labels_y <- polar_plot_grob[["children"]][["panel.9-7-9-7"]][["children"]][[1]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]]
+  
+  polar_plot_labels_x <- polar_plot_labels_x + polar_plot_labels_x_nudge
+  polar_plot_labels_y <- polar_plot_labels_y + polar_plot_labels_y_nudge
+  
+  polar_plot_grob[["children"]][["panel.9-7-9-7"]][["children"]][[1]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["x"]] <- polar_plot_labels_x
+  
+  polar_plot_labels_y <- polar_plot_grob[["children"]][["panel.9-7-9-7"]][["children"]][[1]][["children"]][[5]][["children"]][[1]][["children"]][[1]][["y"]] <- polar_plot_labels_y
+  
+  
   # Combine ggplot with rect border
-  list_polar_grobs[[i]] <- gTree(children = gList(ggplotGrob(plt_polar),
+  list_polar_grobs[[i]] <- gTree(children = gList(polar_plot_grob,
                                                   rectGrob()))
+  
   
 }
 ```
@@ -978,10 +1005,10 @@ plt_heatmap <- ggplot(df_pathways_heatmap,
                        na.value = "grey75",
                        guide = guide_colourbar(title.position = "top",
                                                title.hjust = 0.5,
-                                               barwidth = unit(120, "bigpts"),
-                                               barHeight = unit(10, "bigpts"))) +
+                                               barwidth = unit(100, "bigpts"),
+                                               barheight = unit(10, "bigpts"))) +
   labs(y = NULL,
-       x = "Mouse cluster",
+       x = "Mouse cluster (K-k)",
        fill = heatmap_fill_lab) +
   theme_bw() +
   theme(strip.background = element_blank(),
@@ -991,7 +1018,8 @@ plt_heatmap <- ggplot(df_pathways_heatmap,
         legend.position = "bottom",
         legend.direction = "horizontal",
         legend.title = element_text(size = 9),
-        legend.text = element_text(size = 8))
+        legend.text = element_blank(),
+        legend.margin = margin())
 
 # Extract legend from heatmap
 heatmap_legend_grob <- plt_heatmap %>% 
@@ -1059,7 +1087,7 @@ heatmap_main_width <- fig_width - heatmap_left_padding_width - heatmap_row_dendr
 # heatmap_widths <- c(heatmap_left_padding_width, heatmap_row_dendrogram_width, heatmap_main_width, heatmap_right_padding_width)
 heatmap_widths <- c(heatmap_left_padding_width, heatmap_row_dendrogram_width, heatmap_main_width)
 
-heatmap_height <- 287
+heatmap_height <- 240
 
 heatmap_col_dendrogram_height <- 25
 heatmap_top_padding_height <- 18
@@ -1097,7 +1125,7 @@ dev.off()
 ```
 
 
-# Human molecular pathway enrichment
+# POND+ molecular pathway enrichment
 
 ```{r}
 human_clusters <- file.path(human_cluster_dirs[1], "clusters.csv")
@@ -1138,6 +1166,8 @@ df_human_variants_sankey <- df_human_variants_long %>%
 ```
 
 
+## POND+ sankey with variants
+
 ```{r}
 variants_palette <- c("grey80", carto_pal(n = 9, name = "BurgYl"))
 # variants_palette <- c("grey80", carto_pal(n = 9, name = "PurpOr"))
@@ -1177,7 +1207,11 @@ variants_palette_tmp <- c("grey70", variants_palette_tmp[c(1, 5, 10, 15)])
 ```
 
 ```{r}
-df_sankey_palette <- readxl::read_excel("human_cluster_colours.xlsx")
+file_palette <- "human_cluster_colours_POND.xlsx"
+file_palette <- file.path(PROJECTPATH, "figures/v3/resources/", file_palette)
+df_sankey_palette <- readxl::read_excel(file_palette)
+df_sankey_palette <- df_sankey_palette %>% 
+  rename(colour = colour_1)
 sankey_palette <- df_sankey_palette$colour
 names(sankey_palette) <- df_sankey_palette$cluster_id
 
@@ -1185,7 +1219,8 @@ df_human_sankey <- df_human_variants_long %>%
   mutate(nk = factor(nk), k = factor(k)) %>% 
   left_join(df_sankey_palette, by = "cluster_id") %>% 
   rename(group = colour) %>% 
-  mutate(group = ifelse(variant_identified, group, "grey80"))
+  mutate(group = ifelse(variant_identified, group, "grey80")) %>% 
+  mutate(group = ifelse(group == "grey80" & variant_identified, "black", group))
 
 alluvial_palette <- unique(df_human_sankey$group)
 names(alluvial_palette) <- alluvial_palette
@@ -1193,8 +1228,10 @@ names(alluvial_palette) <- alluvial_palette
 
 ```{r}
 plt_human_sankey <- ggplot(df_human_sankey, 
-       aes(x = nk, stratum = k, alluvium = ID)) + 
-  geom_flow(mapping = aes(fill = group, col = group, linetype = variant_identified, linewidth = variant_identified),
+                           aes(x = nk, stratum = k, alluvium = ID)) + 
+  geom_flow(mapping = aes(fill = group, col = group, 
+                          linetype = variant_identified, 
+                          linewidth = variant_identified),
             stat = "alluvium", aes.flow = "forward", 
             alpha = 1) + 
   scale_fill_manual(values = alluvial_palette) +
@@ -1241,16 +1278,19 @@ df_human_sankey_annotations_x <- tibble(nk = 2:10,
 
 df_human_sankey_annotations <- df_human_sankey_annotations %>% 
   left_join(df_human_sankey_annotations_x, by = "nk")
+```
 
+
+```{r}
 df_human_sankey_annotations$y <- c(c(0.78, 0.35),
                                    c(0.78, 0.52, 0.35),
-                                   c(0.78, 0.55, 0.37, 0.25),
-                                   c(0.78, 0.55, 0.42, 0.33, 0.23),
+                                   c(0.78, 0.55, 0.35, 0.23),
+                                   c(0.78, 0.55, 0.41, 0.30, 0.20),
                                    c(0.78, 0.62, 0.55, 0.46, 0.41, 0.28),
-                                   c(0.78, 0.59, 0.46, 0.40, 0.29, 0.24, 0.20),
-                                   c(0.78, 0.64, 0.56, 0.52, 0.49, 0.40, 0.25, 0.20), 
-                                   c(0.78, 0.59, 0.50, 0.45, 0.384, 0.36, 0.25, 0.20, 0.20),
-                                   c(0.78, 0.64, 0.50, 0.36, 0.30, 0.28, 0.26, 0.23, 0.22, 0.20))
+                                   c(0.78, 0.59, 0.46, 0.38, 0.27, 0.24, 0.20),
+                                   c(0.78, 0.64, 0.56, 0.52, 0.49, 0.40, 0.23, 0.18), 
+                                   c(0.78, 0.59, 0.50, 0.44, 0.370, 0.36, 0.23, 0.20, 0.20),
+                                   c(0.78, 0.64, 0.50, 0.36, 0.30, 0.28, 0.25, 0.23, 0.22, 0.20))
 
 human_sankey_annotations_grob <- textGrob(label = df_human_sankey_annotations$label,
                                           x = df_human_sankey_annotations$x,
@@ -1265,6 +1305,30 @@ human_sankey_grobs <- grobTree(human_sankey_grob,
                                human_sankey_annotations_grob)
 ```
 
+
+```{r}
+# Patchwork -----
+
+human_variants_widths <- c(302, 150, 160)
+human_variants_heights <- c(200, 46)
+
+human_variants_layout <- rbind(c(1, 2, 3),
+                               c(1, 4, 4)) 
+
+human_variants_grob <- arrangeGrob(human_sankey_grobs,
+                                   ggplotGrob(plt_human_variants_heatmap),
+                                   ggplotGrob(plt_human_pathway_metrics),
+                                   zeroGrob(),
+                                   layout_matrix = human_variants_layout,
+                                   widths = unit(human_variants_widths, "bigpts"),
+                                   heights = unit(human_variants_heights, "bigpts"))
+
+human_variants_height <- sum(human_variants_heights)
+```
+
+
+
+## POND+ molecular pathways heatmap
 
 ```{r}
 human_enrichment_dir <- file.path(human_pipeline_dirs[1], "enrichment/StringDB_12.0_Bader_2025/950/NeighbourhoodEnrichment")
@@ -1348,13 +1412,15 @@ plt_human_variants_heatmap <- ggplot(df_human_heatmap,
   theme(strip.background = element_blank(),
         strip.text = element_blank(),
         axis.text.y = element_text(size = 8),
-        axis.text.x = element_text(size = 8, angle = 90, vjust = 0.5, hjust = 1.0, colour = "springgreen4", face = c("plain", "bold", "bold", "bold", "bold", "bold", "bold", "plain", "plain")),
+        axis.text.x = element_text(size = 8, angle = 90, vjust = 0.5, hjust = 1.0, 
+                                   colour = c("grey50", rep("springgreen4", 6), rep("grey50", 2)), 
+                                   # face = c("plain", rep("bold", 6), "plain", "plain"),
+                                   face = "bold"),
         axis.title = element_text(size = 8.5),
         title = element_text(size = 8),
         legend.position = "bottom",
         legend.direction = "horizontal",
         legend.title = element_text(size = 9),
-        # legend.text = element_text(size = 8),
         legend.text = element_blank(),
         legend.margin = margin(),
         legend.text.position = "top")
@@ -1369,6 +1435,7 @@ plt_human_variants_heatmap <- plt_human_variants_heatmap +
   theme(legend.position = "none")
 ```
 
+## Mouse-POND+ molecular pathway correspondence
 
 
 ```{r}
@@ -1446,7 +1513,7 @@ plt_human_pathway_metrics <- ggplot(df_metrics_plt, aes(x = nk, y = value, col =
   theme(panel.grid.minor.x = element_blank(),
         axis.text.y = element_text(size = 8),
         axis.text.x = element_text(size = 8, angle = 90, vjust = 0.5, hjust = 1.0,
-                                   colour = "springgreen4"),
+                                   colour = "springgreen4", face = "bold"),
         axis.title = element_text(size = 8.5, margin = margin(t = 4)),
         legend.title = element_text(size = 9, vjust = 0.5, margin = margin(t = 1)),
         legend.text = element_text(size = 8),
@@ -1460,7 +1527,7 @@ plt_human_pathway_metrics <- ggplot(df_metrics_plt, aes(x = nk, y = value, col =
         # legend.key = element_rect(colour = "black"),
         # legend.background = element_rect(colour = "black"),
         legend.byrow = TRUE, 
-        title = element_text(size = 8))
+        plot.title = element_text(size = 9, hjust = -0.5))
 
 human_metrics_legend_grob <- plt_human_pathway_metrics %>% 
   ggplotGrob() %>% 
@@ -1471,6 +1538,9 @@ plt_human_pathway_metrics <- plt_human_pathway_metrics +
   theme(legend.position = "none",
         plot.margin = margin(r = 10, b = 8, t = 8, unit = "bigpts"))
 ```
+
+
+## Combining panel elements
 
 ```{r}
 # Patchwork -----
@@ -1493,11 +1563,11 @@ human_variants_height <- sum(human_variants_heights)
 ```
 
 
-
 # Figure
 
 ```{r}
-fig_layout <- cbind(1:7)
+# fig_layout <- cbind(1:7)
+fig_layout <- cbind(1:6)
 
 fig_widths <- fig_width
 
@@ -1505,7 +1575,8 @@ fig_widths <- fig_width
 panel_padding_height <- 20
 empty_height <- fig_height - polar_height_pt - panel_padding_height - heatmap_height - panel_padding_height - human_variants_height
 
-fig_heights <- c(20, polar_height_pt, panel_padding_height, heatmap_height, 10, human_variants_height, empty_height)
+# fig_heights <- c(20, polar_height_pt, panel_padding_height, heatmap_height, 10, human_variants_height, empty_height)
+fig_heights <- c(20, polar_height_pt, panel_padding_height, heatmap_height, 10, human_variants_height)
 
 fig_grob <- arrangeGrob(textGrob("Mouse clusters"),
                         polar_grob,
@@ -1515,16 +1586,20 @@ fig_grob <- arrangeGrob(textGrob("Mouse clusters"),
                         zeroGrob(),
                         # rectGrob(gp = gpar(fill = "white")),
                         human_variants_grob,
-                        zeroGrob(),
-                        # rectGrob(gp = gpar(fill = "white")),
                         layout_matrix = fig_layout,
                         widths = unit(fig_widths, "bigpts"),
                         heights = unit(fig_heights, "bigpts"))
 
-fig_width_in <- sum(fig_widths)/72
-fig_height_in <- sum(fig_heights)/72
+
+fig_width_pt <- sum(fig_widths)
+fig_height_pt <- sum(fig_heights)
+
+fig_width_in <- fig_width_pt/72
+fig_height_in <- fig_height_pt/72
+```
 
 
+```{r}
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -1535,21 +1610,15 @@ grid.draw(fig_grob)
 
 # Mouse heatmap legend
 pushViewport(viewport(x = unit(530, "bigpts"),
-                      y = unit(530, "bigpts"),
+                      y = unit(496, "bigpts"),
                       width = unit(132, "bigpts"),
-                      height = unit(56, "bigpts")))
+                      height = unit(25, "bigpts")))
 # grid.rect(gp = gpar(fill = "grey70"))
 grid.draw(heatmap_legend_grob)
+grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
+          x = c(0.08, 0.93), y = 0.22,
+          gp = gpar(fontsize = 9))
 popViewport()
-
-# Human Sankey legend
-# pushViewport(viewport(x = unit(144, "bigpts"),
-#                       y = unit(25, "bigpts"),
-#                       width = unit(166, "bigpts"),
-#                       height = unit(34, "bigpts")))
-# # grid.rect(gp = gpar(fill = "grey70"))
-# grid.draw(human_variants_sankey_legend)
-# popViewport()
 
 # Human heatmap legend
 pushViewport(viewport(x = unit(370, "bigpts"),
@@ -1564,7 +1633,7 @@ grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
 popViewport()
 
 # Human metrics legend
-pushViewport(viewport(x = unit(535, "bigpts"),
+pushViewport(viewport(x = unit(540, "bigpts"),
                       y = unit(32, "bigpts"),
                       width = unit(140, "bigpts"),
                       height = unit(34, "bigpts")))
@@ -1572,6 +1641,10 @@ pushViewport(viewport(x = unit(535, "bigpts"),
 grid.draw(human_metrics_legend_grob)
 popViewport()
 
+grid.text(label = c("a", "b", "c", "d", "e"),
+          x = unit(c(10.0, 10.0, 10.0, 298, 468), "bigpts"),
+          y = unit(fig_height_pt - c(8, 262, 517, 517, 517), "bigpts"),
+          gp = gpar(fontface = "bold", fontsize = 10))
+
 dev.off()
 ```
-
