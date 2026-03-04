@@ -157,7 +157,7 @@ dataset <- "POND"
 
 B <- 500
 replace <- FALSE
-nproc <- 8
+nproc <- 32
 size <- 0.8
 
 
