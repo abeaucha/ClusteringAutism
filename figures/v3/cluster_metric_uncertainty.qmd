@@ -1,0 +1,452 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+# library(tidyverse)
+# library(RMINC)
+# library(ggalluvial)
+# library(patchwork)
+# library(MRIcrotome)
+# library(grid)
+# library(gridExtra)
+# library(RColorBrewer)
+# library(ggnewscale)
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+# Mouse clusters
+
+```{r}
+mouse_params_id <- "107"
+
+mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/", mouse_params_id)
+
+mouse_es_dir <- file.path(mouse_pipeline_dir, "effect_sizes", "200")
+mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters", "resolution_0.2")
+mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids", "resolution_0.05")
+
+mouse_mask_file <- file.path(PROJECTPATH, "data/mouse/registration/reference_files", "scanbase_second_level-nlin-3_mask_200um.mnc")
+
+mouse_clusters_file <- file.path(mouse_cluster_dir, "clusters.csv")
+mouse_clusters <- read_csv(mouse_clusters_file)
+```
+
+```{r}
+list_mouse_es <- vector(mode = "list", length = 2)
+names(list_mouse_es) <- c("absolute", "relative")
+for (i in 1:length(list_mouse_es)) {
+  jacobians <- str_to_title(names(list_mouse_es)[i])
+  
+  es_files <- mouse_clusters %>% 
+    pull(ID) %>% 
+    str_replace(".mnc", paste0("_ES_", jacobians, "_200.mnc"))
+  
+  es_files <- file.path(mouse_es_dir, es_files)
+  
+  es_mat <- import_images(imgfiles = es_files,
+                          mask = mouse_mask_file,
+                          output_format = "matrix",
+                          version = "v2")
+  
+  es_mat[is.nan(es_mat)] <- 0
+  
+  rownames(es_mat) <- mouse_clusters$ID
+  
+  list_mouse_es[[i]] <- es_mat
+}
+
+W <- similarity_network(x = list_mouse_es, metric = "correlation", K = 10,
+                        sigma = 0.5, t = 20, outfile = NULL)
+
+df_cluster_metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
+```
+
+```{r}
+sample_effect_sizes <- function(x, size = 0.8, replace = FALSE, seed = NULL){
+  
+  N <- nrow(x[[1]])
+  n <- floor(size*N)
+  if (!is.null(seed)) {set.seed(seed)}
+  idx <- sample(1:N, size = n, replace = replace)
+  x_sampled <- map(.x = x, .f = function(x){x[idx,]})
+  
+  return(x_sampled)
+}
+
+
+sample_snf_metrics <- function(x, size = 0.8, replace = FALSE, seed = NULL) {
+  
+  x_sampled <- sample_effect_sizes(x = x, size = size, replace = replace, seed = seed)
+  W <- similarity_network(x = x_sampled, metric = "correlation", K = 10,
+                          sigma = 0.5, t = 20, outfile = NULL)
+  
+  metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
+  
+  return(metrics)
+}
+
+
+sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, seed = NULL) {
+  
+  x_sampled <- sample_effect_sizes(x = x, size = size, replace = replace, seed = seed)
+  W_sampled <- similarity_network(x = x_sampled, metric = "correlation", K = 10,
+                                  sigma = 0.5, t = 20, outfile = NULL)
+  
+  clusters_sampled <- create_clusters(W = W_sampled, nk = 10)
+  clusters_sampled <- clusters_sampled %>% 
+    arrange(ID)
+  
+  clusters <- clusters %>% 
+    semi_join(clusters_sampled, by = "ID") %>% 
+    arrange(ID)
+  
+  clusters_sampled <- clusters_sampled %>% 
+    column_to_rownames("ID")
+  
+  clusters <- clusters %>% 
+    column_to_rownames("ID")
+  
+  df_ARI <- tibble(nk = 2:10, ARI = 0)
+  for (i in 1:nrow(df_ARI)) {
+    nki <- df_ARI[[i, "nk"]]
+    nk_col <- paste0("nk", nki)
+    
+    ARI <- mclust::adjustedRandIndex(x = clusters[[nk_col]], y = clusters_sampled[[nk_col]])
+    df_ARI[[i, "ARI"]] <- ARI
+  }
+  
+  return(df_ARI)
+  
+}
+```
+
+```{r}
+size <- 0.8
+replace <- FALSE
+nproc <- 4
+B <- 500
+# B <- 100
+
+pb <- txtProgressBar(max = B, style = 3)
+progress <- function(n) {
+  setTxtProgressBar(pb = pb, value = n)
+}
+
+cl <- makeSOCKcluster(nproc)
+registerDoSNOW(cl)
+opts <- list(progress = progress)
+list_snf_metrics <- foreach(
+  i = 1:B,
+  .packages = c("tidyverse", "SNFtool"),
+  .options.snow = opts
+) %dopar%
+  {
+    sample_snf_metrics(x = list_mouse_es, seed = i, size = 0.8, replace = FALSE)
+  }
+close(pb)
+stopCluster(cl)
+  
+df_snf_metrics <- bind_rows(list_snf_metrics, .id = "seed")
+```
+
+```{r}
+df_snf_metrics_summary <- df_snf_metrics %>% 
+  group_by(nk) %>% 
+  summarise(y = mean(eigengap), 
+            lwr = quantile(eigengap, prob = 0.025),
+            upr = quantile(eigengap, prob = 0.975)) %>% 
+  ungroup() 
+
+
+ggplot(df_snf_metrics, aes(x = nk, y = eigengap)) + 
+  geom_line(mapping = aes(group = factor(seed)),
+            alpha = 0.04) + 
+  # geom_point(alpha = 0.02) +
+  geom_pointrange(data = df_snf_metrics_summary,
+                  mapping = aes(y = y, ymin = lwr, ymax = upr),
+                  col = "red") + 
+  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
+  labs(x = "Cluster solution (K)",
+       y = "Spectral Clustering Eigengap") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+nproc <- 4
+B <- 500
+# B <- 100
+
+pb <- txtProgressBar(max = B, style = 3)
+progress <- function(n) {
+  setTxtProgressBar(pb = pb, value = n)
+}
+
+cl <- makeSOCKcluster(nproc)
+registerDoSNOW(cl)
+opts <- list(progress = progress)
+list_ARI <- foreach(
+  i = 1:B,
+  .packages = c("tidyverse", "SNFtool"),
+  .options.snow = opts
+) %dopar%
+  {
+    sample_ARI(x = list_mouse_es, clusters = mouse_clusters, seed = i)
+  }
+close(pb)
+stopCluster(cl)
+  
+df_ARI <- bind_rows(list_ARI, .id = "seed")
+```
+
+```{r}
+df_ARI_summary <- df_ARI %>% 
+  group_by(nk) %>% 
+  summarise(y = mean(ARI), 
+            lwr = quantile(ARI, prob = 0.025),
+            upr = quantile(ARI, prob = 0.975)) %>% 
+  ungroup() 
+
+
+ggplot(df_ARI, aes(x = nk, y = ARI)) + 
+  geom_line(mapping = aes(group = factor(seed)),
+            alpha = 0.04) + 
+  # geom_point(alpha = 0.02) +
+  geom_pointrange(data = df_ARI_summary,
+                  mapping = aes(y = y, ymin = lwr, ymax = upr),
+                  col = "red") + 
+  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  labs(x = "Cluster solution (K)",
+       y = "Adjusted Rand Index") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+# POND+ clusters
+
+```{r}
+human_params_id <- "700"
+
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/", human_params_id)
+
+human_es_dir <- file.path(human_pipeline_dir, "effect_sizes", "resolution_3.0")
+human_cluster_dir <- file.path(human_pipeline_dir, "clusters", "resolution_3.0")
+
+human_clusters_file <- file.path(human_cluster_dir, "clusters.csv")
+human_clusters <- read_csv(human_clusters_file)
+```
+
+```{r}
+list_human_es <- vector(mode = "list", length = 2)
+names(list_human_es) <- c("absolute", "relative")
+for (i in 1:length(list_human_es)) {
+  jacobians <- names(list_human_es)[i]
+  
+  es_file <- file.path(human_es_dir, jacobians, "effect_sizes.csv")
+  
+  df_es <- as_tibble(data.table::fread(es_file, header = TRUE))
+  
+  es_mat <- df_es %>% 
+    column_to_rownames("file") %>% 
+    as.matrix()
+  
+  list_human_es[[i]] <- es_mat
+}
+
+W <- similarity_network(x = list_human_es, metric = "correlation", K = 10,
+                        sigma = 0.5, t = 20, outfile = NULL)
+
+df_cluster_metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
+```
+
+```{r}
+ggplot(df_cluster_metrics, aes(x = nk, y =eigengap)) + 
+  geom_line() + 
+  geom_point()+
+  scale_y_continuous(breaks = seq(0, 1, by = 0.01)) +
+  coord_cartesian(ylim = c(0, 0.10))
+```
+
+```{r}
+nproc <- 8
+B <- 500
+B <- 100
+
+pb <- txtProgressBar(max = B, style = 3)
+progress <- function(n) {
+  setTxtProgressBar(pb = pb, value = n)
+}
+
+cl <- makeSOCKcluster(nproc)
+registerDoSNOW(cl)
+opts <- list(progress = progress)
+list_snf_metrics_pond <- foreach(
+  i = 1:B,
+  .packages = c("tidyverse", "SNFtool"),
+  .options.snow = opts
+) %dopar%
+  {
+    sample_snf_metrics(x = list_human_es, seed = i)
+  }
+close(pb)
+stopCluster(cl)
+  
+df_snf_metrics_pond <- bind_rows(list_snf_metrics_pond, .id = "seed")
+```
+
+```{r}
+df_snf_metrics_pond_summary <- df_snf_metrics_pond %>% 
+  group_by(nk) %>% 
+  summarise(y = mean(eigengap), 
+            lwr = quantile(eigengap, prob = 0.025),
+            upr = quantile(eigengap, prob = 0.975)) %>% 
+  ungroup() 
+
+
+ggplot(df_snf_metrics_pond, aes(x = nk, y = eigengap)) + 
+  geom_line(mapping = aes(group = factor(seed)),
+            alpha = 0.04) + 
+  # geom_point(alpha = 0.02) +
+  geom_pointrange(data = df_snf_metrics_pond_summary,
+                  mapping = aes(y = y, ymin = lwr, ymax = upr),
+                  col = "red") + 
+  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
+  labs(x = "Cluster solution (K)",
+       y = "Spectral Clustering Eigengap") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+nproc <- 6
+# B <- 500
+B <- 100
+
+pb <- txtProgressBar(max = B, style = 3)
+progress <- function(n) {
+  setTxtProgressBar(pb = pb, value = n)
+}
+
+cl <- makeSOCKcluster(nproc)
+registerDoSNOW(cl)
+opts <- list(progress = progress)
+list_ARI_pond <- foreach(
+  i = 1:B,
+  .packages = c("tidyverse", "SNFtool"),
+  .options.snow = opts
+) %dopar%
+  {
+    sample_ARI(x = list_human_es, clusters = human_clusters, seed = i)
+  }
+close(pb)
+stopCluster(cl)
+  
+df_ARI_pond <- bind_rows(list_ARI_pond, .id = "seed")
+```
+
+```{r}
+df_ARI_pond_summary <- df_ARI_pond %>% 
+  group_by(nk) %>% 
+  summarise(y = mean(ARI), 
+            lwr = quantile(ARI, prob = 0.025),
+            upr = quantile(ARI, prob = 0.975)) %>% 
+  ungroup() 
+
+
+ggplot(df_ARI_pond, aes(x = nk, y = ARI)) + 
+  geom_line(mapping = aes(group = factor(seed)),
+            alpha = 0.04) + 
+  # geom_point(alpha = 0.02) +
+  geom_pointrange(data = df_ARI_pond_summary,
+                  mapping = aes(y = y, ymin = lwr, ymax = upr),
+                  col = "red") + 
+  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  labs(x = "Cluster solution (K)",
+       y = "Adjusted Rand Index") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+n <- 1000
+x <- rnorm(n, mean = 0, sd = 1)
+size <- 0.8
+
+mu <- 0
+xbar <- mean(x)
+
+B <- 1000
+
+means_subsampled <- numeric(B)
+means_bootstrapped <- numeric(B)
+for (b in 1:B) {
+  
+  set.seed(b)
+  idx <- sample(1:n, size = floor(n*size), replace = FALSE)
+  means_subsampled[b] <- mean(x[idx])
+  
+  set.seed(b)
+  idx <- sample(1:n, size = n, replace = TRUE)
+  means_bootstrapped[b] <- mean(x[idx])
+  
+}
+
+df <- bind_rows(tibble(x = means_subsampled,
+                       method = "subsampled"),
+                tibble(x = means_bootstrapped,
+                       method = "bootstrapped"))
+
+df_summary <- df %>% 
+  group_by(method) %>% 
+  summarise(y = mean(x), 
+            ymin = quantile(x, 0.025),
+            ymax = quantile(x, 0.975)) %>% 
+  ungroup()
+
+ggplot(df, aes(x = method, y = x)) + 
+  geom_jitter(alpha = 0.2, width = 0.2) +
+  geom_pointrange(data = df_summary,
+                  mapping = aes(y = y, ymin = ymin, ymax = ymax),
+                  col = "red") + 
+  geom_hline(yintercept = xbar, linetype = "dashed") +
+  geom_hline(yintercept = 0) +
+  coord_cartesian(ylim = c(-0.20, 0.20)) +
+  theme_bw()
+```
+
+```{r}
+sd(x)/sqrt(n)
+```
+
+```{r}
+df_summary
+```
+
+```{r}
+xbar <- mean(x)
+m <- floor(n*size)
+
+d <- sqrt(m) * (means_subsampled - xbar)   # approximates distribution of sqrt(n)(xbar - mu)
+
+q <- quantile(d, c(0.025, 0.975))
+
+CI <- xbar - q / sqrt(n)   # CI for mu
+CI
+```
