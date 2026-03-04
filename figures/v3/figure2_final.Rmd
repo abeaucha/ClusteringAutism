@@ -35,9 +35,9 @@ source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r}
-output_dir <- file.path("outputs", "figure2")
-if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 outfile_prefix <- "figure2"
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
 
 ```{r}
@@ -1091,6 +1091,36 @@ outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(fig_width_in, "in"),
     height = unit(fig_height_in, "in"))
+grid.draw(fig_grobs)
+pushViewport(neuro_legend_vp)
+grid.draw(neuro_legend_grob)
+popViewport()
+
+grid.rect(x = unit(c(5, 235, 427), "bigpts"),
+          y = unit(fig_height_pt-487, "bigpts"),
+          width = unit(c(223, 186, 183), "bigpts"),
+          height = unit(223, "bigpts"),
+          just = c("left", "top"), 
+          gp = gpar(fill = NA, lty = "dotted", lwd = 1.5))
+
+grid.segments(x0 = unit(c(115, 325, 533), "bigpts"),
+              x1 = unit(c(115, 325, 533), "bigpts"),
+              y0 = unit(fig_height_pt - 486, "bigpts"),
+              y1 = unit(fig_height_pt - 470, "bigpts"),
+              gp = gpar(lty = "dotted", lwd = 1.5))
+
+dev.off()
+```
+
+
+```{r}
+outfile <- paste0(outfile_prefix, ".png")
+outfile <- file.path(output_dir, outfile)
+png(file = outfile,
+    width = fig_width_in,
+    height = fig_height_in,
+    units = "in",
+    res = 600)
 grid.draw(fig_grobs)
 pushViewport(neuro_legend_vp)
 grid.draw(neuro_legend_grob)
