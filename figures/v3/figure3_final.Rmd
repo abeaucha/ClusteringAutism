@@ -626,7 +626,7 @@ for (i in 1:length(nk_subset)) {
   
   # Combine ggplot with rect border
   list_polar_grobs[[i]] <- gTree(children = gList(polar_plot_grob,
-                                                  rectGrob()))
+                                                  rectGrob(gp = gpar(fill = NA))))
   
   
 }
@@ -1210,8 +1210,8 @@ variants_palette_tmp <- c("grey70", variants_palette_tmp[c(1, 5, 10, 15)])
 file_palette <- "human_cluster_colours_POND.xlsx"
 file_palette <- file.path(PROJECTPATH, "figures/v3/resources/", file_palette)
 df_sankey_palette <- readxl::read_excel(file_palette)
-df_sankey_palette <- df_sankey_palette %>% 
-  rename(colour = colour_1)
+# df_sankey_palette <- df_sankey_palette %>% 
+#   rename(colour = colour_1)
 sankey_palette <- df_sankey_palette$colour
 names(sankey_palette) <- df_sankey_palette$cluster_id
 
@@ -1304,28 +1304,6 @@ human_sankey_annotations_grob <- textGrob(label = df_human_sankey_annotations$la
 human_sankey_grobs <- grobTree(human_sankey_grob, 
                                human_sankey_annotations_grob)
 ```
-
-
-```{r}
-# Patchwork -----
-
-human_variants_widths <- c(302, 150, 160)
-human_variants_heights <- c(200, 46)
-
-human_variants_layout <- rbind(c(1, 2, 3),
-                               c(1, 4, 4)) 
-
-human_variants_grob <- arrangeGrob(human_sankey_grobs,
-                                   ggplotGrob(plt_human_variants_heatmap),
-                                   ggplotGrob(plt_human_pathway_metrics),
-                                   zeroGrob(),
-                                   layout_matrix = human_variants_layout,
-                                   widths = unit(human_variants_widths, "bigpts"),
-                                   heights = unit(human_variants_heights, "bigpts"))
-
-human_variants_height <- sum(human_variants_heights)
-```
-
 
 
 ## POND+ molecular pathways heatmap
@@ -1648,3 +1626,56 @@ grid.text(label = c("a", "b", "c", "d", "e"),
 
 dev.off()
 ```
+
+```{r}
+outfile <- paste0(outfile_prefix, ".png")
+outfile <- file.path(output_dir, outfile)
+png(file = outfile,
+    width = fig_width_in,
+    height = fig_height_in,
+    units = "in",
+    res = 600)
+
+grid.draw(fig_grob)
+
+# Mouse heatmap legend
+pushViewport(viewport(x = unit(530, "bigpts"),
+                      y = unit(496, "bigpts"),
+                      width = unit(132, "bigpts"),
+                      height = unit(25, "bigpts")))
+# grid.rect(gp = gpar(fill = "grey70"))
+grid.draw(heatmap_legend_grob)
+grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
+          x = c(0.08, 0.93), y = 0.22,
+          gp = gpar(fontsize = 9))
+popViewport()
+
+# Human heatmap legend
+pushViewport(viewport(x = unit(370, "bigpts"),
+                      y = unit(27, "bigpts"),
+                      width = unit(140, "bigpts"),
+                      height = unit(34, "bigpts")))
+# grid.rect(gp = gpar(fill = "grey70"))
+grid.draw(human_heatmap_legend_grob)
+grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
+          x = c(0.1, 0.91), y = 0.8, 
+          gp = gpar(fontsize = 9))
+popViewport()
+
+# Human metrics legend
+pushViewport(viewport(x = unit(540, "bigpts"),
+                      y = unit(32, "bigpts"),
+                      width = unit(140, "bigpts"),
+                      height = unit(34, "bigpts")))
+# grid.rect(gp = gpar(fill = "grey70"))
+grid.draw(human_metrics_legend_grob)
+popViewport()
+
+grid.text(label = c("a", "b", "c", "d", "e"),
+          x = unit(c(10.0, 10.0, 10.0, 298, 468), "bigpts"),
+          y = unit(fig_height_pt - c(8, 262, 517, 517, 517), "bigpts"),
+          gp = gpar(fontface = "bold", fontsize = 10))
+
+dev.off()
+```
+
