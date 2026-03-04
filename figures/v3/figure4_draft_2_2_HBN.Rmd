@@ -251,15 +251,15 @@ tmp_ids <- tmp %>%
   pull(human_cluster_id) %>% 
   unique()
 
-for (i in 1:length(tmp_ids)) {
-  
-  tmp_i <- tmp %>% 
-    filter(human_cluster_id == tmp_ids[i])
-  
-  print(tmp_i)
-  
-  readline()
-}
+# for (i in 1:length(tmp_ids)) {
+#   
+#   tmp_i <- tmp %>% 
+#     filter(human_cluster_id == tmp_ids[i])
+#   
+#   print(tmp_i)
+#   
+#   readline()
+# }
 ```
 
 
@@ -275,52 +275,31 @@ df_matches %>%
   arrange(group, human_nk, mouse_nk)
 ```
 
-```{r}
-df_clusters_hbn_long <- df_clusters_hbn %>% 
-  select(ID, contains("nk")) %>% 
-  pivot_longer(cols = c(-ID), names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = str_remove(nk_name, "nk"),
-         nk = as.numeric(nk),
-         cluster_id = paste0(nk, "-", k))
-
-df_clusters_hbn_long
-```
-
-```{r}
-df_sankey_palette <- readxl::read_excel("resources/human_cluster_colours_HBN.xlsx")
-sankey_palette <- df_sankey_palette$colour
-names(sankey_palette) <- df_sankey_palette$cluster_id
-
-df_human_sankey <- df_clusters_hbn_long %>% 
-  mutate(nk = factor(nk), k = factor(k)) %>% 
-  left_join(df_sankey_palette, by = "cluster_id") %>% 
-  rename(group = colour)
-
-```
-
-
-```{r}
-library(ggalluvial)
-
-ggplot(df_clusters_hbn_long, 
-       aes(x = factor(nk), stratum = k,
-           alluvium = ID, fill = cluster_id)) + 
-  geom_flow(stat = "alluvium", aes.flow = "forward",
-            linewidth = 0.15) +
-  geom_stratum() + 
-  scale_fill_manual(values = sankey_palette, guide = "none") + 
-  theme_bw()
-```
 
 
 # Process clinical data
 
 ## Process HBN data
 
+Conners - C3SR
+- Defiance/Aggression T-score: C3SR_AG_T
+- Family relations T-score: C3SR_FR_T
+- Hyperactivity/Impulsivity T-score: C3SR_HY_T
+- Inattention T-score: C3SR_IN_T
+- Learning problems t-score: C3SR_LP_T
+Conners Adult Self Rating - CAARS
+Children's depression index - parent - CDI_P
+- Emotional problems T-score: CDI2P_EP_T
+- Function problems T-score: CDI2P_FP_T
+- Total score: CDI2P_Total
+Columbia Impairment scale - CIS_P, CIS_SR
+Comprehensive Test of Phonological Process (CTOPP-2)
+
+
 ```{r}
 path <- "/Users/abeauchamp/Documents/Projects/ClusteringAutism/repository/main/data/human/registration/v3/subject_info/HBN/assessment_data"
 
-# Import POND+ clusters
+# Import HBN clusters
 clusters_file <- "/Users/abeauchamp/Documents/Projects/ClusteringAutism/repository/main/data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv"
 df_clusters <- read_csv(clusters_file, show_col_types = FALSE)
 
@@ -338,16 +317,204 @@ df_demographics_hbn <- df_demographics %>%
 df_clusters_hbn <- df_clusters %>% 
   inner_join(df_demographics_hbn, by = c("ID" = "file"))
 
+```
+
+
+```{r}
+df_clusters_hbn_long <- df_clusters_hbn %>%
+  select(ID, contains("nk")) %>%
+  pivot_longer(cols = c(-ID), names_to = "nk_name", values_to = "k") %>%
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         cluster_id = paste0(nk, "-", k))
+
+
+df_sankey_palette <- readxl::read_excel("resources/human_cluster_colours_HBN.xlsx")
+sankey_palette <- df_sankey_palette$colour
+names(sankey_palette) <- df_sankey_palette$cluster_id
+
+df_human_sankey <- df_clusters_hbn_long %>%
+  mutate(nk = factor(nk), k = factor(k)) %>%
+  left_join(df_sankey_palette, by = "cluster_id") %>%
+  rename(group = colour)
+
+
+library(ggalluvial)
+
+plt_sankey <- ggplot(df_clusters_hbn_long,
+       aes(x = factor(nk), stratum = k,
+           alluvium = ID, fill = cluster_id)) +
+  geom_flow(stat = "alluvium", aes.flow = "forward",
+            linewidth = 0.15) +
+  geom_stratum() +
+  scale_fill_manual(values = sankey_palette, guide = "none") +
+  theme_bw()
+
+outfile <- "hbn_sankey.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt_sankey)
+dev.off()
+```
+
+```{r}
+list_assessments <- list(
+  ACE = list(code = "ACE",
+             skip = TRUE,
+             vars = c("ACE_Score")),
+  ARI_P = list(code = "ARI_P",
+               skip = TRUE,
+               vars = c("ARI_P_Total_Score")),
+  ARI_S = list(code = "ARI_S",
+               skip = TRUE,
+               vars = c("ARI_S_Total_Score")),
+  ASSQ = list(code = "ASSQ",
+              skip = TRUE,
+              vars = c("ASSQ_Total")),
+  CDI_P = list(code = "CDI2_P",
+               skip = TRUE,
+               vars = c("CDI2P_Total_T")),
+  CDI_S = list(code = "CDI2_SR",
+               skip = TRUE,
+               vars = c("CDI2_Total_T")),
+  CGAS = list(code = "CGAS",
+              skip = TRUE,
+              vars = c("CGAS_Score")),
+  CIS_P = list(code = "CIS_P",
+               skip = TRUE,
+               vars = c("CIS_P_Score")),
+  CIS_SR = list(code = "CIS_SR",
+                skip = TRUE,
+                vars = c("CIS_SR_Total")),
+  EVT = list(code = "EVT",
+             skip = TRUE,
+             vars = c("EVT2_StandardScore")),
+  GFTA = list(code = "GFTA",
+              skip = TRUE,
+              vars = c("GFTA_SIW_Stnd", "GFTA_SIS_Stnd")),
+  ICU_P = list(code =  "ICU_P",
+               skip = TRUE,
+               vars = c("ICU_P_Callous", "ICU_P_Uncaring", 
+                        "ICU_P_Unemotional", "ICU_P_Total")),
+  ICU_SR = list(code = "ICU_SR",
+                skip = TRUE,
+                vars = c("ICU_SR_Callous", "ICU_SR_Uncaring",
+                         "ICU_SR_Unemotional", "ICU_SR_Total")),
+  KBIT = list(code = "KBIT",
+              skip = TRUE,
+              vars = c("KBIT_IQ_Comp")),
+  MFQ_P = list(code = "MFQ_P",
+               skip = TRUE,
+               vars = c("MFQ_P_Total")),
+  MFQ_SR = list(code = "MFQ_SR",
+                skip = TRUE,
+                vars = c("MFQ_SR_Total #1")),
+  NIH_Scores = list(code = "NIH_Scores",
+                    skip = TRUE,
+                    vars = c("NIH7_Card", "NIH7_Cog", "NIH7_Flanker", 
+                             "NIH7_List", "NIH7_Pattern", "NIH7_Picture")),
+  PPVT = list(code = "PPVT",
+              skip = TRUE,
+              vars = c("PPVT4_StandardScore")),
+  Quotient = list(code = "Quotient",
+                  skip = TRUE,
+                  vars = c("quotient_global_scaled")),
+  RANRAS = list(code = "RANRAS",
+                skip = TRUE,
+                vars = c("RR_Let_Stnd", "RR_Obj_Stnd", "RR_Two_Stnd", "RR_Col_Stnd",
+                         "RR_Num_Stnd", "RR_Three_Stnd")),
+  RBS = list(code = "RBS",
+             skip = TRUE,
+             vars = c("Score_Total")),
+  SCARED_P = list(code = "SCARED_P",
+                  skip = TRUE,
+                  vars = c("SCARED_P_Total")),
+  SCARED_SR = list(code = "SCARED_SR",
+                   skip = TRUE,
+                   vars = c("SCARED_SR_Total")),
+  SCQ = list(code = "SCQ",
+             skip = TRUE,
+             vars = c("SCQ_Total")),
+  SDQ = list(code = "SDQ",
+             skip = TRUE,
+             vars = c("SDQ_Difficulties_Total")),
+  SDS = list(code = "SDS",
+             skip = TRUE,
+             vars = c("SDS_Total_T")),
+  STAI = list(code = "STAI",
+              skip = TRUE,
+              vars = c("STAI_SA", "STAI_TA")),
+  SWAN = list(code = "SWAN",
+              skip = TRUE,
+              vars = c("ADHD_HI", "ADHD_I")),
+  TOWRE = list(code = "TOWRE",
+               skip = TRUE,
+               vars = c("TOWRE_PDE_Scaled", "TOWRE_SWE_Scaled", "TOWRE_Total_Scaled")),
+  Vineland = list(code = "Vineland",
+                  skip = TRUE,
+                  vars = c("VL_Comm_Scale", "VL_DLS_Scale", "VL_Social_Scale")),
+  WHODAS_P = list(code = "WHODAS_P",
+                  skip = TRUE,
+                  vars = c("WHODAS_P_Score")),
+  WHODAS_SR = list(code = "WHODAS_SR",
+                   skip = TRUE,
+                   vars = c("WHODAS_SR_Score")),
+  YSR = list(code = "YSR",
+             skip = TRUE,
+             vars = c("YSR_Total_T"))
+)
+```
+
+
+
+```{r}
 df_clusters_clinical_hbn <- df_clusters_hbn
 
+for (x in list_assessments) {
+  
+  file <- paste0("9994_", x$code, "_20220728.csv")
+  file <- file.path(path, file)
+  df <- read_csv(file, show_col_types = FALSE)
+  if (x$skip) {df <- df[2:nrow(df),]}
+  
+  df <- df[,c("EID", x$vars)]
+  colnames(df) <- c("subject_id", x$vars)
+  df <- df %>% 
+    mutate(across(x$vars, as.numeric)) %>% 
+    distinct()
+  
+  n_multiple <- df %>% 
+    group_by(subject_id) %>% 
+    count() %>% 
+    filter(n > 1) %>% 
+    nrow()
+  
+  if (n_multiple > 0) {
+    df <- df %>% 
+      group_by(subject_id) %>% 
+      sample_n(size = 1) %>% 
+      ungroup() 
+  }
+  
+  df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+    left_join(df, by = "subject_id")
+}
+```
 
+
+SRS and SRS_Pre
+
+
+```{r}
 ## CBCL
 
 file <- file.path(path, "9994_CBCL_20220728.csv")
 df <- read_csv(file, show_col_types = FALSE)
 
 df_cbcl <- df %>% 
-  select(subject_id = EID, cbcl_ip_ts = CBCL_Int_T, cbcl_ep_ts = CBCL_Ext_T)
+  select(subject_id = EID, CBCL_IP_T = CBCL_Int_T, CBCL_EP_T = CBCL_Ext_T)
 
 file <- file.path(path, "9994_CBCL_Pre_20220728.csv")
 df <- read_csv(file, show_col_types = FALSE)
@@ -355,62 +522,14 @@ df <- read_csv(file, show_col_types = FALSE)
 df <- df[2:nrow(df),]
 
 df_cbcl_pre <- df %>% 
-  select(subject_id = EID, cbcl_ip_ts = CBCL_Pre_Int_T, cbcl_ep_ts = CBCL_Pre_Ext_T) %>% 
-  mutate(cbcl_ip_ts = as.numeric(cbcl_ip_ts),
-         cbcl_ep_ts = as.numeric(cbcl_ep_ts))
+  select(subject_id = EID, CBCL_IP_T = CBCL_Pre_Int_T, CBCL_EP_T = CBCL_Pre_Ext_T) %>% 
+  mutate(CBCL_IP_T = as.numeric(CBCL_IP_T),
+         CBCL_EP_T = as.numeric(CBCL_EP_T))
 
 df_cbcl <- bind_rows(df_cbcl, df_cbcl_pre)
 
 df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
   left_join(df_cbcl, by = "subject_id")
-
-
-
-## SWAN
-
-file <- file.path(path, "9994_SWAN_20220728.csv")
-df <- read_csv(file, show_col_types = FALSE)
-
-df <- df[2:nrow(df),]
-
-df_swan <- df %>% 
-  select(subject_id = EID, adhd_i_sub = ADHD_I, adhd_hi_sub = ADHD_HI) %>% 
-  mutate(adhd_i_sub = as.numeric(adhd_i_sub),
-         adhd_hi_sub = as.numeric(adhd_hi_sub))
-
-df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
-  left_join(df_swan, by = "subject_id")
-
-
-
-## SCQ
-
-file <- file.path(path, "9994_SCQ_20220728.csv")
-df <- read_csv(file, show_col_types = FALSE)
-
-df <- df[2:nrow(df),]
-
-df_scq <- df %>% 
-  select(subject_id = EID, scqtot = SCQ_Total) %>% 
-  mutate(scqtot = as.numeric(scqtot))
-
-df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
-  left_join(df_scq, by = "subject_id")
-
-
-## RBS
-
-file <- file.path(path, "9994_RBS_20220728.csv")
-df <- read_csv(file, show_col_types = FALSE)
-
-df <- df[2:nrow(df),]
-
-df_rbs <- df %>% 
-  select(subject_id = EID, rbsallt = Score_Total) %>% 
-  mutate(rbsallt = as.numeric(rbsallt))
-
-df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
-  left_join(df_rbs, by = "subject_id")
 
 
 ## IQ
@@ -441,8 +560,8 @@ df_wasi <- df_wasi %>%
 df_fsiq <- full_join(df_wisc, df_wasi, by = "subject_id")
 
 df_fsiq <- df_fsiq %>% 
-  mutate(fsiq = ifelse(!is.na(WASI_FSIQ), WASI_FSIQ, WISC_FSIQ)) %>% 
-  select(subject_id, fsiq)
+  mutate(FSIQ = ifelse(!is.na(WASI_FSIQ), WASI_FSIQ, WISC_FSIQ)) %>% 
+  select(subject_id, FSIQ)
 
 df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
   left_join(df_fsiq, by = "subject_id")
@@ -485,6 +604,12 @@ df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>%
 df_clusters_clinical_hbn
 ```
 
+```{r}
+df_clusters_clinical_hbn <- df_clusters_clinical_hbn %>% 
+  select(-contains("_SR_"))
+```
+
+
 # Clinical scores analysis
 
 ## Import cluster information
@@ -492,7 +617,7 @@ df_clusters_clinical_hbn
 
 ```{r}
 df_clinical_completion_hbn <- df_clusters_clinical_hbn %>% 
-  select(subject_id, cbcl_ip_ts:CELF_LCI_Stnd) %>% 
+  select(subject_id, ACE_Score:CELF_LCI_Stnd) %>% 
   pivot_longer(cols = -subject_id, names_to = "variable", values_to = "score") %>% 
   mutate(complete = !is.na(score)) %>% 
   group_by(variable) %>% 
@@ -520,7 +645,7 @@ for (i in 1:nrow(df_complete_cases_hbn)) {
 plt_complete_cases <- ggplot(df_complete_cases_hbn, aes(x = n_included, y = n_complete)) + 
   geom_line() + 
   geom_point() +
-  scale_x_continuous(breaks = seq(0, 12, by = 2)) + 
+  scale_x_continuous(breaks = seq(0, 100, by = 4)) +
   scale_y_continuous(breaks = seq (0, 1000, by = 50)) + 
   labs(x = "Number of variables included",
        y = "Number of complete cases") +
@@ -534,6 +659,11 @@ pdf(file = outfile,
 print(plt_complete_cases)
 dev.off()
 ```
+
+```{r}
+df_complete_cases_hbn
+```
+
 
 ```{r}
 df_clusters_clinical_hbn
@@ -566,7 +696,7 @@ That's light green (synaptic, group C) vs. purple (chromatin, group D)
 
 
 ### Pathway grouping v1
- 
+
 ```{r}
 synaptic <- c("7-1", "7-2", "7-7", "8-3", "8-8", "9-1")
 chromatin <- c("7-6", "8-2", "9-6")
@@ -589,14 +719,8 @@ df_pathway_1 <- bind_rows(df_synaptic, df_chromatin)
 
 ```{r}
 # Relevant thresholds are
-# 9: Basic scores
-# 12: Includes OWL
-# 20: Includes SSP
-# 23: Includes BOT2
-# 27: Includes NEPSY
-
 df_mv_syn_chrom <- expand_grid(nk = 7:9, 
-                               n_variables = 7,
+                               n_variables = 29,
                                n_participants = 0,
                                n_participants_syn = 0,
                                lda_auc = 0, error = FALSE)
@@ -680,7 +804,7 @@ library(ggbeeswarm)
 
 ```{r}
 nk_seq <- 7:9
-n_vars <- 7
+n_vars <- 29
 vars_flip <- c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts")
 
 cex_vals <- c(4.0, 4.0, 4.0)
@@ -692,8 +816,8 @@ palette_binary <- c("synaptic" = "seagreen2",
 
 list_panel_grobs <- vector(mode = "list", length = length(nk_seq))
 for (i in 1:length(nk_seq)) {
-
-# i <- 1
+  
+  # i <- 1
   
   nki <- nk_seq[i]
   
@@ -718,23 +842,24 @@ for (i in 1:length(nk_seq)) {
     mutate(y = y,
            y_pred = lda_pred_y,
            y_pred_prob = lda_pred_prob) 
-
+  
   df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
     as_tibble(rownames = "variable") %>% 
     rename(LD1 = V1) %>% 
     mutate(LD1 = ifelse(variable %in% vars_flip, -1*LD1, LD1))
   
-  df_mv_loadings <- df_mv_loadings %>% 
-    left_join(df_clinical_acronyms, by = "variable")
+  # df_mv_loadings <- df_mv_loadings %>% 
+  #   left_join(df_clinical_acronyms, by = "variable")
   
   df_mv_loadings <- df_mv_loadings %>% 
-    mutate(variable = factor(variable, levels = variable[order(LD1)]),
-           acronym = factor(acronym, levels = acronym[order(LD1)]))
+    mutate(variable = factor(variable, levels = variable[order(LD1)]))
+  # ,
+  #          acronym = factor(acronym, levels = acronym[order(LD1)]))
   
   df_mv_loadings <- df_mv_loadings %>% 
     mutate(group = ifelse(LD1 >= 0, "synaptic", "chromatin"))
-
-
+  
+  
   lda_roc <- list_lda_syn_chrom_roc[[idx]]
   df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
                        fpr = 1-lda_roc$specificities,
@@ -764,7 +889,7 @@ for (i in 1:length(nk_seq)) {
     scale_x_discrete(labels = c("Chromatin", "Synaptic"), expand = expansion(add = 0.8)) + 
     scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
     scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
-                           values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                         values  = scales::rescale(c(0, 1), from = c(0, 1)),
                          limits  = c(0, 1),
                          breaks = c(0, 0.5, 1.0),
                          guide = guide_colourbar(barwidth = unit(15, "bigpts"),
@@ -787,12 +912,12 @@ for (i in 1:length(nk_seq)) {
       grid.force() %>% 
       getGrob("guides.3-3-3-3")
   }
-
+  
   plt_mv_scores <- plt_mv_scores + 
     theme(legend.position = "none",
           plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
-
-# plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
+  
+  # plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
   #   geom_vline(xintercept = 0) + 
   #   geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
   #   geom_point() +
@@ -804,20 +929,21 @@ for (i in 1:length(nk_seq)) {
   #        y = "Variable") + 
   #   theme_bw()
   
-    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = group)) +
+  plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = variable, col = group)) +
     geom_vline(xintercept = 0) + 
-    geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
-      geom_point() +
-      coord_cartesian(xlim = c(-0.5, 0.5)) + 
-      scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
-      scale_colour_manual(values = palette_binary) + 
-      labs(x = "Linear discriminant loadings",
-           y = "Clinical variable") + 
-      theme_bw() +
-      theme(legend.position = "none") +
-      theme(axis.title = element_text(size = 9),
-            axis.text = element_text(size = 8),
-            plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
+    # geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
+        geom_segment(mapping = aes(xend = 0, yend = variable)) + 
+    geom_point() +
+    coord_cartesian(xlim = c(-0.5, 0.5)) + 
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
+    scale_colour_manual(values = palette_binary) + 
+    labs(x = "Linear discriminant loadings",
+         y = "Clinical variable") + 
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title = element_text(size = 9),
+          axis.text = element_text(size = 8),
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
   
   plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
     annotate(geom = "segment", 
@@ -846,19 +972,19 @@ for (i in 1:length(nk_seq)) {
   plt_mv_title_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "grey85")),
                                               textGrob(label = plt_mv_title, 
                                                        gp = gpar(fontsize = 9))))
-
-
-plt_scores_height <- 150
-plt_roc_height <- 140
-plt_loadings_height <- 316
-panel_title_height <- 20
-panel_padding_height <- 10
-panel_heights <- c(panel_title_height, 
-                   plt_scores_height,
-                   panel_padding_height, 
-                   plt_roc_height,
-                   panel_padding_height,
-                   plt_loadings_height)
+  
+  
+  plt_scores_height <- 150
+  plt_roc_height <- 140
+  plt_loadings_height <- 316
+  panel_title_height <- 20
+  panel_padding_height <- 10
+  panel_heights <- c(panel_title_height, 
+                     plt_scores_height,
+                     panel_padding_height, 
+                     plt_roc_height,
+                     panel_padding_height,
+                     plt_loadings_height)
   panel_layout <- cbind(1:6)
   
   
@@ -947,7 +1073,7 @@ dev.off()
 
 
 ### Pathway grouping v2
- 
+
 
 ```{r}
 synaptic <- c("7-1", "7-7", "8-3", "9-1")
@@ -1068,8 +1194,8 @@ palette_binary <- c("synaptic" = "seagreen2",
 
 list_panel_grobs <- vector(mode = "list", length = length(nk_seq))
 for (i in 1:length(nk_seq)) {
-
-# i <- 1
+  
+  # i <- 1
   
   nki <- nk_seq[i]
   
@@ -1094,7 +1220,7 @@ for (i in 1:length(nk_seq)) {
     mutate(y = y,
            y_pred = lda_pred_y,
            y_pred_prob = lda_pred_prob) 
-
+  
   df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
     as_tibble(rownames = "variable") %>% 
     rename(LD1 = V1) %>% 
@@ -1109,8 +1235,8 @@ for (i in 1:length(nk_seq)) {
   
   df_mv_loadings <- df_mv_loadings %>% 
     mutate(group = ifelse(LD1 >= 0, "synaptic", "chromatin"))
-
-
+  
+  
   lda_roc <- list_lda_syn_chrom_roc[[idx]]
   df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
                        fpr = 1-lda_roc$specificities,
@@ -1140,7 +1266,7 @@ for (i in 1:length(nk_seq)) {
     scale_x_discrete(labels = c("Chromatin", "Synaptic"), expand = expansion(add = 0.8)) + 
     scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
     scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
-                           values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                         values  = scales::rescale(c(0, 1), from = c(0, 1)),
                          limits  = c(0, 1),
                          breaks = c(0, 0.5, 1.0),
                          guide = guide_colourbar(barwidth = unit(15, "bigpts"),
@@ -1163,12 +1289,12 @@ for (i in 1:length(nk_seq)) {
       grid.force() %>% 
       getGrob("guides.3-3-3-3")
   }
-
+  
   plt_mv_scores <- plt_mv_scores + 
     theme(legend.position = "none",
           plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
-
-# plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
+  
+  # plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
   #   geom_vline(xintercept = 0) + 
   #   geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
   #   geom_point() +
@@ -1180,20 +1306,20 @@ for (i in 1:length(nk_seq)) {
   #        y = "Variable") + 
   #   theme_bw()
   
-    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = group)) +
+  plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = group)) +
     geom_vline(xintercept = 0) + 
     geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
-      geom_point() +
-      coord_cartesian(xlim = c(-0.5, 0.5)) + 
-      scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
-      scale_colour_manual(values = palette_binary) + 
-      labs(x = "Linear discriminant loadings",
-           y = "Clinical variable") + 
-      theme_bw() +
-      theme(legend.position = "none") +
-      theme(axis.title = element_text(size = 9),
-            axis.text = element_text(size = 8),
-            plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
+    geom_point() +
+    coord_cartesian(xlim = c(-0.5, 0.5)) + 
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
+    scale_colour_manual(values = palette_binary) + 
+    labs(x = "Linear discriminant loadings",
+         y = "Clinical variable") + 
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title = element_text(size = 9),
+          axis.text = element_text(size = 8),
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
   
   plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
     annotate(geom = "segment", 
@@ -1222,19 +1348,19 @@ for (i in 1:length(nk_seq)) {
   plt_mv_title_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "grey85")),
                                               textGrob(label = plt_mv_title, 
                                                        gp = gpar(fontsize = 9))))
-
-
-plt_scores_height <- 150
-plt_roc_height <- 140
-plt_loadings_height <- 316
-panel_title_height <- 20
-panel_padding_height <- 10
-panel_heights <- c(panel_title_height, 
-                   plt_scores_height,
-                   panel_padding_height, 
-                   plt_roc_height,
-                   panel_padding_height,
-                   plt_loadings_height)
+  
+  
+  plt_scores_height <- 150
+  plt_roc_height <- 140
+  plt_loadings_height <- 316
+  panel_title_height <- 20
+  panel_padding_height <- 10
+  panel_heights <- c(panel_title_height, 
+                     plt_scores_height,
+                     panel_padding_height, 
+                     plt_roc_height,
+                     panel_padding_height,
+                     plt_loadings_height)
   panel_layout <- cbind(1:6)
   
   
@@ -1323,7 +1449,7 @@ dev.off()
 
 
 ### Pathway grouping v3
- 
+
 
 ```{r}
 synaptic <- c("7-1", "7-7", "8-3", "9-1")
@@ -1444,8 +1570,8 @@ palette_binary <- c("synaptic" = "seagreen2",
 
 list_panel_grobs <- vector(mode = "list", length = length(nk_seq))
 for (i in 1:length(nk_seq)) {
-
-# i <- 1
+  
+  # i <- 1
   
   nki <- nk_seq[i]
   
@@ -1470,7 +1596,7 @@ for (i in 1:length(nk_seq)) {
     mutate(y = y,
            y_pred = lda_pred_y,
            y_pred_prob = lda_pred_prob) 
-
+  
   df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
     as_tibble(rownames = "variable") %>% 
     rename(LD1 = V1) %>% 
@@ -1485,8 +1611,8 @@ for (i in 1:length(nk_seq)) {
   
   df_mv_loadings <- df_mv_loadings %>% 
     mutate(group = ifelse(LD1 >= 0, "synaptic", "chromatin"))
-
-
+  
+  
   lda_roc <- list_lda_syn_chrom_roc[[idx]]
   df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
                        fpr = 1-lda_roc$specificities,
@@ -1516,7 +1642,7 @@ for (i in 1:length(nk_seq)) {
     scale_x_discrete(labels = c("Chromatin", "Synaptic"), expand = expansion(add = 0.8)) + 
     scale_y_continuous(breaks = seq(-5, 5, by = 1)) + 
     scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
-                           values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                         values  = scales::rescale(c(0, 1), from = c(0, 1)),
                          limits  = c(0, 1),
                          breaks = c(0, 0.5, 1.0),
                          guide = guide_colourbar(barwidth = unit(15, "bigpts"),
@@ -1539,12 +1665,12 @@ for (i in 1:length(nk_seq)) {
       grid.force() %>% 
       getGrob("guides.3-3-3-3")
   }
-
+  
   plt_mv_scores <- plt_mv_scores + 
     theme(legend.position = "none",
           plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
-
-# plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
+  
+  # plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = LD1)) +
   #   geom_vline(xintercept = 0) + 
   #   geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
   #   geom_point() +
@@ -1556,20 +1682,20 @@ for (i in 1:length(nk_seq)) {
   #        y = "Variable") + 
   #   theme_bw()
   
-    plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = group)) +
+  plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = LD1, y = acronym, col = group)) +
     geom_vline(xintercept = 0) + 
     geom_segment(mapping = aes(xend = 0, yend = acronym)) + 
-      geom_point() +
-      coord_cartesian(xlim = c(-0.5, 0.5)) + 
-      scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
-      scale_colour_manual(values = palette_binary) + 
-      labs(x = "Linear discriminant loadings",
-           y = "Clinical variable") + 
-      theme_bw() +
-      theme(legend.position = "none") +
-      theme(axis.title = element_text(size = 9),
-            axis.text = element_text(size = 8),
-            plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
+    geom_point() +
+    coord_cartesian(xlim = c(-0.5, 0.5)) + 
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.25)) +
+    scale_colour_manual(values = palette_binary) + 
+    labs(x = "Linear discriminant loadings",
+         y = "Clinical variable") + 
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title = element_text(size = 9),
+          axis.text = element_text(size = 8),
+          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0)) 
   
   plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) + 
     annotate(geom = "segment", 
@@ -1598,19 +1724,19 @@ for (i in 1:length(nk_seq)) {
   plt_mv_title_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "grey85")),
                                               textGrob(label = plt_mv_title, 
                                                        gp = gpar(fontsize = 9))))
-
-
-plt_scores_height <- 150
-plt_roc_height <- 140
-plt_loadings_height <- 316
-panel_title_height <- 20
-panel_padding_height <- 10
-panel_heights <- c(panel_title_height, 
-                   plt_scores_height,
-                   panel_padding_height, 
-                   plt_roc_height,
-                   panel_padding_height,
-                   plt_loadings_height)
+  
+  
+  plt_scores_height <- 150
+  plt_roc_height <- 140
+  plt_loadings_height <- 316
+  panel_title_height <- 20
+  panel_padding_height <- 10
+  panel_heights <- c(panel_title_height, 
+                     plt_scores_height,
+                     panel_padding_height, 
+                     plt_roc_height,
+                     panel_padding_height,
+                     plt_loadings_height)
   panel_layout <- cbind(1:6)
   
   
