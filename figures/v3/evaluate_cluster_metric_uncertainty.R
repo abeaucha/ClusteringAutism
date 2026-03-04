@@ -1,5 +1,7 @@
 # Packages -------------------------------------------------------------------
 
+library(doParallel)
+
 # Environment variables ------------------------------------------------------
 
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
@@ -230,19 +232,20 @@ if (dataset == "MICe") {
 }
 
 
-pb <- txtProgressBar(max = B, style = 3)
-progress <- function(n) {
-  setTxtProgressBar(pb = pb, value = n)
-}
+# pb <- txtProgressBar(max = B, style = 3)
+# progress <- function(n) {
+#   setTxtProgressBar(pb = pb, value = n)
+# }
 
-cl <- makeSOCKcluster(nproc)
-registerDoSNOW(cl)
-opts <- list(progress = progress)
+cl <- makePSOCKcluster(nproc)
+registerDoParallel(cl)
+# cl <- makeSOCKcluster(nproc)
+# registerDoSNOW(cl)
+# opts <- list(progress = progress)
 
 list_snf_metrics <- foreach(
   i = 1:B,
-  .packages = c("tidyverse", "SNFtool"),
-  .options.snow = opts
+  .packages = c("tidyverse", "SNFtool")
 ) %dopar%
   {
     sample_snf_metrics(x = list_es, seed = i, size = size, replace = replace)
@@ -250,8 +253,7 @@ list_snf_metrics <- foreach(
 
 list_ARI <- foreach(
   i = 1:B,
-  .packages = c("tidyverse", "SNFtool"),
-  .options.snow = opts
+  .packages = c("tidyverse", "SNFtool")
 ) %dopar%
   {
     sample_ARI(
@@ -263,7 +265,7 @@ list_ARI <- foreach(
     )
   }
 
-close(pb)
+# close(pb)
 stopCluster(cl)
 
 df_snf_metrics <- bind_rows(list_snf_metrics, .id = "seed")
