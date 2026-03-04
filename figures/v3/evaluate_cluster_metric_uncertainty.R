@@ -135,10 +135,11 @@ sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, seed = NULL) {
 dataset <- "POND"
 # dataset <- "HBN"
 
-B <- 100
+B <- 500
 replace <- FALSE
-nproc <- 4
+nproc <- 32
 size <- 0.8
+
 
 
 if (dataset == "MICe") {
@@ -230,6 +231,6 @@ df_ARI <- bind_rows(list_ARI, .id = "seed")
 df_metrics <- inner_join(df_snf_metrics, df_ARI, by = c("seed", "nk"))
 
 outfile <- paste0("cluster_metrics_uncertainty_", dataset, ".csv")
-outfile <- file.path("figures/v3/resources", outfile)
+outfile <- file.path(PROJECTPATH, "figures/v3/resources", outfile)
 write_csv(df_metrics, outfile)
 
