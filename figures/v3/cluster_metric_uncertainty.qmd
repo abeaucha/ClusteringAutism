@@ -35,14 +35,13 @@ fig_theme <-   theme_bw() +
         axis.text = element_text(size = 8))
 ```
 
-
 # MICe clusters
 
 ```{r}
 file <- "resources/cluster_metrics_uncertainty_MICe.csv"
-df_metrics <- read_csv(file, show_col_types = FALSE)
+df_metrics_MICe <- read_csv(file, show_col_types = FALSE)
 
-df_metrics_summary <- df_metrics %>% 
+df_metrics_MICe_summary <- df_metrics_MICe %>% 
   group_by(nk) %>% 
   summarise(eigengap_mean = mean(eigengap), 
             eigengap_min = quantile(eigengap, prob = 0.025),
@@ -54,10 +53,10 @@ df_metrics_summary <- df_metrics %>%
 ```
 
 ```{r}
-plt_MICe_eigengap <- ggplot(df_metrics, aes(x = nk, y = eigengap)) + 
+plt_MICe_eigengap <- ggplot(df_metrics_MICe, aes(x = nk, y = eigengap)) + 
   geom_line(mapping = aes(group = factor(seed)),
             alpha = 0.03) + 
-  geom_pointrange(data = df_metrics_summary,
+  geom_pointrange(data = df_metrics_MICe_summary,
                   mapping = aes(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max),
                   col = "red", linewidth = 0.65) + 
   scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
@@ -67,19 +66,63 @@ plt_MICe_eigengap <- ggplot(df_metrics, aes(x = nk, y = eigengap)) +
        title = "MICe Eigengap Distributions") + 
   fig_theme
 
-plt_MICe_ARI <- ggplot(df_metrics, aes(x = nk, y = ARI)) + 
+plt_MICe_ARI <- ggplot(df_metrics_MICe, aes(x = nk, y = ARI)) + 
   geom_line(mapping = aes(group = factor(seed)),
             alpha = 0.04) + 
-  geom_pointrange(data = df_metrics_summary,
+  geom_pointrange(data = df_metrics_MICe_summary,
                   mapping = aes(y = ARI_mean, ymin = ARI_min, ymax = ARI_max),
                   col = "red", linewidth = 0.65) + 
+  coord_cartesian(ylim = c(0, 1)) + 
   scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
   scale_y_continuous(breaks = seq(-1, 1, by = 0.1)) +
   labs(x = "Cluster solution (K)",
        y = "Adjusted Rand Index",
        title = "MICe Rand Index Distributions") + 
   fig_theme
+```
 
+# POND+ clusters
+
+```{r}
+file <- "resources/cluster_metrics_uncertainty_POND.csv"
+df_metrics_POND <- read_csv(file, show_col_types = FALSE)
+
+df_metrics_POND_summary <- df_metrics_POND %>% 
+  group_by(nk) %>% 
+  summarise(eigengap_mean = mean(eigengap), 
+            eigengap_min = quantile(eigengap, prob = 0.025),
+            eigengap_max = quantile(eigengap, prob = 0.975),
+            ARI_mean = mean(ARI),
+            ARI_min = quantile(ARI, prob = 0.025),
+            ARI_max = quantile(ARI, prob = 0.975)) %>% 
+  ungroup() 
+
+plt_POND_eigengap <- ggplot(df_metrics_POND, aes(x = nk, y = eigengap)) + 
+  geom_line(mapping = aes(group = factor(seed)),
+            alpha = 0.025) + 
+  geom_pointrange(data = df_metrics_POND_summary,
+                  mapping = aes(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max),
+                  col = "red") + 
+  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
+  labs(x = "Cluster solution (K)",
+       y = "Spectral Clustering Eigengap",
+       title = "POND+ Eigengap Distributions") + 
+  fig_theme
+
+plt_POND_ARI <- ggplot(df_metrics_POND, aes(x = nk, y = ARI)) + 
+  geom_line(mapping = aes(group = factor(seed)),
+            alpha = 0.03) + 
+  geom_pointrange(data = df_metrics_POND_summary,
+                  mapping = aes(y = ARI_mean, ymin = ARI_min, ymax = ARI_max),
+                  col = "red") + 
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(-1, 1, by = 0.1)) +
+  labs(x = "Cluster solution (K)",
+       y = "Adjusted Rand Index",
+       title = "POND+ Rand Index Distributions") + 
+  fig_theme
 
 heights <- rep(1, 3)/3
 widths <- rep(1, 2)/2
@@ -87,7 +130,8 @@ layout <- matrix(1:6, ncol = 2, nrow = 3, byrow = TRUE)
 
 fig <- arrangeGrob(ggplotGrob(plt_MICe_eigengap),
                    ggplotGrob(plt_MICe_ARI),
-                   rectGrob(), rectGrob(),
+                   ggplotGrob(plt_POND_eigengap),
+                   ggplotGrob(plt_POND_ARI),
                    rectGrob(), rectGrob(),
                    layout_matrix = layout,
                    heights = unit(heights, "npc"),
@@ -103,56 +147,13 @@ dev.off()
 ```
 
 
-
-# POND+ clusters
-
-```{r}
-file <- "resources/cluster_metrics_uncertainty_POND.csv"
-df_metrics <- read_csv(file, show_col_types = FALSE)
-
-df_metrics_summary <- df_metrics %>% 
-  group_by(nk) %>% 
-  summarise(eigengap_mean = mean(eigengap), 
-            eigengap_min = quantile(eigengap, prob = 0.025),
-            eigengap_max = quantile(eigengap, prob = 0.975),
-            ARI_mean = mean(ARI),
-            ARI_min = quantile(ARI, prob = 0.025),
-            ARI_max = quantile(ARI, prob = 0.975)) %>% 
-  ungroup() 
-
-plt_POND_eigengap <- ggplot(df_metrics, aes(x = nk, y = eigengap)) + 
-  geom_line(mapping = aes(group = factor(seed)),
-            alpha = 0.04) + 
-  geom_pointrange(data = df_metrics_summary,
-                  mapping = aes(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max),
-                  col = "red") + 
-  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
-  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
-  labs(x = "Cluster solution (K)",
-       y = "Spectral Clustering Eigengap") + 
-  fig_theme
-
-plt_POND_ARI <- ggplot(df_metrics, aes(x = nk, y = ARI)) + 
-  geom_line(mapping = aes(group = factor(seed)),
-            alpha = 0.04) + 
-  geom_pointrange(data = df_metrics_summary,
-                  mapping = aes(y = ARI_mean, ymin = ARI_min, ymax = ARI_max),
-                  col = "red") + 
-  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
-  scale_y_continuous(breaks = seq(-1, 1, by = 0.1)) +
-  labs(x = "Cluster solution (K)",
-       y = "Adjusted Rand Index") + 
-  fig_theme
-```
-
-
 # HBN clusters
 
 ```{r}
 file <- "resources/cluster_metrics_uncertainty_HBN.csv"
-df_metrics <- read_csv(file, show_col_types = FALSE)
+df_metrics_HBN <- read_csv(file, show_col_types = FALSE)
 
-df_metrics_summary <- df_metrics %>% 
+df_metrics_HBN_summary <- df_metrics_HBN %>% 
   group_by(nk) %>% 
   summarise(eigengap_mean = mean(eigengap), 
             eigengap_min = quantile(eigengap, prob = 0.025),
@@ -161,31 +162,53 @@ df_metrics_summary <- df_metrics %>%
             ARI_min = quantile(ARI, prob = 0.025),
             ARI_max = quantile(ARI, prob = 0.975)) %>% 
   ungroup() 
-```
 
-```{r}
-plt_HBN_eigengap <- ggplot(df_metrics, aes(x = nk, y = eigengap)) + 
+plt_HBN_eigengap <- ggplot(df_metrics_HBN, aes(x = nk, y = eigengap)) + 
   geom_line(mapping = aes(group = factor(seed)),
             alpha = 0.04) + 
-  geom_pointrange(data = df_metrics_summary,
+  geom_pointrange(data = df_metrics_HBN_summary,
                   mapping = aes(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max),
                   col = "red") + 
   scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
   labs(x = "Cluster solution (K)",
-       y = "Spectral Clustering Eigengap") + 
+       y = "Spectral Clustering Eigengap",
+       title = "HBN Eigengap Distributions") + 
   fig_theme
 
-plt_HBN_ARI <- ggplot(df_metrics, aes(x = nk, y = ARI)) + 
+plt_HBN_ARI <- ggplot(df_metrics_HBN, aes(x = nk, y = ARI)) + 
   geom_line(mapping = aes(group = factor(seed)),
             alpha = 0.04) + 
-  geom_pointrange(data = df_metrics_summary,
+  geom_pointrange(data = df_metrics_HBN_summary,
                   mapping = aes(y = ARI_mean, ymin = ARI_min, ymax = ARI_max),
                   col = "red") + 
   scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
   scale_y_continuous(breaks = seq(-1, 1, by = 0.1)) +
   labs(x = "Cluster solution (K)",
-       y = "Adjusted Rand Index") + 
+       y = "Adjusted Rand Index",
+       title = "HBN Rand Index Distributions") + 
   fig_theme
-```
 
+
+heights <- rep(1, 3)/3
+widths <- rep(1, 2)/2
+layout <- matrix(1:6, ncol = 2, nrow = 3, byrow = TRUE)
+
+fig <- arrangeGrob(ggplotGrob(plt_MICe_eigengap),
+                   ggplotGrob(plt_MICe_ARI),
+                   ggplotGrob(plt_POND_eigengap),
+                   ggplotGrob(plt_POND_ARI),
+                   ggplotGrob(plt_HBN_eigengap),
+                   ggplotGrob(plt_HBN_ARI),
+                   layout_matrix = layout,
+                   heights = unit(heights, "npc"),
+                   widths = unit(widths, "npc"))
+
+outfile <- "cluster_metric_uncertainty.pdf"
+outfile <- file.path("resources", outfile)
+pdf(file = outfile,
+    width = unit(9, "in"),
+    height = unit(8, "in"))
+grid.draw(fig)
+dev.off()
+```
