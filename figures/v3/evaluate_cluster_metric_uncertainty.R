@@ -1,12 +1,18 @@
+#!/usr/bin/env Rscript
+
 # Packages -------------------------------------------------------------------
 
-library(doParallel)
+library(doSNOW)
+library(foreach)
+
 
 # Environment variables ------------------------------------------------------
 
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
 SRCPATH <- Sys.getenv("SRCPATH")
 
+cat("SLURM_CPUS_PER_TASK=", Sys.getenv("SLURM_CPUS_PER_TASK"), "\n")
+cat("SLURM_JOB_CPUS_PER_NODE=", Sys.getenv("SLURM_JOB_CPUS_PER_NODE"), "\n")
 
 # Functions ------------------------------------------------------------------
 
@@ -98,6 +104,7 @@ sample_snf_metrics <- function(x, size = 0.8, replace = FALSE, seed = NULL) {
   )
 
   metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
+  metrics$seed <- seed
 
   return(metrics)
 }
@@ -142,8 +149,11 @@ sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, seed = NULL) {
       x = clusters[[nk_col]],
       y = clusters_sampled[[nk_col]]
     )
+    # ARI <- rnorm(n = 1)
     df_ARI[[i, "ARI"]] <- ARI
   }
+
+  df_ARI$seed <- seed
 
   return(df_ARI)
 }
@@ -151,15 +161,18 @@ sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, seed = NULL) {
 
 # Main -----------------------------------------------------------------------
 
+args <- commandArgs(trailingOnly = TRUE)
+start <- as.integer(args[[1]]) # Starting seed
+end   <- as.integer(args[[2]]) # Ending seed
+nproc <- as.integer(args[[3]]) # Number of processors to use
+dataset <- args[[4]]           # Dataset name (e.g., "MICe", "POND", "HBN")
+out   <- args[[5]]             # Output file path
+
 # dataset <- "MICe"
-dataset <- "POND"
+# dataset <- "POND"
 # dataset <- "HBN"
-
-B <- 500
 replace <- FALSE
-nproc <- 32
 size <- 0.8
-
 
 if (dataset == "MICe") {
   params_id <- "107"
@@ -221,6 +234,7 @@ if (dataset == "MICe") {
 
 
 #
+print("Importing effect sizes...")
 if (dataset == "MICe") {
   list_es <- import_effect_sizes(
     path = es_dir,
@@ -232,46 +246,29 @@ if (dataset == "MICe") {
 }
 
 
-# pb <- txtProgressBar(max = B, style = 3)
-# progress <- function(n) {
-#   setTxtProgressBar(pb = pb, value = n)
-# }
+seeds <- start:end
 
-cl <- makePSOCKcluster(nproc)
-registerDoParallel(cl)
-# cl <- makeSOCKcluster(nproc)
-# registerDoSNOW(cl)
-# opts <- list(progress = progress)
+cl <- makeSOCKcluster(nproc)
+registerDoSNOW(cl)
+on.exit(stopCluster(cl), add = TRUE)
 
-list_snf_metrics <- foreach(
-  i = 1:B,
-  .packages = c("tidyverse", "SNFtool")
-) %dopar%
-  {
-    sample_snf_metrics(x = list_es, seed = i, size = size, replace = replace)
-  }
+  list_snf_metrics <- foreach(
+      i = seeds,
+      .packages = c("tidyverse", "SNFtool")
+    ) %dopar% {
+      sample_snf_metrics(x = list_es, seed = i, size = size, replace = replace)
+    }
 
-list_ARI <- foreach(
-  i = 1:B,
-  .packages = c("tidyverse", "SNFtool")
-) %dopar%
-  {
-    sample_ARI(
-      x = list_es,
-      clusters = clusters,
-      seed = i,
-      size = size,
-      replace = replace
-    )
-  }
+    list_ARI <- foreach(
+      i = seeds,
+      .packages = c("tidyverse", "SNFtool")
+    ) %dopar% {
+      sample_ARI(x = list_es, clusters = clusters, seed = i, size = size, replace = replace)
+    }
 
-# close(pb)
-stopCluster(cl)
 
-df_snf_metrics <- bind_rows(list_snf_metrics, .id = "seed")
-df_ARI <- bind_rows(list_ARI, .id = "seed")
-df_metrics <- inner_join(df_snf_metrics, df_ARI, by = c("seed", "nk"))
+df_snf_metrics <- bind_rows(list_snf_metrics)
+df_ARI <- bind_rows(list_ARI)
+df_metrics <- left_join(df_snf_metrics, df_ARI, by = c("nk", "seed"))
 
-outfile <- paste0("cluster_metrics_uncertainty_", dataset, ".csv")
-outfile <- file.path(PROJECTPATH, "figures/v3/resources", outfile)
-write_csv(df_metrics, outfile)
+write_csv(df_metrics, out)
