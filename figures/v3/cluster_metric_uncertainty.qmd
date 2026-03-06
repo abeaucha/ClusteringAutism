@@ -59,6 +59,7 @@ plt_MICe_eigengap <- ggplot(df_metrics_MICe, aes(x = nk, y = eigengap)) +
   geom_pointrange(data = df_metrics_MICe_summary,
                   mapping = aes(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max),
                   col = "red", linewidth = 0.65) + 
+  coord_cartesian(ylim = c(0, 0.22)) + 
   scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
   labs(x = "Cluster solution (K)",
@@ -84,8 +85,25 @@ plt_MICe_ARI <- ggplot(df_metrics_MICe, aes(x = nk, y = ARI)) +
 # POND+ clusters
 
 ```{r}
+combine_files <- FALSE
+if (combine_files) {
+  dataset <- "POND"
+  file_prefix <- "cluster_metrics_uncertainty"
+  file_rgx <- paste0(file_prefix, "_", dataset, "_[0-9]+.csv")
+  files <- str_subset(list.files("resources/"), file_rgx)
+  files <- file.path("resources", files)
+  
+  df_metrics_POND <- map_dfr(files, read_csv, show_col_types = FALSE)
+  
+  outfile <- paste(file_prefix, dataset, sep = "_")
+  outfile <- paste0(outfile, ".csv")
+  outfile <- file.path("resources", outfile)
+  write_csv(df_metrics_POND, outfile)
+}
+
 file <- "resources/cluster_metrics_uncertainty_POND.csv"
 df_metrics_POND <- read_csv(file, show_col_types = FALSE)
+
 
 df_metrics_POND_summary <- df_metrics_POND %>% 
   group_by(nk) %>% 
@@ -103,6 +121,7 @@ plt_POND_eigengap <- ggplot(df_metrics_POND, aes(x = nk, y = eigengap)) +
   geom_pointrange(data = df_metrics_POND_summary,
                   mapping = aes(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max),
                   col = "red") + 
+  coord_cartesian(ylim = c(0, 0.08)) + 
   scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
   labs(x = "Cluster solution (K)",
@@ -123,35 +142,32 @@ plt_POND_ARI <- ggplot(df_metrics_POND, aes(x = nk, y = ARI)) +
        y = "Adjusted Rand Index",
        title = "POND+ Rand Index Distributions") + 
   fig_theme
-
-heights <- rep(1, 3)/3
-widths <- rep(1, 2)/2
-layout <- matrix(1:6, ncol = 2, nrow = 3, byrow = TRUE)
-
-fig <- arrangeGrob(ggplotGrob(plt_MICe_eigengap),
-                   ggplotGrob(plt_MICe_ARI),
-                   ggplotGrob(plt_POND_eigengap),
-                   ggplotGrob(plt_POND_ARI),
-                   rectGrob(), rectGrob(),
-                   layout_matrix = layout,
-                   heights = unit(heights, "npc"),
-                   widths = unit(widths, "npc"))
-
-outfile <- "cluster_metric_uncertainty.pdf"
-outfile <- file.path("resources", outfile)
-pdf(file = outfile,
-    width = unit(9, "in"),
-    height = unit(8, "in"))
-grid.draw(fig)
-dev.off()
 ```
 
 
 # HBN clusters
 
 ```{r}
+combine_files <- FALSE
+if (combine_files) {
+  dataset <- "HBN"
+  file_prefix <- "cluster_metrics_uncertainty"
+  file_rgx <- paste0(file_prefix, "_", dataset, "_[0-9]+.csv")
+  files <- str_subset(list.files("resources/"), file_rgx)
+  files <- file.path("resources", files)
+  
+  df_metrics_HBN <- map_dfr(files, read_csv, show_col_types = FALSE)
+  
+  outfile <- paste(file_prefix, dataset, sep = "_")
+  outfile <- paste0(outfile, ".csv")
+  outfile <- file.path("resources", outfile)
+  write_csv(df_metrics_HBN, outfile)
+}
+
+
 file <- "resources/cluster_metrics_uncertainty_HBN.csv"
 df_metrics_HBN <- read_csv(file, show_col_types = FALSE)
+
 
 df_metrics_HBN_summary <- df_metrics_HBN %>% 
   group_by(nk) %>% 
@@ -165,10 +181,11 @@ df_metrics_HBN_summary <- df_metrics_HBN %>%
 
 plt_HBN_eigengap <- ggplot(df_metrics_HBN, aes(x = nk, y = eigengap)) + 
   geom_line(mapping = aes(group = factor(seed)),
-            alpha = 0.04) + 
+            alpha = 0.03) + 
   geom_pointrange(data = df_metrics_HBN_summary,
                   mapping = aes(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max),
                   col = "red") + 
+  coord_cartesian(ylim = c(0, 0.08)) + 
   scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
   labs(x = "Cluster solution (K)",
@@ -182,14 +199,19 @@ plt_HBN_ARI <- ggplot(df_metrics_HBN, aes(x = nk, y = ARI)) +
   geom_pointrange(data = df_metrics_HBN_summary,
                   mapping = aes(y = ARI_mean, ymin = ARI_min, ymax = ARI_max),
                   col = "red") + 
+  coord_cartesian(ylim = c(0, 1)) + 
   scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
   scale_y_continuous(breaks = seq(-1, 1, by = 0.1)) +
   labs(x = "Cluster solution (K)",
        y = "Adjusted Rand Index",
        title = "HBN Rand Index Distributions") + 
   fig_theme
+```
 
 
+# Figures
+
+```{r}
 heights <- rep(1, 3)/3
 widths <- rep(1, 2)/2
 layout <- matrix(1:6, ncol = 2, nrow = 3, byrow = TRUE)
@@ -212,3 +234,54 @@ pdf(file = outfile,
 grid.draw(fig)
 dev.off()
 ```
+
+
+
+```{r}
+df_metrics_summary_combined <- bind_rows(
+  df_metrics_MICe_summary %>% 
+    mutate(dataset = "MICe"),
+  df_metrics_POND_summary %>% 
+    mutate(dataset = "POND"),
+  df_metrics_HBN_summary %>% 
+    mutate(dataset = "HBN")
+)
+
+df_metrics_summary_combined <- df_metrics_summary_combined %>% 
+  mutate(dataset = factor(dataset, levels = c("MICe", "POND", "HBN")))
+
+df_metrics_summary_combined <- bind_rows(
+  df_metrics_summary_combined %>% 
+    select(nk, dataset, contains("eigengap")) %>% 
+    rename(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max) %>% 
+    mutate(metric = "Eigengap"),
+  df_metrics_summary_combined %>% 
+    select(nk, dataset, contains("ARI")) %>% 
+    rename(y = ARI_mean, ymin = ARI_min, ymax = ARI_max) %>% 
+    mutate(metric = "ARI")
+)
+
+df_metrics_summary_combined <- df_metrics_summary_combined %>% 
+  mutate(metric = factor(metric, levels = c("Eigengap", "ARI")))
+
+
+plt <- ggplot(df_metrics_summary_combined, 
+       aes(x = nk, y = y, ymin = ymin, ymax = ymax)) +
+  
+  # geom_ribbon(alpha = 0.2) +
+  geom_pointrange(size = 0.2) +
+  facet_grid(metric~dataset, scales = "free_y") +
+  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  labs(x = "Cluster solution (K)",
+       y = "Score") + 
+  fig_theme
+
+outfile <- "cluster_metric_uncertainty_2.pdf"
+outfile <- file.path("resources", outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(4, "in"))
+grid.draw(plt)
+dev.off()
+```
+
