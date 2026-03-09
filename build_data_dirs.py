@@ -35,5 +35,5 @@ directories = [
 
 # Create each directory
 for directory in directories:
-    os.makedirs(os.path.join("test", directory), exist_ok=True)
+    os.makedirs(directory, exist_ok=True)
     print(f"Created directory: {directory}")
