@@ -42,6 +42,15 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--jacobians',
+        nargs = '*',
+        type = str,
+        choices = ['absolute', 'relative'],
+        default=['absolute', 'relative'],
+        help = "Jacobian types to process."
+    )
+
+    parser.add_argument(
         '--nproc',
         type = int,
         default = 1,
@@ -63,7 +72,7 @@ def parse_args():
 
 # Modules ---------------------------------------------------------------------
 
-def main(imgdir, nproc = 1, verbose = True):
+def main(imgdir, jacobians = ['absolute', 'relative'], nproc = 1, verbose = True):
     """
     Execute the image pre-processing pipeline.
 
@@ -74,6 +83,8 @@ def main(imgdir, nproc = 1, verbose = True):
         Expects sub-directories 'absolute' and 'relative',
         each containing a subdirectory named 'smooth',
         which holds the images.
+    jacobians: list of str, default ['absolute', 'relative']
+        Jacobian types to process. Must be one or both of 'absolute' and 'relative'.
     nproc: int, default 1
         Number of processors to use. Executed in parallel when > 1.
     verbose: bool, default True
@@ -93,7 +104,6 @@ def main(imgdir, nproc = 1, verbose = True):
             OSError("Image directory not found: {}".format(imgdir))
 
     # Iterate over jacobians
-    jacobians = ('absolute', 'relative')
     for jac in jacobians:
 
         if verbose:
