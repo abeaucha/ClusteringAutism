@@ -9,6 +9,11 @@
 import os
 
 
+# Environment Variables ------------------------------------------------------
+
+PROJECTPATH = os.getenv("PROJECTPATH")
+
+
 # Main ------------------------------------------------------------------------
 
 # Define the directories to create
@@ -35,5 +40,5 @@ directories = [
 
 # Create each directory
 for directory in directories:
-    os.makedirs(directory, exist_ok=True)
+    os.makedirs(os.path.join(PROJECTPATH, directory), exist_ok=True)
     print(f"Created directory: {directory}")
