@@ -87,7 +87,7 @@ sample_effect_sizes <- function(x, size = 0.8, replace = FALSE, seed = NULL) {
 }
 
 
-sample_snf_metrics <- function(x, size = 0.8, replace = FALSE, seed = NULL) {
+sample_snf_metrics <- function(x, size = 0.8, replace = FALSE, nk_max = 10, seed = NULL) {
   x_sampled <- sample_effect_sizes(
     x = x,
     size = size,
@@ -103,14 +103,14 @@ sample_snf_metrics <- function(x, size = 0.8, replace = FALSE, seed = NULL) {
     outfile = NULL
   )
 
-  metrics <- estimate_cluster_metrics(W = W, NUMC = 2:10)
+  metrics <- estimate_cluster_metrics(W = W, NUMC = 2:nk_max)
   metrics$seed <- seed
 
   return(metrics)
 }
 
 
-sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, seed = NULL) {
+sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, nk_max = 10, seed = NULL) {
   x_sampled <- sample_effect_sizes(
     x = x,
     size = size,
@@ -126,7 +126,7 @@ sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, seed = NULL) {
     outfile = NULL
   )
 
-  clusters_sampled <- create_clusters(W = W_sampled, nk = 10)
+  clusters_sampled <- create_clusters(W = W_sampled, nk = nk_max)
   clusters_sampled <- clusters_sampled %>%
     arrange(ID)
 
@@ -140,7 +140,7 @@ sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, seed = NULL) {
   clusters <- clusters %>%
     column_to_rownames("ID")
 
-  df_ARI <- tibble(nk = 2:10, ARI = 0)
+  df_ARI <- tibble(nk = 2:nk_max, ARI = 0)
   for (i in 1:nrow(df_ARI)) {
     nki <- df_ARI[[i, "nk"]]
     nk_col <- paste0("nk", nki)
@@ -161,18 +161,25 @@ sample_ARI <- function(x, clusters, size = 0.8, replace = FALSE, seed = NULL) {
 
 # Main -----------------------------------------------------------------------
 
-args <- commandArgs(trailingOnly = TRUE)
-start <- as.integer(args[[1]]) # Starting seed
-end   <- as.integer(args[[2]]) # Ending seed
-nproc <- as.integer(args[[3]]) # Number of processors to use
-dataset <- args[[4]]           # Dataset name (e.g., "MICe", "POND", "HBN")
-out   <- args[[5]]             # Output file path
+# args <- commandArgs(trailingOnly = TRUE)
+# start <- as.integer(args[[1]]) # Starting seed
+# end   <- as.integer(args[[2]]) # Ending seed
+# nproc <- as.integer(args[[3]]) # Number of processors to use
+# dataset <- args[[4]]           # Dataset name (e.g., "MICe", "POND", "HBN")
+# out   <- args[[5]]             # Output file path
 
+
+start <- 1
+end <- 500
+nproc <- 8
+dataset <- "MICe"
+out <- "figures/v3/resources/cluster_metrics_uncertainty_MICe.csv"
 # dataset <- "MICe"
 # dataset <- "POND"
 # dataset <- "HBN"
 replace <- FALSE
 size <- 0.8
+nk_max <- floor(135*0.8)-1
 
 if (dataset == "MICe") {
   params_id <- "107"
@@ -246,6 +253,11 @@ if (dataset == "MICe") {
 }
 
 
+W <- similarity_network(x = list_es, metric = "correlation", K = 10,
+                        sigma = 0.5, t = 20, outfile = NULL)
+
+clusters <- create_clusters(W = W, nk = nk_max)
+
 seeds <- start:end
 
 cl <- makeSOCKcluster(nproc)
@@ -256,17 +268,19 @@ on.exit(stopCluster(cl), add = TRUE)
       i = seeds,
       .packages = c("tidyverse", "SNFtool")
     ) %dopar% {
-      sample_snf_metrics(x = list_es, seed = i, size = size, replace = replace)
+      sample_snf_metrics(x = list_es, seed = i, size = size, nk_max = nk_max, replace = replace)
     }
 
     list_ARI <- foreach(
       i = seeds,
       .packages = c("tidyverse", "SNFtool")
     ) %dopar% {
-      sample_ARI(x = list_es, clusters = clusters, seed = i, size = size, replace = replace)
+      sample_ARI(x = list_es, clusters = clusters, seed = i, size = size, nk_max = nk_max, replace = replace)
     }
 
 
+  
+    
 df_snf_metrics <- bind_rows(list_snf_metrics)
 df_ARI <- bind_rows(list_ARI)
 df_metrics <- left_join(df_snf_metrics, df_ARI, by = c("nk", "seed"))

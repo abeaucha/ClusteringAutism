@@ -60,7 +60,7 @@ plt_MICe_eigengap <- ggplot(df_metrics_MICe, aes(x = nk, y = eigengap)) +
                   mapping = aes(y = eigengap_mean, ymin = eigengap_min, ymax = eigengap_max),
                   col = "red", linewidth = 0.65) + 
   coord_cartesian(ylim = c(0, 0.22)) + 
-  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  scale_x_continuous(breaks = seq(0, 100, by = 1)) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.02)) + 
   labs(x = "Cluster solution (K)",
        y = "Spectral Clustering Eigengap",
@@ -74,12 +74,82 @@ plt_MICe_ARI <- ggplot(df_metrics_MICe, aes(x = nk, y = ARI)) +
                   mapping = aes(y = ARI_mean, ymin = ARI_min, ymax = ARI_max),
                   col = "red", linewidth = 0.65) + 
   coord_cartesian(ylim = c(0, 1)) + 
-  scale_x_continuous(breaks = seq(0, 20, by = 1)) + 
+  scale_x_continuous(breaks = seq(0, 100, by = 1)) + 
   scale_y_continuous(breaks = seq(-1, 1, by = 0.1)) +
   labs(x = "Cluster solution (K)",
        y = "Adjusted Rand Index",
        title = "MICe Rand Index Distributions") + 
   fig_theme
+```
+
+```{r}
+df_metrics_MICe %>% 
+  group_by(seed) %>% 
+  filter(eigengap == max(eigengap)) %>% 
+  ungroup() %>% 
+  group_by(nk) %>% 
+  count() %>% 
+  mutate(prop = n/500)
+```
+
+```{r}
+df_metrics_MICe_summary %>% 
+  select(nk, contains("ARI")) 
+```
+
+```{r}
+ggplot(df_metrics_MICe_summary, aes(x = nk, y = eigengap_mean)) + 
+  geom_ribbon(mapping = aes(ymin = eigengap_min, ymax = eigengap_max),
+                            alpha = 0.2) +
+  geom_line() + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 30, 40, 50, 75, 100)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) +
+  labs(x = "K",
+       y = "Eigengap") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+ggplot(df_metrics_MICe_summary, aes(x = nk, y = eigengap_mean)) + 
+  geom_ribbon(mapping = aes(ymin = eigengap_min, ymax = eigengap_max),
+                            alpha = 0.2) +
+  geom_line() + 
+  coord_cartesian(xlim = c(2, 20)) + 
+  scale_x_continuous(breaks = c(2:10, 15, 20)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) +
+  labs(x = "K",
+       y = "Eigengap") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+df_metrics_MICe_summary <- df_metrics_MICe_summary %>% 
+  mutate(eigengap_diff = eigengap_max - eigengap_min)
+
+ggplot(df_metrics_MICe_summary, aes(x = nk, y = eigengap_diff)) + 
+  geom_line() + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 30, 40, 50, 75, 100)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) +
+  labs(x = "K",
+       y = "Eigengap") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+
+```{r}
+ggplot(df_metrics_MICe_summary, aes(x = nk, y = ARI_mean)) + 
+  geom_ribbon(mapping = aes(ymin = ARI_min, ymax = ARI_max),
+                            alpha = 0.2) +
+  geom_line() + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 30, 40, 50, 75, 100)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  labs(x = "K",
+       y = "ARI") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
 ```
 
 # POND+ clusters
@@ -144,6 +214,15 @@ plt_POND_ARI <- ggplot(df_metrics_POND, aes(x = nk, y = ARI)) +
   fig_theme
 ```
 
+```{r}
+df_metrics_POND %>% 
+  group_by(seed) %>% 
+  filter(eigengap == max(eigengap)) %>% 
+  ungroup() %>% 
+  group_by(nk) %>% 
+  count() %>% 
+  mutate(prop = n/length(unique(df_metrics_POND$seed)))
+```
 
 # HBN clusters
 
@@ -208,6 +287,15 @@ plt_HBN_ARI <- ggplot(df_metrics_HBN, aes(x = nk, y = ARI)) +
   fig_theme
 ```
 
+```{r}
+df_metrics_HBN %>% 
+  group_by(seed) %>% 
+  filter(eigengap == max(eigengap)) %>% 
+  ungroup() %>% 
+  group_by(nk) %>% 
+  count() %>% 
+  mutate(prop = n/length(unique(df_metrics_HBN$seed)))
+```
 
 # Figures
 
@@ -234,8 +322,6 @@ pdf(file = outfile,
 grid.draw(fig)
 dev.off()
 ```
-
-
 
 ```{r}
 df_metrics_summary_combined <- bind_rows(
@@ -284,4 +370,3 @@ pdf(file = outfile,
 grid.draw(plt)
 dev.off()
 ```
-

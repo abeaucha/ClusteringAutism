@@ -1,0 +1,548 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+# library(tidyverse)
+# library(RMINC)
+# library(ggalluvial)
+# library(patchwork)
+# library(MRIcrotome)
+library(grid)
+library(gridExtra)
+library(rcartocolor)
+# library(RColorBrewer)
+# library(ggnewscale)
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r}
+params_id <- "107"
+
+pipeline_dir <- file.path(
+  PROJECTPATH,
+  "data/mouse/derivatives/v3/",
+  params_id
+)
+
+cluster_dir <- file.path(pipeline_dir, "clusters", "resolution_0.2")
+
+mask_file <- file.path(
+  PROJECTPATH,
+  "data/mouse/registration/reference_files",
+  "scanbase_second_level-nlin-3_mask_200um.mnc"
+)
+
+clusters_file <- file.path(cluster_dir, "clusters.csv")
+clusters <- read_csv(clusters_file, show_col_types = FALSE)
+
+affinity_file <- file.path(cluster_dir, "affinity.csv")
+df_affinity <- read_csv(affinity_file, show_col_types = FALSE)
+
+models <- colnames(df_affinity)
+df_affinity$model1 <- models
+```
+
+```{r}
+import_mouse_effect_sizes <- function(path, clusters, mask) {
+  list_es <- vector(mode = "list", length = 2)
+  names(list_es) <- c("absolute", "relative")
+  for (i in 1:length(list_es)) {
+    jacobians <- str_to_title(names(list_es)[i])
+
+    es_files <- clusters %>%
+      pull(ID) %>%
+      str_replace(".mnc", paste0("_ES_", jacobians, "_200.mnc"))
+
+    es_files <- file.path(path, es_files)
+
+    es_mat <- import_images(
+      imgfiles = es_files,
+      mask = mask,
+      output_format = "matrix",
+      version = "v2"
+    )
+
+    es_mat[is.nan(es_mat)] <- 0
+
+    rownames(es_mat) <- clusters$ID
+
+    list_es[[i]] <- es_mat
+  }
+
+  return(list_es)
+}
+
+es_dir <- file.path(pipeline_dir, "effect_sizes", "200")
+mask_file <- file.path(
+  PROJECTPATH,
+  "data/mouse/registration/reference_files",
+  "scanbase_second_level-nlin-3_mask_200um.mnc"
+)
+
+list_es <- import_mouse_effect_sizes(
+    path = es_dir,
+    clusters = clusters,
+    mask = mask_file
+  )
+
+W <- similarity_network(x = list_es, metric = "correlation", K = 10,
+                   sigma = 0.5, t = 20, outfile = NULL)
+
+df_clusters_all <- create_clusters(W = W, nk = nrow(W)-1)
+```
+
+```{r}
+metrics <- estimate_cluster_metrics(W = W, NUMC = 2:(nrow(W)-1))
+```
+
+```{r}
+ggplot(metrics, aes(x = nk, y = eigengap)) + 
+  geom_line() +
+  geom_smooth(span = 0.2) + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 50, 100)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.01)) +
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+degs <- rowSums(W)
+degs[degs == 0] <- .Machine$double.eps
+D <- diag(degs)
+L <- D - W
+Di <- diag(1/sqrt(degs))
+L <- Di %*% L %*% Di
+eigs <- eigen(L)
+
+eigs_order <- sort(eigs$values, index.return = T)$ix
+eigs$values <- eigs$values[eigs_order]
+eigs$vectors <- eigs$vectors[, eigs_order]
+
+df_eigenvals <- tibble(x = 2:length(eigs$values),
+                       lambda = eigs$values[2:length(eigs$values)])
+
+ggplot(df_eigenvals, aes(x = x, y = lambda)) + 
+  geom_point() +
+  labs(x = "K",
+       y = "Eigenvalue") + 
+  coord_cartesian(ylim = c(0.1, 0.8)) + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 50, 100)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+```{r}
+lambda <- rev(eig$values)
+
+U <- eig$vectors
+U <- U[,ncol(U):1]
+
+```
+
+```{r}
+W_scaled <- (W - min(W))/(max(W) - min(W))
+dist_mat <- as.dist(1 - W)
+hc <- hclust(dist_mat, method = "average")
+model_lvls <- hc$labels[hc$order]
+```
+
+```{r}
+# model_lvls <- clusters %>% 
+#   arrange(nk2) %>% 
+  # pull(ID) %>%
+#   str_remove(".mnc")
+
+nk <- 2
+cols <- c("ID", paste0("nk", nk))
+# clusters_nk <- clusters[,cols]
+clusters_nk <- df_clusters_many[,cols]
+colnames(clusters_nk) <- c("ID", "k")
+
+model_lvls <- clusters_nk %>%
+  mutate(spectral_coord = U[, nk+1]) %>%
+  arrange(k, spectral_coord) %>%
+  pull(ID) %>%
+  str_remove(".mnc")
+
+# model_lvls <- clusters_nk %>%
+#   mutate(U1 = U[,1],
+#          U2 = U[,2],
+#          U3 = U[,3],
+#          U4 = U[,4]) %>%
+#   arrange(U4) %>%
+#   pull(ID) %>%
+#   str_remove(".mnc")
+
+# model_lvls <- clusters %>%
+#   arrange(nk2, nk6) %>%
+# pull(ID) %>%
+#   str_remove(".mnc")
+
+# model_lvls <- sample(model_lvls, replace = FALSE)
+
+W_scaled <- (W - min(W))/(max(W) - min(W))
+# W_scaled <- W/max(W)
+dist_mat <- as.dist(1 - W)
+# dist_mat <- dist(W)
+hc <- hclust(dist_mat, method = "average")
+model_lvls <- hc$labels[hc$order]
+model_lvls <- str_remove(model_lvls, ".mnc")
+
+
+df_affinity_long <- df_affinity %>% 
+  pivot_longer(cols = -model1, names_to = "model2", values_to = "affinity") %>% 
+  mutate(model1 = factor(model1, levels = model_lvls),
+         model2 = factor(model2, levels = model_lvls))
+
+threshold <- 0.01
+df_affinity_long <- df_affinity_long %>%
+  mutate(affinity = ifelse(affinity > threshold, threshold, affinity))
+
+palette <- c("white", carto_pal(n = 9, name = "BurgYl"))
+
+plt <- ggplot(df_affinity_long, aes(x = model1, y = fct_rev(model2), fill = affinity)) +
+  geom_tile() +
+  coord_equal() + 
+  scale_fill_gradientn(colours = palette) + 
+  labs(x = "Mouse models",
+       y = "Mouse models") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+  
+outfile <- paste0("mouse_models_affinity_K_", nk, ".pdf")
+pdf(file = outfile, 
+    width = unit(8, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+nk <- 4
+model_lvls <- clusters %>% 
+  arrange(nk4) %>% 
+  # arrange(nk4, nk5, nk6) %>% 
+  pull(ID) %>% 
+  str_remove(".mnc")
+
+df_affinity_long <- df_affinity %>% 
+  pivot_longer(cols = -model1, names_to = "model2", values_to = "affinity") %>% 
+  mutate(model1 = factor(model1, levels = model_lvls),
+         model2 = factor(model2, levels = model_lvls))
+
+threshold <- 0.01
+df_affinity_long <- df_affinity_long %>% 
+  mutate(affinity = ifelse(affinity > threshold, threshold, affinity))
+
+ggplot(df_affinity_long, aes(x = model1, y = fct_rev(model2), fill = affinity)) +
+  geom_tile() +
+  coord_equal() + 
+  scale_fill_gradientn(colours = palette) + 
+  labs(x = "Mouse models",
+       y = "Mouse models") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+```
+
+```{r}
+nk <- 6
+model_lvls <- clusters %>% 
+  arrange(nk6) %>% 
+  pull(ID) %>% 
+  str_remove(".mnc")
+
+df_affinity_long <- df_affinity %>% 
+  pivot_longer(cols = -model1, names_to = "model2", values_to = "affinity") %>% 
+  mutate(model1 = factor(model1, levels = model_lvls),
+         model2 = factor(model2, levels = model_lvls))
+
+threshold <- 0.01
+df_affinity_long <- df_affinity_long %>% 
+  mutate(affinity = ifelse(affinity > threshold, threshold, affinity))
+
+plt <- ggplot(df_affinity_long, aes(x = model1, y = fct_rev(model2), fill = affinity)) +
+  geom_tile() +
+  coord_equal() + 
+  scale_fill_gradientn(colours = palette) + 
+  labs(x = "Mouse models",
+       y = "Mouse models") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+
+outfile <- "mouse_models_affinity_K_6.pdf"
+pdf(file = outfile, 
+    width = unit(8, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+nk <- 8
+model_lvls <- clusters %>% 
+  arrange(nk8, nk10) %>% 
+  pull(ID) %>% 
+  str_remove(".mnc")
+
+df_affinity_long <- df_affinity %>% 
+  pivot_longer(cols = -model1, names_to = "model2", values_to = "affinity") %>% 
+  mutate(model1 = factor(model1, levels = model_lvls),
+         model2 = factor(model2, levels = model_lvls))
+
+threshold <- 0.01
+df_affinity_long <- df_affinity_long %>% 
+  mutate(affinity = ifelse(affinity > threshold, threshold, affinity))
+
+plt <- ggplot(df_affinity_long, aes(x = model1, y = fct_rev(model2), fill = affinity)) +
+  geom_tile() +
+  coord_equal() + 
+  scale_fill_gradientn(colours = palette) + 
+  labs(x = "Mouse models",
+       y = "Mouse models") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+outfile <- "mouse_models_affinity_K_8.pdf"
+pdf(file = outfile, 
+    width = unit(8, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+nk <- 10
+model_lvls <- clusters %>% 
+  arrange(nk10) %>% 
+  pull(ID) %>% 
+  str_remove(".mnc")
+
+df_affinity_long <- df_affinity %>% 
+  pivot_longer(cols = -model1, names_to = "model2", values_to = "affinity") %>% 
+  mutate(model1 = factor(model1, levels = model_lvls),
+         model2 = factor(model2, levels = model_lvls))
+
+threshold <- 0.01
+df_affinity_long <- df_affinity_long %>% 
+  mutate(affinity = ifelse(affinity > threshold, threshold, affinity))
+
+plt <- ggplot(df_affinity_long, aes(x = model1, y = fct_rev(model2), fill = affinity)) +
+  geom_tile() +
+  coord_equal() + 
+  scale_fill_gradientn(colours = palette) + 
+  labs(x = "Mouse models",
+       y = "Mouse models") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+outfile <- "mouse_models_affinity_K_10.pdf"
+pdf(file = outfile, 
+    width = unit(8, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+mat_affinity <- df_affinity %>% 
+  column_to_rownames("model1") %>% 
+  as.matrix()
+
+mat_affinity[mat_affinity > threshold] <- threshold
+
+pheatmap_affinity_out <- pheatmap(mat_affinity, silent = TRUE)
+
+models_hc_labels <- pheatmap_affinity_out$tree_row$labels
+models_hc_order <- pheatmap_affinity_out$tree_row$order
+
+models_hc_lvls <- models_hc_labels[models_hc_order]
+
+df_affinity_long <- df_affinity_long %>% 
+  mutate(affinity = ifelse(affinity > threshold, threshold, affinity)) %>% 
+  mutate(model1 = factor(model1, levels = models_hc_lvls),
+         model2 = factor(model2, levels = models_hc_lvls))
+
+plt <- ggplot(df_affinity_long, aes(x = model1, y = fct_rev(model2), fill = affinity)) +
+  geom_tile() +
+  coord_equal() + 
+  scale_fill_gradientn(colours = palette) + 
+  labs(x = "Mouse models",
+       y = "Mouse models",
+       fill = "Affinity") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+outfile <- "mouse_models_affinity_clustered.pdf"
+pdf(file = outfile, 
+    width = unit(8, "in"),
+    height = unit(6, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+df_model_grid <- expand_grid(model1 = models,
+                             model2 = models)
+
+# clusters_tmp <- clusters %>% 
+  # mutate(ID = str_remove(ID, ".mnc"))
+clusters_tmp <- df_clusters_many %>% 
+  mutate(ID = str_remove(ID, ".mnc"))
+
+nk_seq <- 2:50
+# nk_seq <- 2:10
+
+adj_array <- array(data = FALSE, dim = c(length(models), length(models), length(nk_seq)))
+
+for (i in 1:length(nk_seq)) {
+  
+  cols <- c("ID", paste0("nk", nk_seq[i]))
+  clusters_tmp_nk <- clusters_tmp[,cols] 
+  colnames(clusters_tmp_nk) <- c("ID", "k")
+  
+  df_model_adjacency <- df_model_grid %>% 
+    left_join(clusters_tmp_nk, by = c("model1" = "ID")) %>% 
+    rename(k1 = k) %>% 
+    left_join(clusters_tmp_nk, by = c("model2" = "ID")) %>% 
+    rename(k2 = k) %>% 
+    mutate(adjacency = k1 == k2) %>% 
+    select(model1, model2, adjacency)
+  
+  mat_adj <- df_model_adjacency %>% 
+    pivot_wider(id_cols = model1,
+                names_from = model2, 
+                values_from = adjacency) %>% 
+    column_to_rownames("model1") %>% 
+    as.matrix()
+  
+  adj_array[1:nrow(mat_adj),1:ncol(mat_adj),i] <- mat_adj
+  
+}
+```
+
+```{r, fig.height = 10, fig.width = 10}
+mat_adj_full <- apply(adj_array[,,1:9], c(1, 2), sum)
+colnames(mat_adj_full) <- models
+rownames(mat_adj_full) <- models
+
+df_adj_full <- mat_adj_full %>% 
+  as_tibble(rownames = "model1")  %>% 
+  pivot_longer(cols = -model1, names_to = "model2", values_to = "adjacency")# %>% 
+ # mutate(model1 = factor(model1, levels = model_lvls),
+ #        model2 = factor(model2, levels = model_lvls))
+
+
+library(pheatmap)
+
+kcut <- 7
+out <- pheatmap(mat_adj_full, silent = FALSE, cutree_rows = kcut, cutree_cols = kcut)
+```
+
+```{r}
+models_hc_labels <- out$tree_row$labels
+models_hc_order <- out$tree_row$order
+
+models_hc_lvls <- models_hc_labels[models_hc_order]
+
+
+df_adj_full_hc <- df_adj_full %>% 
+  mutate(model1 = factor(model1, levels = models_hc_lvls),
+         model2 = factor(model2, levels = models_hc_lvls))
+
+plt <- ggplot(df_adj_full_hc, aes(x = model1, y = fct_rev(model2), fill = adjacency)) +
+  geom_tile() +
+  coord_equal() + 
+  scale_x_discrete(position = "top") +
+  # scale_y_discrete(sec.axis = dup_axis()) + 
+  scale_fill_gradientn(colours = palette, limits = c(0, 9),
+                       breaks = seq(1, 9, by = 2)) +
+    # scale_fill_gradientn(colours = palette, limits = c(0, 50)) +
+  labs(x = "Mouse models",
+       y = "Mouse models") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(size = 5, angle = 90, hjust = 0),
+        axis.text.y = element_text(size = 5),
+        axis.ticks.x = element_blank())
+
+outfile <- "mouse_model_adjacency.pdf"
+pdf(file = outfile,
+    width = unit(12, "in"),
+    height = unit(10, "in"))
+print(plt)
+dev.off()
+```
+
+```{r}
+nk_subset <- seq(10, 50, by = 10)
+
+for (i in 1:length(nk_subset)) {
+
+mat_adj_full <- apply(adj_array[,,1:(nk_subset[i]-1)], c(1, 2), sum)
+colnames(mat_adj_full) <- models
+rownames(mat_adj_full) <- models
+
+df_adj_full <- mat_adj_full %>% 
+  as_tibble(rownames = "model1")  %>% 
+  pivot_longer(cols = -model1, names_to = "model2", values_to = "adjacency")# %>% 
+
+df_adj_full_hc <- df_adj_full %>% 
+  mutate(model1 = factor(model1, levels = models_hc_lvls),
+         model2 = factor(model2, levels = models_hc_lvls))
+
+plt <- ggplot(df_adj_full_hc, aes(x = model1, y = fct_rev(model2), fill = adjacency)) +
+  geom_tile() +
+  coord_equal() + 
+  scale_x_discrete(position = "top") +
+  scale_fill_gradientn(colours = palette, limits = c(0, nk_subset[i]-1)) +
+  labs(x = "Mouse models",
+       y = "Mouse models") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(size = 5, angle = 90, hjust = 0),
+        axis.text.y = element_text(size = 5),
+        axis.ticks.x = element_blank())
+
+outfile <- paste0("mouse_model_adjacency_nk_", nk_subset[i], ".pdf")
+pdf(file = outfile,
+    width = unit(12, "in"),
+    height = unit(10, "in"))
+print(plt)
+dev.off()
+
+}
+```
+
+```{r}
+mat <- matrix(rnorm(5*5), 5, 5)
+colnames(mat) <- paste0("X", 1:5)
+rownames(mat) <- colnames(mat)
+tmp <- mat %>% 
+  as_tibble() %>% 
+  mutate(V1 = 1:5) %>% 
+  pivot_longer(cols = -V1, names_to = "V2", values_to = "y") %>% 
+  mutate(V2 = as.numeric(str_remove(V2, "X")))
+
+ggplot(tmp, aes(x = V1, y = V2, fill = y)) + 
+  geom_tile() +
+  scale_y_continuous(sec.axis = dup_axis())
+```
