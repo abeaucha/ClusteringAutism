@@ -35,7 +35,7 @@ source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r}
-outfile_prefix <- "figure2"
+outfile_prefix <- "figure2_dev"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -172,6 +172,28 @@ for (i in 1:length(list_similarity)) {
   list_similarity[[i]] <- df_matches
   
 }
+```
+
+
+```{r}
+matches_pond <- list_similarity$POND %>% 
+  filter(match) %>% 
+  select(mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  distinct() %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  pull(mouse_cluster_id)
+
+matches_hbn <- list_similarity$HBN %>% 
+  filter(match) %>% 
+  select(mouse_cluster_id, mouse_nk, mouse_k) %>% 
+  distinct() %>% 
+  arrange(mouse_nk, mouse_k) %>% 
+  pull(mouse_cluster_id)
+
+matches_both <- intersect(matches_pond, matches_hbn)
+
+matches_both
+length(matches_both)
 ```
 
 
@@ -326,289 +348,6 @@ plt_mouse_sankey
 ```
 
 
-
-# Demographics
-
-```{r}
-list_similarity$HBN %>% 
-  filter(mouse_nk %in% nk_subset, match) %>% 
-  arrange(mouse_nk, mouse_k)
-```
-
-
-```{r}
-list_similarity$POND %>% 
-  filter(mouse_cluster_id == "8-6", match)
-```
-
-
-```{r}
-list_similarity$HBN %>% 
-  filter(mouse_cluster_id == "8-6", match)
-```
-
-
-```{r}
-list_matches <- list(
-  "POND" = tibble(mouse_cluster_id = c("2-1", "2-2", "6-1", "6-4", "6-5", "8-1", "8-2", "8-5", "8-6"),
-                  human_cluster_id = c("3-3", "2-1", "7-2", "6-2", "7-1", "9-5", "8-7", "8-4", "8-2")),
-  "HBN" = tibble(mouse_cluster_id = c("2-1", "2-2", "6-1", "6-4", "6-5", "8-1", "8-2", "8-3", "8-4", "8-5", "8-6"),
-                 human_cluster_id = c("3-3", "2-2", "5-2", "6-1", "5-3", "9-2", "8-3", "9-8", "7-2", "7-3", "8-2"))
-)
-
-```
-
-
-```{r}
-# Human registration directory
-human_registration_dir <- file.path(PROJECTPATH, "data/human/registration/v3")
-
-# Import human demographics data
-demographics <- file.path(human_registration_dir, "subject_info", "demographics.csv")
-demographics <- read_csv(demographics, show_col_types = FALSE)
-
-# Filter for participants 
-# demographics <- demographics %>%
-#   filter(!is.na(DX),
-#          !is.na(Age),
-#          !is.na(Sex),
-#          !is.na(Site),
-#          !is.na(Scanner))
-
-# Redefine diagnostic categories
-list_diagnoses <- list(
-  "POND" = tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD",
-                         "Anxiety", "Sub-threshold ADHD",
-                         "Intellectual Disability only", 
-                         "Tourette Syndrome", "Other", "Fragile X"),
-                  DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", 
-                             "ADHD", "Other", "Other", "Other", "Other")),
-  "HBN" = tibble(DX = c("ASD", "OCD", "ADHD", "Tourette Syndrome", "ID"),
-                 DX_new = c("ASD", "OCD", "ADHD", "Other", "Other"))
-)
-
-cluster_ids <- list_human_clusters_long[[1]] %>% 
-  filter(nk %in% nk_subset) %>% 
-  arrange(nk, k) %>% 
-  pull(cluster_id) %>% 
-  unique()
-
-# Diagnostic category levels
-dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
-
-# Full grid of cluster and DX
-# dx_grid <- expand_grid(DX_new = dx_lvls,
-#                        cluster_id = cluster_ids)  %>% 
-#   separate(col = "cluster_id", into = c("nk", "k"), 
-#            sep = "-", remove = FALSE) %>% 
-#   mutate(nk = as.numeric(nk), k = as.numeric(k))
-
-dx_grid <- tibble(DX_new = dx_lvls)
-```
-
-```{r}
-df_matches <- df_cluster_groups_matches %>% 
-  filter(nk %in% nk_subset) %>% 
-  left_join(list_matches[["POND"]], by = "mouse_cluster_id") %>% 
-  rename(POND = human_cluster_id) %>% 
-  left_join(list_matches[["HBN"]], by = "mouse_cluster_id") %>% 
-  rename(HBN = human_cluster_id) %>% 
-  arrange(nk, k)
-
-palette_matches <- c("A" = "springgreen4",
-                     "B" = "sienna2",
-                     "C" = "seagreen2",
-                     "D" = "darkorchid1")
-```
-
-
-```{r}
-list_plt_params <- list(
-  "POND" = list(ylim = c(0, 0.8),
-                ybreaks = seq(0, 0.8, by = 0.2),
-                bar_widths = c(0.85, 0.8, 0.7)),
-  "HBN" = list(ylim = c(0, 1.0),
-               ybreaks = seq(0, 1.0, by = 0.2),
-               bar_widths = c(0.85, 0.8, 0.7))
-)
-
-list_axis_grobs <- vector(mode = "list", length = length(human_datasets))
-names(list_axis_grobs) <- human_datasets
-
-plt_theme <- theme_bw() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        axis.ticks = element_blank(),
-        axis.text = element_blank(),
-        axis.title = element_blank(),
-        plot.margin = margin(t = 0, b = 0))
-
-list_dx_grobs <- vector(mode = "list", length = length(human_datasets))
-names(list_dx_grobs) <- human_datasets
-for (dataset in human_datasets) {
-  
-  list_dx_grobs[[dataset]] <- vector(mode = "list", length = length(nk_subset)) 
-  names(list_dx_grobs[[dataset]]) <- nk_subset
-  for (i in 1:length(nk_subset)) {
-    
-    
-    df_matches_nk <- df_matches %>% 
-      filter(nk == nk_subset[i])
-    list_dx_grobs[[dataset]][[i]] <- vector(mode = "list", length = nrow(df_matches_nk))
-    for (r in 1:nrow(df_matches_nk)) {
-      
-      human_match_id <- df_matches_nk[[r, dataset]]
-      
-      if (!is.na(human_match_id)) {
-        
-        df_dx_counts <- list_human_clusters_long[[dataset]] %>% 
-          filter(cluster_id == human_match_id) %>% 
-          left_join(select(demographics, ID = file, DX), by = "ID") %>% 
-          left_join(list_diagnoses[[dataset]], by = "DX") %>% 
-          group_by(DX_new) %>% 
-                    summarise(n_dx = n(),
-                    prop_dx = n_dx/nrow(.)) %>% 
-          ungroup() %>% 
-          right_join(dx_grid, by = c("DX_new")) %>% 
-          mutate(n_dx = ifelse(is.na(n_dx), 0, n_dx),
-                 prop_dx = ifelse(is.na(prop_dx), 0, prop_dx),
-                 DX_new = factor(DX_new, levels = dx_lvls))
-        
-        # ggplot(df_dx_counts, aes(x = DX_new, y = n_dx)) + 
-        #   # annotate(geom = "rect",
-        #   #          xmin = 0, xmax = 5, ymin = 0, ymax = 300, 
-        #   #          fill = palette_matches[[df_matches_nk[[r, "group"]]]],
-        #   #          alpha = 0.6) + 
-        #   geom_col(col = "grey45", fill = "seashell1") +
-        #   labs(x = NULL) + 
-        #   theme_bw() +
-        #   theme(panel.background = element_rect(fill = palette_matches[[df_matches_nk[[r, "group"]]]]),
-        #         panel.grid.major.x = element_blank(),
-        #         panel.grid.minor.x = element_blank())
-        
-        
-        plt_dx <- ggplot(df_dx_counts, aes(x = DX_new, y = prop_dx)) + 
-          geom_col(col = "grey45", 
-                   fill = palette_matches[[df_matches_nk[[r, "group"]]]],
-                   width = list_plt_params[[dataset]][["bar_widths"]][[i]]) +
-          coord_cartesian(ylim = list_plt_params[[dataset]][["ylim"]]) +
-          scale_y_continuous(breaks = list_plt_params[[dataset]][["ybreaks"]]) +
-          theme(plot.margin = margin(t = 0, b = 0))
-          # axis.text.y = element_text(size = 7))
-        
-        if (i == 1 & r == 1) {
-          list_axis_grobs[[dataset]] <- getGrob(grid.force(ggplotGrob(plt_dx)), "axis-l.9-6-9-6")
-        }
-
-      } else {
-        
-        plt_dx <- ggplot(tibble(x = factor(dx_lvls, levels = dx_lvls)), 
-                         aes(x = x, y = 0)) + 
-          geom_col() +
-          coord_cartesian(ylim = list_plt_params[[dataset]][["ylim"]]) + 
-          scale_y_continuous(breaks = list_plt_params[[dataset]][["ybreaks"]]) +
-          theme(plot.margin = margin(t = 0, b = 0))
-          # theme(panel.grid.major.x = element_blank(),
-          #       panel.grid.minor.x = element_blank(),
-          #       axis.ticks = element_line(colour = "white"),
-          #       axis.title = element_text(colour = "white"),
-          #       axis.text.x = element_text(angle = 45, hjust = 1, size = 7, colour = "white"),
-          #       axis.ticks.y = element_blank(),
-          #       axis.text.y = element_blank(),
-          #       plot.margin = margin(t = 2))
-        
-      }
-      
-        plt_dx <- plt_dx + 
-          plt_theme
-      
-        list_dx_grobs[[dataset]][[i]][[r]] <- ggplotGrob(plt_dx)
-        
-    }
-  }
-}
-
-list_dx_grobs_nk <- vector(mode = "list", length = length(human_datasets))
-names(list_dx_grobs_nk) <- human_datasets
-for (dataset in human_datasets) {
-  list_dx_grobs_nk[[dataset]] <- map(.x = list_dx_grobs[[dataset]], 
-                                     .f = function(x) {
-                                       arrangeGrob(grobs = x, layout_matrix = rbind(1:length(x)))
-                                     } )
-  
-}
-```
-
-
-```{r}
-dx_yaxis_width <- 40
-dx_padding_width <- 15
-dx_border_width <- 10
-dx_panel_tot_width <- fig_width - 2*dx_padding_width - dx_yaxis_width - dx_border_width
-dx_panel_width <- dx_panel_tot_width/3
-
-dx_widths <- c(dx_yaxis_width, dx_panel_width, dx_padding_width, dx_panel_width, dx_padding_width, dx_panel_width, dx_border_width)
-
-dx_heights <- c(80, 30, 80)
-
-dx_layout <- cbind(rbind(1:6, 7, 9:14), 8)
-
-dx_grobs <- arrangeGrob(list_axis_grobs$POND, 
-                        list_dx_grobs_nk$POND$`2`,
-                        zeroGrob(),
-                        list_dx_grobs_nk$POND$`6`,
-                        zeroGrob(),
-                        list_dx_grobs_nk$POND$`8`,
-                        zeroGrob(), # Horizontal padding between datasets
-                        zeroGrob(), # Right border
-                        list_axis_grobs$HBN, 
-                        list_dx_grobs_nk$HBN$`2`,
-                        zeroGrob(),
-                        list_dx_grobs_nk$HBN$`6`,
-                        zeroGrob(),
-                        list_dx_grobs_nk$HBN$`8`,
-                        layout_matrix = dx_layout,
-                        widths = unit(dx_widths, "bigpts"),
-                        heights = unit(dx_heights, "bigpts"))
-```
-
-
-```{r}
-dx_title_x <- c(48, 241, 433)
-list_dx_title_grobs <- list(
-  "POND" = textGrob(label = "POND+ diagnoses",
-                    x = unit(dx_title_x, "bigpts"),
-                    y = unit(fig_height - 495, "bigpts"),
-                    just = "left", gp = gpar(fontsize = 11)),
-  "HBN" = textGrob(label = "HBN diagnoses",
-                    x = unit(dx_title_x, "bigpts"),
-                    y = unit(fig_height - 605, "bigpts"),
-                   just = "left", gp = gpar(fontsize = 11))
-)
-
-
-dx_label_x <- c(50, 69, 94, 114)
-list_dx_label_grobs <- list(
-  "POND" = textGrob(label = c("ASD", "ADHD", "OCD", "Other"),
-                    x = unit(dx_label_x, "bigpts"), 
-                    y = unit(fig_height - 589, "bigpts"),
-                    just = "left", gp = gpar(fontsize = 8)),
-  "HBN" = textGrob(label = c("ASD", "ADHD", "OCD", "Other"),
-                   x = unit(dx_label_x, "bigpts"),
-                   y = unit(fig_height - 698, "bigpts"), 
-                   just = "left", gp = gpar(fontsize = 8))
-)
-
-dx_yaxis <- textGrob(label = "Proportion per cluster",
-                     x = unit(15, "bigpts"),
-                     y = unit(fig_height - 605, "bigpts"),
-                     rot = 90,
-                     gp = gpar(fontsize = 11))
-```
-
-
-
-
 # Neuroanatomy
 
 ## Mouse slices
@@ -752,6 +491,16 @@ human_slc <- list(
   "2" = c(66, 66),
   "6" = c(66, NA, NA, 66, 66, NA),
   "8" = c(66, 66, 66, 66, 66, 66, NA, NA)
+)
+
+```
+
+```{r}
+list_matches <- list(
+  "POND" = tibble(mouse_cluster_id = c("2-1", "2-2", "6-1", "6-4", "6-5", "8-1", "8-2", "8-5", "8-6"),
+                  human_cluster_id = c("3-3", "2-1", "7-2", "6-2", "7-1", "9-5", "8-7", "8-4", "8-2")),
+  "HBN" = tibble(mouse_cluster_id = c("2-1", "2-2", "6-1", "6-4", "6-5", "8-1", "8-2", "8-3", "8-4", "8-5", "8-6"),
+                 human_cluster_id = c("3-3", "2-2", "5-2", "6-1", "5-3", "9-2", "8-3", "9-8", "7-2", "7-3", "8-2"))
 )
 
 ```
@@ -929,14 +678,13 @@ for (i in 1:length(list_ss_dims)) {
 list_vp_params <- list(
   # K = 2
   list(x = 115,
-       y = fig_height - c(170, 375)),
+       y = sankey_height - c(170, 375)),
   # K = 6
   list(x = 324,
-       y = fig_height - c(102, 156, 205, 248, 308, 410)),
+       y = sankey_height - c(102, 156, 205, 248, 308, 410)),
   # K = 8
   list(x = 533,
-       # y = fig_height - (90 + 50*0:7)
-       y = fig_height - c(102, 146, 200, 255, 297, 340, 390, 445))
+       y = sankey_height - c(102, 146, 200, 255, 297, 340, 390, 445))
 )
 
 list_ss_labels_params <- vector(mode = "list", length = length(list_vp_params))
@@ -996,12 +744,11 @@ for (i in 1:length(nk_subset)) {
 }
 ```
 
-
 ```{r}
 neuro_legend_width <- 130
 neuro_legend_height <- 40
 neuro_legend_x <- 115
-neuro_legend_y <- 570
+neuro_legend_y <- 570 - 307
 
 neuro_legend_vp <- viewport(x = unit(neuro_legend_x, "bigpts"),
                             y = unit(neuro_legend_y, "bigpts"),
@@ -1046,37 +793,20 @@ neuro_legend_grob <- gTree(children = gList(neuro_legend_pos_raster,
 ```
 
 ```{r}
-panel_padding_height <- 20
 sankey_height <- sum(sankey_heights)
-dx_height <- sum(dx_heights)
-fig_base_heights <- c(sankey_height, panel_padding_height, dx_height)
-
-empty_height <- fig_height - sum(fig_base_heights)
-# empty_height <- 20
-
+fig_base_heights <- sankey_height
 fig_base_widths <- c(8, fig_width - 8)
-fig_base_heights <- c(fig_base_heights, empty_height)
 
-fig_base_layout <- rbind(c(01, 01),
-                         c(02, 02),
-                         c(03, 04),
-                         c(05, 05))
+fig_base_layout <- rbind(c(01, 01))
 
 fig_base_grob <- arrangeGrob(sankey_grob,
-                             zeroGrob(),
-                             zeroGrob(),
-                             dx_grobs,
-                             zeroGrob(),
                              layout_matrix = fig_base_layout,
                              widths = unit(fig_base_widths, "bigpts"),
                              heights = unit(fig_base_heights, "bigpts"))
 
 fig_grobs_list <- c(list(fig_base_grob),
                     reduce(list_ss_grobs, c),
-                    list_ss_labels_params,
-                    list_dx_title_grobs,
-                    list_dx_label_grobs,
-                    list(dx_yaxis))
+                    list_ss_labels_params)
 fig_grobs <- do.call(grobTree, fig_grobs_list)
 
 fig_width_pt <- sum(fig_base_widths)
@@ -1096,22 +826,8 @@ pushViewport(neuro_legend_vp)
 grid.draw(neuro_legend_grob)
 popViewport()
 
-grid.rect(x = unit(c(5, 235, 427), "bigpts"),
-          y = unit(fig_height_pt-487, "bigpts"),
-          width = unit(c(223, 186, 183), "bigpts"),
-          height = unit(223, "bigpts"),
-          just = c("left", "top"), 
-          gp = gpar(fill = NA, lty = "dotted", lwd = 1.5))
-
-grid.segments(x0 = unit(c(115, 325, 533), "bigpts"),
-              x1 = unit(c(115, 325, 533), "bigpts"),
-              y0 = unit(fig_height_pt - 486, "bigpts"),
-              y1 = unit(fig_height_pt - 470, "bigpts"),
-              gp = gpar(lty = "dotted", lwd = 1.5))
-
 dev.off()
 ```
-
 
 ```{r}
 outfile <- paste0(outfile_prefix, ".png")
@@ -1126,19 +842,5 @@ pushViewport(neuro_legend_vp)
 grid.draw(neuro_legend_grob)
 popViewport()
 
-grid.rect(x = unit(c(5, 235, 427), "bigpts"),
-          y = unit(fig_height_pt-487, "bigpts"),
-          width = unit(c(223, 186, 183), "bigpts"),
-          height = unit(223, "bigpts"),
-          just = c("left", "top"), 
-          gp = gpar(fill = NA, lty = "dotted", lwd = 1.5))
-
-grid.segments(x0 = unit(c(115, 325, 533), "bigpts"),
-              x1 = unit(c(115, 325, 533), "bigpts"),
-              y0 = unit(fig_height_pt - 486, "bigpts"),
-              y1 = unit(fig_height_pt - 470, "bigpts"),
-              gp = gpar(lty = "dotted", lwd = 1.5))
-
 dev.off()
 ```
-
