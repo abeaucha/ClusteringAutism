@@ -1619,9 +1619,9 @@ pushViewport(viewport(x = unit(540, "bigpts"),
 grid.draw(human_metrics_legend_grob)
 popViewport()
 
-grid.text(label = c("a", "b", "c", "d", "e"),
-          x = unit(c(10.0, 10.0, 10.0, 298, 468), "bigpts"),
-          y = unit(fig_height_pt - c(8, 262, 517, 517, 517), "bigpts"),
+grid.text(label = c("A", "B", "C", "D"),
+          x = unit(c(10.0, 10.0, 298, 468), "bigpts"),
+          y = unit(fig_height_pt - c(8, 517, 517, 517), "bigpts"),
           gp = gpar(fontface = "bold", fontsize = 10))
 
 dev.off()
@@ -1671,9 +1671,9 @@ pushViewport(viewport(x = unit(540, "bigpts"),
 grid.draw(human_metrics_legend_grob)
 popViewport()
 
-grid.text(label = c("a", "b", "c", "d", "e"),
-          x = unit(c(10.0, 10.0, 10.0, 298, 468), "bigpts"),
-          y = unit(fig_height_pt - c(8, 262, 517, 517, 517), "bigpts"),
+grid.text(label = c("A", "B", "C", "D"),
+          x = unit(c(10.0, 10.0, 298, 468), "bigpts"),
+          y = unit(fig_height_pt - c(8, 517, 517, 517), "bigpts"),
           gp = gpar(fontface = "bold", fontsize = 10))
 
 dev.off()
