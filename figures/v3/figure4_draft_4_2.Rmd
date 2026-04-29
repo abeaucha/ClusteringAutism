@@ -142,7 +142,7 @@ group_summary <- function(x, groups, B = 1000) {
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure4_draft_4_1"
+outfile_prefix <- "figure4_draft_4_2"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -1041,20 +1041,16 @@ list_vars_flip <- list(
           "SDS_Total_T", "Score_Total", "WHODAS_P_Score")
 )
 
-cex_vals <- c(4.0, 4.0, 4.0)
+dataset_labels <- c("POND+", "HBN")
 
-palette_binary <- c("synaptic" = "seagreen2",
-                    "chromatin" = "darkorchid1")
+list_lda_scores <- vector(mode = "list", length = length(human_datasets))
+list_lda_loadings <- vector(mode = "list", length = length(human_datasets))
+list_lda_loadings_common <- vector(mode = "list", length = length(human_datasets))
 
-panel_titles <- c("POND+", "HBN")
-panel_titles <- paste0(panel_titles, " (K = ", nki, ")")
-
-
-list_panel_grobs <- vector(mode = "list", length = length(human_datasets))
-names(list_panel_grobs) <- human_datasets
-for (i in 1:length(list_panel_grobs)) {
-# i <- 1
-  
+names(list_lda_scores) <- dataset_labels
+names(list_lda_loadings) <- dataset_labels
+names(list_lda_loadings_common) <- dataset_labels
+for (i in 1:length(human_datasets)) {
   
   X <- list_lda_inputs[[i]] %>% 
     select(-ID, -group) %>% 
@@ -1081,138 +1077,123 @@ for (i in 1:length(list_panel_grobs)) {
   
   df_mv_loadings <- df_mv_loadings %>% 
     left_join(list_clinical_acronyms[[i]], by = "variable") 
-
-    df_mv_loadings <- df_mv_loadings %>% 
+  
+  df_mv_loadings <- df_mv_loadings %>% 
     mutate(group = ifelse(LD1 >= 0, "synaptic", "chromatin"))
   
-    df_mv_loadings_common <- df_mv_loadings %>% 
-      semi_join(df_common, by = "acronym") 
-    
-    # df_mv_loadings <- df_mv_loadings %>% 
-    #   mutate(acronym = str_pad(acronym, width = max(str_length(acronym)), side = "left"))
-    # 
-    # acronym_len <- df_mv_loadings %>% 
-    #   pull(acronym) %>% 
-    #   str_length() %>% unique()
-    # 
-    # df_mv_loadings_common <- df_mv_loadings_common %>% 
-    #   mutate(acronym = str_pad(acronym, width = acronym_len, side = "left"))
-    
-    if (i == 1) {
-      df_mv_loadings_common <- df_mv_loadings_common %>% 
-        mutate(variable = factor(variable, levels = variable[order(LD1)]),
-               acronym = factor(acronym, levels = acronym[order(LD1)]))
-      
-      lvls_common <- levels(df_mv_loadings_common$acronym)
-    } else {
-      df_mv_loadings_common <- df_mv_loadings_common %>% 
-        mutate(acronym = factor(acronym, levels = lvls_common))
-    }
-
-
-    df_mv_loadings <- df_mv_loadings %>% 
+  df_mv_loadings_common <- df_mv_loadings %>% 
+    semi_join(df_common, by = "acronym") 
+  
+  # df_mv_loadings <- df_mv_loadings %>% 
+  #   mutate(acronym = str_pad(acronym, width = max(str_length(acronym)), side = "left"))
+  # 
+  # acronym_len <- df_mv_loadings %>% 
+  #   pull(acronym) %>% 
+  #   str_length() %>% unique()
+  # 
+  # df_mv_loadings_common <- df_mv_loadings_common %>% 
+  #   mutate(acronym = str_pad(acronym, width = acronym_len, side = "left"))
+  
+  if (i == 1) {
+    df_mv_loadings_common <- df_mv_loadings_common %>% 
       mutate(variable = factor(variable, levels = variable[order(LD1)]),
              acronym = factor(acronym, levels = acronym[order(LD1)]))
     
-    
+    lvls_common <- levels(df_mv_loadings_common$acronym)
+  } else {
+    df_mv_loadings_common <- df_mv_loadings_common %>% 
+      mutate(acronym = factor(acronym, levels = lvls_common))
+  }
   
-  lda_roc <- list_lda_roc[[i]]
-  df_lda_roc <- tibble(tpr = lda_roc$sensitivities, 
-                       fpr = 1-lda_roc$specificities,
-                       thresholds = lda_roc$thresholds) %>% 
-    arrange(tpr) 
   
-  lda_roc_auc <- lda_roc$auc[1]
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(variable = factor(variable, levels = variable[order(LD1)]),
+           acronym = factor(acronym, levels = acronym[order(LD1)]))
   
-  set.seed(123)
-  plt_mv_scores <- ggplot(df_mv_scores, aes(x = y, y = LD1, fill = y_pred_prob)) +
-    # geom_jitter(height = 0, width = 0.2, shape = 21) +
-    geom_beeswarm(cex = cex_vals[i],
-                  shape = 21,
-                  size = 1.0,
-                  col = "grey50") +
-    coord_cartesian(ylim = c(-3.5, 4.5)) + 
-    scale_x_discrete(labels = c("Transcription", "Synaptic-Immune"), expand = expansion(add = 0.8)) + 
-    scale_y_continuous(breaks = seq(-6, 6, by = 2)) + 
-    # scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
-    #                      values  = scales::rescale(c(0, 1), from = c(0, 1)),
-    #                      limits  = c(0, 1),
-    #                      breaks = c(0, 0.5, 1.0),
-    #                      guide = guide_colourbar(barwidth = unit(20, "bigpts"),
-    #                                              barheight = unit(10, "bigpts"),
-    #                                              label.theme = element_text(margin = margin()),
-    #                                              title.position = "bottom", title.hjust = 0.5)) +
-    scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
-                         values  = scales::rescale(c(0, 1), from = c(0, 1)),
-                         limits  = c(0, 1),
-                         breaks = c(0, 0.5, 1.0),
-                         guide = guide_colourbar(barwidth = unit(8, "bigpts"),
-                                                 barheight = unit(40, "bigpts"),
-                                                 # label.theme = element_text(margin = margin()),
-                                                 title.position = "right", title.hjust = 0.5)) +
-    labs(col = "LDA predicted class",
-         y = "LD scores",
-         x = "Molecular cluster group",
-         fill = "Probability") + 
-    theme_bw() +
-    theme(legend.margin = margin(),
-          legend.box.margin = margin(l = -8),
-          legend.spacing = unit(0, "pt"),
-          legend.title = element_text(size = 6, angle = 270, margin = margin()),
-          legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
-          axis.title = element_text(size = 6),
-          axis.text.y = element_text(size = 6),
-          axis.text.x = element_text(size = 6, colour = c("darkorchid1", "seagreen2"), hjust = c(1, 0)),
-          plot.margin = margin(l = 0, r = 0, t = 5.5, b = 0))
+  list_lda_scores[[i]] <- df_mv_scores
+  list_lda_loadings[[i]] <- df_mv_loadings
+  list_lda_loadings_common[[i]] <- df_mv_loadings_common
+  
+}
+```
+
+```{r}
+cex_vals <- c(5.0, 4.0)
+
+df_lda_scores <- bind_rows(list_lda_scores, .id = "Dataset") %>% 
+  mutate(Dataset = factor(Dataset, levels = dataset_labels))
+
+set.seed(123)
+plt_lda_scores <- ggplot(df_lda_scores, aes(x = y, y = LD1, fill = y_pred_prob)) + 
+  geom_beeswarm(cex = 3.5,
+                shape = 21,
+                size = 1.0,
+                col = "grey50") +
+  # geom_jitter(height = 0, width = 0.35, shape = 21, size = 1.0, col = "grey50") +
+  facet_grid(.~Dataset) + 
+  coord_cartesian(ylim = c(-3.5, 4.5)) +
+  scale_x_discrete(labels = c("Transcription", "Synaptic-Immune"), expand = expansion(add = 0.8)) + 
+  scale_y_continuous(breaks = seq(-6, 6, by = 2)) + 
+  scale_fill_gradientn(colours = c("darkorchid1", "grey70", "seagreen2"),
+                       values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                       limits  = c(0, 1),
+                       breaks = c(0, 0.5, 1.0),
+                       guide = guide_colourbar(barwidth = unit(8, "bigpts"),
+                                               barheight = unit(50, "bigpts"),
+                                               # label.theme = element_text(margin = margin()),
+                                               title.position = "right", title.hjust = 0.5)) +
+  labs(col = "LDA predicted class",
+       y = "LD scores",
+       x = "Molecular cluster group",
+       fill = "Probability") + 
+  theme_bw() +
+  theme(legend.margin = margin(),
+        legend.box.margin = margin(l = -8),
+        legend.spacing = unit(0, "pt"),
+        legend.title = element_text(size = 6, angle = 270, margin = margin()),
+        legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
+        axis.title = element_text(size = 6),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6, 
+                                   colour = c("darkorchid1", "seagreen2"), 
+                                   hjust = c(0.6, 0.4)),
+        strip.text = element_text(size = 7),
+        plot.margin = margin(l = 0, r = 0, t = 0, b = 0))
+```
 
 
-plt_mv_loadings_common <- ggplot(df_mv_loadings_common, aes(x = acronym, y = LD1, col = group)) +
-    geom_hline(yintercept = 0) +
-    geom_segment(mapping = aes(yend = 0, xend = acronym)) +
-    geom_point(size = 0.9) +
-    coord_cartesian(ylim = c(-0.5, 0.5)) +
-    scale_y_continuous(breaks = seq(-1, 1, by = 0.25)) +
-    scale_colour_manual(values = palette_binary) +
-    labs(y = "Linear discriminant loadings",
-         x = "Clinical variable") +
-    theme_bw() +
-    theme(legend.position = "none") +
-    theme(axis.title = element_text(size = 6),
-          axis.text.x = element_text(size = 6, angle = 90, hjust = 1, vjust = 0.5),
-          axis.text.y = element_text(size = 6))
-
-plt_mv_loadings <- ggplot(df_mv_loadings, aes(x = acronym, y = LD1, col = group)) +
-    geom_hline(yintercept = 0) +
-    geom_segment(mapping = aes(yend = 0, xend = acronym)) +
-    geom_point(size = 0.9) +
-    coord_cartesian(ylim = c(-0.5, 0.5)) +
-    scale_y_continuous(breaks = seq(-1, 1, by = 0.25)) +
-    scale_colour_manual(values = palette_binary) +
-    labs(y = "LD loadings",
-         x = "Clinical variable") +
-    theme_bw() +
-    theme(legend.position = "none") +
-    theme(axis.title.x = element_text(size = 6),
-          axis.text.x = element_text(size = 6, angle = 90, hjust = 1, vjust = 0.5),
-          axis.title.y = element_blank(),
-          axis.text.y = element_blank(),
-          axis.ticks.y = element_blank())
 
 
-plt_loadings_patchwork <- plt_mv_loadings_common + plt_mv_loadings +
-  plot_layout(widths = c(0.22, 0.78)) &
-  theme(plot.margin = margin(l = 0, r = 2, t = 3, b = 5))
+```{r}
+df_lda_roc <- map_dfr(.x = list_lda_roc, .f = function(x) {
+  tibble(tpr = x$sensitivities,
+         fpr = 1-x$specificities,
+         thresholds = x$thresholds,
+         AUC = x$auc[1]) %>% 
+    arrange(tpr)
+}, .id = "Dataset")
 
-plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) +
+df_lda_roc <- df_lda_roc %>% 
+  mutate(Dataset = ifelse(Dataset == "POND", "POND+", Dataset),
+         Dataset = factor(Dataset, levels = dataset_labels))
+
+df_lda_roc_auc <- df_lda_roc %>% 
+  select(Dataset, AUC) %>% 
+  distinct() %>% 
+  mutate(fpr = 0.8, tpr = 0.2, 
+         label = paste0("AUC = ", round(AUC, 3)))
+
+plt_lda_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) +
   annotate(geom = "segment",
            x = 0, y = 0,
            xend = 1, yend = 1,
-           linetype = "dashed") +
-  annotate(geom = "text",
-           x = 0.8, y = 0.2,
-           label = paste0("AUC = ", round(lda_roc_auc, 3)),
-           size = 9 * 0.3527) +
-  geom_line() +
+           linetype = "dashed",
+           linewidth = 0.4) +
+  geom_line(linewidth = 0.4) +
+  geom_text(data = df_lda_roc_auc, 
+            mapping = aes(label = label),
+            size = 6 * 0.3527) + 
+  facet_grid(.~Dataset) + 
   scale_x_continuous(breaks = seq(0, 1, by = 0.2)) +
   scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
   labs(x = "False positive rate",
@@ -1220,73 +1201,134 @@ plt_mv_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) +
   theme_bw() +
   theme(axis.title = element_text(size = 6),
         axis.text = element_text(size = 6),
+        strip.text = element_text(size = 7),
         plot.margin = margin(l = 0, r = 0, t = 0, b = 5.5))
-  
-  plt_mv_scores_grob <- ggplotGrob(plt_mv_scores)
-  plt_mv_loadings_grob <- ggplotGrob(plt_mv_loadings)
-  plt_mv_roc_grob <- ggplotGrob(plt_mv_roc)
-  
-  panel_title_grob <- gTree(children = gList(textGrob(panel_titles[i], rot = 90, gp = gpar(fontsize = 8))))
-  
-  # plt_mv_title_grob <- gTree(children = gList(rectGrob(gp = gpar(fill = "grey85")),
-  #                                             textGrob(label = panel_titles[i], 
-  #                                                      gp = gpar(fontsize = 9))))
-  
+```
 
-panel_widths <- c(10, 130, 5, 135, 5, 235)
-  panel_heights <- c(75, 5, 75)
-  panel_layout <- rbind(c(01, 02, 03, 04, 07, 08),
-                        c(01, 02, 03, 05, 07, 08),
-                        c(01, 02, 03, 06, 07, 08))
+```{r}
+palette_binary <- c("synaptic" = "seagreen2",
+                    "chromatin" = "darkorchid1")
 
-  panel_grob <- arrangeGrob(panel_title_grob,
-                            rectGrob(),
-                            rectGrob(),
-                            ggplotGrob(plt_mv_scores),
-                            rectGrob(),
-                            plt_mv_roc_grob,
-                            zeroGrob(),
-                            patchworkGrob(plt_loadings_patchwork),
-                            layout_matrix = panel_layout,
-                            widths = unit(panel_widths, "bigpts"),
-                            heights = unit(panel_heights, "bigpts"))
-
+list_plt_loadings_common <- vector(mode = "list", length = length(list_lda_loadings))
+list_plt_loadings <- vector(mode = "list", length = length(list_lda_loadings))
+for (i in 1:length(list_lda_loadings)) {
   
-  panel_height_pt <- sum(panel_heights)
-  panel_width_pt <- fig_width
+  df_lda_loadings_common <- list_lda_loadings_common[[i]] %>% 
+    mutate(Dataset = names(list_lda_loadings_common)[i])
   
-  panel_height_in <- panel_height_pt/72
-  panel_width_in <- panel_width_pt/72
+  plt_loadings_common <- ggplot(df_lda_loadings_common, aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) +
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) +
+    geom_point(size = 0.9) +
+    facet_grid(.~Dataset) + 
+    coord_cartesian(xlim = c(-0.5, 0.5)) +
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.5)) +
+    scale_colour_manual(values = palette_binary) +
+    labs(x = "LD loadings",
+         y = NULL) +
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title.y = element_text(size = 6),
+          axis.text.y = element_text(size = 6),
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          strip.text = element_text(size = 7))
   
-  outfile <- paste0("panel_", nki, "_", human_datasets[i], ".pdf")
-  outfile <- file.path(output_dir, outfile)
-  pdf(file = outfile,
-      width = unit(panel_width_in, "in"),
-      height = unit(panel_height_in, "in"))
-  grid.draw(panel_grob)
-  dev.off()
+  plt_loadings <- ggplot(list_lda_loadings[[i]], aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) +
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) +
+    geom_point(size = 0.9) +
+    coord_cartesian(xlim = c(-0.5, 0.5)) +
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.5)) +
+    scale_colour_manual(values = palette_binary) +
+    labs(x = "LD loadings",
+         y = "Clinical variable") +
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title.x = element_text(size = 6),
+          axis.title.y = element_text(size = 6, hjust = 0.6),
+          axis.text = element_text(size = 6))
   
-  list_panel_grobs[[i]] <- panel_grob
+  if (i == 1) {
+    plt_loadings_common <- plt_loadings_common +
+      theme(axis.title.y = element_text(size = 6),
+            axis.text.y = element_text(size = 6),
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank())
+    
+    plt_loadings <- plt_loadings +
+      theme(axis.title = element_text(size = 6),
+            axis.text = element_text(size = 6))
+    
+  } else {
+    plt_loadings_common <- plt_loadings_common +
+      theme(axis.title.y = element_blank(),
+            axis.text.y = element_text(size = 6),
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank())
+    
+    plt_loadings <- plt_loadings + 
+      theme(axis.title.x = element_text(size = 6),
+            axis.title.y = element_blank(),
+            axis.text = element_text(size = 6))
+      
+  }
+  
+  loadings_patchwork <- (plt_loadings_common / plt_loadings) + plot_layout(heights = c(0.2, 0.8)) &
+    theme(plot.margin = margin(b = 3, r = 2, t = 2))
+  
+  list_plt_loadings[[i]] <- patchworkGrob(loadings_patchwork)
+  
   
 }
 
+loadings_grob <- arrangeGrob(list_plt_loadings[[1]],
+                             list_plt_loadings[[2]],
+                             layout_matrix = rbind(c(1,2)))
+
+outfile <- "loadings_panel.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(235/72, "in"),
+    height = unit(320/72, "in"))
+grid.draw(loadings_grob)
+
+invisible(dev.off())
+```
 
 
-fig_heights <- c(panel_height_pt, 10, panel_height_pt)
-fig_layout <- cbind(1:3)
+```{r}
+fig_widths <- c(270, 15, 235)
+fig_heights <- c(100, 10, 100, 10, 100)
+  
+fig_layout <- rbind(c(01, 06, 07),
+                    c(02, 06, 07),
+                    c(03, 06, 07),
+                    c(04, 06, 07),
+                    c(05, 06, 07))
 
-fig_grob <- arrangeGrob(list_panel_grobs[[1]],
-                        rectGrob(),
-                        list_panel_grobs[[2]],
+fig_grob <- arrangeGrob(rectGrob(),
+                        rectGrob(), #Pad
+                        ggplotGrob(plt_lda_scores), # LDA scores
+                        rectGrob(), #Pad
+                        ggplotGrob(plt_lda_roc), # ROC
+                        rectGrob(), #Pad
+                        loadings_grob, # Loadings
                         layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"),
                         heights = unit(fig_heights, "bigpts"))
 
-fig_height_pt <- sum(fig_heights)
-fig_width_pt <- fig_width
+  
+  fig_height_pt <- sum(fig_heights)
+  fig_width_pt <- fig_width
+  
+  fig_height_in <- fig_height_pt/72
+  fig_width_in <- fig_width_pt/72
 
-fig_height_in <- fig_height_pt/72
-fig_width_in <- fig_width_pt/72
-
+  
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -1294,7 +1336,11 @@ pdf(file = outfile,
     height = unit(fig_height_in, "in"))
 grid.draw(fig_grob)
 
+grid.text(label = c("A", "B", "C", "D"),
+          x = unit(c(6, 6, 6, 290), "bigpts"),
+          y = unit(c(312, 215, 105, 312), "bigpts"),
+          gp = gpar(fontsize = 10, fontface = "bold"))
+
 invisible(dev.off())
 ```
-
 
