@@ -466,7 +466,7 @@ for (dataset in human_datasets) {
           left_join(select(demographics, ID = file, DX), by = "ID") %>% 
           left_join(list_diagnoses[[dataset]], by = "DX") %>% 
           group_by(DX_new) %>% 
-                    summarise(n_dx = n(),
+          summarise(n_dx = n(),
                     prop_dx = n_dx/nrow(.)) %>% 
           ungroup() %>% 
           right_join(dx_grid, by = c("DX_new")) %>% 

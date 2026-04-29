@@ -499,7 +499,6 @@ df_clusters_clinical_POND <- list_clusters$POND %>%
 
 ## Process HBN data
 
-
 ```{r}
 list_HBN_assessments <- list(
   ACE = list(code = "ACE", skip = TRUE, vars = c("ACE_Score")),
@@ -1084,16 +1083,6 @@ for (i in 1:length(human_datasets)) {
   df_mv_loadings_common <- df_mv_loadings %>% 
     semi_join(df_common, by = "acronym") 
   
-  # df_mv_loadings <- df_mv_loadings %>% 
-  #   mutate(acronym = str_pad(acronym, width = max(str_length(acronym)), side = "left"))
-  # 
-  # acronym_len <- df_mv_loadings %>% 
-  #   pull(acronym) %>% 
-  #   str_length() %>% unique()
-  # 
-  # df_mv_loadings_common <- df_mv_loadings_common %>% 
-  #   mutate(acronym = str_pad(acronym, width = acronym_len, side = "left"))
-  
   if (i == 1) {
     df_mv_loadings_common <- df_mv_loadings_common %>% 
       mutate(variable = factor(variable, levels = variable[order(LD1)]),
@@ -1116,6 +1105,143 @@ for (i in 1:length(human_datasets)) {
   
 }
 ```
+
+
+## Diagnoses
+
+```{r}
+list_clusters_compare
+```
+```{r}
+# Filter for participants 
+# demographics <- demographics %>%
+#   filter(!is.na(DX),
+#          !is.na(Age),
+#          !is.na(Sex),
+#          !is.na(Site),
+#          !is.na(Scanner))
+
+# Redefine diagnostic categories
+list_diagnoses <- list(
+  "POND" = tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD",
+                         "Anxiety", "Sub-threshold ADHD",
+                         "Intellectual Disability only", 
+                         "Tourette Syndrome", "Other", "Fragile X"),
+                  DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", 
+                             "ADHD", "Other", "Other", "Other", "Other")),
+  "HBN" = tibble(DX = c("ASD", "OCD", "ADHD", "Tourette Syndrome", "ID"),
+                 DX_new = c("ASD", "OCD", "ADHD", "Other", "Other"))
+)
+
+# Diagnostic category levels
+dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
+
+# Full grid of cluster and DX
+# dx_grid <- expand_grid(DX_new = dx_lvls,
+#                        cluster_id = cluster_ids)  %>% 
+#   separate(col = "cluster_id", into = c("nk", "k"), 
+#            sep = "-", remove = FALSE) %>% 
+#   mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+dx_grid <- tibble(DX_new = dx_lvls)
+```
+
+```{r}
+list_dx <- vector(mode = "list", length = length(human_datasets))
+names(list_dx) <- dataset_labels
+for (i in 1:length(list_dx)) {
+
+cluster_ids <- list_clusters_compare[[human_datasets[i]]]
+
+df_cluster_group <- list_cluster_groups[[human_datasets[i]]] %>% 
+  filter(cluster_id %in% cluster_ids) %>% 
+  select(cluster_id, group)
+
+dx_grid <- expand_grid(DX_new = dx_lvls,
+                       cluster_id = cluster_ids)
+
+df_clusters_dx <- list_clusters[[i]] %>% 
+  select(ID, nk7, DX = dx) %>% 
+  left_join(list_diagnoses[[i]], by = "DX") %>% 
+  mutate(cluster_id = paste0("7-", nk7)) %>% 
+  filter(cluster_id %in% list_clusters_compare[[human_datasets[i]]])
+
+df_cluster_dx_summary <- df_clusters_dx %>% 
+  group_by(cluster_id) %>% 
+  mutate(n_in_cluster = n()) %>% 
+  ungroup() %>% 
+  group_by(cluster_id, DX_new) %>% 
+  mutate(n_dx_in_cluster = n()) %>%
+  ungroup() %>% 
+  select(cluster_id, DX_new, n_in_cluster, n_dx_in_cluster) %>% 
+  distinct() %>% 
+  mutate(prop_dx = n_dx_in_cluster/n_in_cluster) %>% 
+  right_join(dx_grid, by = c("DX_new", "cluster_id")) %>% 
+  mutate(prop_dx = ifelse(is.na(prop_dx), 0, prop_dx)) %>% 
+  left_join(df_cluster_group, by = "cluster_id")
+
+list_dx[[i]] <- df_cluster_dx_summary
+
+}
+
+df_dx_summary <- bind_rows(list_dx, .id = "Dataset") %>% 
+  mutate(Dataset = factor(Dataset, levels = dataset_labels))
+         # ,DX_new = factor(DX_new, levels = dx_lvls))
+
+palette_binary <- c("synaptic" = "seagreen2",
+                    "chromatin" = "darkorchid1")
+```
+
+
+```{r}
+plt_diagnoses <- ggplot(df_dx_summary, aes(x = DX_new, y = prop_dx, fill = group)) + 
+  geom_col(position = "dodge", col = "grey30", size = 0.4) + 
+  facet_grid(.~Dataset) +
+  coord_cartesian(ylim = c(0, 1.0)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_fill_manual(labels = c("Transcription", "Synaptic-Immune"),
+                      values = palette_binary) + 
+  labs(x = "Diagnosis",
+       y = "Proportion per cluster") + 
+  theme_bw() +
+  theme(axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        legend.background = element_rect(fill = scales::alpha("white", alpha = 0.5)),
+        legend.position = c(0.86, 0.75),
+        legend.key.size = unit(10, "bigpts"),
+        legend.margin = margin(),
+        # legend.box.margin = margin(l = -8),
+        legend.box.margin = margin(),
+        legend.spacing = unit(0, "pt"),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
+        strip.text = element_text(size = 7),
+        plot.margin = margin(t = 5.5))
+```
+
+
+```{r}
+tmp <- list_clusters$POND %>% 
+  select(ID, nk7, DX = dx) %>% 
+  left_join(list_diagnoses$POND, by = "DX") %>% 
+  mutate(cluster_id = paste0("7-", nk7)) %>% 
+  filter(cluster_id %in% list_clusters_compare$POND)
+
+chisq.test(x = tmp$DX_new, y = tmp$cluster_id, simulate.p.value = TRUE)
+```
+
+```{r}
+tmp <- list_clusters$HBN %>% 
+  select(ID, nk7, DX = dx) %>% 
+  left_join(list_diagnoses$HBN, by = "DX") %>% 
+  mutate(cluster_id = paste0("7-", nk7)) %>% 
+  filter(cluster_id %in% list_clusters_compare$HBN)
+
+chisq.test(x = tmp$DX_new, y = tmp$cluster_id, simulate.p.value = TRUE)
+```
+
+
+## LDA Scores
 
 ```{r}
 cex_vals <- c(5.0, 4.0)
@@ -1160,8 +1286,6 @@ plt_lda_scores <- ggplot(df_lda_scores, aes(x = y, y = LD1, fill = y_pred_prob))
         strip.text = element_text(size = 7),
         plot.margin = margin(l = 0, r = 0, t = 0, b = 0))
 ```
-
-
 
 
 ```{r}
@@ -1299,7 +1423,6 @@ grid.draw(loadings_grob)
 invisible(dev.off())
 ```
 
-
 ```{r}
 fig_widths <- c(270, 15, 235)
 fig_heights <- c(100, 10, 100, 10, 100)
@@ -1310,12 +1433,12 @@ fig_layout <- rbind(c(01, 06, 07),
                     c(04, 06, 07),
                     c(05, 06, 07))
 
-fig_grob <- arrangeGrob(rectGrob(),
-                        rectGrob(), #Pad
+fig_grob <- arrangeGrob(ggplotGrob(plt_diagnoses),
+                        zeroGrob(), #Pad
                         ggplotGrob(plt_lda_scores), # LDA scores
-                        rectGrob(), #Pad
+                        zeroGrob(), #Pad
                         ggplotGrob(plt_lda_roc), # ROC
-                        rectGrob(), #Pad
+                        zeroGrob(), #Pad
                         loadings_grob, # Loadings
                         layout_matrix = fig_layout,
                         widths = unit(fig_widths, "bigpts"),
@@ -1343,4 +1466,3 @@ grid.text(label = c("A", "B", "C", "D"),
 
 invisible(dev.off())
 ```
-
