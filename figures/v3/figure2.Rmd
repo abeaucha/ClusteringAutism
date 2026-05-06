@@ -321,6 +321,7 @@ sankey_grob <- arrangeGrob(textGrob(label = "Mouse clusters", x = ),
                            widths = unit(sankey_widths, "bigpts"),
                            heights = unit(sankey_heights, "bigpts"))
 ```
+
 ```{r}
 plt_mouse_sankey
 ```

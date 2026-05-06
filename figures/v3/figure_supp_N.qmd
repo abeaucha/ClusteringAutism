@@ -1,0 +1,1234 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+- Demographics for multiple clusters in POND+ and HBN
+- Univariate behaviour for POND+ and HBN
+
+```{r packages}
+library(tidyverse)
+library(grid)
+library(gridExtra)
+library(viridis)
+```
+
+```{r env}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r functions}
+consolidate_visits <- function(df, cols) {
+  
+  subject_ids <- df %>% 
+    pull(subject_id) %>% 
+    unique()
+  
+  df_init <- df %>% 
+    select(subject_id, visit_instance, all_of(cols)) %>% 
+    mutate(n_missing = rowSums(!is.na(across(all_of(cols)))))
+  
+  df_complete <- df_init %>% 
+    filter(n_missing > 0) %>% 
+    group_by(subject_id) %>% 
+    filter(visit_instance == max(visit_instance)) %>% 
+    ungroup() %>% 
+    select(subject_id, all_of(cols))
+  
+  # Participants with completed ABAS
+  ids_complete <- df_complete %>% 
+    pull(subject_id) %>% 
+    unique()
+  
+  # Participants with no ABAS scores
+  ids_missing <- setdiff(subject_ids, ids_complete)
+  
+  # Create a data frame of NAs for particpants with no scores
+  df_missing <- matrix(nrow = length(ids_missing), ncol = length(cols))
+  rownames(df_missing) <- ids_missing
+  colnames(df_missing) <- cols
+  df_missing <- as_tibble(df_missing, rownames = "subject_id")
+  
+  df_out <- bind_rows(df_complete, df_missing)
+  
+  return(df_out)
+  
+}
+```
+
+```{r outputs}
+outfile_prefix <- "figure_SN_draft_1_1"
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
+```
+
+```{r}
+# Human registration directory
+human_registration_dir <- file.path(PROJECTPATH, "data/human/registration/v3")
+
+# Import human demographics data
+demographics <- file.path(human_registration_dir, "subject_info", "demographics.csv")
+demographics <- read_csv(demographics, show_col_types = FALSE)
+
+demographics
+```
+
+# Diagnoses
+
+```{r}
+list_diagnoses <- list(
+  "POND" = tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD",
+                         "Anxiety", "Sub-threshold ADHD",
+                         "Intellectual Disability only", 
+                         "Tourette Syndrome", "Other", "Fragile X"),
+                  DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", 
+                             "ADHD", "Other", "Other", "Other", "Other")),
+  "HBN" = tibble(DX = c("ASD", "OCD", "ADHD", "Tourette Syndrome", "ID"),
+                 DX_new = c("ASD", "OCD", "ADHD", "Other", "Other"))
+)
+
+```
+
+## POND+
+
+```{r}
+file <- "data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv"
+file <- file.path(PROJECTPATH, file)
+df_clusters_pond <- read_csv(file, show_col_types = FALSE)
+
+df_clusters_pond_long <- df_clusters_pond %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  unite("cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  select(-nk_name)
+
+df_clusters_pond_dx <- df_clusters_pond_long %>% 
+  left_join(select(demographics, file, DX), by = c("ID" = "file")) %>% 
+  left_join(list_diagnoses$POND, by = "DX") %>% 
+  select(-DX, DX = DX_new) 
+
+```
+
+```{r}
+nk_subset <- seq(2, 10, by = 2)
+
+dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
+
+list_pond_dx_plots <- vector(mode = "list", length = length(nk_subset))
+for (i in 1:length(nk_subset)) {
+  
+  nki <- nk_subset[i]
+  
+  df_clusters_pond_dx_K <- df_clusters_pond_dx %>% 
+    filter(nk == nki)   
+  
+  df_grid <- expand_grid(k = 1:nki, DX = dx_lvls)
+  
+  df_cluster_dx_summary <- df_clusters_pond_dx_K %>% 
+    group_by(cluster_id) %>% 
+    mutate(n_in_cluster = n()) %>% 
+    ungroup() %>% 
+    group_by(cluster_id, DX) %>% 
+    mutate(n_dx_in_cluster = n()) %>%
+    ungroup() %>% 
+    select(cluster_id, k, DX, n_in_cluster, n_dx_in_cluster)  %>% 
+    distinct() %>% 
+    mutate(prop_dx = n_dx_in_cluster/n_in_cluster) %>% 
+    right_join(df_grid, by = c("DX", "k")) %>% 
+    mutate(prop_dx = ifelse(is.na(prop_dx), 0, prop_dx),
+           k = factor(k),
+           label = paste0("K = ", nki))
+  
+  plt <- ggplot(df_cluster_dx_summary, aes(x = k, y = prop_dx, fill = DX)) + 
+    geom_col(position = "dodge") +
+    facet_grid(.~label) + 
+    labs(x = "POND+ cluster (k)",
+         fill = "Diagnosis") + 
+    theme_bw() +
+    theme(plot.margin = margin(l = 2, t = 2),
+          axis.title = element_text(size = 6),
+          axis.text = element_text(size = 6),
+          strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
+  
+  if (i == 1) {
+    plt <- plt + 
+      coord_cartesian(ylim = c(0, 1.0)) + 
+      labs(y = "") +
+      theme(axis.title.x = element_blank(),
+            legend.text = element_text(size = 6, margin = margin(l = 2)),
+            legend.title = element_text(size = 6, margin = margin(b = 2)),
+            legend.key.size = unit(10, "bigpts"),
+            legend.margin = margin(),
+            legend.box.margin = margin())
+    
+    diagnoses_legend_grob <- plt %>% 
+      ggplotGrob() %>% 
+      grid.force() %>% 
+      getGrob("guide-box-right.10-11-10-11")
+
+  }
+  
+  
+  if (i %in% 2:3) {
+    plt <- plt + 
+      coord_cartesian(ylim = c(0, 0.7)) + 
+      theme(axis.title.y = element_blank(),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.title.x = element_blank(),
+            plot.margin = margin(l = 2, t = 2))
+  }
+  
+  if (i == 4) {
+    plt <- plt + 
+      coord_cartesian(ylim = c(0, 1.0)) + 
+      labs(y = "Proportion per cluster") +
+      theme(axis.title.x = element_blank())
+  }
+  
+  if (i == 5) {
+    plt <- plt +
+      labs(y = "")
+  }
+  
+  plt <- plt + theme(legend.position = "none")
+  
+  list_pond_dx_plots[[i]] <- plt
+  
+}
+
+
+
+pond_dx_widths <- c(0.2461, 0.2930, 0.4609) 
+pond_dx_heights <- c(0.3125, 0.3125, 0.3750)
+pond_dx_layout <- rbind(c(01, 02, 03),
+                        c(05, 05, 05),
+                        c(04, 04, 04))
+
+pond_dx_grob <- arrangeGrob(list_pond_dx_plots[[1]],
+                            list_pond_dx_plots[[2]],
+                            list_pond_dx_plots[[3]],
+                            list_pond_dx_plots[[5]],
+                            list_pond_dx_plots[[4]],
+                            layout_matrix = pond_dx_layout,
+                            widths = unit(pond_dx_widths, "npc"),
+                            heights = unit(pond_dx_heights, "npc"))
+```
+
+
+
+## HBN
+
+```{r}
+file <- "data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv"
+file <- file.path(PROJECTPATH, file)
+df_clusters_hbn <- read_csv(file, show_col_types = FALSE)
+
+df_clusters_hbn_long <- df_clusters_hbn %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  unite("cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  select(-nk_name)
+
+df_clusters_hbn_dx <- df_clusters_hbn_long %>% 
+  left_join(select(demographics, file, DX), by = c("ID" = "file")) %>% 
+  left_join(list_diagnoses$HBN, by = "DX") %>% 
+  select(-DX, DX = DX_new) 
+```
+
+
+```{r}
+nk_subset <- seq(2, 10, by = 2)
+
+dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
+
+list_hbn_dx_plots <- vector(mode = "list", length = length(nk_subset))
+for (i in 1:length(nk_subset)) {
+  
+  nki <- nk_subset[i]
+  
+  df_clusters_hbn_dx_K <- df_clusters_hbn_dx %>% 
+    filter(nk == nki)   
+  
+  df_grid <- expand_grid(k = 1:nki,
+                         DX = dx_lvls)
+  
+  df_cluster_dx_summary <- df_clusters_hbn_dx_K %>% 
+    group_by(cluster_id) %>% 
+    mutate(n_in_cluster = n()) %>% 
+    ungroup() %>% 
+    group_by(cluster_id, DX) %>% 
+    mutate(n_dx_in_cluster = n()) %>%
+    ungroup() %>% 
+    select(cluster_id, k, DX, n_in_cluster, n_dx_in_cluster)  %>% 
+    distinct() %>% 
+    mutate(prop_dx = n_dx_in_cluster/n_in_cluster) %>% 
+    right_join(df_grid, by = c("DX", "k")) %>% 
+    mutate(prop_dx = ifelse(is.na(prop_dx), 0, prop_dx),
+           k = factor(k),
+           label = paste0("K = ", nki))
+  
+  plt <- ggplot(df_cluster_dx_summary, aes(x = k, y = prop_dx, fill = DX)) + 
+    geom_col(position = "dodge") +
+    facet_grid(.~label) + 
+    coord_cartesian(ylim = c(0, 1.0)) + 
+    labs(x = "HBN cluster (k)") + 
+    theme_bw() +
+    theme(legend.position = "none",
+          plot.margin = margin(l = 2, t = 2),
+          axis.title = element_text(size = 6),
+          axis.text = element_text(size = 6),
+          strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
+  
+  if (i == 1) {
+    plt <- plt + 
+      labs(y = "") +
+      theme(axis.title.x = element_blank())
+  }
+  
+  
+  if (i %in% 2:3) {
+    plt <- plt + 
+      theme(axis.title.y = element_blank(),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.title.x = element_blank(),
+            plot.margin = margin(l = 2, t = 2))
+  }
+  
+  if (i == 4) {
+    plt <- plt + 
+      labs(y = "Proportion per cluster") +
+      theme(axis.title.x = element_blank())
+  }
+  
+  if (i == 5) {
+    plt <- plt +
+      labs(y = "")
+  }
+  
+  
+  list_hbn_dx_plots[[i]] <- plt
+  
+}
+
+
+
+hbn_dx_widths <- c(0.2461, 0.2930, 0.4609) 
+hbn_dx_heights <- c(0.3125, 0.3125, 0.3750)
+hbn_dx_layout <- rbind(c(01, 02, 03),
+                        c(05, 05, 05),
+                       c(04, 04, 04))
+
+hbn_dx_grob <- arrangeGrob(list_hbn_dx_plots[[1]],
+                            list_hbn_dx_plots[[2]],
+                            list_hbn_dx_plots[[3]],
+                            list_hbn_dx_plots[[5]],
+                            list_hbn_dx_plots[[4]],
+                            layout_matrix = hbn_dx_layout,
+                            widths = unit(hbn_dx_widths, "npc"),
+                            heights = unit(hbn_dx_heights, "npc"))
+```
+
+
+
+# Univariate clinical measures
+
+## POND+
+
+
+
+```{r import-pond-db}
+# Import full POND database
+pond_db_file <- "POND_database_export_20251210.csv"
+pond_db_file <- file.path(human_registration_dir, "subject_info/POND", pond_db_file)
+df_pond_db <- read_csv(pond_db_file, show_col_types = FALSE)
+```
+
+```{r clean-pond-db}
+# List of database data columns
+list_data_cols <- list(
+  CBCL = c("cb68ipts", "cb68epts", "cbipts", "cbepts"),
+  ABAS = c("ab05gccs", "ab21gccs", "ab89gccs"),
+  BOT2 = c("bot2_bltc_ss", "bot2_bal_ss", "bot2_bdyc_stds"),
+  KINDL = c("kkid_tot", "kkdo_tot", "kkdy_tot"),
+  NEPSY = c("nepsyii_a516_ar_ss", "nepsyii_a516_mf_ss", "nepsyii_a516_mfd_ss", 
+            "nepsyii_a516_mf_mfd_ccs", "nepsyii_a516_tm_ss",
+            "nepsyii_a716_as_tcssc", "nepsyii_a716_as_css"),
+  OWL = c("owllcss", "owloess", "owlocss"),
+  OWL2 = c("owl2lcss", "owl2oess", "owl2olcss"),
+  RBS = "rbsallt",
+  SCQ = "scqtot",
+  SSP = c("ssp_tactile_rs", "ssp_taste_smell_rs", "ssp_movement_rs", "ssp_underresp_seeks_rs",
+          "ssp_aud_filter_rs", "ssp_low_enrgy_weak_rs", "ssp_vis_aud_rs", "ssp_total_rs"),
+  SpatialNBack = c("s0b_tgt_accuracy", "s0b_nontgt_accuracy", "s1b_tgt_accuracy", "s1b_nontgt_accuracy",
+                   "s2b_tgt_accuracy", "s2b_nontgt_accuracy"),
+  StopTask = c("mt_st_pcrt", "mt_st_mcrtt", "mt_st_crtsdt", "mt_st_psit", "mt_st_ssrtt",
+               "mt_st_itssrt", "mt_st_psrrt"),
+  SWAN = c("adhd_i_sub", "adhd_hi_sub"),
+  TOCS = "tpocs_tot",
+  IQ = c("wasi_ii_fsiq_4", "wasi_fsiq_4", "wisc_v_fsiq", "wisc_iv_fsiq",
+         "sbfulliq", "wppsi47_full", "wppsi_iv47_fsiq_cs", "wasi_ii_fsiq_2",
+         "wasi_fsiq_2")
+)
+
+# Reduce data columns into a vector
+pond_db_data_cols <- reduce(list_data_cols, c)
+
+# Database columns to include
+pond_db_cols <- c("subject_id", "sub_id", "redcap_event_name", "redcap_repeat_instance",
+                  "site", "dob", "primary_diagnosis", "research_confirm_diag", 
+                  pond_db_data_cols)
+
+# Subset for desired columns
+df_pond_db_subset <- df_pond_db[,pond_db_cols]
+
+# Remove deprecated and cross-visit arms
+events_exclude <- c("deprecated_arm_1", "cross_visit_arm_1")
+df_pond_db_subset <- df_pond_db_subset %>% 
+  filter(!(redcap_event_name %in% events_exclude)) %>% 
+  filter(str_detect(subject_id, "deprecated", negate = TRUE))
+
+# Dictionary for site codes
+df_site_codes <- tibble(site_acronym = c("HBK", "HSC", "LHR", "MCU", "QNS"),
+                        site_code = c("105", "088", "113", "114", "394"))
+
+# Redefine site codes based on subject site acronym
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(site_acronym = subject_id %>% 
+           str_trunc(9, ellipsis = "") %>% 
+           str_trunc(3, side = "left", ellipsis = "")) %>% 
+  left_join(df_site_codes, by = "site_acronym") 
+
+# Clean up IDs
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(subject_id_test = str_trunc(subject_id, 4, side = "left", ellipsis = "")) %>% 
+  mutate(pond_id = paste0(site_code, subject_id_test)) %>% 
+  select(-subject_id_test, -sub_id, -site) %>% 
+  rename(site = site_code,
+         redcap_id = subject_id,
+         subject_id = pond_id)  
+
+# Clean up visits information
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(redcap_repeat_instance = ifelse(is.na(redcap_repeat_instance), 0, redcap_repeat_instance)) %>% 
+  mutate(visit_type = ifelse(redcap_event_name == "baseline_arm_1", "baseline", "longitudinal")) %>% 
+  rename(visit_instance = redcap_repeat_instance) %>% 
+  select(-redcap_event_name)
+
+# Correct ABAS values 
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(ab21gccs = ifelse(ab21gccs == "<40", NA, ab21gccs),
+         ab21gccs = as.numeric(ab21gccs))  
+
+# Consolidate missing values
+df_pond_db_subset <- df_pond_db_subset %>% 
+  mutate(across(all_of(pond_db_data_cols), ~ ifelse(.x %in% c(-9999, 999), NA, .x)))
+```
+
+```{r consolidate-clinical-scores}
+# Initialize data frame for POND clinical scores
+df_clinical_scores <- df_pond_db_subset %>% 
+  select(redcap_id, subject_id) %>% 
+  distinct()
+
+
+# Consolidate CBCL scores -----------------------------------------------------
+
+# If cb68 scores present, use those. If not, use cb scores
+df_cbcl_init <- df_pond_db_subset %>% 
+  select(subject_id, visit_instance, starts_with("cb")) %>% 
+  mutate(cbcl_ep_ts = ifelse(!is.na(cb68epts), cb68epts, cbepts),
+         cbcl_ip_ts = ifelse(!is.na(cb68ipts), cb68ipts, cbipts)) %>% 
+  select(subject_id, visit_instance, cbcl_ep_ts, cbcl_ip_ts)
+
+df_cbcl <- consolidate_visits(df = df_cbcl_init, cols = c("cbcl_ep_ts", "cbcl_ip_ts"))
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_cbcl, by = "subject_id")
+
+
+# Consolidate ABAS scores -----------------------------------------------------
+# Unsure of the order to use scales here, when they have multiple in the same visit
+
+df_abas_init <- df_pond_db_subset %>%
+  select(subject_id, visit_instance, starts_with("ab")) %>% 
+  mutate(abas_gccs = ifelse(!is.na(ab89gccs), ab89gccs,
+                            ifelse(!is.na(ab21gccs), ab21gccs, ab05gccs))) %>% 
+  select(subject_id, visit_instance, abas_gccs)
+
+df_abas <- consolidate_visits(df = df_abas_init, cols = "abas_gccs")
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_abas, by = "subject_id")
+
+
+# Consolidate KINDL scores ----------------------------------------------------
+# Not sure if I can compare scores here?
+# Some scores are 0. What is the range? Scores above 100.
+
+df_kindl_init <- df_pond_db_subset %>%
+  select(subject_id, visit_instance, kkid_tot, kkdo_tot, kkdy_tot) %>% 
+  mutate(kindl_tot = ifelse(!is.na(kkdo_tot), kkdo_tot, 
+                            ifelse(!is.na(kkid_tot), kkid_tot, kkdy_tot))) %>% 
+  select(subject_id, visit_instance, kindl_tot)
+
+df_kindl <- consolidate_visits(df = df_kindl_init, cols = "kindl_tot")
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_kindl, by = "subject_id")
+
+
+# Consolidate OWL scores ------------------------------------------------------
+
+df_owl_init <- df_pond_db_subset %>%
+  select(subject_id, visit_instance, starts_with("owl")) %>% 
+  mutate(owl_lc_ss = ifelse(!is.na(owl2lcss), owl2lcss, owllcss),
+         owl_oe_ss = ifelse(!is.na(owl2oess), owl2oess, owloess),
+         owl_olc_ss = ifelse(!is.na(owl2olcss), owl2olcss, owllcss)) %>% 
+  select(subject_id, visit_instance, starts_with("owl"))  
+
+df_owl <- consolidate_visits(df = df_owl_init, cols = c("owl_lc_ss", "owl_oe_ss", "owl_olc_ss"))
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_owl, by = "subject_id")
+
+
+# Consolidate IQ scores ------------------------------------------------------
+
+df_fsiq_init <- df_pond_db_subset %>% 
+  select(subject_id, visit_instance, all_of(list_data_cols[["IQ"]])) %>% 
+  mutate(fsiq = ifelse(!is.na(wasi_ii_fsiq_4), wasi_ii_fsiq_4,
+                       ifelse(!is.na(wasi_fsiq_4), wasi_fsiq_4,
+                              ifelse(!is.na(wisc_v_fsiq), wisc_v_fsiq,
+                                     ifelse(!is.na(wisc_iv_fsiq), wisc_iv_fsiq,
+                                            ifelse(!is.na(sbfulliq), sbfulliq,
+                                                   ifelse(!is.na(wppsi47_full), wppsi47_full,
+                                                          ifelse(!is.na(wppsi_iv47_fsiq_cs), wppsi_iv47_fsiq_cs,
+                                                                 ifelse(!is.na(wasi_ii_fsiq_2), wasi_ii_fsiq_2,
+                                                                        ifelse(!is.na(wasi_fsiq_2), wasi_fsiq_2, NA)))))))))) %>% 
+  select(subject_id, visit_instance, fsiq)
+
+
+df_fsiq <- consolidate_visits(df = df_fsiq_init, cols = "fsiq")
+
+df_clinical_scores <- df_clinical_scores %>% 
+  left_join(df_fsiq, by = "subject_id")
+
+
+# Consolidate remaining variables ---------------------------------------------
+
+idx_vars <- !(names(list_data_cols) %in% c("CBCL", "ABAS", "KINDL", "OWL", "OWL2", "IQ"))
+list_data_cols_sub <- list_data_cols[idx_vars]
+for (cols in list_data_cols[idx_vars]) {
+  df_clinical_scores <- df_clinical_scores %>% 
+    left_join(consolidate_visits(df = df_pond_db_subset, cols = cols),
+              by = "subject_id")
+}
+
+# Update subject IDs to match clusters and demographics
+df_clinical_scores <- df_clinical_scores %>% 
+  mutate(subject_id = paste0("sub-", subject_id))
+```
+
+
+```{r consolidate-clinical-scores}
+df_clusters_clinical <- df_clusters_pond %>% 
+  left_join(select(demographics, ID = file, subject_id = Subject_ID, Dataset),
+            by = "ID") %>% 
+  filter(Dataset == "POND") %>% 
+  left_join(df_clinical_scores, by = "subject_id")
+```
+
+```{r}
+clinical_labels <- c("scqtot" = "SCQ Total",
+                     "rbsallt" = "RBS-R Total",
+                     "tpocs_tot" = "TOCS Total",
+                     "adhd_i_sub" = "SWAN Inattentive",
+                     "adhd_hi_sub" = "SWAN Hyperactive/Impulsive",
+                     "fsiq" = "Full-Scale IQ",
+                     "abas_gccs" = "ABAS General Adaptive Composite",
+                     "cbcl_ep_ts" = "CBCL Externalizing",
+                     "cbcl_ip_ts" = "CBCL Internalizing",
+                     "ssp_total_rs" = "SSP Total",
+                     "ssp_aud_filter_rs" = "SSP Auditory Filtering",
+                     "ssp_low_enrgy_weak_rs" = "SSP Low Energy/Weak",
+                     "ssp_movement_rs" = "SSP Movement Sensitivity",
+                     "ssp_tactile_rs" = "SSP Tactile",
+                     "ssp_taste_smell_rs" = "SSP Taste/Smell Sensitivity",
+                     "ssp_underresp_seeks_rs" = "SSP Underresponsive/Seeks Sensation",
+                     "ssp_vis_aud_rs" = "SSP Visual/Auditory Sensitivity",
+                     "owl_lc_ss" = "OWLS Listening Comprehension",
+                     "owl_oe_ss" = "OWLS Oral Expression",
+                     "owl_olc_ss" = "OWLS Oral Language Composite",
+                     "nepsyii_a516_ar_ss" = "NEPSY Affect Recognition",
+                     "nepsyii_a516_mf_ss" = "NEPSY Memory for Faces",
+                     "nepsyii_a516_mfd_ss" = "NEPSY Memory for Faces (Delayed)",
+                     "nepsyii_a516_mf_mfd_ccs" = "NEPSY MF vs. MFD contrast",
+                     "bot2_bal_ss" = "BOT 2 Balance",
+                     "bot2_bltc_ss" = "BOT 2 Bilateral Coordination",
+                     "bot2_bdyc_stds" = "BOT 2 Body Coordination")
+
+df_clinical_labels <- enframe(clinical_labels, name = "variable", value = "label")
+```
+
+```{r}
+df_clinical_completion <- df_clusters_clinical %>% 
+  select(-ID, -redcap_id, -Dataset, -starts_with("nk")) %>% 
+    pivot_longer(cols = -subject_id, names_to = "variable", values_to = "score") %>% 
+  mutate(complete = !is.na(score)) %>% 
+  group_by(variable) %>% 
+  summarise(n_completed = sum(complete)) %>% 
+  ungroup() %>% 
+  arrange(desc(n_completed))
+
+df_clinical_completion
+```
+
+
+```{r}
+# Compute cluster sizes
+df_cluster_sizes_pond <- df_clusters_clinical %>% 
+  select(ID, contains("nk")) %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id, nk, k) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(nk, k)
+```
+
+
+```{r}
+# Minimal cluster size for inclusion
+# min_cluster_n <- 30
+min_cluster_n <- 1
+
+# Minimal completion number for inclusion
+min_completion_n <- 200
+
+# Select questionnaires to analyze 
+clinical_vars <- df_clinical_completion %>% 
+  filter(n_completed > min_completion_n) %>% 
+  pull(variable)
+
+# Run KW tests for each combination of nk and questionnaire
+df_kw_clusters <- expand_grid(nk = 2:10,
+                              variable = clinical_vars) %>% 
+  mutate(H = 0, p = 0)
+for (i in 1:nrow(df_kw_clusters)) {
+  
+  nki <- df_kw_clusters[[i, "nk"]]
+  variable <- df_kw_clusters[[i, "variable"]]
+  
+  # Fetch cluster sizes for current nk
+  df_cluster_sizes_nk <- df_cluster_sizes_pond %>% 
+    filter(nk == nki) %>% 
+    select(k, n)
+  
+  # Subset variables for analysis
+  cols <- c(paste0("nk", nki), variable)
+  df_model <- df_clusters_clinical[,cols]
+  colnames(df_model) <- c("k", "y")
+  
+  # Filter clusters based on size threshold
+  df_model <- df_model %>% 
+    left_join(df_cluster_sizes_nk, by = "k") %>% 
+    filter(n > min_cluster_n)
+  
+  # Remove participants with missing scores
+  df_model <- df_model %>% 
+    filter(!is.na(y))
+  
+  # Convert cluster number to factor
+  df_model <- df_model %>% 
+    mutate(k = factor(k))
+  
+  # Evaluate KW test
+  kw_out <- kruskal.test(x = df_model[["y"]], g = df_model[["k"]])
+  
+  df_kw_clusters[[i, "H"]] <- kw_out[["statistic"]]
+  df_kw_clusters[[i, "p"]] <- kw_out[["p.value"]]
+  
+}
+
+# Correct p-values using FDR
+df_kw_clusters <- df_kw_clusters %>%
+  group_by(nk) %>% 
+  mutate(q = p.adjust(p, method = "fdr")) %>% 
+  ungroup() 
+
+df_kw_clusters <- df_kw_clusters %>% 
+  left_join(df_clinical_labels, by = "variable") %>% 
+  mutate(label = factor(label, levels = df_clinical_labels$label))
+
+# df_kw_clusters_all <- df_kw_clusters
+```
+
+```{r}
+palette_univariate <- magma(n = 9, direction = -1, begin = 0.25, end = 0.85)
+
+p_threshold <- 0.05
+# H_max <- max(df_kw_clusters$H)
+H_max <- 26
+df_kw_plt <- df_kw_clusters %>% 
+  mutate(H_threshold = ifelse(p < p_threshold, H, NA),
+         significant = ifelse(p < p_threshold, "Yes", "No"),
+         significant = factor(significant, levels = c("Yes", "No")))
+
+# plt_pond_univariate <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = H, fill = H_threshold, size = significant)) + 
+#   geom_point(shape = 21, stroke = 1.2) +
+#   scale_fill_gradientn(colors = palette_univariate, limits = c(0, H_max), na.value = "white", guide = "none") +
+#   scale_colour_gradientn(colors = palette_univariate, limits = c(0, H_max)) + 
+#   scale_size_manual(values = c(5, 2),
+#                     labels = expression(p < 0.05, p >= 0.05)) + 
+#   labs(x = "POND+ cluster solution (K)",
+#        y = "Clinical measure",
+#        col = "H-statistic",
+#        size = "p-value") +
+#   theme_bw() +
+#   theme(panel.grid.major = element_blank(),
+#         axis.title = element_text(size = 6),
+#         axis.text = element_text(size = 6),
+#         legend.text = element_text(size = 6),
+#         legend.title = element_text(size = 6),
+#         plot.margin = margin(t = 2, l = 2))
+
+
+plt_pond_univariate <- ggplot(df_kw_plt, 
+                              aes(x = factor(nk), y = fct_rev(label), 
+                                  fill = H_threshold)) + 
+  geom_tile(col = "grey50") +
+  scale_fill_gradientn(colors = palette_univariate,
+                       limits = c(0, H_max), 
+                       na.value = "grey90",
+                       guide = guide_colourbar(barwidth = unit(12, "bigpts"),
+                                               barheight = unit(100, "bigpts"))) +
+  labs(x = "POND+ cluster solution (K)",
+       y = "Clinical measure",
+       fill = "H-statistic") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        legend.text = element_text(size = 6, margin = margin(l = 2)),
+        legend.title = element_text(size = 6, margin = margin(b = 2)),
+        legend.margin = margin(),
+        legend.box.margin = margin(),
+        plot.margin = margin(t = 2, l = 2))
+
+
+univariate_legend_grob <- plt_pond_univariate %>% 
+  ggplotGrob() %>% 
+  grid.force() %>% 
+  getGrob("guide-box-right.9-11-9-11")
+
+plt_pond_univariate <- plt_pond_univariate + theme(legend.position = "none")
+```
+
+
+## HBN
+
+```{r}
+list_HBN_assessments <- list(
+  ACE = list(code = "ACE", skip = TRUE, vars = c("ACE_Score")),
+  ARI_P = list(code = "ARI_P",
+               skip = TRUE,
+               vars = c("ARI_P_Total_Score")),
+  ARI_S = list(code = "ARI_S",
+               skip = TRUE,
+               vars = c("ARI_S_Total_Score")),
+  ASSQ = list(code = "ASSQ",
+              skip = TRUE,
+              vars = c("ASSQ_Total")),
+  CDI_P = list(code = "CDI2_P",
+               skip = TRUE,
+               vars = c("CDI2P_Total_T")),
+  CDI_S = list(code = "CDI2_SR",
+               skip = TRUE,
+               vars = c("CDI2_Total_T")),
+  CGAS = list(code = "CGAS",
+              skip = TRUE,
+              vars = c("CGAS_Score")),
+  CIS_P = list(code = "CIS_P",
+               skip = TRUE,
+               vars = c("CIS_P_Score")),
+  CIS_SR = list(code = "CIS_SR",
+                skip = TRUE,
+                vars = c("CIS_SR_Total")),
+  EVT = list(code = "EVT",
+             skip = TRUE,
+             vars = c("EVT2_StandardScore")),
+  GFTA = list(code = "GFTA",
+              skip = TRUE,
+              vars = c("GFTA_SIW_Stnd", "GFTA_SIS_Stnd")),
+  ICU_P = list(code =  "ICU_P",
+               skip = TRUE,
+               vars = c("ICU_P_Callous", "ICU_P_Uncaring", 
+                        "ICU_P_Unemotional", "ICU_P_Total")),
+  ICU_SR = list(code = "ICU_SR",
+                skip = TRUE,
+                vars = c("ICU_SR_Callous", "ICU_SR_Uncaring",
+                         "ICU_SR_Unemotional", "ICU_SR_Total")),
+  KBIT = list(code = "KBIT",
+              skip = TRUE,
+              vars = c("KBIT_IQ_Comp")),
+  MFQ_P = list(code = "MFQ_P",
+               skip = TRUE,
+               vars = c("MFQ_P_Total")),
+  MFQ_SR = list(code = "MFQ_SR",
+                skip = TRUE,
+                vars = c("MFQ_SR_Total #1")),
+  NIH_Scores = list(code = "NIH_Scores",
+                    skip = TRUE,
+                    vars = c("NIH7_Card", "NIH7_Cog", "NIH7_Flanker", 
+                             "NIH7_List", "NIH7_Pattern", "NIH7_Picture")),
+  PPVT = list(code = "PPVT",
+              skip = TRUE,
+              vars = c("PPVT4_StandardScore")),
+  Quotient = list(code = "Quotient",
+                  skip = TRUE,
+                  vars = c("quotient_global_scaled")),
+  RANRAS = list(code = "RANRAS",
+                skip = TRUE,
+                vars = c("RR_Let_Stnd", "RR_Obj_Stnd", "RR_Two_Stnd", "RR_Col_Stnd",
+                         "RR_Num_Stnd", "RR_Three_Stnd")),
+  RBS = list(code = "RBS",
+             skip = TRUE,
+             vars = c("Score_Total")),
+  SCARED_P = list(code = "SCARED_P",
+                  skip = TRUE,
+                  vars = c("SCARED_P_Total")),
+  SCARED_SR = list(code = "SCARED_SR",
+                   skip = TRUE,
+                   vars = c("SCARED_SR_Total")),
+  SCQ = list(code = "SCQ",
+             skip = TRUE,
+             vars = c("SCQ_Total")),
+  SDQ = list(code = "SDQ",
+             skip = TRUE,
+             vars = c("SDQ_Difficulties_Total")),
+  SDS = list(code = "SDS",
+             skip = TRUE,
+             vars = c("SDS_Total_T")),
+  STAI = list(code = "STAI",
+              skip = TRUE,
+              vars = c("STAI_SA", "STAI_TA")),
+  SWAN = list(code = "SWAN",
+              skip = TRUE,
+              vars = c("ADHD_HI", "ADHD_I")),
+  TOWRE = list(code = "TOWRE",
+               skip = TRUE,
+               vars = c("TOWRE_PDE_Scaled", "TOWRE_SWE_Scaled", "TOWRE_Total_Scaled")),
+  Vineland = list(code = "Vineland",
+                  skip = TRUE,
+                  vars = c("VL_Comm_Scale", "VL_DLS_Scale", "VL_Social_Scale")),
+  WHODAS_P = list(code = "WHODAS_P",
+                  skip = TRUE,
+                  vars = c("WHODAS_P_Score")),
+  WHODAS_SR = list(code = "WHODAS_SR",
+                   skip = TRUE,
+                   vars = c("WHODAS_SR_Score")),
+  YSR = list(code = "YSR",
+             skip = TRUE,
+             vars = c("YSR_Total_T"))
+)
+```
+
+
+```{r}
+clinical_labels_hbn <- c("SCQ_Total" = "SCQ Total",
+                         "Score_Total" = "RBS-R Total",
+                         "ADHD_I" = "SWAN Inattentive",
+                         "ADHD_HI" = "SWAN Hyperactive/Impulsive",
+                         "FSIQ" = "Full-Scale IQ",
+                         "CGAS_Score" = "CGAS Score",
+                         "CBCL_EP_T" = "CBCL Externalizing",
+                         "CBCL_IP_T" = "CBCL Internalizing",
+                         "ASSQ_Total" = "ASSQ Total",
+                         "ARI_P_Total_Score" = "ARI Total Score",
+                         "SCARED_P_Total" = "SCARED Total Score",
+                         "MFQ_P_Total" = "MFQ Total Score",
+                         "SDQ_Difficulties_Total" = "SDQ Difficulties Total",
+                         "WHODAS_P_Score" = "WHODAS Score",
+                         "CIS_P_Score" = "CIS Total Score",
+                         "SDS_Total_T" = "SDS Total",
+                         "ICU_P_Callous" = "ICU Callousness Score",
+                         "ICU_P_Uncaring" = "ICU Uncaring Score",
+                         "ICU_P_Unemotional" = "ICU Unemotional Score",
+                         "ICU_P_Total" = "ICU Total Score",
+                         "NIH7_Card" = "NIH Dimensional Change Card Sort",
+                         "NIH7_Flanker" = "NIH Flanker Inhibitory Control/Attention",
+                         "NIH7_Pattern" = "NIH Pattern Comparison Process Speed",
+                         "NIH7_List" = "NIH List Sorting Working Memory",
+                         "TOWRE_SWE_Scaled" = "TOWRE-2 Sight Word",
+                         "TOWRE_PDE_Scaled" = "TOWRE-2 Phonemic Decoding",
+                         "TOWRE_Total_Scaled" = "TOWRE-2 Total Word Reading",
+                         "GFTA_SIW_Stnd" = "GFTA Sounds-in-words",
+                         "YSR_Total_T" = "YSR Total")
+
+
+df_clinical_labels_hbn <- enframe(clinical_labels_hbn, name = "variable", value = "label")
+```
+
+
+```{r}
+path_HBN_assessments <- file.path(human_registration_dir, "subject_info", 
+                                  "HBN", "assessment_data")
+
+df_clusters_clinical_HBN <- df_clusters_hbn %>% 
+  left_join(select(demographics, ID = file, subject_id = Subject_ID), by = "ID")
+
+for (x in list_HBN_assessments) {
+  
+  file <- paste0("9994_", x$code, "_20220728.csv")
+  file <- file.path(path_HBN_assessments, file)
+  df <- read_csv(file, show_col_types = FALSE)
+  if (x$skip) {df <- df[2:nrow(df),]}
+  
+  df <- df[,c("EID", x$vars)]
+  colnames(df) <- c("subject_id", x$vars)
+  df <- df %>% 
+    mutate(across(x$vars, as.numeric)) %>% 
+    distinct()
+  
+  n_multiple <- df %>% 
+    group_by(subject_id) %>% 
+    count() %>% 
+    filter(n > 1) %>% 
+    nrow()
+  
+  if (n_multiple > 0) {
+    df <- df %>% 
+      group_by(subject_id) %>% 
+      sample_n(size = 1) %>% 
+      ungroup() 
+  }
+  
+  df_clusters_clinical_HBN <- df_clusters_clinical_HBN %>% 
+    left_join(df, by = "subject_id")
+}
+
+
+## CBCL
+
+file <- file.path(path_HBN_assessments, "9994_CBCL_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df_cbcl <- df %>% 
+  select(subject_id = EID, CBCL_IP_T = CBCL_Int_T, CBCL_EP_T = CBCL_Ext_T)
+
+file <- file.path(path_HBN_assessments, "9994_CBCL_Pre_20220728.csv")
+df <- read_csv(file, show_col_types = FALSE)
+
+df <- df[2:nrow(df),]
+
+df_cbcl_pre <- df %>% 
+  select(subject_id = EID, CBCL_IP_T = CBCL_Pre_Int_T, CBCL_EP_T = CBCL_Pre_Ext_T) %>% 
+  mutate(CBCL_IP_T = as.numeric(CBCL_IP_T),
+         CBCL_EP_T = as.numeric(CBCL_EP_T))
+
+df_cbcl <- bind_rows(df_cbcl, df_cbcl_pre)
+
+df_clusters_clinical_HBN <- df_clusters_clinical_HBN %>% 
+  left_join(df_cbcl, by = "subject_id")
+
+
+## IQ
+
+file <- file.path(path_HBN_assessments, "9994_WISC_20220728.csv")
+df_wisc <- read_csv(file, show_col_types = FALSE)
+
+df_wisc <- df_wisc[2:nrow(df_wisc),]
+
+df_wisc <- df_wisc %>% 
+  select(subject_id = EID, WISC_FSIQ) %>% 
+  mutate(WISC_FSIQ = as.numeric(WISC_FSIQ)) %>% 
+  group_by(subject_id) %>% 
+  mutate(WISC_FSIQ_MEAN = mean(WISC_FSIQ)) %>% 
+  ungroup() %>% 
+  select(subject_id, WISC_FSIQ = WISC_FSIQ_MEAN) %>% 
+  distinct()
+
+file <- file.path(path_HBN_assessments, "9994_WASI_20220728.csv")
+df_wasi <- read_csv(file, show_col_types = FALSE)
+
+df_wasi <- df_wasi[2:nrow(df_wasi),]
+
+df_wasi <- df_wasi %>% 
+  select(subject_id = EID, WASI_FSIQ) %>% 
+  mutate(WASI_FSIQ = as.numeric(WASI_FSIQ))
+
+df_fsiq <- full_join(df_wisc, df_wasi, by = "subject_id")
+
+df_fsiq <- df_fsiq %>% 
+  mutate(FSIQ = ifelse(!is.na(WASI_FSIQ), WASI_FSIQ, WISC_FSIQ)) %>% 
+  select(subject_id, FSIQ)
+
+df_clusters_clinical_HBN <- df_clusters_clinical_HBN %>% 
+  left_join(df_fsiq, by = "subject_id")
+
+
+
+## CELF
+
+file <- file.path(path_HBN_assessments, "9994_CELF_Full_5to8_20220728.csv")
+df_celf_5to8 <- read_csv(file, show_col_types = FALSE)
+
+df_celf_5to8 <- df_celf_5to8[2:nrow(df_celf_5to8),]
+
+df_celf_5to8 <- df_celf_5to8 %>% 
+  select(subject_id = EID, CELF_CLS_Stnd, CELF_RLI_Stnd, CELF_ELI_Stnd, CELF_LCI_Stnd) %>% 
+  mutate(CELF_CLS_Stnd = as.numeric(CELF_CLS_Stnd),
+         CELF_RLI_Stnd = as.numeric(CELF_RLI_Stnd),
+         CELF_ELI_Stnd = as.numeric(CELF_ELI_Stnd),
+         CELF_LCI_Stnd = as.numeric(CELF_LCI_Stnd))
+
+
+file <- file.path(path_HBN_assessments, "9994_CELF_Full_9to21_20220728.csv")
+df_celf_9to21 <- read_csv(file, show_col_types = FALSE)
+
+df_celf_9to21 <- df_celf_9to21[2:nrow(df_celf_9to21),]
+
+df_celf_9to21 <- df_celf_9to21 %>% 
+  select(subject_id = EID, CELF_CLS_Stnd, CELF_RLI_Stnd, CELF_ELI_Stnd, CELF_LCI_Stnd) %>% 
+  mutate(CELF_CLS_Stnd = as.numeric(CELF_CLS_Stnd),
+         CELF_RLI_Stnd = as.numeric(CELF_RLI_Stnd),
+         CELF_ELI_Stnd = as.numeric(CELF_ELI_Stnd),
+         CELF_LCI_Stnd = as.numeric(CELF_LCI_Stnd))
+
+
+df_celf <- bind_rows(df_celf_5to8, df_celf_9to21)
+
+df_clusters_clinical_HBN <- df_clusters_clinical_HBN %>% 
+  left_join(df_celf, by = "subject_id")
+
+df_clusters_clinical_HBN <- df_clusters_clinical_HBN %>% 
+  select(-contains("_SR_"), -ARI_S_Total_Score, -CDI2_Total_T)
+
+```
+
+
+
+```{r}
+df_clinical_completion <- df_clusters_clinical_HBN %>% 
+  select(-ID, -starts_with("nk")) %>% 
+    pivot_longer(cols = -subject_id, names_to = "variable", values_to = "score") %>% 
+  mutate(complete = !is.na(score)) %>% 
+  group_by(variable) %>% 
+  summarise(n_completed = sum(complete)) %>% 
+  ungroup() %>% 
+  arrange(desc(n_completed))
+
+df_clinical_completion
+```
+
+
+```{r}
+# Compute cluster sizes
+df_cluster_sizes_HBN <- df_clusters_clinical_HBN %>% 
+  select(ID, starts_with("nk")) %>% 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
+  group_by(cluster_id, nk, k) %>%
+  count() %>% 
+  ungroup() %>% 
+  arrange(nk, k)
+
+df_cluster_sizes_HBN
+```
+
+
+```{r}
+# Minimal cluster size for inclusion
+# min_cluster_n <- 30
+min_cluster_n <- 1
+
+# Minimal completion number for inclusion
+min_completion_n <- 200
+
+# Select questionnaires to analyze 
+clinical_vars <- df_clinical_completion %>% 
+  filter(n_completed > min_completion_n) %>% 
+  pull(variable)
+
+# Run KW tests for each combination of nk and questionnaire
+df_kw_clusters <- expand_grid(nk = 2:10,
+                              variable = clinical_vars) %>% 
+  mutate(H = 0, p = 0)
+for (i in 1:nrow(df_kw_clusters)) {
+  
+  nki <- df_kw_clusters[[i, "nk"]]
+  variable <- df_kw_clusters[[i, "variable"]]
+  
+  # Fetch cluster sizes for current nk
+  df_cluster_sizes_nk <- df_cluster_sizes_HBN %>% 
+    filter(nk == nki) %>% 
+    select(k, n)
+  
+  # Subset variables for analysis
+  cols <- c(paste0("nk", nki), variable)
+  df_model <- df_clusters_clinical_HBN[,cols]
+  colnames(df_model) <- c("k", "y")
+  
+  # Filter clusters based on size threshold
+  df_model <- df_model %>% 
+    left_join(df_cluster_sizes_nk, by = "k") %>% 
+    filter(n > min_cluster_n)
+  
+  # Remove participants with missing scores
+  df_model <- df_model %>% 
+    filter(!is.na(y))
+  
+  # Convert cluster number to factor
+  df_model <- df_model %>% 
+    mutate(k = factor(k))
+  
+  # Evaluate KW test
+  kw_out <- kruskal.test(x = df_model[["y"]], g = df_model[["k"]])
+  
+  df_kw_clusters[[i, "H"]] <- kw_out[["statistic"]]
+  df_kw_clusters[[i, "p"]] <- kw_out[["p.value"]]
+  
+}
+
+# Correct p-values using FDR
+df_kw_clusters <- df_kw_clusters %>%
+  group_by(nk) %>% 
+  mutate(q = p.adjust(p, method = "fdr")) %>% 
+  ungroup() 
+
+df_kw_clusters <- df_kw_clusters %>% 
+  left_join(df_clinical_labels_hbn, by = "variable") %>% 
+  mutate(label = factor(label, levels = df_clinical_labels_hbn$label))
+
+# df_kw_clusters_all <- df_kw_clusters
+```
+
+
+```{r}
+palette_univariate <- magma(n = 9, direction = -1, begin = 0.25, end = 0.85)
+
+p_threshold <- 0.05
+# H_max <- max(df_kw_clusters$H)
+H_max <- 26
+df_kw_plt <- df_kw_clusters %>% 
+  mutate(H_threshold = ifelse(p < p_threshold, H, NA),
+         significant = ifelse(p < p_threshold, "Yes", "No"),
+         significant = factor(significant, levels = c("Yes", "No")))
+
+# plt_pond_univariate <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = H, fill = H_threshold, size = significant)) + 
+#   geom_point(shape = 21, stroke = 1.2) +
+#   scale_fill_gradientn(colors = palette_univariate, limits = c(0, H_max), na.value = "white", guide = "none") +
+#   scale_colour_gradientn(colors = palette_univariate, limits = c(0, H_max)) + 
+#   scale_size_manual(values = c(5, 2),
+#                     labels = expression(p < 0.05, p >= 0.05)) + 
+#   labs(x = "POND+ cluster solution (K)",
+#        y = "Clinical measure",
+#        col = "H-statistic",
+#        size = "p-value") +
+#   theme_bw() +
+#   theme(panel.grid.major = element_blank(),
+#         axis.title = element_text(size = 6),
+#         axis.text = element_text(size = 6),
+#         legend.text = element_text(size = 6),
+#         legend.title = element_text(size = 6),
+#         plot.margin = margin(t = 2, l = 2))
+
+
+plt_hbn_univariate <- ggplot(df_kw_plt, 
+                              aes(x = factor(nk), 
+                                  y = fct_rev(label),
+                                  fill = H_threshold)) + 
+  geom_tile(col = "grey50") +
+  scale_fill_gradientn(colors = palette_univariate,
+                       limits = c(0, H_max), 
+                       na.value = "grey90",
+                       guide = guide_colourbar(barwidth = unit(12, "bigpts"),
+                                               barheight = unit(100, "bigpts"))) +
+  labs(x = "HBN cluster solution (K)",
+       y = "Clinical measure",
+       fill = "H-statistic") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        legend.position = "none",
+        plot.margin = margin(t = 2, l = 2))
+
+
+plt_hbn_univariate
+```
+
+
+
+
+# Figure
+
+
+```{r}
+panel_label_pond <- gTree(children = gList(textGrob("POND+", x = 0.53, gp = gpar(fontsize = 8)),
+                                           segmentsGrob(x0 = 0.10, x1 = 1, y0 = 0.07, y1 = 0.07)))
+panel_label_hbn <- gTree(children = gList(textGrob("HBN", x = 0.53, gp = gpar(fontsize = 8)),
+                                          segmentsGrob(x0 = 0.08, x1 = 1, y0 = 0.07, y1 = 0.07)))
+
+
+# Science two-col figure dimensions
+fig_width <- 7.25*72
+
+legend_width <- 35
+padding_width <- 10
+plotting_area <- fig_width - legend_width - padding_width
+panel_width <- plotting_area/2
+panel_dx_height <- 160
+padding_height <- 10
+panel_univar_height <- 200
+panel_label_height <- 15
+
+fig_widths <- c(panel_width, padding_width, panel_width, legend_width)
+fig_heights <- c(panel_label_height, panel_dx_height, padding_height, panel_univar_height)
+
+fig_layout <- rbind(c(10, 02, 11, NA),
+                    c(01, 02, 03, 04),
+                    c(05, 05, 05, 05),
+                    c(06, 07, 08, 09))
+
+fig_grob <- arrangeGrob(pond_dx_grob, 
+                        zeroGrob(), #padding
+                        hbn_dx_grob, # HBN dx
+                        diagnoses_legend_grob, # dx legend
+                        zeroGrob(), #padding
+                        ggplotGrob(plt_pond_univariate),
+                        zeroGrob(), #padding
+                        ggplotGrob(plt_hbn_univariate), # HBN univariate
+                        univariate_legend_grob,
+                        panel_label_pond,
+                        panel_label_hbn,
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"),
+                        heights = unit(fig_heights, "bigpts"))
+
+
+fig_height_pt <- sum(fig_heights)
+fig_width_pt <- sum(fig_widths)
+
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
+
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+grid.text(label = c("A", "B"), 
+          x = unit(c(7, 7), "bigpts"),
+          y = unit(c(377, 205), "bigpts"),
+          gp = gpar(fontsize = 10, fontface = "bold"))
+invisible(dev.off())
+```

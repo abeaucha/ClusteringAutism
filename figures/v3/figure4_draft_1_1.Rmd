@@ -514,7 +514,6 @@ df_clinical_labels <- enframe(clinical_labels, name = "variable", value = "label
 ```
 
 
-
 ## Univariate analyses
 
 ### Differences between clusters

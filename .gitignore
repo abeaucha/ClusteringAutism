@@ -52,3 +52,4 @@ build_demo_data.R
 .DS_Store
 analyses/.DS_Store
 air.toml
+.positai
