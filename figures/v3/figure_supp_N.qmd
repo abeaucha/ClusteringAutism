@@ -217,8 +217,6 @@ pond_dx_grob <- arrangeGrob(list_pond_dx_plots[[1]],
                             heights = unit(pond_dx_heights, "npc"))
 ```
 
-
-
 ## HBN
 
 ```{r}
@@ -237,7 +235,6 @@ df_clusters_hbn_dx <- df_clusters_hbn_long %>%
   left_join(list_diagnoses$HBN, by = "DX") %>% 
   select(-DX, DX = DX_new) 
 ```
-
 
 ```{r}
 nk_subset <- seq(2, 10, by = 2)
@@ -332,13 +329,9 @@ hbn_dx_grob <- arrangeGrob(list_hbn_dx_plots[[1]],
                             heights = unit(hbn_dx_heights, "npc"))
 ```
 
-
-
 # Univariate clinical measures
 
 ## POND+
-
-
 
 ```{r import-pond-db}
 # Import full POND database
@@ -533,7 +526,6 @@ df_clinical_scores <- df_clinical_scores %>%
   mutate(subject_id = paste0("sub-", subject_id))
 ```
 
-
 ```{r consolidate-clinical-scores}
 df_clusters_clinical <- df_clusters_pond %>% 
   left_join(select(demographics, ID = file, subject_id = Subject_ID, Dataset),
@@ -587,7 +579,6 @@ df_clinical_completion <- df_clusters_clinical %>%
 df_clinical_completion
 ```
 
-
 ```{r}
 # Compute cluster sizes
 df_cluster_sizes_pond <- df_clusters_clinical %>% 
@@ -600,7 +591,6 @@ df_cluster_sizes_pond <- df_clusters_clinical %>%
   ungroup() %>% 
   arrange(nk, k)
 ```
-
 
 ```{r}
 # Minimal cluster size for inclusion
@@ -618,7 +608,7 @@ clinical_vars <- df_clinical_completion %>%
 # Run KW tests for each combination of nk and questionnaire
 df_kw_clusters <- expand_grid(nk = 2:10,
                               variable = clinical_vars) %>% 
-  mutate(H = 0, p = 0)
+  mutate(H = 0, p = 0, eta2H = 0, eta2 = 0)
 for (i in 1:nrow(df_kw_clusters)) {
   
   nki <- df_kw_clusters[[i, "nk"]]
@@ -649,9 +639,19 @@ for (i in 1:nrow(df_kw_clusters)) {
   
   # Evaluate KW test
   kw_out <- kruskal.test(x = df_model[["y"]], g = df_model[["k"]])
+  anova_out <- anova(lm(y ~ k, data = df_model))
   
-  df_kw_clusters[[i, "H"]] <- kw_out[["statistic"]]
+  ss_between <- anova_out["k", "Sum Sq"]
+  ss_total <- sum(anova_out[, "Sum Sq"])
+  
+  H <- kw_out[["statistic"]]
+  n <- nrow(df_model)
+  k <- length(levels(df_model$k))
+  
+  df_kw_clusters[[i, "H"]] <- H
   df_kw_clusters[[i, "p"]] <- kw_out[["p.value"]]
+  df_kw_clusters[[i, "eta2H"]] <- H/(n-1)
+  df_kw_clusters[[i, "eta2"]] <- ss_between/ss_total
   
 }
 
@@ -665,7 +665,10 @@ df_kw_clusters <- df_kw_clusters %>%
   left_join(df_clinical_labels, by = "variable") %>% 
   mutate(label = factor(label, levels = df_clinical_labels$label))
 
-# df_kw_clusters_all <- df_kw_clusters
+df_kw_clusters <- df_kw_clusters %>% 
+  mutate(var_explained = eta2*100)
+
+df_kw_clusters_pond <- df_kw_clusters
 ```
 
 ```{r}
@@ -674,51 +677,59 @@ palette_univariate <- magma(n = 9, direction = -1, begin = 0.25, end = 0.85)
 p_threshold <- 0.05
 # H_max <- max(df_kw_clusters$H)
 H_max <- 26
-df_kw_plt <- df_kw_clusters %>% 
+var_explained_max <- 7
+df_kw_plt_pond <- df_kw_clusters_pond %>% 
   mutate(H_threshold = ifelse(p < p_threshold, H, NA),
+         var_explained_threshold = ifelse(p < p_threshold, var_explained, NA),
          significant = ifelse(p < p_threshold, "Yes", "No"),
          significant = factor(significant, levels = c("Yes", "No")))
 
-# plt_pond_univariate <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = H, fill = H_threshold, size = significant)) + 
-#   geom_point(shape = 21, stroke = 1.2) +
-#   scale_fill_gradientn(colors = palette_univariate, limits = c(0, H_max), na.value = "white", guide = "none") +
-#   scale_colour_gradientn(colors = palette_univariate, limits = c(0, H_max)) + 
-#   scale_size_manual(values = c(5, 2),
-#                     labels = expression(p < 0.05, p >= 0.05)) + 
-#   labs(x = "POND+ cluster solution (K)",
-#        y = "Clinical measure",
-#        col = "H-statistic",
-#        size = "p-value") +
-#   theme_bw() +
-#   theme(panel.grid.major = element_blank(),
-#         axis.title = element_text(size = 6),
-#         axis.text = element_text(size = 6),
-#         legend.text = element_text(size = 6),
-#         legend.title = element_text(size = 6),
-#         plot.margin = margin(t = 2, l = 2))
-
-
-plt_pond_univariate <- ggplot(df_kw_plt, 
-                              aes(x = factor(nk), y = fct_rev(label), 
-                                  fill = H_threshold)) + 
-  geom_tile(col = "grey50") +
-  scale_fill_gradientn(colors = palette_univariate,
-                       limits = c(0, H_max), 
-                       na.value = "grey90",
+plt_pond_univariate <- ggplot(df_kw_plt_pond, aes(x = factor(nk), y = fct_rev(label), 
+                                             col = var_explained, fill = var_explained_threshold)) +
+  geom_point(shape = 21, stroke = 1.0, size = 1.5) +
+  scale_fill_gradientn(colors = palette_univariate, limits = c(0, var_explained_max), na.value = "white", guide = "none") +
+  scale_colour_gradientn(colors = palette_univariate,
+                         limits = c(0, var_explained_max),
+                         breaks = seq(0, var_explained_max, by = 1),
                        guide = guide_colourbar(barwidth = unit(12, "bigpts"),
-                                               barheight = unit(100, "bigpts"))) +
+                                               barheight = unit(100, "bigpts"),
+                                               title.position = "right", title.hjust = 0.5)) +
   labs(x = "POND+ cluster solution (K)",
        y = "Clinical measure",
-       fill = "H-statistic") +
+       col = "Variance explained (%)",
+       size = "p-value") +
   theme_bw() +
   theme(panel.grid.major = element_blank(),
         axis.title = element_text(size = 6),
         axis.text = element_text(size = 6),
         legend.text = element_text(size = 6, margin = margin(l = 2)),
-        legend.title = element_text(size = 6, margin = margin(b = 2)),
+        legend.title = element_text(size = 6, angle = 270, margin = margin(l = 3)),
         legend.margin = margin(),
         legend.box.margin = margin(),
         plot.margin = margin(t = 2, l = 2))
+
+
+# plt_pond_univariate <- ggplot(df_kw_plt, 
+#                               aes(x = factor(nk), y = fct_rev(label), 
+#                                   fill = H_threshold)) + 
+#   geom_tile(col = "grey50") +
+#   scale_fill_gradientn(colors = palette_univariate,
+#                        limits = c(0, H_max), 
+#                        na.value = "grey90",
+#                        guide = guide_colourbar(barwidth = unit(12, "bigpts"),
+#                                                barheight = unit(100, "bigpts"))) +
+#   labs(x = "POND+ cluster solution (K)",
+#        y = "Clinical measure",
+#        fill = "H-statistic") +
+#   theme_bw() +
+#   theme(panel.grid.major = element_blank(),
+#         axis.title = element_text(size = 6),
+#         axis.text = element_text(size = 6),
+#         legend.text = element_text(size = 6, margin = margin(l = 2)),
+#         legend.title = element_text(size = 6, margin = margin(b = 2)),
+#         legend.margin = margin(),
+#         legend.box.margin = margin(),
+#         plot.margin = margin(t = 2, l = 2))
 
 
 univariate_legend_grob <- plt_pond_univariate %>% 
@@ -728,6 +739,8 @@ univariate_legend_grob <- plt_pond_univariate %>%
 
 plt_pond_univariate <- plt_pond_univariate + theme(legend.position = "none")
 ```
+
+
 
 
 ## HBN
@@ -838,7 +851,6 @@ list_HBN_assessments <- list(
 )
 ```
 
-
 ```{r}
 clinical_labels_hbn <- c("SCQ_Total" = "SCQ Total",
                          "Score_Total" = "RBS-R Total",
@@ -873,7 +885,6 @@ clinical_labels_hbn <- c("SCQ_Total" = "SCQ Total",
 
 df_clinical_labels_hbn <- enframe(clinical_labels_hbn, name = "variable", value = "label")
 ```
-
 
 ```{r}
 path_HBN_assessments <- file.path(human_registration_dir, "subject_info", 
@@ -1011,8 +1022,6 @@ df_clusters_clinical_HBN <- df_clusters_clinical_HBN %>%
 
 ```
 
-
-
 ```{r}
 df_clinical_completion <- df_clusters_clinical_HBN %>% 
   select(-ID, -starts_with("nk")) %>% 
@@ -1025,7 +1034,6 @@ df_clinical_completion <- df_clusters_clinical_HBN %>%
 
 df_clinical_completion
 ```
-
 
 ```{r}
 # Compute cluster sizes
@@ -1041,7 +1049,6 @@ df_cluster_sizes_HBN <- df_clusters_clinical_HBN %>%
 
 df_cluster_sizes_HBN
 ```
-
 
 ```{r}
 # Minimal cluster size for inclusion
@@ -1059,7 +1066,7 @@ clinical_vars <- df_clinical_completion %>%
 # Run KW tests for each combination of nk and questionnaire
 df_kw_clusters <- expand_grid(nk = 2:10,
                               variable = clinical_vars) %>% 
-  mutate(H = 0, p = 0)
+  mutate(H = 0, p = 0, eta2H = 0, eta2 = 0)
 for (i in 1:nrow(df_kw_clusters)) {
   
   nki <- df_kw_clusters[[i, "nk"]]
@@ -1090,9 +1097,19 @@ for (i in 1:nrow(df_kw_clusters)) {
   
   # Evaluate KW test
   kw_out <- kruskal.test(x = df_model[["y"]], g = df_model[["k"]])
+  anova_out <- anova(lm(y ~ k, data = df_model))
   
-  df_kw_clusters[[i, "H"]] <- kw_out[["statistic"]]
+  ss_between <- anova_out["k", "Sum Sq"]
+  ss_total <- sum(anova_out[, "Sum Sq"])
+  
+  H <- kw_out[["statistic"]]
+  n <- nrow(df_model)
+  k <- length(levels(df_model$k))
+  
+  df_kw_clusters[[i, "H"]] <- H
   df_kw_clusters[[i, "p"]] <- kw_out[["p.value"]]
+  df_kw_clusters[[i, "eta2H"]] <- H/(n-1)
+  df_kw_clusters[[i, "eta2"]] <- ss_between/ss_total
   
 }
 
@@ -1106,7 +1123,10 @@ df_kw_clusters <- df_kw_clusters %>%
   left_join(df_clinical_labels_hbn, by = "variable") %>% 
   mutate(label = factor(label, levels = df_clinical_labels_hbn$label))
 
-# df_kw_clusters_all <- df_kw_clusters
+df_kw_clusters <- df_kw_clusters %>% 
+  mutate(var_explained = eta2*100)
+
+df_kw_clusters_hbn <- df_kw_clusters
 ```
 
 
@@ -1116,43 +1136,22 @@ palette_univariate <- magma(n = 9, direction = -1, begin = 0.25, end = 0.85)
 p_threshold <- 0.05
 # H_max <- max(df_kw_clusters$H)
 H_max <- 26
-df_kw_plt <- df_kw_clusters %>% 
+var_explained_max <- 7
+df_kw_plt_hbn <- df_kw_clusters_hbn %>% 
   mutate(H_threshold = ifelse(p < p_threshold, H, NA),
+         var_explained_threshold = ifelse(p < p_threshold, var_explained, NA),
          significant = ifelse(p < p_threshold, "Yes", "No"),
          significant = factor(significant, levels = c("Yes", "No")))
 
-# plt_pond_univariate <- ggplot(df_kw_plt, aes(x = factor(nk), y = fct_rev(label), col = H, fill = H_threshold, size = significant)) + 
-#   geom_point(shape = 21, stroke = 1.2) +
-#   scale_fill_gradientn(colors = palette_univariate, limits = c(0, H_max), na.value = "white", guide = "none") +
-#   scale_colour_gradientn(colors = palette_univariate, limits = c(0, H_max)) + 
-#   scale_size_manual(values = c(5, 2),
-#                     labels = expression(p < 0.05, p >= 0.05)) + 
-#   labs(x = "POND+ cluster solution (K)",
-#        y = "Clinical measure",
-#        col = "H-statistic",
-#        size = "p-value") +
-#   theme_bw() +
-#   theme(panel.grid.major = element_blank(),
-#         axis.title = element_text(size = 6),
-#         axis.text = element_text(size = 6),
-#         legend.text = element_text(size = 6),
-#         legend.title = element_text(size = 6),
-#         plot.margin = margin(t = 2, l = 2))
-
-
-plt_hbn_univariate <- ggplot(df_kw_plt, 
-                              aes(x = factor(nk), 
-                                  y = fct_rev(label),
-                                  fill = H_threshold)) + 
-  geom_tile(col = "grey50") +
-  scale_fill_gradientn(colors = palette_univariate,
-                       limits = c(0, H_max), 
-                       na.value = "grey90",
-                       guide = guide_colourbar(barwidth = unit(12, "bigpts"),
-                                               barheight = unit(100, "bigpts"))) +
+plt_hbn_univariate <- ggplot(df_kw_plt_hbn, aes(x = factor(nk), y = fct_rev(label), 
+                                             col = var_explained, fill = var_explained_threshold)) +
+  geom_point(shape = 21, stroke = 1.0, size = 1.5) +
+  scale_fill_gradientn(colors = palette_univariate, limits = c(0, var_explained_max), na.value = "white", guide = "none") +
+  scale_colour_gradientn(colors = palette_univariate, limits = c(0, var_explained_max)) +
   labs(x = "HBN cluster solution (K)",
        y = "Clinical measure",
-       fill = "H-statistic") +
+       col = "Variance explained",
+       size = "p-value") +
   theme_bw() +
   theme(panel.grid.major = element_blank(),
         axis.title = element_text(size = 6),
@@ -1161,14 +1160,31 @@ plt_hbn_univariate <- ggplot(df_kw_plt,
         plot.margin = margin(t = 2, l = 2))
 
 
+# plt_hbn_univariate <- ggplot(df_kw_plt, 
+#                               aes(x = factor(nk), 
+#                                   y = fct_rev(label),
+#                                   fill = H_threshold)) + 
+#   geom_tile(col = "grey50") +
+#   scale_fill_gradientn(colors = palette_univariate,
+#                        limits = c(0, H_max), 
+#                        na.value = "grey90",
+#                        guide = guide_colourbar(barwidth = unit(12, "bigpts"),
+#                                                barheight = unit(100, "bigpts"))) +
+#   labs(x = "HBN cluster solution (K)",
+#        y = "Clinical measure",
+#        fill = "H-statistic") +
+#   theme_bw() +
+#   theme(panel.grid.major = element_blank(),
+#         axis.title = element_text(size = 6),
+#         axis.text = element_text(size = 6),
+#         legend.position = "none",
+#         plot.margin = margin(t = 2, l = 2))
+
+
 plt_hbn_univariate
 ```
 
-
-
-
 # Figure
-
 
 ```{r}
 panel_label_pond <- gTree(children = gList(textGrob("POND+", x = 0.53, gp = gpar(fontsize = 8)),
