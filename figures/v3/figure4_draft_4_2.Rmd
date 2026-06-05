@@ -1466,3 +1466,24 @@ grid.text(label = c("A", "B", "C", "D"),
 
 invisible(dev.off())
 ```
+
+
+```{r}
+outfile <- paste0(outfile_prefix, ".png")
+outfile <- file.path(output_dir, outfile)
+png(file = outfile,
+    width = fig_width_in,
+    height = fig_height_in,
+    units = "in",
+    res = 600)
+
+grid.draw(fig_grob)
+
+grid.text(label = c("A", "B", "C", "D"),
+          x = unit(c(6, 6, 6, 290), "bigpts"),
+          y = unit(c(312, 215, 105, 312), "bigpts"),
+          gp = gpar(fontsize = 10, fontface = "bold"))
+
+invisible(dev.off())
+```
+
