@@ -1,0 +1,617 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+library(patchwork)
+library(grid)
+library(gridExtra)
+library(rcartocolor)
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r}
+outfile_prefix <- "figure_S2_draft_1_1"
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
+```
+
+```{r}
+params_id <- "107"
+
+pipeline_dir <- file.path(
+  PROJECTPATH,
+  "data/mouse/derivatives/v3/",
+  params_id
+)
+
+cluster_dir <- file.path(pipeline_dir, "clusters", "resolution_0.2")
+
+mask_file <- file.path(
+  PROJECTPATH,
+  "data/mouse/registration/reference_files",
+  "scanbase_second_level-nlin-3_mask_200um.mnc"
+)
+
+clusters_file <- file.path(cluster_dir, "clusters.csv")
+clusters <- read_csv(clusters_file, show_col_types = FALSE)
+
+affinity_file <- file.path(cluster_dir, "affinity.csv")
+df_affinity <- read_csv(affinity_file, show_col_types = FALSE)
+
+models <- colnames(df_affinity)
+df_affinity$model1 <- models
+```
+
+```{r}
+import_mouse_effect_sizes <- function(path, clusters, mask) {
+  list_es <- vector(mode = "list", length = 2)
+  names(list_es) <- c("absolute", "relative")
+  for (i in 1:length(list_es)) {
+    jacobians <- str_to_title(names(list_es)[i])
+
+    es_files <- clusters %>%
+      pull(ID) %>%
+      str_replace(".mnc", paste0("_ES_", jacobians, "_200.mnc"))
+
+    es_files <- file.path(path, es_files)
+
+    es_mat <- import_images(
+      imgfiles = es_files,
+      mask = mask,
+      output_format = "matrix",
+      version = "v2"
+    )
+
+    es_mat[is.nan(es_mat)] <- 0
+
+    rownames(es_mat) <- clusters$ID
+
+    list_es[[i]] <- es_mat
+  }
+
+  return(list_es)
+}
+
+es_dir <- file.path(pipeline_dir, "effect_sizes", "200")
+mask_file <- file.path(
+  PROJECTPATH,
+  "data/mouse/registration/reference_files",
+  "scanbase_second_level-nlin-3_mask_200um.mnc"
+)
+
+list_es <- import_mouse_effect_sizes(
+    path = es_dir,
+    clusters = clusters,
+    mask = mask_file
+  )
+
+W <- similarity_network(x = list_es, metric = "correlation", K = 10,
+                   sigma = 0.5, t = 20, outfile = NULL)
+
+df_clusters_all <- create_clusters(W = W, nk = nrow(W)-1)
+```
+
+```{r}
+# metrics <- estimate_cluster_metrics(W = W, NUMC = 2:(nrow(W)-1))
+metrics <- estimate_cluster_metrics(W = W, NUMC = 2:100)
+```
+
+```{r}
+plt_metrics <- ggplot(metrics, aes(x = nk, y = eigengap)) + 
+  geom_line() +
+  # geom_smooth(span = 0.2) + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 50, 100), 
+                     expand = expansion(add = 2)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) +
+  coord_cartesian(xlim = c(2, 100), 
+                  ylim = c(0, 0.10)) + 
+  labs(x = "Mouse clusters (K)",
+       y = "Spectral eigengap") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 8),
+        plot.margin = margin(t = 10))
+```
+
+
+
+```{r}
+file <- "resources/cluster_metrics_uncertainty_MICe.csv"
+df_metrics_MICe <- read_csv(file, show_col_types = FALSE)
+
+df_metrics_MICe_summary <- df_metrics_MICe %>% 
+  group_by(nk) %>% 
+  summarise(eigengap_mean = mean(eigengap), 
+            eigengap_min = quantile(eigengap, prob = 0.025),
+            eigengap_max = quantile(eigengap, prob = 0.975),
+            ARI_mean = mean(ARI),
+            ARI_min = quantile(ARI, prob = 0.025),
+            ARI_max = quantile(ARI, prob = 0.975)) %>% 
+  ungroup() 
+
+df_metrics_MICe_summary
+```
+
+```{r}
+df_metrics_plt <- df_metrics_MICe_summary %>% 
+  filter(nk <= 100)
+
+plt_eigengap <- ggplot(df_metrics_plt, aes(x = nk, y = eigengap_mean)) + 
+  geom_ribbon(mapping = aes(ymin = eigengap_min, ymax = eigengap_max),
+                            alpha = 0.2) +
+  geom_line() + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 50, 100), 
+                     expand = expansion(add = 2)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.04)) +
+  labs(x = "Mouse clusters (K)",
+       y = "Laplacian eigengap") + 
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 8),
+        plot.margin = margin(t = 15))
+
+# plt_eigengap
+```
+
+
+
+
+```{r}
+plt_ARI <- ggplot(df_metrics_plt, aes(x = nk, y = ARI_mean)) + 
+  geom_ribbon(mapping = aes(ymin = ARI_min, ymax = ARI_max),
+                            alpha = 0.2) +
+  geom_line() + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 50, 100), 
+                     expand = expansion(add = 2)) + 
+  # scale_y_continuous(breaks = seq(0, 1, by = 0.02)) +
+  labs(x = "Mouse clusters (K)",
+       y = "Adjusted Rand index") + 
+    theme_bw() +
+  theme(panel.grid.minor.x = element_blank(),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 8),
+        plot.margin = margin(t = 10))
+
+plt_ARI
+```
+
+
+
+```{r}
+degs <- rowSums(W)
+degs[degs == 0] <- .Machine$double.eps
+D <- diag(degs)
+L <- D - W
+Di <- diag(1/sqrt(degs))
+L <- Di %*% L %*% Di
+eigs <- eigen(L)
+
+eigs_order <- sort(eigs$values, index.return = T)$ix
+eigs$values <- eigs$values[eigs_order]
+eigs$vectors <- eigs$vectors[, eigs_order]
+
+# lambda <- rev(eig$values)
+
+U <- eigs$vectors
+U <- U[,ncol(U):1]
+
+```
+
+```{r}
+# model_lvls <- clusters %>% 
+#   arrange(nk2) %>% 
+  # pull(ID) %>%
+#   str_remove(".mnc")
+
+threshold <- 0.01
+palette <- c("white", carto_pal(n = 9, name = "BurgYl"))
+
+nk_affinity <- c(2, 5, 10, 20)
+
+list_affinity_plt <- vector(mode = "list", length = length(nk_affinity))
+list_affinity_labels <- vector(mode = "list", length = length(nk_affinity))
+for (i in 1:length(list_affinity_plt)) {
+
+nki <- nk_affinity[i]
+
+cols <- c("ID", paste0("nk", nki))
+clusters_nk <- df_clusters_all[,cols]
+colnames(clusters_nk) <- c("ID", "k")
+
+model_lvls <- clusters_nk %>%
+  mutate(spectral_coord = U[, nki+1]) %>%
+  arrange(k, spectral_coord) %>%
+  pull(ID) %>%
+  str_remove(".mnc")
+
+# model_lvls <- clusters_nk %>%
+#   mutate(U1 = U[,1],
+#          U2 = U[,2],
+#          U3 = U[,3],
+#          U4 = U[,4]) %>%
+#   arrange(U4) %>%
+#   pull(ID) %>%
+#   str_remove(".mnc")
+
+# model_lvls <- clusters %>%
+#   arrange(nk2, nk6) %>%
+# pull(ID) %>%
+#   str_remove(".mnc")
+
+# model_lvls <- sample(model_lvls, replace = FALSE)
+
+# W_scaled <- (W - min(W))/(max(W) - min(W))
+# W_scaled <- W/max(W)
+# dist_mat <- as.dist(1 - W)
+# dist_mat <- dist(W)
+# hc <- hclust(dist_mat, method = "average")
+# model_lvls <- hc$labels[hc$order]
+# model_lvls <- str_remove(model_lvls, ".mnc")
+
+
+df_affinity_long <- df_affinity %>% 
+  pivot_longer(cols = -model1, names_to = "model2", values_to = "affinity") %>% 
+  mutate(model1 = factor(model1, levels = model_lvls),
+         model2 = factor(model2, levels = model_lvls))
+
+df_affinity_long <- df_affinity_long %>%
+  mutate(affinity = ifelse(affinity > threshold, threshold, affinity))
+
+
+
+plt <- ggplot(df_affinity_long, aes(x = model1, y = fct_rev(model2), fill = affinity)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = palette,
+                       limits = c(0, threshold),
+                       breaks = c(0, threshold),
+                       guide = guide_colourbar(barwidth = unit(12, "bigpts"),
+                                               barheight = unit(70, "bigpts"),
+                                               # label.theme = element_text(margin = margin()),
+                                               title.position = "right", title.hjust = 0.5)) +
+  labs(x = "Mouse models",
+       y = "Mouse models",
+       fill = "Affinity") + 
+  theme_bw() + 
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.x = element_text(size = 7, margin = margin()),
+        axis.title.y = element_text(size = 7, margin = margin()),
+        legend.title = element_text(size = 7, angle = 270, margin = margin(l = 2)),
+        legend.text = element_blank(),
+        # legend.background = element_rect(color = "black"),
+        legend.box.margin = margin(),
+        legend.margin = margin(l = 5),
+        # legend.position = "none",
+        plot.margin = margin())
+
+
+if (i == 1) {affinity_legend_grob <- plt %>% 
+  ggplotGrob() %>% 
+  grid.force() %>% 
+  getGrob("guides.3-3-3-3")}
+
+plt <- plt + theme(legend.position = "none")
+
+
+
+# affinity_legend_grob <- getGrob(plt_grob, "guides.3-3-3-3")
+
+# plt %>% ggplotGrob() %>% grid.force() %>% grid.ls()
+
+
+list_affinity_plt[[i]] <- ggplotGrob(plt)
+
+list_affinity_labels[[i]] <- gTree(children = gList(rectGrob(x = 0.08, just = "left", width = 0.92,
+                                                             gp = gpar(fill = "grey85")), 
+                                                    textGrob(x = 0.55, label = paste0("K = ", nki),
+                                                             gp = gpar(fontsize = 8))))
+  
+  
+
+}
+
+
+# BREAK
+
+fig_width <- 7.25*72
+
+affinity_legend_width <- 30
+
+left_padding_width <- 6
+padding_width <- 6
+padding_height <- 3
+
+panel_width <- (fig_width - affinity_legend_width - left_padding_width - 3*padding_width)/4
+
+
+affinity_panel_widths <- c(panel_width, padding_width, 
+                           panel_width, padding_width, 
+                           panel_width, padding_width, 
+                           panel_width)
+affinity_panel_heights <- c(15, padding_height, 100)
+affinity_panel_layout <- rbind(c(01, 02, 03, 04, 05, 06, 07),
+                               c(08, 08, 08, 08, 08, 08, 08),
+                               c(09, 10, 11, 12, 13, 14, 15))
+
+
+
+# affinity_panel_layout <- matrix(1:18, nrow = 2, ncol = 9, byrow = TRUE)
+
+affinity_panel_grob <- arrangeGrob(list_affinity_labels[[1]], 
+                                   zeroGrob(), 
+                                   list_affinity_labels[[2]],
+                                   zeroGrob(), 
+                                   list_affinity_labels[[3]],
+                                   zeroGrob(), 
+                                   list_affinity_labels[[4]],
+                                   zeroGrob(),
+                                   list_affinity_plt[[1]],
+                                   zeroGrob(),
+                                   list_affinity_plt[[2]],
+                                   zeroGrob(),
+                                   list_affinity_plt[[3]],
+                                   zeroGrob(),
+                                   list_affinity_plt[[4]],
+                                   layout_matrix = affinity_panel_layout,
+                                   widths = unit(affinity_panel_widths, units = "bigpts"),
+                                   heights = unit(affinity_panel_heights, units = "bigpts"))
+
+
+
+affinity_panel_height_pt <- sum(affinity_panel_heights)
+affinity_panel_width_pt <- sum(affinity_panel_widths)
+
+affinity_panel_height_in <- affinity_panel_height_pt/72
+affinity_panel_width_in <- affinity_panel_width_pt/72
+
+
+outfile <- "affinity_panel.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(affinity_panel_width_in, "in"),
+    height = unit(affinity_panel_height_in, "in"))
+grid.draw(affinity_panel_grob)
+
+invisible(dev.off())
+```
+
+
+```{r}
+# BREAK
+
+fig_heights <- c(100, 10, affinity_panel_height_pt)
+fig_widths <- c(left_padding_width, affinity_panel_width_pt, affinity_legend_width)
+
+fig_layout <- rbind(c(01, 02, 03),
+                    c(01, 04, 04),
+                    c(01, 05, 06))
+
+fig_grob <- arrangeGrob(zeroGrob(), 
+                        ggplotGrob(plt_eigengap),
+                        rectGrob(),
+                        zeroGrob(),
+                        affinity_panel_grob,
+                        affinity_legend_grob,
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"),
+                        heights = unit(fig_heights, "bigpts"))
+
+fig_height_pt <- sum(fig_heights)
+fig_width_pt <- sum(fig_widths)
+
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+
+grid.text(label = c("0.00", threshold),
+          x = unit(c(503.5, 503.5), "bigpts"),
+          y = unit(c(17, 100), "bigpts"),
+          gp = gpar(fontsize = 7))
+
+invisible(dev.off())
+
+```
+
+
+# Figure only eigengap
+
+```{r}
+# BREAK
+
+fig_heights <- c(105, 10, affinity_panel_height_pt)
+fig_widths <- c(left_padding_width, affinity_panel_width_pt, affinity_legend_width)
+
+fig_layout <- rbind(c(01, 02, 03),
+                    c(01, 04, 04),
+                    c(01, 05, 06))
+
+fig_grob <- arrangeGrob(zeroGrob(), 
+                        ggplotGrob(plt_eigengap),
+                        zeroGrob(),
+                        zeroGrob(),
+                        affinity_panel_grob,
+                        affinity_legend_grob,
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"),
+                        heights = unit(fig_heights, "bigpts"))
+
+fig_height_pt <- sum(fig_heights)
+fig_width_pt <- sum(fig_widths)
+
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+
+grid.text(label = c("0.00", threshold),
+          x = unit(c(503.5, 503.5), "bigpts"),
+          y = unit(c(17, 100), "bigpts"),
+          gp = gpar(fontsize = 7))
+
+grid.text(label = c("A", "B"),
+          x = unit(7, "bigpts"),
+          y = unit(c(227, 130), "bigpts"),
+          gp = gpar(fontsize = 10, fontface = "bold"))
+
+invisible(dev.off())
+
+```
+
+
+# Figure eigengap + ARI
+
+```{r}
+# BREAK
+
+fig_heights <- c(105, 100, 10, affinity_panel_height_pt)
+fig_widths <- c(left_padding_width, affinity_panel_width_pt, affinity_legend_width)
+
+fig_layout <- rbind(c(01, 02, 03),
+                    c(01, 04, 05),
+                    c(01, 06, 06),
+                    c(01, 07, 08))
+
+fig_grob <- arrangeGrob(zeroGrob(), 
+                        ggplotGrob(plt_eigengap),
+                        zeroGrob(),
+                        ggplotGrob(plt_ARI),
+                        zeroGrob(),
+                        zeroGrob(),
+                        affinity_panel_grob,
+                        affinity_legend_grob,
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"),
+                        heights = unit(fig_heights, "bigpts"))
+
+fig_height_pt <- sum(fig_heights)
+fig_width_pt <- sum(fig_widths)
+
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
+
+outfile <- paste0(outfile_prefix, "_with_ARI.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+
+grid.text(label = c("0.00", threshold),
+          x = unit(c(503.5, 503.5), "bigpts"),
+          y = unit(c(17, 100), "bigpts"),
+          gp = gpar(fontsize = 7))
+
+grid.text(label = c("A", "B", "C"),
+          x = unit(7, "bigpts"),
+          y = unit(c(326, 230, 130), "bigpts"),
+          gp = gpar(fontsize = 10, fontface = "bold"))
+
+invisible(dev.off())
+
+```
+
+# Figure eigengap + ARI with inset
+
+```{r}
+df_metrics_plt_inset <- df_metrics_MICe_summary %>% 
+  filter(nk <= 10)
+
+plt_eigengap_inset <- ggplot(df_metrics_plt_inset, aes(x = nk, y = eigengap_mean)) + 
+  geom_ribbon(mapping = aes(ymin = eigengap_min, ymax = eigengap_max),
+                            alpha = 0.2) +
+  geom_line() + 
+  scale_x_continuous(breaks = c(2, 5, 10, 20, 50, 100), 
+                     expand = expansion(add = 0)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.04)) +
+  labs(x = NULL,
+       y = NULL) + 
+  # theme_bw() +
+  theme(panel.grid.minor.x = element_blank(),
+        # axis.text = element_text(size = 7),
+        axis.text = element_blank(),
+        axis.title = element_text(size = 8),
+        plot.margin = margin(),
+        plot.background = element_rect(color = "black"))
+
+# plt_eigengap_inset
+
+
+# BREAK
+
+fig_heights <- c(100, 100, 10, affinity_panel_height_pt)
+fig_widths <- c(left_padding_width, affinity_panel_width_pt, affinity_legend_width)
+
+fig_layout <- rbind(c(01, 02, 03),
+                    c(01, 04, 05),
+                    c(01, 06, 06),
+                    c(01, 07, 08))
+
+fig_grob <- arrangeGrob(zeroGrob(), 
+                        ggplotGrob(plt_eigengap),
+                        rectGrob(),
+                        ggplotGrob(plt_ARI),
+                        rectGrob(),
+                        rectGrob(),
+                        affinity_panel_grob,
+                        affinity_legend_grob,
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"),
+                        heights = unit(fig_heights, "bigpts"))
+
+fig_height_pt <- sum(fig_heights)
+fig_width_pt <- sum(fig_widths)
+
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
+
+outfile <- paste0(outfile_prefix, "_with_ARI_with_inset.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+
+grid.text(label = c("0.00", threshold),
+          x = unit(c(503.5, 503.5), "bigpts"),
+          y = unit(c(17, 100), "bigpts"),
+          gp = gpar(fontsize = 7))
+
+pushViewport(viewport(x = unit(270, "bigpts"), 
+                      y = unit(290, "bigpts"), 
+                      just = "left",
+                      width = unit(200, "bigpts"),
+                      height = unit(50, "bigpts")))
+# grid.rect(gp = gpar(fill = "red"))
+grid.draw(ggplotGrob(plt_eigengap_inset))
+popViewport()
+
+
+invisible(dev.off())
+
+```
