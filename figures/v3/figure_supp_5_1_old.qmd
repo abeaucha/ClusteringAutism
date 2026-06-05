@@ -1,0 +1,425 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r packages}
+library(tidyverse)
+library(ggalluvial)
+library(RMINC)
+library(MRIcrotome)
+library(grid)
+library(gridExtra)
+library(viridis)
+```
+
+```{r}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+```
+
+```{r}
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+```
+
+```{r outputs}
+outfile_prefix <- "figure_S5_draft_1_1"
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
+```
+
+```{r}
+human_cluster_file <- file.path(PROJECTPATH, "data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv")
+df_human_clusters <- read_csv(human_cluster_file, show_col_types = FALSE)
+```
+
+```{r}
+# nk_subset <- seq(2, 10, by = 2)
+nk_subset <- 2:10
+
+df_human_clusters_long <- df_human_clusters %>%
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>%
+  mutate(
+    nk = str_remove(nk_name, "nk"),
+    nk = as.numeric(nk),
+    cluster_id = paste0(nk, "-", k)
+  )
+
+
+df_cluster_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/HBN_cluster_labels.xlsx"))
+
+
+df_cluster_labels <- df_cluster_labels %>%
+  separate(col = "cluster_id_old", into = c("nk_old", "k_old"), remove = FALSE) %>%
+  separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
+  mutate(nk_old = as.numeric(nk_old),
+         k_old = as.numeric(k_old),
+         nk_new = as.numeric(nk_new),
+         k_new = as.numeric(k_new))
+
+
+df_human_clusters_long <- df_human_clusters_long %>%
+  select(ID, cluster_id) %>%
+  left_join(df_cluster_labels, by = c("cluster_id" = "cluster_id_old")) %>%
+  select(ID, cluster_id = cluster_id_new, nk = nk_new, k = k_new) %>%
+  mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+
+
+cluster_ids <- df_human_clusters_long %>%
+  select(nk, k, cluster_id) %>%
+  distinct() %>%
+  arrange(nk, k) %>%
+  pull(cluster_id)
+
+df_human_sankey <- df_human_clusters_long %>% 
+  filter(nk %in% nk_subset) %>% 
+  mutate(
+    nk = factor(nk),
+    k = factor(k),
+    cluster_id = factor(cluster_id, levels = cluster_ids)
+  )
+```
+
+```{r}
+df_palette <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/human_cluster_colours_HBN.xlsx"))
+
+df_palette <- df_palette %>%
+  left_join(df_cluster_labels, by = c("cluster_id" = "cluster_id_old")) %>%
+  select(cluster_id = cluster_id_new, nk = nk_new, k = k_new, colour) %>%
+    mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+palette <- df_palette[["colour"]]
+names(palette) <- df_palette$cluster_id
+
+
+
+stratum_width <- 0.5
+
+# human cluster Sankey plot
+plt_human_sankey <- ggplot(
+  df_human_sankey,
+  aes(
+    x = nk,
+    stratum = k,
+    alluvium = ID,
+    fill = cluster_id,
+    label = k
+  )
+) +
+  geom_flow(
+    stat = "alluvium",
+    aes.flow = "forward",
+    # col = "grey30",
+    linewidth = 0.15,
+    width = stratum_width
+  ) +
+  geom_stratum(width = stratum_width) +
+  scale_x_discrete(position = "bottom", 
+                   expand = expansion(add = c(stratum_width/2+0.15, stratum_width/2+0.10))) +
+  scale_y_continuous(breaks = c(seq(0, 650, by = 50), nrow(df_human_clusters)),
+                     expand = expansion(add = 10)) +
+  scale_fill_manual(values = palette, na.value = "grey80") +
+  labs(x = "HBN cluster solution (K)",
+       y = "Number of participants") +
+  theme_bw() +
+  theme(axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+    panel.grid.major.x = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none",
+    panel.border = element_blank(),
+    axis.line.y.left = element_line(colour = "grey50"),
+    axis.line.x.bottom = element_line(colour = "grey50"),
+    panel.ontop = FALSE,
+    plot.margin = margin(r = 2)
+  )
+
+plt_human_sankey
+```
+
+
+
+```{r}
+df_human_clusters %>% 
+  filter(nk4 == 3) %>% 
+  select(nk3, nk4, nk5)
+```
+
+```{r}
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/013")
+
+human_centroid_dir <- file.path(human_pipeline_dir, "centroids", "resolution_0.8")
+
+# Jacobians to display
+jacobians <- "relative"
+
+# # Threshold method
+# threshold <- pipeline_params %>% 
+#   filter(id == params_id) %>% 
+#   pull(threshold)
+# 
+# # Threshold value
+# threshold_value <- pipeline_params %>% 
+#   filter(id == params_id) %>% 
+#   pull(threshold_value)
+# 
+# # Threshold symmetric option
+# threshold_symmetric <- pipeline_params %>% 
+#   filter(id == params_id) %>% 
+#   pull(threshold_symmetric)
+
+threshold <- "top_n"
+threshold_value <- 0.2
+threshold_symmetric <- TRUE
+
+# Mouse centroid map directory
+human_centroid_dir <- file.path(human_centroid_dir, jacobians)
+
+# Mouse mask
+human_mask_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/mask_0.8mm.mnc")
+human_mask <- mincGetVolume(human_mask_file)
+
+# human anatomy
+human_anat_file <- file.path(PROJECTPATH, "data/human/registration/v3/reference_files/model_0.8mm.mnc")
+human_anat <- mincGetVolume(human_anat_file)
+human_anat[human_mask < 0.5] <- 0
+human_anat_vol <- mincArray(human_anat)
+
+slices_dim_1 <- 27:220
+slices_dim_2 <- 10:280
+slices_dim_3 <- 1:220
+human_anat_vol_cropped <- human_anat_vol[slices_dim_1, slices_dim_2, slices_dim_3]
+
+overlay_low <- 0.19
+overlay_high <- 1.0
+
+# Human anatomy thresholds
+human_anat_low <- 40
+human_anat_high <- 110
+
+human_slc_dim <- 1
+human_slc <- 82
+# human_slc <- 66
+
+```
+
+```{r}
+list_human_slices <- vector(mode = "list", length = length(nk_subset))
+names(list_human_slices) <- nk_subset
+for (i in 1:length(list_human_slices)) {
+  
+  nki <- nk_subset[i]
+  list_human_slices[[i]] <- vector(mode = "list", length = nki)
+  for (k in 1:nki) {
+    
+    # nk_init <- nki
+    nk_init <- df_cluster_labels %>%
+      filter(nk_new == nki, k == k_new) %>%
+      pull(nk_old)
+
+    # k_init <- k
+    k_init <- df_cluster_labels %>%
+      filter(nk_new == nki, k == k_new) %>%
+      pull(k_old)
+    
+    
+    img <- import_cluster_map(imgdir = human_centroid_dir,
+                              mask = human_mask_file,
+                              nk = nk_init, k = k_init, 
+                              threshold = threshold,
+                              threshold_value = threshold_value,
+                              threshold_symmetric = threshold_symmetric)
+    
+    # Compute overlay thresholds
+    overlay_threshold <- numeric(2)
+    overlay_threshold[1] <- min(abs(img[img != 0]))
+    overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
+    overlay_threshold <- round(overlay_threshold, 2)
+    
+    img <- mincArray(img)
+    img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
+    
+          img_grob <- sliceSeries(nrow = 1, ncol = 1, 
+                              dimension = human_slc_dim, 
+                              slices = human_slc) %>% 
+        anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
+        overlay(img, 
+                low = overlay_threshold[1], high = overlay_threshold[2],
+                symmetric = TRUE) %>% 
+        grobify()
+          
+          list_human_slices[[i]][[k]] <- img_grob
+    
+  }
+}
+```
+
+```{r}
+fig_height_pt <- 600
+
+# Parameters for slice series
+list_ss_params <- list(
+  # K = 2
+  list(ss_slc_w = 40,
+       ss_pad_w = 4),
+  # K = 3
+  list(ss_slc_w = 40,
+       ss_pad_w = 4),
+  # K = 4
+  list(ss_slc_w = 40,
+       ss_pad_w = 5),
+  # K = 5
+  list(ss_slc_w = 40,
+       ss_pad_w = 5),
+  # K = 6
+  list(ss_slc_w = 40,
+       ss_pad_w = 5),
+  # K = 7
+  list(ss_slc_w = 40,
+       ss_pad_w = 5),
+  # K = 8
+  list(ss_slc_w = 40,
+       ss_pad_w = 5),
+  # K = 9
+  list(ss_slc_w = 36,
+       ss_pad_w = 5),
+  # K = 10
+  list(ss_slc_w = 36,
+       ss_pad_w = 5)
+)
+
+# Dimensions of slice series 
+list_ss_dims <- vector(mode = "list", length = length(nk_subset)) 
+for (i in 1:length(list_ss_dims)) {
+  
+  list_ss_dims[[i]][["widths"]] <- list_ss_params[[i]][["ss_slc_w"]]
+  # list_ss_dims[[i]][["widths"]] <- c(list_ss_params[[i]][["ss_slc_w"]],
+  #                                    list_ss_params[[i]][["ss_pad_w"]],
+  #                                    list_ss_params[[i]][["ss_slc_w"]],
+  #                                    list_ss_params[[i]][["ss_pad_w"]],
+  #                                    list_ss_params[[i]][["ss_slc_w"]])
+  # 
+  list_ss_dims[[i]][["heights"]] <- list_ss_params[[i]][["ss_slc_w"]]
+  
+}
+```
+
+```{r}
+list_vp_params <- list(
+  # K = 2
+  list(x = 46,
+       y = fig_height_pt - c(149, 443)),
+  # K = 3
+  list(x = 102,
+       y = fig_height_pt - c(70, 288, 443)),
+  # K = 4
+  list(x = 159,
+       y = fig_height_pt - c(70, 278, 420, 518)),
+  # K = 5
+  list(x = 216,
+       y = fig_height_pt - c(70, 260, 373, 451, 536)),
+  # K = 6
+  list(x = 274,
+       y = fig_height_pt - c(70, 208, 268, 328, 389, 487)),
+  # K = 7
+  list(x = 329,
+       y = fig_height_pt - c(70, 145, 238, 350, 406, 493, 555)),
+  # K = 8
+  list(x = 386,
+       y = fig_height_pt - c(70, 142, 198, 263, 369, 464, 510, 555)),
+  # K = 9
+  list(x = 443,
+       y = fig_height_pt - c(70, 153, 231, 320, 366, 413, 451, 517, 555)),
+  # K = 10
+  list(x = 500,
+       y = fig_height_pt - c(70, 153, 200, 245, 283, 366, 440, 480, 518, 555))
+  
+)
+
+
+list_vps <- list_vp_params
+for (i in 1:length(list_vps)) {
+  
+  list_vps[[i]] <- vector(mode = "list", length = nk_subset[i])
+  for (k in 1:nk_subset[i]) {
+    
+    x <- list_vp_params[[i]][["x"]]
+    y <- list_vp_params[[i]][["y"]][[k]]
+    w <- sum(list_ss_dims[[i]][["widths"]])
+    h <- sum(list_ss_dims[[i]][["heights"]])
+    
+    list_vps[[i]][[k]] <- viewport(
+      x = unit(x, "bigpts"),
+      y = unit(y, "bigpts"),
+      width = unit(w, "bigpts"),
+      height = unit(h, "bigpts")
+    )
+    
+  }
+}
+
+
+list_ss_grobs <- vector(mode = "list", length = length(nk_subset))
+names(list_ss_grobs) <- nk_subset
+for (i in 1:length(list_ss_grobs)) {
+# for (i in c(1:8)) {
+  
+  list_ss_grobs[[i]] <- vector(mode = "list", length = nk_subset[i])
+  for (k in 1:nk_subset[i]) {
+    
+    ki <- k
+    
+    # cluster_colour <- df_palette %>%
+    #   filter(nk == nk_subset[i], k == ki) %>%
+    #   pull(colour)
+    cluster_colour <- "grey50"
+    
+    # ss_grob <- arrangeGrob(list_mouse_slices[[i]][[k]],
+    #                        zeroGrob(),
+    #                        list_human_slices_POND[[i]][[k]],
+    #                        zeroGrob(),
+    #                        list_human_slices_HBN[[i]][[k]],
+    #                        layout_matrix = ss_layout,
+    #                        widths = unit(list_ss_dims[[i]][["widths"]], "bigpts"),
+    #                        heights = unit(list_ss_dims[[i]][["heights"]], "bigpts"))
+    
+    ss_grob <- rectGrob(gp = gpar(fill = "grey70"))
+    ss_border_grob <- rectGrob(gp = gpar(col = cluster_colour, lwd = 2))
+    ss_grob <- list_human_slices[[i]][[k]]
+    
+    list_ss_grobs[[i]][[k]] <- gTree(children = gList(ss_grob, ss_border_grob),
+                                     vp = list_vps[[i]][[k]])
+    
+  }
+}
+```
+
+```{r}
+fig_width <- 7.25*72
+
+
+fig_grobs_list <- c(list(ggplotGrob(plt_human_sankey)),
+                    reduce(list_ss_grobs, c))
+fig_grobs <- do.call(grobTree, fig_grobs_list)
+
+# fig_height_pt <- sum(fig_heights)
+# fig_width_pt <- sum(fig_widths)
+
+fig_width_pt <- fig_width
+
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grobs)
+# grid.draw(ggplotGrob(plt_mouse_sankey))
+invisible(dev.off())
+```
