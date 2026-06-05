@@ -23,7 +23,7 @@ source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r}
-outfile_prefix <- "figure_S2_draft_1_1"
+outfile_prefix <- "figure_S2"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -38,13 +38,6 @@ pipeline_dir <- file.path(
 )
 
 cluster_dir <- file.path(pipeline_dir, "clusters", "resolution_0.2")
-
-mask_file <- file.path(
-  PROJECTPATH,
-  "data/mouse/registration/reference_files",
-  "scanbase_second_level-nlin-3_mask_200um.mnc"
-)
-
 clusters_file <- file.path(cluster_dir, "clusters.csv")
 clusters <- read_csv(clusters_file, show_col_types = FALSE)
 
@@ -105,31 +98,6 @@ df_clusters_all <- create_clusters(W = W, nk = nrow(W)-1)
 ```
 
 ```{r}
-# metrics <- estimate_cluster_metrics(W = W, NUMC = 2:(nrow(W)-1))
-metrics <- estimate_cluster_metrics(W = W, NUMC = 2:100)
-```
-
-```{r}
-plt_metrics <- ggplot(metrics, aes(x = nk, y = eigengap)) + 
-  geom_line() +
-  # geom_smooth(span = 0.2) + 
-  scale_x_continuous(breaks = c(2, 5, 10, 20, 50, 100), 
-                     expand = expansion(add = 2)) + 
-  scale_y_continuous(breaks = seq(0, 1, by = 0.02)) +
-  coord_cartesian(xlim = c(2, 100), 
-                  ylim = c(0, 0.10)) + 
-  labs(x = "Mouse clusters (K)",
-       y = "Spectral eigengap") + 
-  theme_bw() +
-  theme(panel.grid.minor.x = element_blank(),
-        axis.text = element_text(size = 7),
-        axis.title = element_text(size = 8),
-        plot.margin = margin(t = 10))
-```
-
-
-
-```{r}
 file <- "resources/cluster_metrics_uncertainty_MICe.csv"
 df_metrics_MICe <- read_csv(file, show_col_types = FALSE)
 
@@ -168,9 +136,6 @@ plt_eigengap <- ggplot(df_metrics_plt, aes(x = nk, y = eigengap_mean)) +
 # plt_eigengap
 ```
 
-
-
-
 ```{r}
 plt_ARI <- ggplot(df_metrics_plt, aes(x = nk, y = ARI_mean)) + 
   geom_ribbon(mapping = aes(ymin = ARI_min, ymax = ARI_max),
@@ -189,8 +154,6 @@ plt_ARI <- ggplot(df_metrics_plt, aes(x = nk, y = ARI_mean)) +
 
 plt_ARI
 ```
-
-
 
 ```{r}
 degs <- rowSums(W)
@@ -391,49 +354,6 @@ invisible(dev.off())
 ```
 
 
-```{r}
-# BREAK
-
-fig_heights <- c(100, 10, affinity_panel_height_pt)
-fig_widths <- c(left_padding_width, affinity_panel_width_pt, affinity_legend_width)
-
-fig_layout <- rbind(c(01, 02, 03),
-                    c(01, 04, 04),
-                    c(01, 05, 06))
-
-fig_grob <- arrangeGrob(zeroGrob(), 
-                        ggplotGrob(plt_eigengap),
-                        rectGrob(),
-                        zeroGrob(),
-                        affinity_panel_grob,
-                        affinity_legend_grob,
-                        layout_matrix = fig_layout,
-                        widths = unit(fig_widths, "bigpts"),
-                        heights = unit(fig_heights, "bigpts"))
-
-fig_height_pt <- sum(fig_heights)
-fig_width_pt <- sum(fig_widths)
-
-fig_height_in <- fig_height_pt/72
-fig_width_in <- fig_width_pt/72
-
-outfile <- paste0(outfile_prefix, ".pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig_width_in, "in"),
-    height = unit(fig_height_in, "in"))
-grid.draw(fig_grob)
-
-grid.text(label = c("0.00", threshold),
-          x = unit(c(503.5, 503.5), "bigpts"),
-          y = unit(c(17, 100), "bigpts"),
-          gp = gpar(fontsize = 7))
-
-invisible(dev.off())
-
-```
-
-
 # Figure only eigengap
 
 ```{r}
@@ -482,7 +402,6 @@ grid.text(label = c("A", "B"),
 invisible(dev.off())
 
 ```
-
 
 # Figure eigengap + ARI
 
