@@ -26,7 +26,7 @@ source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure_S3_draft_2_1"
+outfile_prefix <- "figure_S3"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -37,8 +37,6 @@ df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
 ```
 
 ```{r}
-nk_subset <- seq(2, 10, by = 2)
-
 df_mouse_clusters_long <- df_mouse_clusters %>%
   pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>%
   mutate(
@@ -47,31 +45,53 @@ df_mouse_clusters_long <- df_mouse_clusters %>%
     cluster_id = paste0(nk, "-", k)
   )
 
+df_cluster_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/MICe_cluster_labels_colours.xlsx"))
+
+df_cluster_labels <- df_cluster_labels %>% 
+  separate(col = "cluster_id", into = c("nk_old", "k_old"), remove = FALSE) %>% 
+  separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
+  mutate(nk_old = as.numeric(nk_old),
+         k_old = as.numeric(k_old),
+         nk_new = as.numeric(nk_new),
+         k_new = as.numeric(k_new))
+
+df_mouse_clusters_long <- df_mouse_clusters_long %>%
+  select(ID, cluster_id) %>%
+  left_join(df_cluster_labels, by = "cluster_id") %>%
+  select(ID, cluster_id = cluster_id_new, nk = nk_new, k = k_new) %>%
+  mutate(nk = as.numeric(nk), k = as.numeric(k))
+
 cluster_ids <- df_mouse_clusters_long %>%
   select(nk, k, cluster_id) %>%
   distinct() %>%
   arrange(nk, k) %>%
   pull(cluster_id)
 
-df_mouse_sankey <- df_mouse_clusters_long %>% 
-  filter(nk %in% nk_subset) %>% 
+df_mouse_sankey <- df_mouse_clusters_long %>%
   mutate(
     nk = factor(nk),
     k = factor(k),
     cluster_id = factor(cluster_id, levels = cluster_ids)
   )
-```
 
-```{r}
-df_palette <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/mouse_cluster_colours.xlsx"))
-colour_set <- 1
-palette <- df_palette[[paste0("colour_", colour_set)]]
+
+
+
+# df_palette <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/mouse_cluster_colours.xlsx"))
+# colour_set <- 1
+# palette <- df_palette[[paste0("colour_", colour_set)]]
+# names(palette) <- df_palette$cluster_id
+# 
+# df_palette <- df_palette %>% 
+#   separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE) %>% 
+#   mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+
+df_palette <- df_cluster_labels %>% 
+  select(cluster_id = cluster_id_new, nk = nk_new, k = k_new, colour)
+
+palette <- df_palette[["colour"]]
 names(palette) <- df_palette$cluster_id
-
-df_palette <- df_palette %>% 
-  separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE) %>% 
-  mutate(nk = as.numeric(nk), k = as.numeric(k))
-
 
 
 stratum_width <- 0.5
@@ -96,7 +116,7 @@ plt_mouse_sankey <- ggplot(
   ) +
   geom_stratum(width = stratum_width) +
   scale_x_discrete(position = "bottom", 
-                   expand = expansion(add = c(stratum_width/2+0.05, stratum_width/2+0.05))) +
+                   expand = expansion(add = c(stratum_width/2+0.15, stratum_width/2+0.10))) +
   scale_y_continuous(breaks = c(seq(0, 130, by = 20), nrow(df_mouse_clusters)),
                      expand = expansion(add = 2)) +
   scale_fill_manual(values = palette, na.value = "grey80") +
@@ -169,7 +189,7 @@ mouse_slc <- 92
 ```
 
 ```{r}
-nk_subset <- seq(2, 10, by = 2)
+nk_subset <- 2:10
 
 list_mouse_slices <- vector(mode = "list", length = length(nk_subset))
 names(list_mouse_slices) <- nk_subset
@@ -179,9 +199,17 @@ for (i in 1:length(list_mouse_slices)) {
   list_mouse_slices[[i]] <- vector(mode = "list", length = nki)
   for (k in 1:nki) {
     
+    nk_init <- df_cluster_labels %>%
+      filter(nk_new == nki, k == k_new) %>%
+      pull(nk_old)
+    
+    k_init <- df_cluster_labels %>%
+      filter(nk_new == nki, k == k_new) %>%
+      pull(k_old)
+    
     img <- import_cluster_map(imgdir = mouse_centroid_dir,
                               mask = mouse_mask_file,
-                              nk = nki, k = k, 
+                              nk = nk_init, k = k_init, 
                               threshold = threshold,
                               threshold_value = threshold_value,
                               threshold_symmetric = threshold_symmetric)
@@ -211,24 +239,36 @@ for (i in 1:length(list_mouse_slices)) {
 ```
 
 ```{r}
-fig_height_pt <- 500
+fig_height_pt <- 600
 
 # Parameters for slice series
 list_ss_params <- list(
   # K = 2
-  list(ss_slc_w = 45,
+  list(ss_slc_w = 40,
+       ss_pad_w = 4),
+  # K = 3
+  list(ss_slc_w = 40,
        ss_pad_w = 4),
   # K = 4
-  list(ss_slc_w = 45,
+  list(ss_slc_w = 40,
+       ss_pad_w = 5),
+  # K = 5
+  list(ss_slc_w = 40,
        ss_pad_w = 5),
   # K = 6
-  list(ss_slc_w = 45,
+  list(ss_slc_w = 40,
+       ss_pad_w = 5),
+  # K = 7
+  list(ss_slc_w = 40,
        ss_pad_w = 5),
   # K = 8
-  list(ss_slc_w = 44,
+  list(ss_slc_w = 38,
+       ss_pad_w = 5),
+  # K = 9
+  list(ss_slc_w = 38,
        ss_pad_w = 5),
   # K = 10
-  list(ss_slc_w = 36,
+  list(ss_slc_w = 38,
        ss_pad_w = 5)
 )
 
@@ -246,26 +286,40 @@ for (i in 1:length(list_ss_dims)) {
   list_ss_dims[[i]][["heights"]] <- list_ss_params[[i]][["ss_slc_w"]]
   
 }
+```
 
-
+```{r}
 list_vp_params <- list(
   # K = 2
-  list(x = 54,
-       y = fig_height_pt - c(124, 369)),
+  list(x = 46,
+       y = fig_height_pt - c(137, 486)),
+  # K = 3
+  list(x = 102,
+       y = fig_height_pt - c(137, 300, 486)),
   # K = 4
-  list(x = 164,
-       y = fig_height_pt - c(80, 180, 238, 369)),
+  list(x = 159,
+       y = fig_height_pt - c(100, 290, 355, 486)),
+  # K = 5
+  list(x = 216,
+       y = fig_height_pt - c(75, 243, 294, 371, 499)),
   # K = 6
-  list(x = 271,
-       y = fig_height_pt - c(32, 111, 168, 215, 286, 402)),
+  list(x = 274,
+       y = fig_height_pt - c(38, 180, 295, 345, 409, 524)),
+  # K = 7
+  list(x = 329,
+       y = fig_height_pt - c(38, 142, 244, 325, 370, 427, 537)),
   # K = 8
-  list(x = 380,
-       y = fig_height_pt - c(32, 100, 165, 230, 280, 325, 380, 444)),
+  list(x = 386,
+       y = fig_height_pt - c(39, 130, 217, 294, 337, 392, 471, 552)),
+  # K = 9
+  list(x = 443,
+       y = fig_height_pt - c(39, 107, 182, 246, 289, 338, 410, 482, 552)),
   # K = 10
-  list(x = 489,
-       y = fig_height_pt - c(32, 80, 118, 156, 194, 232, 270, 326, 390, 445))
+  list(x = 500,
+       y = fig_height_pt - c(39, 113, 192, 250, 292, 340, 387, 434, 496, 552))
   
 )
+
 
 
 list_vps <- list_vp_params
@@ -273,6 +327,7 @@ for (i in 1:length(list_vps)) {
   
   list_vps[[i]] <- vector(mode = "list", length = nk_subset[i])
   for (k in 1:nk_subset[i]) {
+    
     
     x <- list_vp_params[[i]][["x"]]
     y <- list_vp_params[[i]][["y"]][[k]]
@@ -293,7 +348,7 @@ for (i in 1:length(list_vps)) {
 list_ss_grobs <- vector(mode = "list", length = length(nk_subset))
 names(list_ss_grobs) <- nk_subset
 for (i in 1:length(list_ss_grobs)) {
-# for (i in c(1,6:8)) {
+# for (i in c(1:7)) {
   
   list_ss_grobs[[i]] <- vector(mode = "list", length = nk_subset[i])
   for (k in 1:nk_subset[i]) {
@@ -301,8 +356,8 @@ for (i in 1:length(list_ss_grobs)) {
     ki <- k
     
     cluster_colour <- df_palette %>% 
-      filter(nk == nk_subset[i], k == ki) %>% 
-      pull(colour_1)
+      filter(nk == i+1, k == ki) %>% 
+      pull(colour)
     
     # ss_grob <- arrangeGrob(list_mouse_slices[[i]][[k]],
     #                        zeroGrob(),
@@ -322,6 +377,7 @@ for (i in 1:length(list_ss_grobs)) {
     
   }
 }
+
 
 
 fig_width <- 7.25*72
