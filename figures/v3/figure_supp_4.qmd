@@ -26,7 +26,7 @@ source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure_S4_draft_1_1"
+outfile_prefix <- "figure_S4"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -142,7 +142,6 @@ plt_human_sankey <- ggplot(
 
 plt_human_sankey
 ```
-
 
 ```{r}
 df_human_clusters %>% 
@@ -397,7 +396,6 @@ for (i in 1:length(list_ss_grobs)) {
   }
 }
 ```
-
 
 ```{r}
 fig_width <- 7.25*72
