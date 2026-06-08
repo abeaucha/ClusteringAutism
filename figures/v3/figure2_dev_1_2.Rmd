@@ -325,53 +325,53 @@ plt_mouse_sankey
 
 
 ```{r}
-df_mouse_sankey <- df_mouse_sankey %>% 
-  mutate(nk = factor(nk), k = factor(k))
-
-stratum_width <- 0.7
-
-palette <- c("A" = "springgreen4",
-             "B" = "sienna2",
-             "C" = "seagreen2",
-             "D" = "darkorchid1")
-
+# df_mouse_sankey <- df_mouse_sankey %>% 
+#   mutate(nk = factor(nk), k = factor(k))
+# 
+# stratum_width <- 0.7
+# 
 # palette <- c("A" = "springgreen4",
-#              "B" = "seagreen2",
-#              "C" = "#446F87",
+#              "B" = "sienna2",
+#              "C" = "seagreen2",
 #              "D" = "darkorchid1")
-
-# Mouse cluster Sankey plot
-plt_mouse_sankey <- ggplot(df_mouse_sankey,
-                           aes(x = nk,
-                               stratum = k,
-                               alluvium = ID,
-                               fill = group,
-                               label = k)) + 
-  geom_flow(stat = "alluvium", aes.flow = "backward", width = stratum_width, col = "grey30", linewidth = 0.15) + 
-  geom_stratum(alpha = 1, width = stratum_width) +
-  # geom_stratum(mapping = aes(col = group), alpha = 1, width = stratum_width) +
-  # scale_x_discrete(position = "top") + 
-  scale_x_discrete(position = "top", 
-                   expand = expansion(add = c(stratum_width/2+0.020, stratum_width/2+0.005))) +
-  scale_y_continuous(breaks = c(seq(0, 130, by = 20), nrow(df_mouse_clusters)),
-                     expand = expansion(add = c(3, 2))) + 
-  scale_fill_manual(values = palette, na.value = "grey80") + 
-  scale_colour_manual(values = palette) + 
-  labs(x = "Mouse clusters",
-       y = "Number of models") + 
-  # theme_void() + 
-  theme_bw() +
-  theme(panel.grid.major.x = element_blank(),
-        panel.grid = element_blank(),
-        legend.position = "none",
-        panel.border = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.title.x = element_blank(),
-        axis.line.y.left = element_line(colour = "grey50"),
-        panel.ontop = FALSE)
-
-plt_mouse_sankey
+# 
+# # palette <- c("A" = "springgreen4",
+# #              "B" = "seagreen2",
+# #              "C" = "#446F87",
+# #              "D" = "darkorchid1")
+# 
+# # Mouse cluster Sankey plot
+# plt_mouse_sankey <- ggplot(df_mouse_sankey,
+#                            aes(x = nk,
+#                                stratum = k,
+#                                alluvium = ID,
+#                                fill = group,
+#                                label = k)) + 
+#   geom_flow(stat = "alluvium", aes.flow = "backward", width = stratum_width, col = "grey30", linewidth = 0.15) + 
+#   geom_stratum(alpha = 1, width = stratum_width) +
+#   # geom_stratum(mapping = aes(col = group), alpha = 1, width = stratum_width) +
+#   # scale_x_discrete(position = "top") + 
+#   scale_x_discrete(position = "top", 
+#                    expand = expansion(add = c(stratum_width/2+0.020, stratum_width/2+0.005))) +
+#   scale_y_continuous(breaks = c(seq(0, 130, by = 20), nrow(df_mouse_clusters)),
+#                      expand = expansion(add = c(3, 2))) + 
+#   scale_fill_manual(values = palette, na.value = "grey80") + 
+#   scale_colour_manual(values = palette) + 
+#   labs(x = "Mouse clusters",
+#        y = "Number of models") + 
+#   # theme_void() + 
+#   theme_bw() +
+#   theme(panel.grid.major.x = element_blank(),
+#         panel.grid = element_blank(),
+#         legend.position = "none",
+#         panel.border = element_blank(),
+#         axis.text.x = element_blank(),
+#         axis.ticks.x = element_blank(),
+#         axis.title.x = element_blank(),
+#         axis.line.y.left = element_line(colour = "grey50"),
+#         panel.ontop = FALSE)
+# 
+# plt_mouse_sankey
 ```
 
 
@@ -467,6 +467,11 @@ mouse_slc <- 92
 ```
 
 ```{r}
+df_mouse_cluster_labels
+```
+
+
+```{r}
 list_mouse_slices <- vector(mode = "list", length = length(nk_subset))
 names(list_mouse_slices) <- nk_subset
 for (i in 1:length(list_mouse_slices)) {
@@ -475,9 +480,17 @@ for (i in 1:length(list_mouse_slices)) {
   list_mouse_slices[[i]] <- vector(mode = "list", length = nki)
   for (k in 1:nki) {
     
+    nk_init <- df_mouse_cluster_labels %>% 
+      filter(nk_new == nki, k_new == k) %>% 
+      pull(nk_old)
+    
+    k_init <- df_mouse_cluster_labels %>% 
+      filter(nk_new == nki, k_new == k) %>% 
+      pull(k_old)
+    
     img <- import_cluster_map(imgdir = mouse_centroid_dir,
                               mask = mouse_mask_file,
-                              nk = nki, k = k, 
+                              nk = nk_init, k = k_init, 
                               threshold = threshold,
                               threshold_value = threshold_value,
                               threshold_symmetric = threshold_symmetric)
@@ -557,8 +570,8 @@ human_slc_dim <- 1
 # human_slc <- 82
 human_slc <- list(
   "2" = c(66, 66),
-  "6" = c(66, NA, NA, 66, 66, NA),
-  "8" = c(66, 66, 66, 66, 66, 66, NA, NA)
+  "6" = c(66, 66, 66, 66, 66, 66),
+  "8" = c(66, 66, 66, 66, 66, 66, 66, 66)
 )
 
 ```
@@ -585,7 +598,16 @@ for (i in 1:length(list_human_slices_POND)) {
   list_human_slices_POND[[i]] <- vector(mode = "list", length = nki)
   for (k in 1:nki) {
     
-    cluster_id <- paste0(nki, "-", k)
+    nk_init <- df_mouse_cluster_labels %>% 
+      filter(nk_new == nki, k_new == k) %>% 
+      pull(nk_old)
+    
+    k_init <- df_mouse_cluster_labels %>% 
+      filter(nk_new == nki, k_new == k) %>% 
+      pull(k_old)
+    
+    cluster_id <- paste0(nk_init, "-", k_init)
+    # cluster_id <- paste0(nki, "-", k)
     
     if (cluster_id %in% list_matches[["POND"]]$mouse_cluster_id) {
       
@@ -636,6 +658,7 @@ for (i in 1:length(list_human_slices_POND)) {
 ```
 
 
+
 ### HBN
 
 ```{r}
@@ -647,7 +670,16 @@ for (i in 1:length(list_human_slices_HBN)) {
   list_human_slices_HBN[[i]] <- vector(mode = "list", length = nki)
   for (k in 1:nki) {
     
-    cluster_id <- paste0(nki, "-", k)
+    nk_init <- df_mouse_cluster_labels %>% 
+      filter(nk_new == nki, k_new == k) %>% 
+      pull(nk_old)
+    
+    k_init <- df_mouse_cluster_labels %>% 
+      filter(nk_new == nki, k_new == k) %>% 
+      pull(k_old)
+    
+    cluster_id <- paste0(nk_init, "-", k_init)
+    # cluster_id <- paste0(nki, "-", k)
     
     if (cluster_id %in% list_matches[["HBN"]]$mouse_cluster_id) {
       
@@ -700,21 +732,11 @@ for (i in 1:length(list_human_slices_HBN)) {
 ```
 
 
-```{r}
-# sliceSeries(nrow = 1, ncol = 1, 
-#                               dimension = human_slc_dim, 
-#                               slices = human_slc) %>% 
-#         anatomy(human_anat_vol_cropped, low = human_anat_low, high = human_anat_high) %>% 
-#         overlay(img, 
-#                 low = overlay_threshold[1], high = overlay_threshold[2],
-#                 symmetric = TRUE) %>% 
-#   draw()
-```
-
-
 # Figure
 
 ```{r}
+sankey_height <- sum(sankey_heights)
+
 # Parameters for slice series
 list_ss_params <- list(
   # K = 2
@@ -749,10 +771,10 @@ list_vp_params <- list(
        y = sankey_height - c(170, 375)),
   # K = 6
   list(x = 324,
-       y = sankey_height - c(102, 156, 205, 248, 308, 410)),
+       y = sankey_height - c(102, 185, 270, 313, 360, 430)),
   # K = 8
   list(x = 533,
-       y = sankey_height - c(102, 146, 200, 255, 297, 340, 390, 445))
+       y = sankey_height - c(102, 150, 210, 260, 303, 346, 395, 447))
 )
 
 list_ss_labels_params <- vector(mode = "list", length = length(list_vp_params))
@@ -810,9 +832,11 @@ for (i in 1:length(nk_subset)) {
     
   }
 }
-```
 
-```{r}
+
+
+# BREAK
+
 neuro_legend_width <- 130
 neuro_legend_height <- 40
 neuro_legend_x <- 115
@@ -858,9 +882,11 @@ neuro_legend_grob <- gTree(children = gList(neuro_legend_pos_raster,
                                             neuro_legend_neg_raster,
                                             neuro_legend_text,
                                             neuro_legend_title))
-```
 
-```{r}
+
+
+# BREAK
+
 sankey_height <- sum(sankey_heights)
 fig_base_heights <- sankey_height
 fig_base_widths <- c(8, fig_width - 8)
