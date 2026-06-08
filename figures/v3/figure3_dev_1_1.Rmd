@@ -38,7 +38,7 @@ source(file.path(SRCPATH, "enrichment.R"))
 
 ```{r params}
 # Output file prefix
-outfile_prefix <- "figure3"
+outfile_prefix <- "figure3_dev_1_1"
 
 # Output directory
 output_dir <- file.path("outputs", outfile_prefix)
@@ -953,14 +953,29 @@ heatmap_dendrogram_row_grob <- pheatmap_rowclust[["gtable"]][["grobs"]][[1]]
 # heatmap_dendrogram_col_grob <- pheatmap_colclust[["gtable"]][["grobs"]][[1]]
 ```
 
+```{r}
+df_mouse_cluster_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/MICe_cluster_labels_colours.xlsx"))
+
+df_mouse_cluster_labels <- df_mouse_cluster_labels %>% 
+  separate(col = "cluster_id", into = c("nk_old", "k_old"), remove = FALSE) %>% 
+  separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
+  mutate(nk_old = as.numeric(nk_old),
+         k_old = as.numeric(k_old),
+         nk_new = as.numeric(nk_new),
+         k_new = as.numeric(k_new))
+
+df_mouse_cluster_labels
+```
+
+
 ```{r mouse-pathways-heatmap-main}
 # Extract cluster levels
-cluster_lvls <- df_pathways_subset %>% 
-  select(cluster_id, nk, k) %>% 
-    filter(cluster_id %in% mouse_clusters_match) %>%
-  distinct() %>% 
-  arrange(nk, k) %>% 
-  pull(cluster_id)  
+# cluster_lvls <- df_pathways_subset %>% 
+#   select(cluster_id, nk, k) %>% 
+#     filter(cluster_id %in% mouse_clusters_match) %>%
+#   distinct() %>% 
+#   arrange(nk, k) %>% 
+#   pull(cluster_id)  
 
 df_pathways_heatmap <- df_pathways_subset %>% 
   filter(cluster_id %in% mouse_clusters_match) %>% 
@@ -970,9 +985,28 @@ df_pathways_heatmap <- df_pathways_subset %>%
 
 df_pathways_heatmap <- df_pathways_heatmap %>%
   left_join(df_pathway_labels, by = "pathway") %>%
-  mutate(pathway_label = factor(pathway_label, levels = df_pathway_labels$pathway_label)) %>%
-  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls))
+  mutate(pathway_label = factor(pathway_label, levels = df_pathway_labels$pathway_label))
 
+
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  select(-nk, -k) %>% 
+  left_join(df_mouse_cluster_labels, by = "cluster_id") %>% 
+  select(-cluster_id) %>% 
+  rename(cluster_id = cluster_id_new, nk = nk_new, k = k_new) 
+
+cluster_lvls_new_labels <- df_pathways_heatmap %>% 
+  select(cluster_id, nk, k) %>% 
+  distinct() %>% 
+  arrange(nk, k) %>% 
+  pull(cluster_id)  
+
+df_pathways_heatmap <- df_pathways_heatmap %>% 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_new_labels))
+
+```
+
+
+```{r mouse-pathways-heatmap-main}
 # Clamped enrichment statistic
 NLQ_max <- 20
 q_threshold <- 0.001
@@ -1031,6 +1065,7 @@ heatmap_legend_grob <- plt_heatmap %>%
 plt_heatmap <- plt_heatmap + 
   theme(legend.position = "none")
 ```
+
 
 ```{r mouse-pathways-heatmap-groups}
 # Data frame for cluster groups
@@ -1168,59 +1203,35 @@ df_human_variants_sankey <- df_human_variants_long %>%
 
 ## POND+ sankey with variants
 
-```{r}
-variants_palette <- c("grey80", carto_pal(n = 9, name = "BurgYl"))
-# variants_palette <- c("grey80", carto_pal(n = 9, name = "PurpOr"))
-# variants_palette <- c("grey80", carto_pal(n = 9, name = "Burg"))
 
-variants_palette_bin <- c("grey95", variants_palette[length(variants_palette)])
-
-ggplot(df_human_variants_sankey, 
-       aes(x = nk, stratum = k,
-           alluvium = ID)) + 
-  geom_flow(mapping = aes(fill = variant_identified, col = variant_identified),
-            stat = "alluvium", aes.flow = "forward",
-            linewidth = 0.15) +
-  scale_colour_manual(values = c("grey80", variants_palette[length(variants_palette)])) + 
-  scale_fill_manual(values = c("grey95", variants_palette[length(variants_palette)])) + 
-  # scale_alpha_manual(values = c(0.8, 1.0)) + 
-  new_scale_fill() + 
-  # new_scale_colour() + 
-  geom_stratum(mapping = aes(fill = n_variants)) +
-  scale_fill_manual(values = variants_palette) + 
-  # scale_colour_manual(values = c("grey50", "springgreen4")) + 
-  theme_bw()
-```
 
 ```{r}
-tmp <- df_human_variants_long %>% 
-  mutate(include = cluster_id %in% c("2-2", human_clusters_variants, "9-2", "10-3"),
-         n_variants = ifelse(include, n_variants, 0),
-         variant_identified = ifelse(include, variant_identified, FALSE)) %>% 
-  mutate(nk = factor(nk), k = factor(k),
-         n_variants = factor(n_variants, levels = c(0, 5, 6, 7, 11)))
-
-# variants_palette_tmp <- c("grey70", "#18A999", "#0C9A6F", "#06935A", "springgreen4")
-
-variants_palette_tmp <- colorRampPalette(c(carto_pal(n = 7, name = "BluGrn")[2], "springgreen4"))(15)
-variants_palette_tmp <- c("grey70", variants_palette_tmp[c(1, 5, 10, 15)])
-```
-
-```{r}
-file_palette <- "human_cluster_colours_POND.xlsx"
+# file_palette <- "human_cluster_colours_POND.xlsx"
+file_palette <- "POND_cluster_labels_colours.xlsx"
 file_palette <- file.path(PROJECTPATH, "figures/v3/resources/", file_palette)
-df_sankey_palette <- readxl::read_excel(file_palette)
-# df_sankey_palette <- df_sankey_palette %>% 
-#   rename(colour = colour_1)
-sankey_palette <- df_sankey_palette$colour
-names(sankey_palette) <- df_sankey_palette$cluster_id
+
+df_human_cluster_labels <- readxl::read_excel(file_palette)
+
+df_human_cluster_labels <- df_human_cluster_labels %>% 
+  separate(col = "cluster_id", into = c("nk_old", "k_old"), remove = FALSE) %>% 
+  separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
+  mutate(nk_old = as.numeric(nk_old),
+         k_old = as.numeric(k_old),
+         nk_new = as.numeric(nk_new),
+         k_new = as.numeric(k_new))
+
+sankey_palette <- df_human_cluster_labels$colour_match
+names(sankey_palette) <- df_human_cluster_labels$cluster_id_new
 
 df_human_sankey <- df_human_variants_long %>% 
-  mutate(nk = factor(nk), k = factor(k)) %>% 
-  left_join(df_sankey_palette, by = "cluster_id") %>% 
+  select(-nk, -k) %>% 
+  left_join(df_human_cluster_labels, by = "cluster_id") %>% 
+  select(-cluster_id, -nk_old, -k_old, -colour) %>% 
+  rename(cluster_id = cluster_id_new, nk = nk_new, k = k_new, colour = colour_match) %>% 
   rename(group = colour) %>% 
   mutate(group = ifelse(variant_identified, group, "grey80")) %>% 
-  mutate(group = ifelse(group == "grey80" & variant_identified, "black", group))
+  mutate(group = ifelse(group == "grey80" & variant_identified, "black", group)) %>% 
+  mutate(nk = factor(nk), k = factor(k))
 
 alluvial_palette <- unique(df_human_sankey$group)
 names(alluvial_palette) <- alluvial_palette
@@ -1253,18 +1264,23 @@ plt_human_sankey <- ggplot(df_human_sankey,
         title = element_text(size = 8)) 
 
 human_sankey_grob <- ggplotGrob(plt_human_sankey)
+
+plt_human_sankey
 ```
 
+```{r}
+df_human_sankey_annotations
+```
 
 ```{r}
 df_human_sankey_annotations <- df_human_variants_long %>% 
-  select(cluster_id, nk, k, n_variants) %>%
+    select(-nk, -k) %>% 
+  left_join(df_human_cluster_labels, by = "cluster_id") %>% 
+  select(-cluster_id, -nk_old, -k_old, -colour) %>% 
+  rename(cluster_id = cluster_id_new, nk = nk_new, k = k_new, group = colour_match) %>% 
+  select(cluster_id, nk, k, n_variants, group) %>%
   distinct() %>% 
   arrange(nk, k)
-
-df_human_sankey_annotations <- df_human_sankey_annotations %>% 
-  left_join(df_sankey_palette, by = "cluster_id") %>% 
-  rename(group = colour)
 
 df_human_sankey_annotations <- df_human_sankey_annotations %>% 
   mutate(colour = ifelse(group != "grey80", "black", "grey25"),
@@ -1282,15 +1298,15 @@ df_human_sankey_annotations <- df_human_sankey_annotations %>%
 
 
 ```{r}
-df_human_sankey_annotations$y <- c(c(0.78, 0.35),
-                                   c(0.78, 0.52, 0.35),
-                                   c(0.78, 0.55, 0.35, 0.23),
-                                   c(0.78, 0.55, 0.41, 0.30, 0.20),
-                                   c(0.78, 0.62, 0.55, 0.46, 0.41, 0.28),
-                                   c(0.78, 0.59, 0.46, 0.38, 0.27, 0.24, 0.20),
-                                   c(0.78, 0.64, 0.56, 0.52, 0.49, 0.40, 0.23, 0.18), 
-                                   c(0.78, 0.59, 0.50, 0.44, 0.370, 0.36, 0.23, 0.20, 0.20),
-                                   c(0.78, 0.64, 0.50, 0.36, 0.30, 0.28, 0.25, 0.23, 0.22, 0.20))
+df_human_sankey_annotations$y <- c(c(0.78, 0.35), #2
+                                   c(0.78, 0.52, 0.30), #3
+                                   c(0.78, 0.58, 0.45, 0.25), #4
+                                   c(0.78, 0.61, 0.53, 0.43, 0.25), #5
+                                   c(0.78, 0.61, 0.55, 0.52, 0.43, 0.25), #6
+                                   c(0.78, 0.61, 0.55, 0.52, 0.43, 0.34, 0.25), #7
+                                   c(0.78, 0.62, 0.57, 0.54, 0.45, 0.36, 0.33, 0.25), #8
+                                   c(0.78, 0.63, 0.57, 0.54, 0.51, 0.45, 0.365, 0.20, 0.25), #9
+                                   c(0.78, 0.67, 0.62, 0.57, 0.54, 0.51, 0.25, 0.23, 0.22, 0.25)) #10
 
 human_sankey_annotations_grob <- textGrob(label = df_human_sankey_annotations$label,
                                           x = df_human_sankey_annotations$x,
@@ -1366,13 +1382,20 @@ df_human_heatmap <- df_human_heatmap %>%
          acronym = factor(acronym, levels = df_pathway_labels$acronym))
 ```
 
+```{r}
+
+human_clusters_variants_new_labs <- df_human_cluster_labels %>% 
+  filter(cluster_id %in% human_clusters_variants) %>% 
+  pull(cluster_id_new)
+```
+
 
 ```{r}
 plt_human_variants_heatmap <- ggplot(df_human_heatmap, 
        aes(x = factor(nk), y = fct_rev(acronym), fill = NLQ)) +
   geom_tile(col = "grey60") +
   facet_grid(pathway_cluster~., scales = "free", space = "free") + 
-  scale_x_discrete(expand = expansion(), labels = human_clusters_variants) + 
+  scale_x_discrete(expand = expansion(), labels = human_clusters_variants_new_labs) + 
   scale_y_discrete(expand = expansion(), position = "right") +
   scale_fill_gradientn(colors = heatmap_palette,
                        limits = heatmap_limits,
@@ -1392,8 +1415,8 @@ plt_human_variants_heatmap <- ggplot(df_human_heatmap,
         axis.text.y = element_text(size = 8),
         axis.text.x = element_text(size = 8, angle = 90, vjust = 0.5, hjust = 1.0, 
                                    colour = c("grey50", rep("springgreen4", 6), rep("grey50", 2)), 
-                                   # face = c("plain", rep("bold", 6), "plain", "plain"),
-                                   face = "bold"),
+                                   face = c("plain", rep("bold", 6), "plain", "plain")),
+                                   # face = "bold"),
         axis.title = element_text(size = 8.5),
         title = element_text(size = 8),
         legend.position = "bottom",
@@ -1413,8 +1436,8 @@ plt_human_variants_heatmap <- plt_human_variants_heatmap +
   theme(legend.position = "none")
 ```
 
-## Mouse-POND+ molecular pathway correspondence
 
+## Mouse-POND+ molecular pathway correspondence
 
 ```{r}
 # Metrics -----
