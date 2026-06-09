@@ -59,7 +59,7 @@ consolidate_visits <- function(df, cols) {
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure_SN_draft_1_1"
+outfile_prefix <- "figure_S6"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -740,9 +740,6 @@ univariate_legend_grob <- plt_pond_univariate %>%
 plt_pond_univariate <- plt_pond_univariate + theme(legend.position = "none")
 ```
 
-
-
-
 ## HBN
 
 ```{r}
@@ -1128,7 +1125,6 @@ df_kw_clusters <- df_kw_clusters %>%
 
 df_kw_clusters_hbn <- df_kw_clusters
 ```
-
 
 ```{r}
 palette_univariate <- magma(n = 9, direction = -1, begin = 0.25, end = 0.85)
