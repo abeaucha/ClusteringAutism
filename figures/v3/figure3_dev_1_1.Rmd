@@ -1268,9 +1268,6 @@ human_sankey_grob <- ggplotGrob(plt_human_sankey)
 plt_human_sankey
 ```
 
-```{r}
-df_human_sankey_annotations
-```
 
 ```{r}
 df_human_sankey_annotations <- df_human_variants_long %>% 
@@ -1488,7 +1485,11 @@ df_metrics_plt <- df_metrics %>%
   pivot_longer(cols = -nk, names_to = "metric", values_to = "value") %>% 
   arrange(nk, metric)
 
-human_pathway_metrics_labs <- paste0("  ", df_human_variant_matches$human_cluster_id)
+human_pathway_metrics_labs <- df_human_variant_matches %>% 
+  left_join(df_human_cluster_labels, by = c("human_cluster_id" = "cluster_id")) %>% 
+  pull(cluster_id_new)
+
+human_pathway_metrics_labs <- paste0("  ", human_pathway_metrics_labs)
 ```
 
 
