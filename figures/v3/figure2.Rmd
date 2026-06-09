@@ -35,7 +35,7 @@ source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r}
-outfile_prefix <- "figure2_dev_1_2"
+outfile_prefix <- "figure2"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
