@@ -38,7 +38,7 @@ source(file.path(SRCPATH, "enrichment.R"))
 
 ```{r params}
 # Output file prefix
-outfile_prefix <- "figure3_dev_1_1"
+outfile_prefix <- "figure3"
 
 # Output directory
 output_dir <- file.path("outputs", outfile_prefix)
@@ -520,6 +520,14 @@ df_pathway_labels <- tibble(pathway = pathway_lvls_clustered,
                             acronym = c("SNR", "CRS", "AIS", "SRTK", "MAPK", "SSM", "CSIS", "PPIS", 
                                         "TACS", "RPII", "ERGE", "CME", "WNT", "NSD", "GTPases"))
 ```
+
+
+```{r}
+df_pathway_labels %>% 
+  left_join(df_pathway_hclust, by = "pathway") %>% 
+  write_csv("resources/pathways_subset.csv")
+```
+
 
 ```{r mouse-pathways-polar-plots}
 # Filter pathway data for mouse clusters with matches
@@ -1125,8 +1133,8 @@ heatmap_widths <- c(heatmap_left_padding_width, heatmap_row_dendrogram_width, he
 heatmap_height <- 240
 
 heatmap_col_dendrogram_height <- 25
-heatmap_top_padding_height <- 18
-heatmap_bottom_padding_height <- 34
+heatmap_top_padding_height <- 16
+heatmap_bottom_padding_height <- 38
 # heatmap_main_height <- 158
 heatmap_main_height <- heatmap_height - heatmap_top_padding_height - heatmap_bottom_padding_height
 
