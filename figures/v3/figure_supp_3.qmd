@@ -369,7 +369,7 @@ for (i in 1:length(list_ss_grobs)) {
     #                        heights = unit(list_ss_dims[[i]][["heights"]], "bigpts"))
     
     ss_grob <- rectGrob(gp = gpar(fill = "grey70"))
-    ss_border_grob <- rectGrob(gp = gpar(col = cluster_colour, lwd = 2))
+    ss_border_grob <- rectGrob(gp = gpar(col = cluster_colour, lwd = 2, fill = NA))
     ss_grob <- list_mouse_slices[[i]][[k]]
     
     list_ss_grobs[[i]][[k]] <- gTree(children = gList(ss_grob, ss_border_grob),
@@ -404,3 +404,18 @@ grid.draw(fig_grobs)
 # grid.draw(ggplotGrob(plt_mouse_sankey))
 invisible(dev.off())
 ```
+
+```{r}
+outfile <- paste0(outfile_prefix, ".png")
+outfile <- file.path(output_dir, outfile)
+png(file = outfile,
+    width = fig_width_in,
+    height = fig_height_in,
+    units = "in",
+    res = 600)
+
+grid.draw(fig_grobs)
+
+invisible(dev.off())
+```
+

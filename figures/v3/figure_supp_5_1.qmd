@@ -26,7 +26,7 @@ source(file.path(SRCPATH, "analysis.R"))
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure_S5_draft_1_1"
+outfile_prefix <- "figure_S5"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -179,7 +179,6 @@ df_similarity <- compute_similarity_significance(
 )
 ```
 
-
 ```{r}
 df_HBN_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/HBN_cluster_labels_colours.xlsx"))
 
@@ -195,9 +194,8 @@ df_similarity %>%
   rename(MICe_cluster_id = cluster_id_new) %>% 
   select(HBN_cluster_id, img1_nk, MICe_cluster_id, img2_nk, HBN_colour, MICe_colour) %>% 
   filter(MICe_cluster_id %in% c("10-5", "9-5", "8-5", "7-5", "6-4"))
-  arrange(img1_nk, HBN_cluster_id)
-``` 
-
+  
+```
 
 ```{r}
 df_similarity %>% 
@@ -460,7 +458,7 @@ for (i in 1:length(list_ss_grobs)) {
     #                        heights = unit(list_ss_dims[[i]][["heights"]], "bigpts"))
     
     ss_grob <- rectGrob(gp = gpar(fill = "grey70"))
-    ss_border_grob <- rectGrob(gp = gpar(col = cluster_colour, lwd = 2))
+    ss_border_grob <- rectGrob(gp = gpar(col = cluster_colour, lwd = 2, fill = NA))
     ss_grob <- list_human_slices[[i]][[k]]
     
     list_ss_grobs[[i]][[k]] <- gTree(children = gList(ss_grob, ss_border_grob),
@@ -492,6 +490,21 @@ pdf(file = outfile,
     height = unit(fig_height_in, "in"))
 grid.draw(fig_grobs)
 # grid.draw(ggplotGrob(plt_human_sankey))
+invisible(dev.off())
+```
+
+
+```{r}
+outfile <- paste0(outfile_prefix, ".png")
+outfile <- file.path(output_dir, outfile)
+png(file = outfile,
+    width = fig_width_in,
+    height = fig_height_in,
+    units = "in",
+    res = 600)
+
+grid.draw(fig_grobs)
+
 invisible(dev.off())
 ```
 

@@ -353,7 +353,6 @@ grid.draw(affinity_panel_grob)
 invisible(dev.off())
 ```
 
-
 # Figure only eigengap
 
 ```{r}
@@ -382,7 +381,7 @@ fig_width_pt <- sum(fig_widths)
 fig_height_in <- fig_height_pt/72
 fig_width_in <- fig_width_pt/72
 
-outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- paste0(outfile_prefix, "_eigengap_only.pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(fig_width_in, "in"),
@@ -434,7 +433,7 @@ fig_width_pt <- sum(fig_widths)
 fig_height_in <- fig_height_pt/72
 fig_width_in <- fig_width_pt/72
 
-outfile <- paste0(outfile_prefix, "_with_ARI.pdf")
+outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(fig_width_in, "in"),
@@ -454,6 +453,31 @@ grid.text(label = c("A", "B", "C"),
 invisible(dev.off())
 
 ```
+
+```{r}
+outfile <- paste0(outfile_prefix, ".png")
+outfile <- file.path(output_dir, outfile)
+png(file = outfile,
+    width = fig_width_in,
+    height = fig_height_in,
+    units = "in",
+    res = 600)
+
+grid.draw(fig_grob)
+
+grid.text(label = c("0.00", threshold),
+          x = unit(c(503.5, 503.5), "bigpts"),
+          y = unit(c(17, 100), "bigpts"),
+          gp = gpar(fontsize = 7))
+
+grid.text(label = c("A", "B", "C"),
+          x = unit(7, "bigpts"),
+          y = unit(c(326, 230, 130), "bigpts"),
+          gp = gpar(fontsize = 10, fontface = "bold"))
+
+invisible(dev.off())
+```
+
 
 # Figure eigengap + ARI with inset
 
