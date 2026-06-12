@@ -123,10 +123,10 @@ plt_human_sankey <- ggplot(
   geom_stratum(width = stratum_width) +
   scale_x_discrete(position = "bottom", 
                    expand = expansion(add = c(stratum_width/2+0.15, stratum_width/2+0.10))) +
-  scale_y_continuous(breaks = c(seq(0, 650, by = 50), nrow(df_human_clusters)),
+  scale_y_continuous(breaks = c(seq(0, 850, by = 50), nrow(df_human_clusters)),
                      expand = expansion(add = 10)) +
   scale_fill_manual(values = palette, na.value = "grey80") +
-  labs(x = "POND+ cluster solution (K)",
+  labs(x = "HBN cluster solution (K)",
        y = "Number of participants") +
   theme_bw() +
   theme(axis.title = element_text(size = 6),
@@ -142,76 +142,58 @@ plt_human_sankey <- ggplot(
   )
 
 # plt_human_sankey
+
+
+
+fig_width <- 7.25*72
+
+
+fig_grobs_list <- c(list(ggplotGrob(plt_human_sankey)),
+                    reduce(list_ss_grobs, c))
+fig_grobs <- do.call(grobTree, fig_grobs_list)
+
+# fig_height_pt <- sum(fig_heights)
+# fig_width_pt <- sum(fig_widths)
+
+fig_width_pt <- fig_width
+
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grobs)
+# grid.draw(ggplotGrob(plt_human_sankey))
+invisible(dev.off())
 ```
 
-```{r}
-# fig_width <- 7.25*72
-# 
-# 
-# fig_grobs_list <- c(list(ggplotGrob(plt_human_sankey)),
-#                     reduce(list_ss_grobs, c))
-# fig_grobs <- do.call(grobTree, fig_grobs_list)
-# 
-# # fig_height_pt <- sum(fig_heights)
-# # fig_width_pt <- sum(fig_widths)
-# 
-# fig_width_pt <- fig_width
-# 
-# fig_height_in <- fig_height_pt/72
-# fig_width_in <- fig_width_pt/72
-# 
-# outfile <- paste0(outfile_prefix, ".pdf")
-# outfile <- file.path(output_dir, outfile)
-# pdf(file = outfile,
-#     width = unit(fig_width_in, "in"),
-#     height = unit(fig_height_in, "in"))
-# grid.draw(fig_grobs)
-# # grid.draw(ggplotGrob(plt_human_sankey))
-# invisible(dev.off())
-```
-
-```{r}
-df_similarity <- compute_similarity_significance(
-  similarity = import_similarity(param_id = "861", 
-                                 pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/")), 
-  permutations = import_similarity_permutations(param_id = "861", 
-                                 pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/"))
-)
-```
 
 ```{r}
 df_HBN_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/HBN_cluster_labels_colours.xlsx"))
 
-df_MICe_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/MICe_cluster_labels_colours.xlsx"))
+df_POND_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/POND_cluster_labels_colours.xlsx"))
 
 df_similarity %>% 
-  filter(pval < 0.05) %>% 
-  left_join(df_HBN_labels, by = c("img1_cluster_id" = "cluster_id")) %>% 
-  select(-img1_cluster_id) %>% 
-  rename(HBN_cluster_id = cluster_id_new, HBN_colour = colour) %>% 
-  left_join(df_MICe_labels, by = c("img2_cluster_id" = "cluster_id")) %>% 
-  select(-img2_cluster_id, MICe_colour = colour) %>% 
-  rename(MICe_cluster_id = cluster_id_new) %>% 
-  select(HBN_cluster_id, img1_nk, MICe_cluster_id, img2_nk, HBN_colour, MICe_colour) %>% 
-  filter(MICe_cluster_id %in% c("10-5", "9-5", "8-5", "7-5", "6-4"))
+  left_join(df_HBN_labels, by = c("img2_cluster_id" = "cluster_id")) %>% 
+  rename(HBN_cluster_id_old = img2_cluster_id, 
+         HBN_cluster_id_new = cluster_id_new, 
+         HBN_colour = colour) %>% 
+  left_join(df_POND_labels, by = c("img1_cluster_id" = "cluster_id")) %>% 
+  select(-img1_cluster_id, POND_colour = colour) %>% 
+  rename(POND_cluster_id_new = cluster_id_new) %>% 
+  select(HBN_cluster_id_old, HBN_cluster_id_new, 
+         POND_cluster_id_new, POND_nk = img1_nk, HBN_colour, POND_colour, pval) %>% 
+  filter(HBN_cluster_id_new == "7-6", POND_nk == 7) %>% 
+  arrange(pval)
+  # filter(MICe_cluster_id %in% c("10-5", "9-5", "8-5", "7-5", "6-4"))
   
 ```
 
-```{r}
-df_similarity %>% 
-  filter(pval < 0.05) %>% 
-  # filter(img1_nk == 6)
-# filter(img2_nk == 8, img2_k == 5)
-  # filter(img1_cluster_id %in% c("10-9", "9-2", "8-4"))
-filter(img2_cluster_id %in% c("10-5", "9-5", "8-5", "7-5", "6-4"))
-  # filter(img1_nk == 6, img2_nk == 6)
-```
 
-```{r}
-df_human_clusters %>% 
-  filter(nk4 == 3) %>% 
-  select(nk3, nk4, nk5)
-```
+
 
 ```{r}
 human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/013")
@@ -374,8 +356,10 @@ for (i in 1:length(list_ss_dims)) {
   list_ss_dims[[i]][["heights"]] <- list_ss_params[[i]][["ss_slc_w"]]
   
 }
+```
 
 
+```{r}
 # BREAK
 
 list_vp_params <- list(
@@ -390,22 +374,22 @@ list_vp_params <- list(
        y = fig_height_pt - c(69, 234, 355, 506)),
   # K = 5
   list(x = 216,
-       y = fig_height_pt - c(54, 188, 270, 379, 514)),
+       y = fig_height_pt - c(54, 188, 275, 400, 520)),
   # K = 6
   list(x = 274,
-       y = fig_height_pt - c(45, 171, 257, 326, 395, 519)),
+       y = fig_height_pt - c(45, 171, 225, 280, 410, 525)),
   # K = 7
   list(x = 329,
-       y = fig_height_pt - c(40, 138, 192, 285, 357, 420, 530)),
+       y = fig_height_pt - c(40, 138, 182, 256, 375, 456, 530)),
   # K = 8
   list(x = 386,
-       y = fig_height_pt - c(40, 138, 189, 258, 338, 387, 436, 538)),
+       y = fig_height_pt - c(40, 135, 175, 230, 302, 392, 474, 538)),
   # K = 9
   list(x = 443,
-       y = fig_height_pt - c(41, 99, 147, 213, 297, 381, 428, 480, 549)),
+       y = fig_height_pt - c(40, 97, 136, 183, 267, 351, 418, 474, 543)),
   # K = 10
   list(x = 500,
-       y = fig_height_pt - c(41, 92, 138, 200, 280, 357, 413, 453, 499, 552))
+       y = fig_height_pt - c(40, 91, 130, 175, 250, 326, 384, 434, 484, 543))
   
 )
 
@@ -432,11 +416,10 @@ for (i in 1:length(list_vps)) {
 }
 
 
-
 list_ss_grobs <- vector(mode = "list", length = length(nk_subset))
 names(list_ss_grobs) <- nk_subset
 for (i in 1:length(list_ss_grobs)) {
-# for (i in 1:6) {
+# for (i in 1:8) {
   
   list_ss_grobs[[i]] <- vector(mode = "list", length = nk_subset[i])
   for (k in 1:nk_subset[i]) {
@@ -446,7 +429,7 @@ for (i in 1:length(list_ss_grobs)) {
     cluster_colour <- df_palette %>%
       filter(nk == nk_subset[i], k == ki) %>%
       pull(colour)
-    cluster_colour <- "grey50"
+    # cluster_colour <- "grey50"
     
     # ss_grob <- arrangeGrob(list_mouse_slices[[i]][[k]],
     #                        zeroGrob(),
@@ -467,6 +450,9 @@ for (i in 1:length(list_ss_grobs)) {
   }
 }
 
+
+
+# BREAK
 
 fig_width <- 7.25*72
 
@@ -493,7 +479,6 @@ grid.draw(fig_grobs)
 invisible(dev.off())
 ```
 
-
 ```{r}
 outfile <- paste0(outfile_prefix, ".png")
 outfile <- file.path(output_dir, outfile)
@@ -510,18 +495,18 @@ invisible(dev.off())
 
 ```{r}
 df_similarity <- compute_similarity_significance(
-  similarity = import_similarity(param_id = "861", 
+  similarity = import_similarity(param_id = "779", 
                                  pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/")), 
-  permutations = import_similarity_permutations(param_id = "861", 
+  permutations = import_similarity_permutations(param_id = "779", 
                                  pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/"))
 )
 
 df_similarity %>% 
+  left_join(df_cluster_labels, by = c("img2_cluster_id" = "cluster_id", 
+                                      "img2_nk" = "nk_old", "img2_k" = "k_old")) %>% 
   filter(pval < 0.05) %>% 
-  # filter(img1_nk == 6)
-# filter(img2_nk == 8, img2_k == 5)
-filter(img2_cluster_id %in% c("10-3", "9-4", "8-5", "7-3", "6-3"))
-  # filter(img1_nk == 6, img2_nk == 6)
+  filter(nk_new == 10) %>% 
+  select(img1_cluster_id, cluster_id_new)
 ```
 
 5-4 7-4 7-6 7-3 8-7 9-6
