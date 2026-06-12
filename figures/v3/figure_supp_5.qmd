@@ -142,58 +142,36 @@ plt_human_sankey <- ggplot(
   )
 
 # plt_human_sankey
-
-
-
-fig_width <- 7.25*72
-
-
-fig_grobs_list <- c(list(ggplotGrob(plt_human_sankey)),
-                    reduce(list_ss_grobs, c))
-fig_grobs <- do.call(grobTree, fig_grobs_list)
-
-# fig_height_pt <- sum(fig_heights)
-# fig_width_pt <- sum(fig_widths)
-
-fig_width_pt <- fig_width
-
-fig_height_in <- fig_height_pt/72
-fig_width_in <- fig_width_pt/72
-
-outfile <- paste0(outfile_prefix, ".pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig_width_in, "in"),
-    height = unit(fig_height_in, "in"))
-grid.draw(fig_grobs)
-# grid.draw(ggplotGrob(plt_human_sankey))
-invisible(dev.off())
 ```
 
 
 ```{r}
-df_HBN_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/HBN_cluster_labels_colours.xlsx"))
-
-df_POND_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/POND_cluster_labels_colours.xlsx"))
-
-df_similarity %>% 
-  left_join(df_HBN_labels, by = c("img2_cluster_id" = "cluster_id")) %>% 
-  rename(HBN_cluster_id_old = img2_cluster_id, 
-         HBN_cluster_id_new = cluster_id_new, 
-         HBN_colour = colour) %>% 
-  left_join(df_POND_labels, by = c("img1_cluster_id" = "cluster_id")) %>% 
-  select(-img1_cluster_id, POND_colour = colour) %>% 
-  rename(POND_cluster_id_new = cluster_id_new) %>% 
-  select(HBN_cluster_id_old, HBN_cluster_id_new, 
-         POND_cluster_id_new, POND_nk = img1_nk, HBN_colour, POND_colour, pval) %>% 
-  filter(HBN_cluster_id_new == "7-6", POND_nk == 7) %>% 
-  arrange(pval)
-  # filter(MICe_cluster_id %in% c("10-5", "9-5", "8-5", "7-5", "6-4"))
-  
+# df_HBN_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/HBN_cluster_labels_colours.xlsx"))
+# 
+# df_POND_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/POND_cluster_labels_colours.xlsx"))
+# 
+# df_similarity <- compute_similarity_significance(
+#   similarity = import_similarity(param_id = "779", 
+#                                  pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/")), 
+#   permutations = import_similarity_permutations(param_id = "779", 
+#                                  pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/"))
+# )
+# 
+# df_similarity %>% 
+#   left_join(df_HBN_labels, by = c("img2_cluster_id" = "cluster_id")) %>% 
+#   rename(HBN_cluster_id_old = img2_cluster_id, 
+#          HBN_cluster_id_new = cluster_id_new, 
+#          HBN_colour = colour) %>% 
+#   left_join(df_POND_labels, by = c("img1_cluster_id" = "cluster_id")) %>% 
+#   select(-img1_cluster_id, POND_colour = colour) %>% 
+#   rename(POND_cluster_id_new = cluster_id_new) %>% 
+#   select(HBN_cluster_id_old, HBN_cluster_id_new, 
+#          POND_cluster_id_new, POND_nk = img1_nk, HBN_colour, POND_colour, pval) %>% 
+#   filter(HBN_cluster_id_new == "7-6", POND_nk == 7) %>% 
+#   arrange(pval)
+#   # filter(MICe_cluster_id %in% c("10-5", "9-5", "8-5", "7-5", "6-4"))
+#   
 ```
-
-
-
 
 ```{r}
 human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/013")
@@ -358,7 +336,6 @@ for (i in 1:length(list_ss_dims)) {
 }
 ```
 
-
 ```{r}
 # BREAK
 
@@ -493,20 +470,5 @@ grid.draw(fig_grobs)
 invisible(dev.off())
 ```
 
-```{r}
-df_similarity <- compute_similarity_significance(
-  similarity = import_similarity(param_id = "779", 
-                                 pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/")), 
-  permutations = import_similarity_permutations(param_id = "779", 
-                                 pipeline_dir = file.path(PROJECTPATH, "data/cross_species/v3/"))
-)
 
-df_similarity %>% 
-  left_join(df_cluster_labels, by = c("img2_cluster_id" = "cluster_id", 
-                                      "img2_nk" = "nk_old", "img2_k" = "k_old")) %>% 
-  filter(pval < 0.05) %>% 
-  filter(nk_new == 10) %>% 
-  select(img1_cluster_id, cluster_id_new)
-```
 
-5-4 7-4 7-6 7-3 8-7 9-6
