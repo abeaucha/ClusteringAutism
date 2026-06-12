@@ -142,7 +142,7 @@ group_summary <- function(x, groups, B = 1000) {
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure4_test"
+outfile_prefix <- "figure4_dev"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -853,7 +853,6 @@ for (l in 1:length(list_clusters_clinical)) {
 
 ## Pairwise LDA
 
-
 ```{r}
 clinical_acronyms_POND <- c("scqtot" = "SCQ",
                             "rbsallt" = "RBS-R",
@@ -871,7 +870,7 @@ clinical_acronyms_POND <- c("scqtot" = "SCQ",
                             "ssp_tactile_rs" = "SSP TAC",
                             "ssp_taste_smell_rs" = "SSP TSS",
                             "ssp_underresp_seeks_rs" = "SSP URSS",
-                            "ssp_vis_aud_rs" = "SSP VAS",
+                            "ssp_vis_aud_rs" =  "SSP VAS",
                             "owl_lc_ss" = "OWLS LC",
                             "owl_oe_ss" = "OWLS OE",
                             "owl_olc_ss" = "OWLS OLC",
@@ -1050,20 +1049,82 @@ list_cluster_groups$HBN %>%
 
 
 ```{r}
-# comparison <- sort(c("synaptic", "chromatin"))
-# palette_binary <- c("synaptic" = "seagreen2","chromatin" = "darkorchid1")
+list_loading_lvls <- list(
+  "chromatin_synaptic" = list(
+    "POND+" = c("ssp_low_enrgy_weak_rs", "adhd_i_sub", "adhd_hi_sub",
+                "owl_oe_ss", "scqtot", "fsiq", "owl_lc_ss", "abas_gccs",
+                "ssp_movement_rs", "tpocs_tot","cbcl_ip_ts", "rbsallt",
+                "owl_olc_ss", "ssp_total_rs", "ssp_tactile_rs",
+                "ssp_taste_smell_rs", "ssp_aud_filter_rs", "cbcl_ep_ts",
+                "ssp_underresp_seeks_rs", "ssp_vis_aud_rs"),
+    "HBN" = c("SCQ_Total", "WHODAS_P_Score", "GFTA_SIW_Stnd",
+              "TOWRE_SWE_Scaled", "TOWRE_Total_Scaled", "TOWRE_PDE_Scaled",  
+              "FSIQ",  "SCARED_P_Total",  "CBCL_IP_T",
+              "SDQ_Difficulties_Total", "MFQ_P_Total", "NIH7_Pattern", 
+              "ADHD_HI", "NIH7_List", "Score_Total", "ASSQ_Total",
+              "ARI_P_Total_Score", "NIH7_Card", "ICU_P_Unemotional", 
+              "CGAS_Score", "SDS_Total_T", "ADHD_I",  "CIS_P_Score",
+              "CBCL_EP_T",  "ICU_P_Uncaring",  "ICU_P_Total",  "ICU_P_Callous")
+  ),
+  "chromatin_mapkwnt" = list(
+    "POND+" = c("tpocs_tot", "adhd_i_sub", "cbcl_ip_ts", 
+                "ssp_low_enrgy_weak_rs", "adhd_hi_sub", "ssp_taste_smell_rs",
+                "ssp_underresp_seeks_rs", "ssp_movement_rs", "cbcl_ep_ts",
+                "scqtot", "rbsallt", "abas_gccs", "ssp_total_rs", "owl_lc_ss",
+                "fsiq", "owl_olc_ss", "owl_oe_ss", "ssp_tactile_rs",
+                "ssp_aud_filter_rs",  "ssp_vis_aud_rs"),
+    "HBN" = c("ADHD_HI", "ARI_P_Total_Score", "GFTA_SIW_Stnd", 
+              "ICU_P_Unemotional", "SCQ_Total", "CBCL_IP_T", 
+              "NIH7_Pattern", "TOWRE_SWE_Scaled", "ICU_P_Callous", 
+              "TOWRE_Total_Scaled", "ICU_P_Uncaring", "ICU_P_Total",
+              "TOWRE_PDE_Scaled", "SDQ_Difficulties_Total", "SCARED_P_Total",
+              "NIH7_Card", "CIS_P_Score", "ASSQ_Total", "FSIQ", 
+              "MFQ_P_Total", "SDS_Total_T", "CBCL_EP_T", "Score_Total", 
+              "NIH7_List", "CGAS_Score", "ADHD_I", "WHODAS_P_Score")
+  ),
+  "mapkwnt_synaptic" = list(
+    "POND+" = c("owl_oe_ss", "fsiq", "owl_lc_ss", "ssp_low_enrgy_weak_rs",
+                "scqtot", "adhd_hi_sub", "abas_gccs", "owl_olc_ss", 
+                "ssp_tactile_rs", "adhd_i_sub", "ssp_movement_rs", 
+                "rbsallt", "ssp_total_rs", "ssp_aud_filter_rs", 
+                "ssp_vis_aud_rs", "cbcl_ip_ts", "cbcl_ep_ts", 
+                "ssp_taste_smell_rs", "ssp_underresp_seeks_rs", "tpocs_tot"),
+    "HBN" = c("WHODAS_P_Score", "SCQ_Total", "TOWRE_SWE_Scaled", 
+              "TOWRE_Total_Scaled", "GFTA_SIW_Stnd", "TOWRE_PDE_Scaled",
+              "FSIQ", "MFQ_P_Total", "SCARED_P_Total", 
+              "SDQ_Difficulties_Total", "CBCL_IP_T", "CGAS_Score",
+              "NIH7_List", "Score_Total", "ADHD_I", "ASSQ_Total", 
+              "SDS_Total_T", "CBCL_EP_T", "NIH7_Card", "NIH7_Pattern",
+              "CIS_P_Score", "ICU_P_Unemotional", "ARI_P_Total_Score",
+              "ADHD_HI", "ICU_P_Uncaring", "ICU_P_Total", "ICU_P_Callous")
+  )
+)
+
+list_loading_common_lvls <- list(
+  "chromatin_synaptic" = c("adhd_i_sub", "adhd_hi_sub", "scqtot", "fsiq", "cbcl_ip_ts", "rbsallt", "cbcl_ep_ts"),
+  "chromatin_mapkwnt" = c("adhd_i_sub", "cbcl_ip_ts", "adhd_hi_sub", "cbcl_ep_ts", "scqtot", "rbsallt", "fsiq"),
+  "mapkwnt_synaptic" = c("fsiq", "scqtot", "adhd_hi_sub", "adhd_i_sub", "rbsallt", "cbcl_ip_ts", "cbcl_ep_ts")
+) 
+
+```
+
+### Synaptic-chromatin 
+
+```{r}
+comparison <- sort(c("synaptic", "chromatin"))
+palette_binary <- c("synaptic" = "seagreen2","chromatin" = "darkorchid1")
 
 # comparison <- sort(c("synaptic", "mapkwnt"))
 # palette_binary <- c("synaptic" = "seagreen2","mapkwnt" = "springgreen4")
 
-comparison <- sort(c("chromatin", "mapkwnt"))
-palette_binary <- c("chromatin" = "darkorchid1","mapkwnt" = "springgreen4")
+# comparison <- sort(c("chromatin", "mapkwnt"))
+# palette_binary <- c("chromatin" = "darkorchid1","mapkwnt" = "springgreen4")
 
 palette_binary <- palette_binary[comparison[order(comparison)]]
 
-nki <- 9
+nki <- 7
 
-outfile_prefix <- paste0("figure4_", str_flatten(comparison, collapse = "_"), "_nk_", nki)
+# outfile_prefix <- paste0("figure4_", str_flatten(comparison, collapse = "_"), "_nk_", nki)
 
 
 # list_clusters_compare <- list(
@@ -1135,66 +1196,6 @@ list_lda_roc[[i]] <- lda_roc
 }
 ```
 
-
-```{r}
-list_loading_lvls <- list(
-  "chromatin_synaptic" = list(
-    "POND+" = c("ssp_low_enrgy_weak_rs", "adhd_i_sub", "adhd_hi_sub",
-                "owl_oe_ss", "scqtot", "fsiq", "owl_lc_ss", "abas_gccs",
-                "ssp_movement_rs", "tpocs_tot","cbcl_ip_ts", "rbsallt",
-                "owl_olc_ss", "ssp_total_rs", "ssp_tactile_rs",
-                "ssp_taste_smell_rs", "ssp_aud_filter_rs", "cbcl_ep_ts",
-                "ssp_underresp_seeks_rs", "ssp_vis_aud_rs"),
-    "HBN" = c("SCQ_Total", "WHODAS_P_Score", "GFTA_SIW_Stnd",
-              "TOWRE_SWE_Scaled", "TOWRE_Total_Scaled", "TOWRE_PDE_Scaled",  
-              "FSIQ",  "SCARED_P_Total",  "CBCL_IP_T",
-              "SDQ_Difficulties_Total", "MFQ_P_Total", "NIH7_Pattern", 
-              "ADHD_HI", "NIH7_List", "Score_Total", "ASSQ_Total",
-              "ARI_P_Total_Score", "NIH7_Card", "ICU_P_Unemotional", 
-              "CGAS_Score", "SDS_Total_T", "ADHD_I",  "CIS_P_Score",
-              "CBCL_EP_T",  "ICU_P_Uncaring",  "ICU_P_Total",  "ICU_P_Callous")
-  ),
-  "chromatin_mapkwnt" = list(
-    "POND+" = c("tpocs_tot", "adhd_i_sub", "cbcl_ip_ts", 
-                "ssp_low_enrgy_weak_rs", "adhd_hi_sub", "ssp_taste_smell_rs",
-                "ssp_underresp_seeks_rs", "ssp_movement_rs", "cbcl_ep_ts",
-                "scqtot", "rbsallt", "abas_gccs", "ssp_total_rs", "owl_lc_ss",
-                "fsiq", "owl_olc_ss", "owl_oe_ss", "ssp_tactile_rs",
-                "ssp_aud_filter_rs",  "ssp_vis_aud_rs"),
-    "HBN" = c("ADHD_HI", "ARI_P_Total_Score", "GFTA_SIW_Stnd", 
-              "ICU_P_Unemotional", "SCQ_Total", "CBCL_IP_T", 
-              "NIH7_Pattern", "TOWRE_SWE_Scaled", "ICU_P_Callous", 
-              "TOWRE_Total_Scaled", "ICU_P_Uncaring", "ICU_P_Total",
-              "TOWRE_PDE_Scaled", "SDQ_Difficulties_Total", "SCARED_P_Total",
-              "NIH7_Card", "CIS_P_Score", "ASSQ_Total", "FSIQ", 
-              "MFQ_P_Total", "SDS_Total_T", "CBCL_EP_T", "Score_Total", 
-              "NIH7_List", "CGAS_Score", "ADHD_I", "WHODAS_P_Score")
-  ),
-  "mapkwnt_synaptic" = list(
-    "POND+" = c("owl_oe_ss", "fsiq", "owl_lc_ss", "ssp_low_enrgy_weak_rs",
-                "scqtot", "adhd_hi_sub", "abas_gccs", "owl_olc_ss", 
-                "ssp_tactile_rs", "adhd_i_sub", "ssp_movement_rs", 
-                "rbsallt", "ssp_total_rs", "ssp_aud_filter_rs", 
-                "ssp_vis_aud_rs", "cbcl_ip_ts", "cbcl_ep_ts", 
-                "ssp_taste_smell_rs", "ssp_underresp_seeks_rs", "tpocs_tot"),
-    "HBN" = c("WHODAS_P_Score", "SCQ_Total", "TOWRE_SWE_Scaled", 
-              "TOWRE_Total_Scaled", "GFTA_SIW_Stnd", "TOWRE_PDE_Scaled",
-              "FSIQ", "MFQ_P_Total", "SCARED_P_Total", 
-              "SDQ_Difficulties_Total", "CBCL_IP_T", "CGAS_Score",
-              "NIH7_List", "Score_Total", "ADHD_I", "ASSQ_Total", 
-              "SDS_Total_T", "CBCL_EP_T", "NIH7_Card", "NIH7_Pattern",
-              "CIS_P_Score", "ICU_P_Unemotional", "ARI_P_Total_Score",
-              "ADHD_HI", "ICU_P_Uncaring", "ICU_P_Total", "ICU_P_Callous")
-  )
-)
-
-list_loading_common_lvls <- list(
-  "chromatin_synaptic" = c("adhd_i_sub", "adhd_hi_sub", "scqtot", "fsiq", "cbcl_ip_ts", "rbsallt", "cbcl_ep_ts"),
-  "chromatin_mapkwnt" = c("adhd_i_sub", "cbcl_ip_ts", "adhd_hi_sub", "cbcl_ep_ts", "scqtot", "rbsallt", "fsiq"),
-  "mapkwnt_synaptic" = c("fsiq", "scqtot", "adhd_hi_sub", "adhd_i_sub", "rbsallt", "cbcl_ip_ts", "cbcl_ep_ts")
-) 
-
-```
 
 ```{r}
 list_vars_flip <- list(
@@ -1277,7 +1278,7 @@ for (i in 1:length(human_datasets)) {
 
 
 
-### Diagnoses
+#### Diagnoses
 
 ```{r}
 # Filter for participants 
@@ -1311,9 +1312,9 @@ dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
 #   mutate(nk = as.numeric(nk), k = as.numeric(k))
 
 dx_grid <- tibble(DX_new = dx_lvls)
-```
 
-```{r}
+
+
 list_dx <- vector(mode = "list", length = length(human_datasets))
 names(list_dx) <- dataset_labels
 for (i in 1:length(list_dx)) {
@@ -1363,10 +1364,8 @@ df_dx_summary <- bind_rows(list_dx, .id = "Dataset") %>%
   mutate(Dataset = factor(Dataset, levels = dataset_labels))
          # ,DX_new = factor(DX_new, levels = dx_lvls))
 
-```
 
 
-```{r}
 plt_diagnoses <- ggplot(df_dx_summary, aes(x = DX_new, y = prop_dx, fill = group)) + 
   geom_col(position = "dodge", col = "grey30", size = 0.4) + 
   facet_grid(.~Dataset) +
@@ -1389,16 +1388,16 @@ plt_diagnoses <- ggplot(df_dx_summary, aes(x = DX_new, y = prop_dx, fill = group
         legend.spacing = unit(0, "pt"),
         legend.title = element_blank(),
         legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
-        strip.text = element_text(size = 7),
+        strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)),
         plot.margin = margin(t = 5.5))
 
-plt_diagnoses
+# plt_diagnoses
 ```
 
 
 
 
-### LDA Scores
+#### LDA Scores
 
 ```{r}
 cex_vals <- c(5.0, 4.0)
@@ -1440,13 +1439,15 @@ plt_lda_scores <- ggplot(df_lda_scores, aes(x = y, y = LD1, fill = y_pred_prob))
         axis.text.x = element_text(size = 6, 
                                    colour = palette_binary, 
                                    hjust = c(0.6, 0.4)),
-        strip.text = element_text(size = 7),
+        strip.text = element_text(size = 6, margin = margin(b = 2, t = 2)),
         plot.margin = margin(l = 0, r = 0, t = 0, b = 0))
 
-plt_lda_scores
+# plt_lda_scores
 ```
 
-### ROC
+
+
+#### ROC
 
 ```{r}
 df_lda_roc <- map_dfr(.x = list_lda_roc, .f = function(x) {
@@ -1485,11 +1486,13 @@ plt_lda_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) +
   theme_bw() +
   theme(axis.title = element_text(size = 6),
         axis.text = element_text(size = 6),
-        strip.text = element_text(size = 7),
+        strip.text = element_text(size = 6, margin = margin(b = 2, t = 2)),
         plot.margin = margin(l = 0, r = 0, t = 0, b = 5.5))
 ```
 
-### Loadings
+
+
+#### Loadings
 
 ```{r}
 list_plt_loadings_common <- vector(mode = "list", length = length(list_lda_loadings))
@@ -1516,7 +1519,7 @@ for (i in 1:length(list_lda_loadings)) {
           axis.text.x = element_blank(),
           axis.title.x = element_blank(),
           axis.ticks.x = element_blank(),
-          strip.text = element_text(size = 7))
+          strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
   
   plt_loadings <- ggplot(list_lda_loadings[[i]], aes(x = LD1, y = acronym, col = group)) +
     geom_vline(xintercept = 0) +
@@ -1561,7 +1564,7 @@ for (i in 1:length(list_lda_loadings)) {
   }
   
   loadings_patchwork <- (plt_loadings_common / plt_loadings) + plot_layout(heights = c(0.2, 0.8)) &
-    theme(plot.margin = margin(b = 3, r = 2, t = 2))
+    theme(plot.margin = margin(b = 3, r = 0, t = 0))
   
   list_plt_loadings[[i]] <- patchworkGrob(loadings_patchwork)
   
@@ -1582,66 +1585,1106 @@ loadings_grob <- arrangeGrob(list_plt_loadings[[1]],
 # invisible(dev.off())
 ```
 
+#### Panel
+
 ```{r}
-fig_widths <- c(270, 15, 235)
+panel_width <- (fig_width - 2*10)/3
+
+panel_heights <- c(80, 10, 80, 10, 80, 10, 300)
+  
+panel_layout <- cbind(1:7)
+
+panel_grob <- arrangeGrob(ggplotGrob(plt_diagnoses),
+                          rectGrob(), #Pad
+                          ggplotGrob(plt_lda_scores), # LDA scores
+                          rectGrob(), #Pad
+                          ggplotGrob(plt_lda_roc), # ROC
+                          rectGrob(), #Pad
+                          loadings_grob, # Loadings
+                          layout_matrix = panel_layout,
+                          widths = unit(panel_width, "bigpts"),
+                          heights = unit(panel_heights, "bigpts"))
+
+panel_height_pt <- sum(panel_heights)
+panel_width_pt <- panel_width
+  
+panel_height_in <- panel_height_pt/72
+panel_width_in <- panel_width_pt/72
+
+  
+outfile <- paste0("panel", ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(panel_width_in, "in"),
+    height = unit(panel_height_in, "in"))
+grid.draw(panel_grob)
+
+invisible(dev.off())
+
+panel_synaptic_chromatin_grob <- panel_grob
+```
+
+
+### Synaptic-MAPKWNT
+
+```{r}
+comparison <- sort(c("synaptic", "mapkwnt"))
+palette_binary <- c("synaptic" = "seagreen2","mapkwnt" = "springgreen4")
+
+# comparison <- sort(c("chromatin", "mapkwnt"))
+# palette_binary <- c("chromatin" = "darkorchid1","mapkwnt" = "springgreen4")
+
+palette_binary <- palette_binary[comparison[order(comparison)]]
+
+nki <- 7
+
+# outfile_prefix <- paste0("figure4_", str_flatten(comparison, collapse = "_"), "_nk_", nki)
+
+
+# list_clusters_compare <- list(
+#   POND = c("7-1", "7-2"),
+#   HBN = c("7-6", "7-4")
+# )
+
+
+n_variables <- c(20, 27)
+
+list_lda_inputs <- vector(mode = "list", length = length(human_datasets))
+names(list_lda_inputs) <- human_datasets
+list_lda_fit <- list_lda_inputs
+list_lda_roc <- list_lda_inputs
+for (i in 1:length(list_lda_inputs)) {
+
+# df_cluster_compare <- list_cluster_groups[[i]] %>% 
+#   filter(cluster_id %in% list_clusters_compare[[i]])
+
+df_cluster_compare <- list_cluster_groups[[i]] %>% 
+  filter(nk == nki) %>% 
+  filter(group %in% comparison)
+
+# Fetch variables with the desired completion level
+variables <- list_complete_cases[[i]] %>% 
+  slice_max(order_by = n_complete, n = n_variables[i]) %>% 
+  pull(variable)
+
+# Extract variable scores
+cols <- c("ID", paste0("nk", nki), variables)
+df_multivariate <- list_clusters_clinical[[i]][,cols]
+colnames(df_multivariate) <- c("ID", "k", variables)
+
+# Filter for complete cases
+df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+
+# Include information about pathway
+df_multivariate <- df_multivariate %>% 
+  inner_join(df_cluster_compare %>% 
+               filter(nk == nki) %>% 
+               select(k, group), by = "k") %>% 
+  mutate(group = factor(group)) %>% 
+  select(-k)
+
+
+list_lda_inputs[[i]] <- df_multivariate
+
+# Extract feature matrix and labels
+X <- as.matrix(df_multivariate[,variables])
+X <- scale(X)
+y <- df_multivariate$group
+
+# Fit LDA
+lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+
+# Extract class probabilities
+lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+
+# Run LDA ROC analysis
+lda_roc <- pROC::roc(response = y,
+                     predictor = lda_pred_prob,
+                     direction = "<", 
+                     quiet = TRUE)
+
+# Store LDA outputs
+list_lda_fit[[i]] <- lda_fit
+list_lda_roc[[i]] <- lda_roc
+
+}
+```
+
+
+```{r}
+list_vars_flip <- list(
+  POND = c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts"),
+  HBN = c("ARI_P_Total_Score", "ASSQ_Total", "CBCL_IP_T", "CBCL_EP_T", "CIS_P_Score",
+          "ICU_P_Callous", "ICU_P_Total", "ICU_P_Uncaring", "ICU_P_Unemotional",
+          "MFQ_P_Total", "SCARED_P_Total", "SCQ_Total", "SDQ_Difficulties_Total",
+          "SDS_Total_T", "Score_Total", "WHODAS_P_Score")
+)
+
+dataset_labels <- c("POND+", "HBN")
+
+list_lda_scores <- vector(mode = "list", length = length(human_datasets))
+list_lda_loadings <- vector(mode = "list", length = length(human_datasets))
+list_lda_loadings_common <- vector(mode = "list", length = length(human_datasets))
+
+names(list_lda_scores) <- dataset_labels
+names(list_lda_loadings) <- dataset_labels
+names(list_lda_loadings_common) <- dataset_labels
+for (i in 1:length(human_datasets)) {
+  
+  X <- list_lda_inputs[[i]] %>% 
+    select(-ID, -group) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  y <- list_lda_inputs[[i]] %>% 
+    pull(group)
+  
+  lda_pred <- predict(list_lda_fit[[i]], X)
+  lda_pred_y <- lda_pred[["class"]]
+  lda_pred_prob <- lda_pred[["posterior"]][,2]
+  
+  df_mv_scores <- lda_pred[["x"]] %>% 
+    as_tibble() %>% 
+    mutate(y = y,
+           y_pred = lda_pred_y,
+           y_pred_prob = lda_pred_prob) 
+  
+  df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(LD1 = V1) %>% 
+    mutate(LD1 = ifelse(variable %in% list_vars_flip[[i]], -1*LD1, LD1))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    left_join(list_clinical_acronyms[[i]], by = "variable") 
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(group = ifelse(LD1 >= 0, comparison[2], comparison[1]))
+  
+  df_mv_loadings_common <- df_mv_loadings %>% 
+    semi_join(df_common, by = "acronym") 
+  
+  if (i == 1) {
+    df_mv_loadings_common <- df_mv_loadings_common %>% 
+      mutate(variable = factor(variable, levels = list_loading_common_lvls[[str_flatten(comparison, "_")]]),
+             acronym = factor(acronym, levels = acronym[order(variable)]))
+    
+    lvls_common <- levels(df_mv_loadings_common$acronym)
+  } else {
+    df_mv_loadings_common <- df_mv_loadings_common %>% 
+      mutate(acronym = factor(acronym, levels = lvls_common))
+  }
+  
+  
+  # df_mv_loadings <- df_mv_loadings %>% 
+  #   mutate(variable = factor(variable, levels = variable[order(LD1)]),
+  #          acronym = factor(acronym, levels = acronym[order(LD1)]))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(variable = factor(variable, levels = list_loading_lvls[[str_flatten(comparison, "_")]][[i]]),
+           acronym = factor(acronym, levels = acronym[order(variable)]))
+  
+  list_lda_scores[[i]] <- df_mv_scores
+  list_lda_loadings[[i]] <- df_mv_loadings
+  list_lda_loadings_common[[i]] <- df_mv_loadings_common
+  
+}
+```
+
+
+
+#### Diagnoses
+
+```{r}
+# Filter for participants 
+# demographics <- demographics %>%
+#   filter(!is.na(DX),
+#          !is.na(Age),
+#          !is.na(Sex),
+#          !is.na(Site),
+#          !is.na(Scanner))
+
+# Redefine diagnostic categories
+list_diagnoses <- list(
+  "POND" = tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD",
+                         "Anxiety", "Sub-threshold ADHD",
+                         "Intellectual Disability only", 
+                         "Tourette Syndrome", "Other", "Fragile X"),
+                  DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", 
+                             "ADHD", "Other", "Other", "Other", "Other")),
+  "HBN" = tibble(DX = c("ASD", "OCD", "ADHD", "Tourette Syndrome", "ID"),
+                 DX_new = c("ASD", "OCD", "ADHD", "Other", "Other"))
+)
+
+# Diagnostic category levels
+dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
+
+# Full grid of cluster and DX
+# dx_grid <- expand_grid(DX_new = dx_lvls,
+#                        cluster_id = cluster_ids)  %>% 
+#   separate(col = "cluster_id", into = c("nk", "k"), 
+#            sep = "-", remove = FALSE) %>% 
+#   mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+dx_grid <- tibble(DX_new = dx_lvls)
+
+
+
+list_dx <- vector(mode = "list", length = length(human_datasets))
+names(list_dx) <- dataset_labels
+for (i in 1:length(list_dx)) {
+
+# cluster_ids <- list_clusters_compare[[human_datasets[i]]]
+
+df_cluster_group <- list_cluster_groups[[human_datasets[i]]] %>% 
+  filter(nk == nki) %>% 
+  filter(group %in% comparison) %>% 
+  # filter(cluster_id %in% cluster_ids) %>% 
+  select(cluster_id, group)
+
+cluster_ids <- df_cluster_group$cluster_id
+
+dx_grid <- expand_grid(DX_new = dx_lvls,
+                       cluster_id = cluster_ids)
+
+df_clusters_dx <- list_clusters[[i]]# %>% 
+df_clusters_dx <- df_clusters_dx[,c("ID", paste0("nk", nki), "dx")]
+colnames(df_clusters_dx) <- c("ID", "k", "DX")
+
+df_clusters_dx <- df_clusters_dx %>% 
+  left_join(list_diagnoses[[i]], by = "DX") %>% 
+  mutate(cluster_id = paste0(nki, "-", k)) %>% 
+  semi_join(df_cluster_group, by = "cluster_id")
+  # filter(cluster_id %in% list_clusters_compare[[human_datasets[i]]])
+
+df_cluster_dx_summary <- df_clusters_dx %>% 
+  group_by(cluster_id) %>% 
+  mutate(n_in_cluster = n()) %>% 
+  ungroup() %>% 
+  group_by(cluster_id, DX_new) %>% 
+  mutate(n_dx_in_cluster = n()) %>%
+  ungroup() %>% 
+  select(cluster_id, DX_new, n_in_cluster, n_dx_in_cluster) %>% 
+  distinct() %>% 
+  mutate(prop_dx = n_dx_in_cluster/n_in_cluster) %>% 
+  right_join(dx_grid, by = c("DX_new", "cluster_id")) %>% 
+  mutate(prop_dx = ifelse(is.na(prop_dx), 0, prop_dx)) %>% 
+  left_join(df_cluster_group, by = "cluster_id")
+
+list_dx[[i]] <- df_cluster_dx_summary
+
+}
+
+df_dx_summary <- bind_rows(list_dx, .id = "Dataset") %>% 
+  mutate(Dataset = factor(Dataset, levels = dataset_labels))
+         # ,DX_new = factor(DX_new, levels = dx_lvls))
+
+
+
+plt_diagnoses <- ggplot(df_dx_summary, aes(x = DX_new, y = prop_dx, fill = group)) + 
+  geom_col(position = "dodge", col = "grey30", size = 0.4) + 
+  facet_grid(.~Dataset) +
+  coord_cartesian(ylim = c(0, 1.0)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_fill_manual(labels = comparison,
+                      values = palette_binary) + 
+  labs(x = "Diagnosis",
+       y = "Proportion per cluster") + 
+  theme_bw() +
+  theme(axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        legend.background = element_rect(fill = scales::alpha("white", alpha = 0.5)),
+        legend.position.inside = c(0.86, 0.75),
+        legend.position = "inside",
+        legend.key.size = unit(10, "bigpts"),
+        legend.margin = margin(),
+        # legend.box.margin = margin(l = -8),
+        legend.box.margin = margin(),
+        legend.spacing = unit(0, "pt"),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
+        strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)),
+        plot.margin = margin(t = 5.5))
+
+# plt_diagnoses
+```
+
+
+#### LDA Scores
+
+```{r}
+cex_vals <- c(5.0, 4.0)
+
+df_lda_scores <- bind_rows(list_lda_scores, .id = "Dataset") %>% 
+  mutate(Dataset = factor(Dataset, levels = dataset_labels))
+
+set.seed(123)
+plt_lda_scores <- ggplot(df_lda_scores, aes(x = y, y = LD1, fill = y_pred_prob)) + 
+  geom_beeswarm(cex = 3.5,
+                shape = 21,
+                size = 1.0,
+                col = "grey50") +
+  # geom_jitter(height = 0, width = 0.35, shape = 21, size = 1.0, col = "grey50") +
+  facet_grid(.~Dataset) + 
+  coord_cartesian(ylim = c(-3.5, 4.5)) +
+  scale_x_discrete(labels = comparison, expand = expansion(add = 0.8)) + 
+  scale_y_continuous(breaks = seq(-6, 6, by = 2)) + 
+  scale_fill_gradientn(colours = c(palette_binary[1], "grey70", palette_binary[2]),
+                       values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                       limits  = c(0, 1),
+                       breaks = c(0, 0.5, 1.0),
+                       guide = guide_colourbar(barwidth = unit(8, "bigpts"),
+                                               barheight = unit(50, "bigpts"),
+                                               # label.theme = element_text(margin = margin()),
+                                               title.position = "right", title.hjust = 0.5)) +
+  labs(col = "LDA predicted class",
+       y = "LD scores",
+       x = "Molecular cluster group",
+       fill = "Probability") + 
+  theme_bw() +
+  theme(legend.margin = margin(),
+        legend.box.margin = margin(l = -8),
+        legend.spacing = unit(0, "pt"),
+        legend.title = element_text(size = 6, angle = 270, margin = margin()),
+        legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
+        axis.title = element_text(size = 6),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6, 
+                                   colour = palette_binary, 
+                                   hjust = c(0.6, 0.4)),
+        strip.text = element_text(size = 6, margin = margin(b = 2, t = 2)),
+        plot.margin = margin(l = 0, r = 0, t = 0, b = 0))
+
+# plt_lda_scores
+```
+
+#### ROC
+
+```{r}
+df_lda_roc <- map_dfr(.x = list_lda_roc, .f = function(x) {
+  tibble(tpr = x$sensitivities,
+         fpr = 1-x$specificities,
+         thresholds = x$thresholds,
+         AUC = x$auc[1]) %>% 
+    arrange(tpr)
+}, .id = "Dataset")
+
+df_lda_roc <- df_lda_roc %>% 
+  mutate(Dataset = ifelse(Dataset == "POND", "POND+", Dataset),
+         Dataset = factor(Dataset, levels = dataset_labels))
+
+df_lda_roc_auc <- df_lda_roc %>% 
+  select(Dataset, AUC) %>% 
+  distinct() %>% 
+  mutate(fpr = 0.8, tpr = 0.2, 
+         label = paste0("AUC = ", round(AUC, 3)))
+
+plt_lda_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) +
+  annotate(geom = "segment",
+           x = 0, y = 0,
+           xend = 1, yend = 1,
+           linetype = "dashed",
+           linewidth = 0.4) +
+  geom_line(linewidth = 0.4) +
+  geom_text(data = df_lda_roc_auc, 
+            mapping = aes(label = label),
+            size = 6 * 0.3527) + 
+  facet_grid(.~Dataset) + 
+  scale_x_continuous(breaks = seq(0, 1, by = 0.2)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  labs(x = "False positive rate",
+       y = "True positive rate") +
+  theme_bw() +
+  theme(axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        strip.text = element_text(size = 6, margin = margin(b = 2, t = 2)),
+        plot.margin = margin(l = 0, r = 0, t = 0, b = 5.5))
+```
+
+
+
+#### Loadings
+
+```{r}
+list_plt_loadings_common <- vector(mode = "list", length = length(list_lda_loadings))
+list_plt_loadings <- vector(mode = "list", length = length(list_lda_loadings))
+for (i in 1:length(list_lda_loadings)) {
+  
+  df_lda_loadings_common <- list_lda_loadings_common[[i]] %>% 
+    mutate(Dataset = names(list_lda_loadings_common)[i])
+  
+  plt_loadings_common <- ggplot(df_lda_loadings_common, aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) +
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) +
+    geom_point(size = 0.9) +
+    facet_grid(.~Dataset) + 
+    coord_cartesian(xlim = c(-0.5, 0.5)) +
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.5)) +
+    scale_colour_manual(values = palette_binary) +
+    labs(x = "LD loadings",
+         y = NULL) +
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title.y = element_text(size = 6),
+          axis.text.y = element_text(size = 6),
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
+  
+  plt_loadings <- ggplot(list_lda_loadings[[i]], aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) +
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) +
+    geom_point(size = 0.9) +
+    coord_cartesian(xlim = c(-0.5, 0.5)) +
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.5)) +
+    scale_colour_manual(values = palette_binary) +
+    labs(x = "LD loadings",
+         y = "Clinical variable") +
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title.x = element_text(size = 6),
+          axis.title.y = element_text(size = 6, hjust = 0.6),
+          axis.text = element_text(size = 6))
+  
+  if (i == 1) {
+    plt_loadings_common <- plt_loadings_common +
+      theme(axis.title.y = element_text(size = 6),
+            axis.text.y = element_text(size = 6),
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank())
+    
+    plt_loadings <- plt_loadings +
+      theme(axis.title = element_text(size = 6),
+            axis.text = element_text(size = 6))
+    
+  } else {
+    plt_loadings_common <- plt_loadings_common +
+      theme(axis.title.y = element_blank(),
+            axis.text.y = element_text(size = 6),
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank())
+    
+    plt_loadings <- plt_loadings + 
+      theme(axis.title.x = element_text(size = 6),
+            axis.title.y = element_blank(),
+            axis.text = element_text(size = 6))
+      
+  }
+  
+  loadings_patchwork <- (plt_loadings_common / plt_loadings) + plot_layout(heights = c(0.2, 0.8)) &
+    theme(plot.margin = margin(b = 3, r = 0, t = 0))
+  
+  list_plt_loadings[[i]] <- patchworkGrob(loadings_patchwork)
+  
+  
+}
+
+loadings_grob <- arrangeGrob(list_plt_loadings[[1]],
+                             list_plt_loadings[[2]],
+                             layout_matrix = rbind(c(1,2)))
+
+# outfile <- "loadings_panel.pdf"
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile,
+#     width = unit(235/72, "in"),
+#     height = unit(320/72, "in"))
+# grid.draw(loadings_grob)
+# 
+# invisible(dev.off())
+```
+
+#### Panel
+
+```{r}
+panel_width <- (fig_width - 2*10)/3
+
+panel_heights <- c(80, 10, 80, 10, 80, 10, 300)
+  
+panel_layout <- cbind(1:7)
+
+panel_grob <- arrangeGrob(ggplotGrob(plt_diagnoses),
+                          rectGrob(), #Pad
+                          ggplotGrob(plt_lda_scores), # LDA scores
+                          rectGrob(), #Pad
+                          ggplotGrob(plt_lda_roc), # ROC
+                          rectGrob(), #Pad
+                          loadings_grob, # Loadings
+                          layout_matrix = panel_layout,
+                          widths = unit(panel_width, "bigpts"),
+                          heights = unit(panel_heights, "bigpts"))
+
+panel_height_pt <- sum(panel_heights)
+panel_width_pt <- panel_width
+  
+panel_height_in <- panel_height_pt/72
+panel_width_in <- panel_width_pt/72
+
+  
+outfile <- paste0("panel", ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(panel_width_in, "in"),
+    height = unit(panel_height_in, "in"))
+grid.draw(panel_grob)
+
+invisible(dev.off())
+
+panel_synaptic_mapkwnt_grob <- panel_grob
+```
+
+
+
+
+### Chromatin-MAPKWNT
+
+```{r}
+comparison <- sort(c("chromatin", "mapkwnt"))
+palette_binary <- c("chromatin" = "darkorchid1","mapkwnt" = "springgreen4")
+
+palette_binary <- palette_binary[comparison[order(comparison)]]
+
+nki <- 7
+
+# outfile_prefix <- paste0("figure4_", str_flatten(comparison, collapse = "_"), "_nk_", nki)
+
+
+# list_clusters_compare <- list(
+#   POND = c("7-1", "7-2"),
+#   HBN = c("7-6", "7-4")
+# )
+
+
+n_variables <- c(20, 27)
+
+list_lda_inputs <- vector(mode = "list", length = length(human_datasets))
+names(list_lda_inputs) <- human_datasets
+list_lda_fit <- list_lda_inputs
+list_lda_roc <- list_lda_inputs
+for (i in 1:length(list_lda_inputs)) {
+
+# df_cluster_compare <- list_cluster_groups[[i]] %>% 
+#   filter(cluster_id %in% list_clusters_compare[[i]])
+
+df_cluster_compare <- list_cluster_groups[[i]] %>% 
+  filter(nk == nki) %>% 
+  filter(group %in% comparison)
+
+# Fetch variables with the desired completion level
+variables <- list_complete_cases[[i]] %>% 
+  slice_max(order_by = n_complete, n = n_variables[i]) %>% 
+  pull(variable)
+
+# Extract variable scores
+cols <- c("ID", paste0("nk", nki), variables)
+df_multivariate <- list_clusters_clinical[[i]][,cols]
+colnames(df_multivariate) <- c("ID", "k", variables)
+
+# Filter for complete cases
+df_multivariate <- df_multivariate[complete.cases(df_multivariate),]
+
+# Include information about pathway
+df_multivariate <- df_multivariate %>% 
+  inner_join(df_cluster_compare %>% 
+               filter(nk == nki) %>% 
+               select(k, group), by = "k") %>% 
+  mutate(group = factor(group)) %>% 
+  select(-k)
+
+
+list_lda_inputs[[i]] <- df_multivariate
+
+# Extract feature matrix and labels
+X <- as.matrix(df_multivariate[,variables])
+X <- scale(X)
+y <- df_multivariate$group
+
+# Fit LDA
+lda_fit <- MASS::lda(x = X, grouping = y, prior = c(0.5, 0.5))
+
+# Extract class probabilities
+lda_pred_prob <- predict(lda_fit, X)[["posterior"]][,2]
+
+# Run LDA ROC analysis
+lda_roc <- pROC::roc(response = y,
+                     predictor = lda_pred_prob,
+                     direction = "<", 
+                     quiet = TRUE)
+
+# Store LDA outputs
+list_lda_fit[[i]] <- lda_fit
+list_lda_roc[[i]] <- lda_roc
+
+}
+```
+
+
+```{r}
+list_vars_flip <- list(
+  POND = c("scqtot", "tpocs_tot", "rbsallt", "cbcl_ep_ts", "cbcl_ip_ts"),
+  HBN = c("ARI_P_Total_Score", "ASSQ_Total", "CBCL_IP_T", "CBCL_EP_T", "CIS_P_Score",
+          "ICU_P_Callous", "ICU_P_Total", "ICU_P_Uncaring", "ICU_P_Unemotional",
+          "MFQ_P_Total", "SCARED_P_Total", "SCQ_Total", "SDQ_Difficulties_Total",
+          "SDS_Total_T", "Score_Total", "WHODAS_P_Score")
+)
+
+dataset_labels <- c("POND+", "HBN")
+
+list_lda_scores <- vector(mode = "list", length = length(human_datasets))
+list_lda_loadings <- vector(mode = "list", length = length(human_datasets))
+list_lda_loadings_common <- vector(mode = "list", length = length(human_datasets))
+
+names(list_lda_scores) <- dataset_labels
+names(list_lda_loadings) <- dataset_labels
+names(list_lda_loadings_common) <- dataset_labels
+for (i in 1:length(human_datasets)) {
+  
+  X <- list_lda_inputs[[i]] %>% 
+    select(-ID, -group) %>% 
+    as.matrix() %>% 
+    scale()
+  
+  y <- list_lda_inputs[[i]] %>% 
+    pull(group)
+  
+  lda_pred <- predict(list_lda_fit[[i]], X)
+  lda_pred_y <- lda_pred[["class"]]
+  lda_pred_prob <- lda_pred[["posterior"]][,2]
+  
+  df_mv_scores <- lda_pred[["x"]] %>% 
+    as_tibble() %>% 
+    mutate(y = y,
+           y_pred = lda_pred_y,
+           y_pred_prob = lda_pred_prob) 
+  
+  df_mv_loadings <- cor(x = X, y = df_mv_scores$LD1) %>% 
+    as_tibble(rownames = "variable") %>% 
+    rename(LD1 = V1) %>% 
+    mutate(LD1 = ifelse(variable %in% list_vars_flip[[i]], -1*LD1, LD1))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    left_join(list_clinical_acronyms[[i]], by = "variable") 
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(group = ifelse(LD1 >= 0, comparison[2], comparison[1]))
+  
+  df_mv_loadings_common <- df_mv_loadings %>% 
+    semi_join(df_common, by = "acronym") 
+  
+  if (i == 1) {
+    df_mv_loadings_common <- df_mv_loadings_common %>% 
+      mutate(variable = factor(variable, levels = list_loading_common_lvls[[str_flatten(comparison, "_")]]),
+             acronym = factor(acronym, levels = acronym[order(variable)]))
+    
+    lvls_common <- levels(df_mv_loadings_common$acronym)
+  } else {
+    df_mv_loadings_common <- df_mv_loadings_common %>% 
+      mutate(acronym = factor(acronym, levels = lvls_common))
+  }
+  
+  
+  # df_mv_loadings <- df_mv_loadings %>% 
+  #   mutate(variable = factor(variable, levels = variable[order(LD1)]),
+  #          acronym = factor(acronym, levels = acronym[order(LD1)]))
+  
+  df_mv_loadings <- df_mv_loadings %>% 
+    mutate(variable = factor(variable, levels = list_loading_lvls[[str_flatten(comparison, "_")]][[i]]),
+           acronym = factor(acronym, levels = acronym[order(variable)]))
+  
+  list_lda_scores[[i]] <- df_mv_scores
+  list_lda_loadings[[i]] <- df_mv_loadings
+  list_lda_loadings_common[[i]] <- df_mv_loadings_common
+  
+}
+```
+
+
+
+#### Diagnoses
+
+```{r}
+# Filter for participants 
+# demographics <- demographics %>%
+#   filter(!is.na(DX),
+#          !is.na(Age),
+#          !is.na(Sex),
+#          !is.na(Site),
+#          !is.na(Scanner))
+
+# Redefine diagnostic categories
+list_diagnoses <- list(
+  "POND" = tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD",
+                         "Anxiety", "Sub-threshold ADHD",
+                         "Intellectual Disability only", 
+                         "Tourette Syndrome", "Other", "Fragile X"),
+                  DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", 
+                             "ADHD", "Other", "Other", "Other", "Other")),
+  "HBN" = tibble(DX = c("ASD", "OCD", "ADHD", "Tourette Syndrome", "ID"),
+                 DX_new = c("ASD", "OCD", "ADHD", "Other", "Other"))
+)
+
+# Diagnostic category levels
+dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
+
+# Full grid of cluster and DX
+# dx_grid <- expand_grid(DX_new = dx_lvls,
+#                        cluster_id = cluster_ids)  %>% 
+#   separate(col = "cluster_id", into = c("nk", "k"), 
+#            sep = "-", remove = FALSE) %>% 
+#   mutate(nk = as.numeric(nk), k = as.numeric(k))
+
+dx_grid <- tibble(DX_new = dx_lvls)
+
+
+
+list_dx <- vector(mode = "list", length = length(human_datasets))
+names(list_dx) <- dataset_labels
+for (i in 1:length(list_dx)) {
+
+# cluster_ids <- list_clusters_compare[[human_datasets[i]]]
+
+df_cluster_group <- list_cluster_groups[[human_datasets[i]]] %>% 
+  filter(nk == nki) %>% 
+  filter(group %in% comparison) %>% 
+  # filter(cluster_id %in% cluster_ids) %>% 
+  select(cluster_id, group)
+
+cluster_ids <- df_cluster_group$cluster_id
+
+dx_grid <- expand_grid(DX_new = dx_lvls,
+                       cluster_id = cluster_ids)
+
+df_clusters_dx <- list_clusters[[i]]# %>% 
+df_clusters_dx <- df_clusters_dx[,c("ID", paste0("nk", nki), "dx")]
+colnames(df_clusters_dx) <- c("ID", "k", "DX")
+
+df_clusters_dx <- df_clusters_dx %>% 
+  left_join(list_diagnoses[[i]], by = "DX") %>% 
+  mutate(cluster_id = paste0(nki, "-", k)) %>% 
+  semi_join(df_cluster_group, by = "cluster_id")
+  # filter(cluster_id %in% list_clusters_compare[[human_datasets[i]]])
+
+df_cluster_dx_summary <- df_clusters_dx %>% 
+  group_by(cluster_id) %>% 
+  mutate(n_in_cluster = n()) %>% 
+  ungroup() %>% 
+  group_by(cluster_id, DX_new) %>% 
+  mutate(n_dx_in_cluster = n()) %>%
+  ungroup() %>% 
+  select(cluster_id, DX_new, n_in_cluster, n_dx_in_cluster) %>% 
+  distinct() %>% 
+  mutate(prop_dx = n_dx_in_cluster/n_in_cluster) %>% 
+  right_join(dx_grid, by = c("DX_new", "cluster_id")) %>% 
+  mutate(prop_dx = ifelse(is.na(prop_dx), 0, prop_dx)) %>% 
+  left_join(df_cluster_group, by = "cluster_id")
+
+list_dx[[i]] <- df_cluster_dx_summary
+
+}
+
+df_dx_summary <- bind_rows(list_dx, .id = "Dataset") %>% 
+  mutate(Dataset = factor(Dataset, levels = dataset_labels))
+         # ,DX_new = factor(DX_new, levels = dx_lvls))
+
+
+
+plt_diagnoses <- ggplot(df_dx_summary, aes(x = DX_new, y = prop_dx, fill = group)) + 
+  geom_col(position = "dodge", col = "grey30", size = 0.4) + 
+  facet_grid(.~Dataset) +
+  coord_cartesian(ylim = c(0, 1.0)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) + 
+  scale_fill_manual(labels = comparison,
+                      values = palette_binary) + 
+  labs(x = "Diagnosis",
+       y = "Proportion per cluster") + 
+  theme_bw() +
+  theme(axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        legend.background = element_rect(fill = scales::alpha("white", alpha = 0.5)),
+        legend.position.inside = c(0.86, 0.75),
+        legend.position = "inside",
+        legend.key.size = unit(10, "bigpts"),
+        legend.margin = margin(),
+        # legend.box.margin = margin(l = -8),
+        legend.box.margin = margin(),
+        legend.spacing = unit(0, "pt"),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
+        strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)),
+        plot.margin = margin(t = 5.5))
+
+# plt_diagnoses
+```
+
+
+#### LDA Scores
+
+```{r}
+cex_vals <- c(5.0, 4.0)
+
+df_lda_scores <- bind_rows(list_lda_scores, .id = "Dataset") %>% 
+  mutate(Dataset = factor(Dataset, levels = dataset_labels))
+
+set.seed(123)
+plt_lda_scores <- ggplot(df_lda_scores, aes(x = y, y = LD1, fill = y_pred_prob)) + 
+  geom_beeswarm(cex = 3.5,
+                shape = 21,
+                size = 1.0,
+                col = "grey50") +
+  # geom_jitter(height = 0, width = 0.35, shape = 21, size = 1.0, col = "grey50") +
+  facet_grid(.~Dataset) + 
+  coord_cartesian(ylim = c(-3.5, 4.5)) +
+  scale_x_discrete(labels = comparison, expand = expansion(add = 0.8)) + 
+  scale_y_continuous(breaks = seq(-6, 6, by = 2)) + 
+  scale_fill_gradientn(colours = c(palette_binary[1], "grey70", palette_binary[2]),
+                       values  = scales::rescale(c(0, 1), from = c(0, 1)),
+                       limits  = c(0, 1),
+                       breaks = c(0, 0.5, 1.0),
+                       guide = guide_colourbar(barwidth = unit(8, "bigpts"),
+                                               barheight = unit(50, "bigpts"),
+                                               # label.theme = element_text(margin = margin()),
+                                               title.position = "right", title.hjust = 0.5)) +
+  labs(col = "LDA predicted class",
+       y = "LD scores",
+       x = "Molecular cluster group",
+       fill = "Probability") + 
+  theme_bw() +
+  theme(legend.margin = margin(),
+        legend.box.margin = margin(l = -8),
+        legend.spacing = unit(0, "pt"),
+        legend.title = element_text(size = 6, angle = 270, margin = margin()),
+        legend.text = element_text(size = 6, margin = margin(l = 2, r = 2)),
+        axis.title = element_text(size = 6),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6, 
+                                   colour = palette_binary, 
+                                   hjust = c(0.6, 0.4)),
+        strip.text = element_text(size = 6, margin = margin(b = 2, t = 2)),
+        plot.margin = margin(l = 0, r = 0, t = 0, b = 0))
+
+# plt_lda_scores
+```
+
+#### ROC
+
+```{r}
+df_lda_roc <- map_dfr(.x = list_lda_roc, .f = function(x) {
+  tibble(tpr = x$sensitivities,
+         fpr = 1-x$specificities,
+         thresholds = x$thresholds,
+         AUC = x$auc[1]) %>% 
+    arrange(tpr)
+}, .id = "Dataset")
+
+df_lda_roc <- df_lda_roc %>% 
+  mutate(Dataset = ifelse(Dataset == "POND", "POND+", Dataset),
+         Dataset = factor(Dataset, levels = dataset_labels))
+
+df_lda_roc_auc <- df_lda_roc %>% 
+  select(Dataset, AUC) %>% 
+  distinct() %>% 
+  mutate(fpr = 0.8, tpr = 0.2, 
+         label = paste0("AUC = ", round(AUC, 3)))
+
+plt_lda_roc <- ggplot(df_lda_roc, aes(x = fpr, y = tpr)) +
+  annotate(geom = "segment",
+           x = 0, y = 0,
+           xend = 1, yend = 1,
+           linetype = "dashed",
+           linewidth = 0.4) +
+  geom_line(linewidth = 0.4) +
+  geom_text(data = df_lda_roc_auc, 
+            mapping = aes(label = label),
+            size = 6 * 0.3527) + 
+  facet_grid(.~Dataset) + 
+  scale_x_continuous(breaks = seq(0, 1, by = 0.2)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  labs(x = "False positive rate",
+       y = "True positive rate") +
+  theme_bw() +
+  theme(axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        strip.text = element_text(size = 6, margin = margin(b = 2, t = 2)),
+        plot.margin = margin(l = 0, r = 0, t = 0, b = 5.5))
+```
+
+
+
+#### Loadings
+
+```{r}
+list_plt_loadings_common <- vector(mode = "list", length = length(list_lda_loadings))
+list_plt_loadings <- vector(mode = "list", length = length(list_lda_loadings))
+for (i in 1:length(list_lda_loadings)) {
+  
+  df_lda_loadings_common <- list_lda_loadings_common[[i]] %>% 
+    mutate(Dataset = names(list_lda_loadings_common)[i])
+  
+  plt_loadings_common <- ggplot(df_lda_loadings_common, aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) +
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) +
+    geom_point(size = 0.9) +
+    facet_grid(.~Dataset) + 
+    coord_cartesian(xlim = c(-0.5, 0.5)) +
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.5)) +
+    scale_colour_manual(values = palette_binary) +
+    labs(x = "LD loadings",
+         y = NULL) +
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title.y = element_text(size = 6),
+          axis.text.y = element_text(size = 6),
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
+  
+  plt_loadings <- ggplot(list_lda_loadings[[i]], aes(x = LD1, y = acronym, col = group)) +
+    geom_vline(xintercept = 0) +
+    geom_segment(mapping = aes(xend = 0, yend = acronym)) +
+    geom_point(size = 0.9) +
+    coord_cartesian(xlim = c(-0.5, 0.5)) +
+    scale_x_continuous(breaks = seq(-1, 1, by = 0.5)) +
+    scale_colour_manual(values = palette_binary) +
+    labs(x = "LD loadings",
+         y = "Clinical variable") +
+    theme_bw() +
+    theme(legend.position = "none") +
+    theme(axis.title.x = element_text(size = 6),
+          axis.title.y = element_text(size = 6, hjust = 0.6),
+          axis.text = element_text(size = 6))
+  
+  if (i == 1) {
+    plt_loadings_common <- plt_loadings_common +
+      theme(axis.title.y = element_text(size = 6),
+            axis.text.y = element_text(size = 6),
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank())
+    
+    plt_loadings <- plt_loadings +
+      theme(axis.title = element_text(size = 6),
+            axis.text = element_text(size = 6))
+    
+  } else {
+    plt_loadings_common <- plt_loadings_common +
+      theme(axis.title.y = element_blank(),
+            axis.text.y = element_text(size = 6),
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank())
+    
+    plt_loadings <- plt_loadings + 
+      theme(axis.title.x = element_text(size = 6),
+            axis.title.y = element_blank(),
+            axis.text = element_text(size = 6))
+      
+  }
+  
+  loadings_patchwork <- (plt_loadings_common / plt_loadings) + plot_layout(heights = c(0.2, 0.8)) &
+    theme(plot.margin = margin(b = 3, r = 0, t = 0))
+  
+  list_plt_loadings[[i]] <- patchworkGrob(loadings_patchwork)
+  
+  
+}
+
+loadings_grob <- arrangeGrob(list_plt_loadings[[1]],
+                             list_plt_loadings[[2]],
+                             layout_matrix = rbind(c(1,2)))
+
+# outfile <- "loadings_panel.pdf"
+# outfile <- file.path(output_dir, outfile)
+# pdf(file = outfile,
+#     width = unit(235/72, "in"),
+#     height = unit(320/72, "in"))
+# grid.draw(loadings_grob)
+# 
+# invisible(dev.off())
+```
+
+#### Panel
+
+```{r}
+panel_width <- (fig_width - 2*10)/3
+
+panel_heights <- c(80, 10, 80, 10, 80, 10, 300)
+  
+panel_layout <- cbind(1:7)
+
+panel_grob <- arrangeGrob(ggplotGrob(plt_diagnoses),
+                          rectGrob(), #Pad
+                          ggplotGrob(plt_lda_scores), # LDA scores
+                          rectGrob(), #Pad
+                          ggplotGrob(plt_lda_roc), # ROC
+                          rectGrob(), #Pad
+                          loadings_grob, # Loadings
+                          layout_matrix = panel_layout,
+                          widths = unit(panel_width, "bigpts"),
+                          heights = unit(panel_heights, "bigpts"))
+
+panel_height_pt <- sum(panel_heights)
+panel_width_pt <- panel_width
+  
+panel_height_in <- panel_height_pt/72
+panel_width_in <- panel_width_pt/72
+
+  
+outfile <- paste0("panel", ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(panel_width_in, "in"),
+    height = unit(panel_height_in, "in"))
+grid.draw(panel_grob)
+
+invisible(dev.off())
+
+panel_chromatin_mapkwnt_grob <- panel_grob
+```
+
+
+
+
+# Figure
+
+```{r}
+# fig_widths <- c(270, 15, 235)
+fig_widths <- c(panel_width_pt, 10, panel_width_pt, 10, panel_width_pt)
+fig_height <- panel_height_pt
 fig_heights <- c(100, 10, 100, 10, 100)
   
-fig_layout <- rbind(c(01, 06, 07),
-                    c(02, 06, 07),
-                    c(03, 06, 07),
-                    c(04, 06, 07),
-                    c(05, 06, 07))
+fig_layout <- rbind(1:5)
 
-fig_grob <- arrangeGrob(ggplotGrob(plt_diagnoses),
-                        zeroGrob(), #Pad
-                        ggplotGrob(plt_lda_scores), # LDA scores
-                        zeroGrob(), #Pad
-                        ggplotGrob(plt_lda_roc), # ROC
-                        zeroGrob(), #Pad
-                        loadings_grob, # Loadings
+fig_grob <- arrangeGrob(panel_synaptic_chromatin_grob, 
+                        zeroGrob(),
+                        panel_synaptic_mapkwnt_grob,
+                        zeroGrob(),
+                        panel_chromatin_mapkwnt_grob,
                         layout_matrix = fig_layout,
                         widths = unit(fig_widths, "bigpts"),
-                        heights = unit(fig_heights, "bigpts"))
+                        heights = unit(fig_height, "bigpts"))
 
   
-  fig_height_pt <- sum(fig_heights)
-  fig_width_pt <- fig_width
+fig_height_pt <- sum(fig_height)
+fig_width_pt <- sum(fig_widths)
   
-  fig_height_in <- fig_height_pt/72
-  fig_width_in <- fig_width_pt/72
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
 
-  
+
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(fig_width_in, "in"),
     height = unit(fig_height_in, "in"))
-grid.draw(fig_grob)
-
-grid.text(label = c("A", "B", "C", "D"),
-          x = unit(c(6, 6, 6, 290), "bigpts"),
-          y = unit(c(312, 215, 105, 312), "bigpts"),
-          gp = gpar(fontsize = 10, fontface = "bold"))
-
-invisible(dev.off())
-```
-
-
-```{r}
-outfile <- paste0(outfile_prefix, ".png")
-outfile <- file.path(output_dir, outfile)
-png(file = outfile,
-    width = fig_width_in,
-    height = fig_height_in,
-    units = "in",
-    res = 600)
 
 grid.draw(fig_grob)
 
-grid.text(label = c("A", "B", "C", "D"),
-          x = unit(c(6, 6, 6, 290), "bigpts"),
-          y = unit(c(312, 215, 105, 312), "bigpts"),
-          gp = gpar(fontsize = 10, fontface = "bold"))
+# grid.text(label = c("A", "B", "C", "D"),
+#           x = unit(c(6, 6, 6, 290), "bigpts"),
+#           y = unit(c(312, 215, 105, 312), "bigpts"),
+#           gp = gpar(fontsize = 10, fontface = "bold"))
 
 invisible(dev.off())
 ```
