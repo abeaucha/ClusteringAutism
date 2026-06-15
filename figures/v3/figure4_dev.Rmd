@@ -1108,6 +1108,17 @@ list_loading_common_lvls <- list(
 
 ```
 
+```{r}
+list_lda_loadings_all <- list(
+  "chromatin_synaptic" = NULL,
+  "chromatin_mapkwnt" = NULL,
+  "mapkwnt_synaptic" = NULL
+)
+
+list_lda_loadings_common_all <- list_lda_loadings_all
+```
+
+
 ### Synaptic-chromatin 
 
 ```{r}
@@ -1275,7 +1286,10 @@ for (i in 1:length(human_datasets)) {
   
 }
 ```
-
+```{r}
+list_lda_loadings_all$chromatin_synaptic <- list_lda_loadings
+list_lda_loadings_common_all$chromatin_synaptic <- list_lda_loadings_common
+```
 
 
 #### Diagnoses
@@ -1790,7 +1804,10 @@ for (i in 1:length(human_datasets)) {
 }
 ```
 
-
+```{r}
+list_lda_loadings_all$mapkwnt_synaptic <- list_lda_loadings
+list_lda_loadings_common_all$mapkwnt_synaptic <- list_lda_loadings_common
+```
 
 #### Diagnoses
 
@@ -2299,7 +2316,10 @@ for (i in 1:length(human_datasets)) {
 }
 ```
 
-
+```{r}
+list_lda_loadings_all$chromatin_mapkwnt <- list_lda_loadings
+list_lda_loadings_common_all$chromatin_mapkwnt <- list_lda_loadings_common
+```
 
 #### Diagnoses
 
@@ -2831,7 +2851,121 @@ invisible(dev.off())
 
 
 
+# Loadings biplots
+
+```{r}
+df_1 <- list_lda_loadings_all$chromatin_synaptic$`POND+` %>% 
+  mutate(variable = as.character(variable),
+         acronym = as.character(acronym)) %>% 
+  select(acronym, chromatin_synaptic = LD1)
+
+df_2 <- list_lda_loadings_all$mapkwnt_synaptic$`POND+` %>% 
+    mutate(variable = as.character(variable),
+         acronym = as.character(acronym)) %>% 
+    select(acronym, mapkwnt_synaptic = LD1)
+
+df_chromsyn_mapkwntsyn <- inner_join(df_1, df_2, by = "acronym")
+
+df_chromsyn_mapkwntsyn <- df_chromsyn_mapkwntsyn %>% 
+  mutate(r = sqrt(chromatin_synaptic^2 + mapkwnt_synaptic^2)) %>% 
+  mutate(label = ifelse(r < 0.3, "", acronym))
+
+ggplot(df_chromsyn_mapkwntsyn, aes(x = chromatin_synaptic, y = mapkwnt_synaptic, label = label)) + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 0) + 
+  geom_point() + 
+  geom_text() +
+  coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  theme_classic()
+```
+
+```{r}
+df_1 <- list_lda_loadings_all$chromatin_synaptic$`POND+` %>% 
+  mutate(variable = as.character(variable),
+         acronym = as.character(acronym)) %>% 
+  select(acronym, chromatin_synaptic = LD1)
+
+df_2 <- list_lda_loadings_all$chromatin_mapkwnt$`POND+` %>% 
+    mutate(variable = as.character(variable),
+         acronym = as.character(acronym)) %>% 
+    select(acronym, chromatin_mapkwnt = LD1)
+
+df_chromsyn_chrommapkwnt <- inner_join(df_1, df_2, by = "acronym")
+
+df_chromsyn_chrommapkwnt <- df_chromsyn_chrommapkwnt %>% 
+  mutate(r = sqrt(chromatin_synaptic^2 + chromatin_mapkwnt^2)) %>% 
+  mutate(label = ifelse(r < 0.3, "", acronym))
+
+ggplot(df_chromsyn_chrommapkwnt, aes(x = chromatin_synaptic, y = chromatin_mapkwnt, label = label)) + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 0) + 
+  geom_point() + 
+  geom_text() +
+  coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  theme_classic()
+```
+
+```{r}
+df_1 <- list_lda_loadings_all$mapkwnt_synaptic$`POND+` %>% 
+  mutate(variable = as.character(variable),
+         acronym = as.character(acronym)) %>% 
+  select(acronym, mapkwnt_synaptic = LD1)
+
+df_2 <- list_lda_loadings_all$chromatin_mapkwnt$`POND+` %>% 
+    mutate(variable = as.character(variable),
+         acronym = as.character(acronym)) %>% 
+    select(acronym, chromatin_mapkwnt = LD1)
+
+df_mapkwntsyn_chrommapkwnt <- inner_join(df_1, df_2, by = "acronym")
+
+df_mapkwntsyn_chrommapkwnt <- df_mapkwntsyn_chrommapkwnt %>% 
+  mutate(r = sqrt(mapkwnt_synaptic^2 + chromatin_mapkwnt^2)) %>% 
+  mutate(label = ifelse(r < 0.3, "", acronym))
+
+ggplot(df_mapkwntsyn_chrommapkwnt, aes(x = mapkwnt_synaptic, y = chromatin_mapkwnt, label = label)) + 
+  geom_hline(yintercept = 0) + 
+  geom_vline(xintercept = 0) + 
+  geom_point() + 
+  geom_text() +
+  coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  theme_classic()
+```
 
 
 
+```{r}
+df_chromatin_synaptic <- list_lda_loadings_all$chromatin_synaptic$`POND+` %>% 
+  select(acronym, LD1, group) %>% 
+  mutate(comparison = "chromatin_synaptic")
+
+lvls <- df_chromatin_synaptic %>% 
+  pull(acronym) %>% 
+  levels()
+
+df_mapkwnt_synaptic <- list_lda_loadings_all$mapkwnt_synaptic$`POND+` %>% 
+  select(acronym, LD1, group) %>% 
+  mutate(acronym = factor(acronym, levels = lvls)) %>% 
+  mutate(comparison = "mapkwnt_synaptic")
+
+df_chromatin_mapkwnt <- list_lda_loadings_all$chromatin_mapkwnt$`POND+` %>% 
+  select(acronym, LD1, group) %>% 
+  mutate(acronym = factor(acronym, levels = lvls)) %>% 
+  mutate(comparison = "chromatin_mapkwnt")
+
+df_loadings <- bind_rows(df_chromatin_synaptic, 
+                         df_mapkwnt_synaptic,
+                         df_chromatin_mapkwnt)
+
+df_loadings <- df_loadings %>% 
+  mutate(comparison = factor(comparison, levels = c("chromatin_synaptic", "mapkwnt_synaptic", "chromatin_mapkwnt")))
+
+ggplot(df_loadings, aes(x = LD1, y = acronym, col = group)) + 
+  geom_vline(xintercept = 0) + 
+  geom_segment(aes(xend = 0, yend = acronym)) + 
+  geom_point() +
+  facet_grid(.~comparison) +
+  coord_cartesian(xlim = c(-0.5, 0.5)) + 
+  scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2")) + 
+  theme_bw()
+```
 
