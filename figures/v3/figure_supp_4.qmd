@@ -144,6 +144,16 @@ plt_human_sankey
 ```
 
 ```{r}
+outfile <- "POND_sankey.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt_human_sankey)
+invisible(dev.off())
+```
+
+```{r}
 df_human_clusters %>% 
   filter(nk4 == 3) %>% 
   select(nk3, nk4, nk5)

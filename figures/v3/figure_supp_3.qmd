@@ -139,6 +139,17 @@ plt_mouse_sankey
 ```
 
 ```{r}
+outfile <- "mouse_sankey.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(8, "in"),
+    height = unit(4, "in"))
+print(plt_mouse_sankey)
+invisible(dev.off())
+```
+
+
+```{r}
 mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/107")
 
 mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids", "resolution_0.05")
@@ -418,4 +429,3 @@ grid.draw(fig_grobs)
 
 invisible(dev.off())
 ```
-
