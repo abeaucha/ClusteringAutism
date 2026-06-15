@@ -4,3 +4,814 @@ format: html
 editor: visual
 ---
 
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(ggnewscale))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+```
+
+
+```{r env}
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+SRCPATH <- Sys.getenv("SRCPATH")
+
+source(file.path(SRCPATH, "utils.R"))
+source(file.path(SRCPATH, "processing.R"))
+source(file.path(SRCPATH, "analysis.R"))
+source(file.path(SRCPATH, "enrichment.R"))
+```
+
+
+```{r}
+# Output file prefix
+outfile_prefix <- "figure_S6"
+
+# Output directory
+output_dir <- file.path("outputs", outfile_prefix)
+if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
+
+```
+
+```{r}
+# Human directories
+human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/", "700")
+human_cluster_dir <- file.path(human_pipeline_dir, "clusters", "resolution_3.0")
+```
+
+
+```{r mouse-pathways-import-reactome}
+# Path to base enrichment dir
+enrichment_dir <- file.path(PROJECTPATH, "data", "enrichment")
+
+# Path to Reactome hierarchy file
+reactome_hierarchy <- file.path(enrichment_dir, "reactome_hierarchy.csv")
+
+# Import Reactome hierarchy
+df_reactome_hierarchy <- read_csv(reactome_hierarchy, show_col_types = FALSE)
+
+# Initialize tree levels for root pathways
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(level = ifelse(is.na(ParentID), 0, NA))
+
+# Iterate lvl down the tree
+nmissing <- sum(is.na(df_reactome_hierarchy$level))
+lvl <- 0
+while (nmissing > 0) {
+  
+  df_reactome_lvl <- df_reactome_hierarchy %>% 
+    filter(level == lvl)
+  
+  # Iterate over nodes at given level
+  for (i in 1:nrow(df_reactome_lvl)){
+    
+    node <- df_reactome_lvl[[i, "Name"]]
+    
+    df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+      mutate(level = ifelse(is.na(Parent), 0, 
+                            ifelse(Parent == node, lvl+1, level)))
+    
+  }
+  
+  nmissing <- sum(is.na(df_reactome_hierarchy$level))
+  lvl <- lvl + 1
+  
+}
+
+# Clean up names
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(Name = str_replace_all(Name, "  ", " "),
+         Name = str_replace_all(Name, "/", " "))
+
+# Bader Reactome gene sets
+module_file <- file.path(enrichment_dir, "Human_Reactome_June_01_2025_symbol.gmt")
+
+# Import Bader sets
+df_modules <- get_module_sizes(modules = module_file)
+
+# Clean up IDs
+df_modules <- df_modules %>% 
+  rename(IDBader = ID) %>% 
+  mutate(ID = IDBader %>% 
+           str_split_i("%", i = -1) %>% 
+           str_remove("R-HSA-") %>% 
+           str_remove("\\.[0-9]+"),
+         ID = paste0("R-HSA-", ID)) %>% 
+  mutate(Title = str_replace_all(Title, "  ", " "))
+
+# Include hierarchy information
+df_reactome <- inner_join(df_reactome_hierarchy,
+                          df_modules,
+                          by = "ID")
+
+# Pathways to keep
+pathway_ids_keep <- df_reactome %>% 
+  filter(B > 10) %>% 
+  pull(IDBader)
+```
+
+```{r mouse-pathways-import-enrichment}
+mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/", "107")
+mouse_enrichment_dir <- file.path(mouse_pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025", "950", "NeighbourhoodEnrichment")
+
+# Prefix for pathway data files
+pathways_file_prefix <- "cluster_pathway_enrichment"
+
+nk_max <- 10
+stringdb_threshold <- 950
+
+# Iterate over cluster solutions and import mouse pathway enrichment files
+list_pathways <- vector(mode = "list", length = nk_max-1)
+names(list_pathways) <- 2:nk_max
+for (nk in 2:nk_max) {
+  
+  # Iterate over cluster number
+  list_pathways[[nk-1]] <- vector(mode = "list", length = nk)
+  for (k in 1:nk) {
+    pathways_file <- paste(pathways_file_prefix, nk, k, stringdb_threshold, sep = "_")
+    pathways_file <- paste0(pathways_file, ".csv")
+    pathways_file <- file.path(mouse_enrichment_dir, pathways_file)
+    list_pathways[[nk-1]][[k]] <- read_csv(pathways_file, show_col_types = FALSE)  %>% 
+      semi_join(df_reactome, by = c("ID" = "IDBader")) %>% 
+      left_join(df_reactome %>% 
+                  select(ID = IDBader, level, Parent, Root), by = "ID") %>% 
+      filter(ID %in% pathway_ids_keep) %>% 
+      filter(!(Root == "Signal Transduction" & Title == "Integrin signaling"))
+  }
+  
+  # Combine clusters per solution
+  list_pathways[[nk-1]] <- bind_rows(list_pathways[[nk-1]]) %>% 
+    mutate(nk = nk) 
+  
+}
+
+# Reduce all pathway data frames into one
+df_pathways_all <- bind_rows(list_pathways)
+
+df_pathways_all <- df_pathways_all %>% 
+  rename(pathway = Title) %>% 
+  mutate(NLQ = -log10(adj.P.Val)) %>% 
+  mutate(pathway = ifelse(pathway == "Signaling Pathways", "Signal Transduction", pathway)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+df_pathways_all <- df_pathways_all %>%
+  filter(Root != "Disease") %>% 
+  filter(!(Root == "Reproduction" & pathway == "Meiosis")) %>% 
+  filter(!(Root == "DNA Replication" & pathway == "Synthesis of DNA"))  
+
+```
+
+
+```{r}
+df_pathways_subset <- read_csv("resources/pathways_subset.csv")
+
+df_pathway_labels <- df_pathways_subset
+```
+
+
+```{r}
+df_pathways_mouse_subset <- df_pathways_all %>% 
+  filter(pathway %in% df_pathways_subset$pathway) %>% 
+  arrange(pathway)
+```
+
+
+```{r}
+file_palette <- "POND_cluster_labels_colours.xlsx"
+file_palette <- file.path(PROJECTPATH, "figures/v3/resources/", file_palette)
+
+df_human_cluster_labels <- readxl::read_excel(file_palette)
+
+df_human_cluster_labels <- df_human_cluster_labels %>% 
+  separate(col = "cluster_id", into = c("nk_old", "k_old"), remove = FALSE) %>% 
+  separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
+  mutate(nk_old = as.numeric(nk_old),
+         k_old = as.numeric(k_old),
+         nk_new = as.numeric(nk_new),
+         k_new = as.numeric(k_new))
+
+df_mouse_cluster_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/MICe_cluster_labels_colours.xlsx"))
+
+df_mouse_cluster_labels <- df_mouse_cluster_labels %>% 
+  separate(col = "cluster_id", into = c("nk_old", "k_old"), remove = FALSE) %>% 
+  separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
+  mutate(nk_old = as.numeric(nk_old),
+         k_old = as.numeric(k_old),
+         nk_new = as.numeric(nk_new),
+         k_new = as.numeric(k_new))
+
+```
+
+
+# POND+ molecular pathway enrichment
+
+```{r}
+human_clusters <- file.path(human_cluster_dir, "clusters.csv")
+df_human_clusters <- read_csv(human_clusters, show_col_types = FALSE)
+
+human_variants <- file.path(human_pipeline_dir, "cluster_variants.csv")
+df_human_variants <- read_csv(human_variants, show_col_types = FALSE)
+
+df_human_variants <- df_human_variants %>% 
+  filter(!is.na(gene)) %>% 
+  select(ID = file, gene)
+
+df_human_variants <- df_human_clusters %>% 
+  left_join(df_human_variants, by = "ID") %>% 
+  mutate(variant_identified = !is.na(gene))
+
+df_human_variants_long <- df_human_variants %>% 
+  select(-gene) %>% 
+  pivot_longer(cols = c(-ID, -variant_identified), names_to = "nk_name", values_to = "k") %>% 
+  mutate(nk = str_remove(nk_name, "nk"),
+         nk = as.numeric(nk),
+         cluster_id = paste0(nk, "-", k)) %>% 
+  select(-nk_name)
+
+df_human_clusters_variant_counts <- df_human_variants_long %>%
+  group_by(nk, k) %>% 
+  summarise(n_variants = sum(variant_identified), .groups = "drop")
+
+df_human_variants_long <- df_human_variants_long %>% 
+  left_join(df_human_clusters_variant_counts, by = c("nk", "k"))
+
+human_clusters_variants <- c("2-2", "3-3", "4-2", "5-2", "6-6", "7-2", "8-6", "9-2", "10-3")
+
+df_human_variants_sankey <- df_human_variants_long %>% 
+  mutate(nk = factor(nk), k = factor(k),
+         n_variants = factor(n_variants, levels = 0:11),
+         has_match = cluster_id %in% human_clusters_variants)
+```
+
+
+## POND+ sankey with variants
+
+```{r}
+sankey_palette <- df_human_cluster_labels$colour_match
+names(sankey_palette) <- df_human_cluster_labels$cluster_id_new
+```
+
+
+```{r}
+df_human_sankey <- df_human_variants_long %>% 
+  select(-nk, -k) %>% 
+  left_join(df_human_cluster_labels, by = "cluster_id") %>% 
+  select(-cluster_id, -nk_old, -k_old, -colour) %>% 
+  rename(cluster_id = cluster_id_new, nk = nk_new, k = k_new, colour = colour_match) %>% 
+  rename(group = colour) %>% 
+  mutate(group = ifelse(variant_identified, group, "grey80")) %>% 
+  mutate(group = ifelse(group == "grey80" & variant_identified, "black", group)) %>% 
+  mutate(nk = factor(nk), k = factor(k))
+
+alluvial_palette <- unique(df_human_sankey$group)
+names(alluvial_palette) <- alluvial_palette
+```
+
+```{r}
+plt_human_sankey <- ggplot(df_human_sankey, 
+                           aes(x = nk, stratum = k, alluvium = ID)) + 
+  geom_flow(mapping = aes(fill = group, col = group, 
+                          linetype = variant_identified, 
+                          linewidth = variant_identified),
+            stat = "alluvium", aes.flow = "forward", 
+            alpha = 1) + 
+  scale_fill_manual(values = alluvial_palette) +
+  scale_colour_manual(values = alluvial_palette) +
+  scale_linetype_manual(values = c("blank", "solid"), guide = "none") + 
+  scale_linewidth_manual(values = c(0.10, 0.15), guide = "none") + 
+  new_scale_fill() + 
+  geom_stratum(mapping = aes(fill = cluster_id), width = 0.45) +
+  scale_fill_manual(values = sankey_palette, guide = "none") + 
+  scale_y_continuous(breaks = c(seq(0, 600, by = 100), nrow(df_human_clusters))) + 
+  labs(x = "POND+ clusters (K)",
+       y = "Number of participants",
+       fill = "Number of genetic variants",
+       title = "POND+ genetic variants") + 
+  theme_bw() +
+  theme(legend.position = "none") + 
+  theme(axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        title = element_text(size = 8)) 
+
+human_sankey_grob <- ggplotGrob(plt_human_sankey)
+
+plt_human_sankey
+```
+
+
+```{r}
+df_human_sankey_annotations <- df_human_variants_long %>% 
+    select(-nk, -k) %>% 
+  left_join(df_human_cluster_labels, by = "cluster_id") %>% 
+  select(-cluster_id, -nk_old, -k_old, -colour) %>% 
+  rename(cluster_id = cluster_id_new, nk = nk_new, k = k_new, group = colour_match) %>% 
+  select(cluster_id, nk, k, n_variants, group) %>%
+  distinct() %>% 
+  arrange(nk, k)
+
+df_human_sankey_annotations <- df_human_sankey_annotations %>% 
+  mutate(colour = ifelse(group != "grey80", "black", "grey25"),
+         fontface = ifelse(group != "grey80", "bold", "plain"))
+
+df_human_sankey_annotations <- df_human_sankey_annotations %>% 
+  mutate(label = ifelse(n_variants == 0, "", n_variants))
+
+
+df_human_sankey_annotations_x <- tibble(nk = 2:10,
+                                        x = 0.165 + (0:8)*0.0949)
+
+df_human_sankey_annotations <- df_human_sankey_annotations %>% 
+  left_join(df_human_sankey_annotations_x, by = "nk")
+
+
+df_human_sankey_annotations$y <- c(c(0.78, 0.35), #2
+                                   c(0.78, 0.52, 0.30), #3
+                                   c(0.78, 0.58, 0.45, 0.25), #4
+                                   c(0.78, 0.61, 0.53, 0.43, 0.25), #5
+                                   c(0.78, 0.61, 0.55, 0.52, 0.43, 0.25), #6
+                                   c(0.78, 0.61, 0.55, 0.52, 0.43, 0.34, 0.25), #7
+                                   c(0.78, 0.62, 0.57, 0.54, 0.45, 0.35, 0.31, 0.25), #8
+                                   c(0.78, 0.63, 0.57, 0.54, 0.51, 0.45, 0.355, 0.20, 0.25), #9
+                                   c(0.78, 0.67, 0.62, 0.57, 0.54, 0.50, 0.25, 0.23, 0.22, 0.25)) #10
+
+human_sankey_annotations_grob <- textGrob(label = df_human_sankey_annotations$label,
+                                          x = df_human_sankey_annotations$x,
+                                          y = df_human_sankey_annotations$y,
+                                          just = "center",
+                                          gp = gpar(fontsize = 8, 
+                                                    fontface = df_human_sankey_annotations$fontface,
+                                                    col = df_human_sankey_annotations$colour))
+
+
+human_sankey_grobs <- grobTree(human_sankey_grob, 
+                               human_sankey_annotations_grob)
+```
+
+
+# MAPK-WNT cluster
+
+```{r}
+df_variant_matches_mapkwnt_new <- tibble(human_cluster_id = c("4-1", "5-1", "6-1", "7-1", "8-1", "9-1"),
+                                          mouse_cluster_id = c("4-1", "5-1", "6-1", "7-1", "8-1", "9-1"))
+
+df_variant_matches_mapkwnt <- df_variant_matches_mapkwnt_new %>% 
+  left_join(df_human_cluster_labels %>% 
+              select(cluster_id_old = cluster_id, cluster_id_new), 
+            by = c("human_cluster_id" = "cluster_id_new")) %>% 
+  rename(human_cluster_id_new = human_cluster_id,
+         human_cluster_id_old = cluster_id_old) %>% 
+  left_join(df_mouse_cluster_labels %>% 
+              select(cluster_id_old = cluster_id, cluster_id_new), 
+            by = c("mouse_cluster_id" = "cluster_id_new")) %>% 
+  rename(mouse_cluster_id_new = mouse_cluster_id,
+         mouse_cluster_id_old = cluster_id_old)
+
+df_variant_matches_mapkwnt
+```
+
+
+```{r}
+variants_mapkwnt <- df_variant_matches_mapkwnt$human_cluster_id_old
+
+human_enrichment_dir <- "../../data/human/derivatives/v3/700/enrichment/StringDB_12.0_Bader_2025/950/NeighbourhoodEnrichment"
+
+
+pathways_file_prefix <- "cluster_pathway_enrichment"
+stringdb_threshold <- 950
+
+list_human_enrichment <- vector(mode = "list", length = length(variants_mapkwnt))
+names(list_human_enrichment) <- variants_mapkwnt
+for (i in 1:length(list_human_enrichment)) {
+  cluster_id <- variants_mapkwnt[[i]]
+  nk <- str_split(cluster_id, "-")[[1]][[1]]
+  k <- str_split(cluster_id, "-")[[1]][[2]]
+  pathways_file <- paste(pathways_file_prefix, nk, k, stringdb_threshold, sep = "_")
+  pathways_file <- paste0(pathways_file, ".csv")
+  pathways_file <- file.path(human_enrichment_dir, pathways_file)
+  list_human_enrichment[[i]] <- read_csv(pathways_file, show_col_types = FALSE)  %>% 
+    semi_join(df_reactome, by = c("ID" = "IDBader")) %>% 
+    left_join(df_reactome %>% 
+                select(ID = IDBader, level, Parent, Root), by = "ID") %>% 
+    filter(ID %in% pathway_ids_keep) %>% 
+    filter(!(Root == "Signal Transduction" & Title == "Integrin signaling"))
+}
+
+df_pathways_human <- bind_rows(list_human_enrichment)
+
+df_pathways_human <- df_pathways_human %>% 
+  rename(pathway = Title) %>% 
+  mutate(NLQ = -log10(adj.P.Val)) %>% 
+  mutate(pathway = ifelse(pathway == "Signaling Pathways", "Signal Transduction", pathway)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+df_pathways_human <- df_pathways_human %>% 
+  filter(Root != "Disease") %>% 
+  filter(!(Root == "Reproduction" & pathway == "Meiosis")) %>% 
+  filter(!(Root == "DNA Replication" & pathway == "Synthesis of DNA"))
+
+
+df_pathways_human_subset <- df_pathways_human %>% 
+  filter(pathway %in% df_pathways_subset$pathway) %>% 
+  arrange(pathway)
+```
+
+```{r}
+q_threshold <- 0.001
+
+df_metrics <- df_variant_matches_mapkwnt %>% 
+  mutate(accuracy = 0,
+         sensitivity = 0,
+         specificity = 0,
+         PPV = 0, NPV = 0)
+
+
+for (i in 1:nrow(df_metrics)) {
+
+human_cluster_id <- df_metrics[[i, "human_cluster_id_old"]]
+mouse_cluster_id <- df_metrics[[i, "mouse_cluster_id_old"]]
+
+mouse_pass <- df_pathways_mouse_subset %>% 
+  filter(cluster_id == mouse_cluster_id) %>% 
+  mutate(pass = adj.P.Val < q_threshold) %>% 
+  arrange(pathway) %>% 
+  pull(pass)
+
+human_pass <- df_pathways_human_subset %>% 
+  filter(cluster_id == human_cluster_id) %>% 
+  mutate(pass = adj.P.Val < q_threshold) %>% 
+  arrange(pathway) %>% 
+  pull(pass)
+
+TP <- sum(human_pass & mouse_pass)
+FP <- sum(human_pass & !mouse_pass)
+FN <- sum(!human_pass & mouse_pass)
+TN <- sum(!human_pass & !mouse_pass)
+
+df_metrics[[i, "accuracy"]] <- (TP + TN)/(TP + TN + FP + FN)
+df_metrics[[i, "sensitivity"]] <- TP/(TP + FN)
+df_metrics[[i, "specificity"]] <- TN/(TN + FP)
+df_metrics[[i, "PPV"]] <- TP/(TP + FP)
+df_metrics[[i, "NPV"]] <- TN/(TN + FN)
+
+}
+
+df_metrics_mapkwnt <- df_metrics %>% 
+  mutate(group = "mapkwnt")
+```
+
+
+# Synaptic immune cluster
+
+```{r}
+df_variant_matches_synaptic_new <- tibble(human_cluster_id = c("4-2", "5-2", "6-2", "7-2", "8-2", "9-2"),
+                                          mouse_cluster_id = c("5-2", "5-2", "6-3", "7-4", "8-4", "9-4"))
+
+df_variant_matches_synaptic <- df_variant_matches_synaptic_new %>% 
+  left_join(df_human_cluster_labels %>% 
+              select(cluster_id_old = cluster_id, cluster_id_new), 
+            by = c("human_cluster_id" = "cluster_id_new")) %>% 
+  rename(human_cluster_id_new = human_cluster_id,
+         human_cluster_id_old = cluster_id_old) %>% 
+  left_join(df_mouse_cluster_labels %>% 
+              select(cluster_id_old = cluster_id, cluster_id_new), 
+            by = c("mouse_cluster_id" = "cluster_id_new")) %>% 
+  rename(mouse_cluster_id_new = mouse_cluster_id,
+         mouse_cluster_id_old = cluster_id_old)
+
+df_variant_matches_synaptic
+```
+
+```{r}
+variants_synaptic <- df_variant_matches_synaptic$human_cluster_id_old
+
+human_enrichment_dir <- "../../data/human/derivatives/v3/700/enrichment/StringDB_12.0_Bader_2025/950/NeighbourhoodEnrichment"
+
+
+pathways_file_prefix <- "cluster_pathway_enrichment"
+stringdb_threshold <- 950
+
+list_human_enrichment <- vector(mode = "list", length = length(variants_synaptic))
+names(list_human_enrichment) <- variants_synaptic
+for (i in 1:length(list_human_enrichment)) {
+  cluster_id <- variants_synaptic[[i]]
+  nk <- str_split(cluster_id, "-")[[1]][[1]]
+  k <- str_split(cluster_id, "-")[[1]][[2]]
+  pathways_file <- paste(pathways_file_prefix, nk, k, stringdb_threshold, sep = "_")
+  pathways_file <- paste0(pathways_file, ".csv")
+  pathways_file <- file.path(human_enrichment_dir, pathways_file)
+  list_human_enrichment[[i]] <- read_csv(pathways_file, show_col_types = FALSE)  %>% 
+    semi_join(df_reactome, by = c("ID" = "IDBader")) %>% 
+    left_join(df_reactome %>% 
+                select(ID = IDBader, level, Parent, Root), by = "ID") %>% 
+    filter(ID %in% pathway_ids_keep) %>% 
+    filter(!(Root == "Signal Transduction" & Title == "Integrin signaling"))
+}
+
+df_pathways_human <- bind_rows(list_human_enrichment)
+
+df_pathways_human <- df_pathways_human %>% 
+  rename(pathway = Title) %>% 
+  mutate(NLQ = -log10(adj.P.Val)) %>% 
+  mutate(pathway = ifelse(pathway == "Signaling Pathways", "Signal Transduction", pathway)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+df_pathways_human <- df_pathways_human %>% 
+  filter(Root != "Disease") %>% 
+  filter(!(Root == "Reproduction" & pathway == "Meiosis")) %>% 
+  filter(!(Root == "DNA Replication" & pathway == "Synthesis of DNA"))
+
+
+df_pathways_human_subset <- df_pathways_human %>% 
+  filter(pathway %in% df_pathways_subset$pathway) %>% 
+  arrange(pathway)
+
+
+```
+
+
+```{r}
+q_threshold <- 0.001
+
+df_metrics <- df_variant_matches_synaptic %>% 
+  mutate(accuracy = 0,
+         sensitivity = 0,
+         specificity = 0,
+         PPV = 0, NPV = 0)
+
+
+for (i in 1:nrow(df_metrics)) {
+
+human_cluster_id <- df_metrics[[i, "human_cluster_id_old"]]
+mouse_cluster_id <- df_metrics[[i, "mouse_cluster_id_old"]]
+
+mouse_pass <- df_pathways_mouse_subset %>% 
+  filter(cluster_id == mouse_cluster_id) %>% 
+  mutate(pass = adj.P.Val < q_threshold) %>% 
+  arrange(pathway) %>% 
+  pull(pass)
+
+human_pass <- df_pathways_human_subset %>% 
+  filter(cluster_id == human_cluster_id) %>% 
+  mutate(pass = adj.P.Val < q_threshold) %>% 
+  arrange(pathway) %>% 
+  pull(pass)
+
+TP <- sum(human_pass & mouse_pass)
+FP <- sum(human_pass & !mouse_pass)
+FN <- sum(!human_pass & mouse_pass)
+TN <- sum(!human_pass & !mouse_pass)
+
+df_metrics[[i, "accuracy"]] <- (TP + TN)/(TP + TN + FP + FN)
+df_metrics[[i, "sensitivity"]] <- TP/(TP + FN)
+df_metrics[[i, "specificity"]] <- TN/(TN + FP)
+df_metrics[[i, "PPV"]] <- TP/(TP + FP)
+df_metrics[[i, "NPV"]] <- TN/(TN + FN)
+
+}
+
+
+df_metrics_synaptic <- df_metrics %>% 
+  mutate(group = "synaptic")
+```
+
+
+# Transcription cluster
+
+```{r}
+df_variant_matches_transcription_new <- tibble(human_cluster_id = c("2-2", "3-3", "4-4", "5-5", "6-6", "7-7", "8-8"),
+                                          mouse_cluster_id = c("2-2", "3-3", "4-4", "5-5", "6-6", "7-7", "8-8"))
+
+df_variant_matches_transcription <- df_variant_matches_transcription_new %>% 
+  left_join(df_human_cluster_labels %>% 
+              select(cluster_id_old = cluster_id, cluster_id_new), 
+            by = c("human_cluster_id" = "cluster_id_new")) %>% 
+  rename(human_cluster_id_new = human_cluster_id,
+         human_cluster_id_old = cluster_id_old) %>% 
+  left_join(df_mouse_cluster_labels %>% 
+              select(cluster_id_old = cluster_id, cluster_id_new), 
+            by = c("mouse_cluster_id" = "cluster_id_new")) %>% 
+  rename(mouse_cluster_id_new = mouse_cluster_id,
+         mouse_cluster_id_old = cluster_id_old)
+
+df_variant_matches_transcription
+```
+
+
+```{r}
+variants_transcription <- df_variant_matches_transcription$human_cluster_id_old
+
+human_enrichment_dir <- "../../data/human/derivatives/v3/700/enrichment/StringDB_12.0_Bader_2025/950/NeighbourhoodEnrichment"
+
+
+pathways_file_prefix <- "cluster_pathway_enrichment"
+stringdb_threshold <- 950
+
+list_human_enrichment <- vector(mode = "list", length = length(variants_transcription))
+names(list_human_enrichment) <- variants_transcription
+for (i in 1:length(list_human_enrichment)) {
+  cluster_id <- variants_transcription[[i]]
+  nk <- str_split(cluster_id, "-")[[1]][[1]]
+  k <- str_split(cluster_id, "-")[[1]][[2]]
+  pathways_file <- paste(pathways_file_prefix, nk, k, stringdb_threshold, sep = "_")
+  pathways_file <- paste0(pathways_file, ".csv")
+  pathways_file <- file.path(human_enrichment_dir, pathways_file)
+  list_human_enrichment[[i]] <- read_csv(pathways_file, show_col_types = FALSE)  %>% 
+    semi_join(df_reactome, by = c("ID" = "IDBader")) %>% 
+    left_join(df_reactome %>% 
+                select(ID = IDBader, level, Parent, Root), by = "ID") %>% 
+    filter(ID %in% pathway_ids_keep) %>% 
+    filter(!(Root == "Signal Transduction" & Title == "Integrin signaling"))
+}
+
+df_pathways_human <- bind_rows(list_human_enrichment)
+
+df_pathways_human <- df_pathways_human %>% 
+  rename(pathway = Title) %>% 
+  mutate(NLQ = -log10(adj.P.Val)) %>% 
+  mutate(pathway = ifelse(pathway == "Signaling Pathways", "Signal Transduction", pathway)) %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = FALSE)
+
+df_pathways_human <- df_pathways_human %>% 
+  filter(Root != "Disease") %>% 
+  filter(!(Root == "Reproduction" & pathway == "Meiosis")) %>% 
+  filter(!(Root == "DNA Replication" & pathway == "Synthesis of DNA"))
+
+
+df_pathways_human_subset <- df_pathways_human %>% 
+  filter(pathway %in% df_pathways_subset$pathway) %>% 
+  arrange(pathway)
+
+```
+
+```{r}
+q_threshold <- 0.001
+
+df_metrics <- df_variant_matches_transcription %>% 
+  mutate(accuracy = 0,
+         sensitivity = 0,
+         specificity = 0,
+         PPV = 0, NPV = 0)
+
+
+for (i in 1:nrow(df_metrics)) {
+
+human_cluster_id <- df_metrics[[i, "human_cluster_id_old"]]
+mouse_cluster_id <- df_metrics[[i, "mouse_cluster_id_old"]]
+
+mouse_pass <- df_pathways_mouse_subset %>% 
+  filter(cluster_id == mouse_cluster_id) %>% 
+  mutate(pass = adj.P.Val < q_threshold) %>% 
+  arrange(pathway) %>% 
+  pull(pass)
+
+human_pass <- df_pathways_human_subset %>% 
+  filter(cluster_id == human_cluster_id) %>% 
+  mutate(pass = adj.P.Val < q_threshold) %>% 
+  arrange(pathway) %>% 
+  pull(pass)
+
+TP <- sum(human_pass & mouse_pass)
+FP <- sum(human_pass & !mouse_pass)
+FN <- sum(!human_pass & mouse_pass)
+TN <- sum(!human_pass & !mouse_pass)
+
+df_metrics[[i, "accuracy"]] <- (TP + TN)/(TP + TN + FP + FN)
+df_metrics[[i, "sensitivity"]] <- TP/(TP + FN)
+df_metrics[[i, "specificity"]] <- TN/(TN + FP)
+df_metrics[[i, "PPV"]] <- TP/(TP + FP)
+df_metrics[[i, "NPV"]] <- TN/(TN + FN)
+
+}
+
+
+df_metrics_transcriptional <- df_metrics %>% 
+  mutate(group = "transcription")
+```
+
+
+
+
+```{r}
+df_metrics_all <- bind_rows(df_metrics_mapkwnt,
+                            df_metrics_transcriptional,
+                            df_metrics_synaptic)
+
+df_metrics_all <- df_metrics_all %>% 
+  select(-mouse_cluster_id_new, -mouse_cluster_id_old, -human_cluster_id_old) %>% 
+  separate(col = "human_cluster_id_new", c("nk", "k")) %>% 
+  mutate(nk = as.numeric(nk)) %>% 
+  filter(nk %in% 4:8)
+
+df_metrics_all
+```
+
+```{r}
+df_variants_n <- bind_rows(
+  tibble(nk = 4:8, nvariants = c(6, 5, 5, 6, 5), group = "mapkwnt"),
+  tibble(nk = 4:8, nvariants = 4, group = "synaptic"),
+  tibble(nk = 4:8, nvariants = c(3, 2, 2, 2, 2), group = "transcription")
+)
+
+df_variants_wt <- df_variants_n %>% 
+  group_by(nk) %>% 
+  mutate(n_variants_tot = sum(nvariants)) %>% 
+  ungroup() %>% 
+  mutate(wt = nvariants/n_variants_tot) %>% 
+  select(nk, group, wt)
+
+df_variants_wt %>% 
+  filter(nk == 4)
+```
+
+
+```{r}
+df_metrics_means <- df_metrics_all %>%
+  select(-k) %>% 
+  pivot_longer(cols = c(-nk, -group), names_to = "metric", values_to = "value") %>% 
+  left_join(df_variants_wt, by = c("nk", "group")) %>% 
+  group_by(nk, metric) %>% 
+  summarise(metric_mean_wt = weighted.mean(x = value, w = wt),
+            metric_mean = mean(x = value)) %>% 
+  ungroup()
+```
+
+
+```{r}
+plt_metrics <- ggplot(df_metrics_means, aes(x = nk, y = metric_mean_wt, col = metric)) + 
+  geom_line() + 
+  geom_point() +
+  coord_cartesian(ylim = c(0, 1)) + 
+  scale_x_continuous(breaks = 2:8, expand = expansion(add = 0.6)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) + 
+    scale_colour_discrete(labels = c("Acc.", "NPV", "PPV", "Sens.", "Spec.")) + 
+  # scale_colour_discrete(labels = c("Acc.", "NPV", "PPV", "Sens.", "Spec."),
+                        # guide = guide_legend(title.position = "bottom", title.hjust = 0.5, nrow = 2)) + 
+  labs(x = "POND+ clusters (K)",
+       y = "Score",
+       col = "Metric",
+       title = "MICe-POND+ correspondence") + 
+  theme_bw() +
+  theme(axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        title = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 8),
+        legend.key.size = unit(15, "pt"),
+        legend.margin = margin())
+```
+
+
+# Figure
+
+```{r}
+fig_widths <- c(0.6, 0.4)
+
+fig_grob <- arrangeGrob(human_sankey_grobs, 
+                        ggplotGrob(plt_metrics),
+                        layout_matrix = rbind(1:2),
+                        widths = unit(fig_widths, "npc"))
+
+
+fig_width_in <- 7.25
+fig_height_in <- 300/72
+
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+
+grid.draw(fig_grob)
+
+grid.text(label = c("A", "B"),
+          x = unit(c(0.03, 0.63), "npc"),
+          y = unit(0.97, "npc"),
+          gp = gpar(fontface = "bold", fontsize = 10))
+
+
+invisible(dev.off())
+```
+
+```{r}
+outfile <- paste0(outfile_prefix, ".png")
+outfile <- file.path(output_dir, outfile)
+png(file = outfile,
+    width = fig_width_in,
+    height = fig_height_in,
+    units = "in",
+    res = 600)
+
+grid.draw(fig_grob)
+
+grid.text(label = c("A", "B"),
+          x = unit(c(0.03, 0.63), "npc"),
+          y = unit(0.97, "npc"),
+          gp = gpar(fontface = "bold", fontsize = 10))
+
+
+invisible(dev.off())
+```
+
