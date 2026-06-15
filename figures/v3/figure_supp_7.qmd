@@ -59,7 +59,7 @@ consolidate_visits <- function(df, cols) {
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure_S6"
+outfile_prefix <- "figure_S7"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -1244,7 +1244,6 @@ grid.text(label = c("A", "B"),
           gp = gpar(fontsize = 10, fontface = "bold"))
 invisible(dev.off())
 ```
-
 
 ```{r}
 outfile <- paste0(outfile_prefix, ".png")
