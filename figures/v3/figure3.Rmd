@@ -1577,7 +1577,7 @@ human_variants_height <- sum(human_variants_heights)
 
 ```{r}
 # fig_layout <- cbind(1:7)
-fig_layout <- cbind(1:6)
+fig_layout <- cbind(1:5)
 
 fig_widths <- fig_width
 
@@ -1586,7 +1586,7 @@ panel_padding_height <- 20
 empty_height <- fig_height - polar_height_pt - panel_padding_height - heatmap_height - panel_padding_height - human_variants_height
 
 # fig_heights <- c(20, polar_height_pt, panel_padding_height, heatmap_height, 10, human_variants_height, empty_height)
-fig_heights <- c(20, polar_height_pt, panel_padding_height, heatmap_height, 10, human_variants_height)
+fig_heights <- c(20, polar_height_pt, panel_padding_height, heatmap_height, 5)
 
 fig_grob <- arrangeGrob(textGrob("Mouse clusters"),
                         polar_grob,
@@ -1595,7 +1595,6 @@ fig_grob <- arrangeGrob(textGrob("Mouse clusters"),
                         heatmap_grob, 
                         zeroGrob(),
                         # rectGrob(gp = gpar(fill = "white")),
-                        human_variants_grob,
                         layout_matrix = fig_layout,
                         widths = unit(fig_widths, "bigpts"),
                         heights = unit(fig_heights, "bigpts"))
@@ -1606,10 +1605,7 @@ fig_height_pt <- sum(fig_heights)
 
 fig_width_in <- fig_width_pt/72
 fig_height_in <- fig_height_pt/72
-```
 
-
-```{r}
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -1620,7 +1616,7 @@ grid.draw(fig_grob)
 
 # Mouse heatmap legend
 pushViewport(viewport(x = unit(530, "bigpts"),
-                      y = unit(496, "bigpts"),
+                      y = unit(25, "bigpts"),
                       width = unit(132, "bigpts"),
                       height = unit(25, "bigpts")))
 # grid.rect(gp = gpar(fill = "grey70"))
@@ -1630,31 +1626,12 @@ grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
           gp = gpar(fontsize = 9))
 popViewport()
 
-# Human heatmap legend
-pushViewport(viewport(x = unit(370, "bigpts"),
-                      y = unit(27, "bigpts"),
-                      width = unit(140, "bigpts"),
-                      height = unit(34, "bigpts")))
-# grid.rect(gp = gpar(fill = "grey70"))
-grid.draw(human_heatmap_legend_grob)
-grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
-          x = c(0.1, 0.91), y = 0.8, 
-          gp = gpar(fontsize = 9))
-popViewport()
 
-# Human metrics legend
-pushViewport(viewport(x = unit(540, "bigpts"),
-                      y = unit(32, "bigpts"),
-                      width = unit(140, "bigpts"),
-                      height = unit(34, "bigpts")))
-# grid.rect(gp = gpar(fill = "grey70"))
-grid.draw(human_metrics_legend_grob)
-popViewport()
 
-grid.text(label = c("A", "B", "C", "D"),
-          x = unit(c(10.0, 10.0, 298, 468), "bigpts"),
-          y = unit(fig_height_pt - c(8, 517, 517, 517), "bigpts"),
-          gp = gpar(fontface = "bold", fontsize = 10))
+# grid.text(label = c("A", "B", "C", "D"),
+#           x = unit(c(10.0, 10.0, 298, 468), "bigpts"),
+#           y = unit(fig_height_pt - c(8, 517, 517, 517), "bigpts"),
+#           gp = gpar(fontface = "bold", fontsize = 10))
 
 dev.off()
 ```
@@ -1672,7 +1649,7 @@ grid.draw(fig_grob)
 
 # Mouse heatmap legend
 pushViewport(viewport(x = unit(530, "bigpts"),
-                      y = unit(496, "bigpts"),
+                      y = unit(25, "bigpts"),
                       width = unit(132, "bigpts"),
                       height = unit(25, "bigpts")))
 # grid.rect(gp = gpar(fill = "grey70"))
@@ -1681,32 +1658,6 @@ grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
           x = c(0.08, 0.93), y = 0.22,
           gp = gpar(fontsize = 9))
 popViewport()
-
-# Human heatmap legend
-pushViewport(viewport(x = unit(370, "bigpts"),
-                      y = unit(27, "bigpts"),
-                      width = unit(140, "bigpts"),
-                      height = unit(34, "bigpts")))
-# grid.rect(gp = gpar(fill = "grey70"))
-grid.draw(human_heatmap_legend_grob)
-grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
-          x = c(0.1, 0.91), y = 0.8, 
-          gp = gpar(fontsize = 9))
-popViewport()
-
-# Human metrics legend
-pushViewport(viewport(x = unit(540, "bigpts"),
-                      y = unit(32, "bigpts"),
-                      width = unit(140, "bigpts"),
-                      height = unit(34, "bigpts")))
-# grid.rect(gp = gpar(fill = "grey70"))
-grid.draw(human_metrics_legend_grob)
-popViewport()
-
-grid.text(label = c("A", "B", "C", "D"),
-          x = unit(c(10.0, 10.0, 298, 468), "bigpts"),
-          y = unit(fig_height_pt - c(8, 517, 517, 517), "bigpts"),
-          gp = gpar(fontface = "bold", fontsize = 10))
 
 dev.off()
 ```
