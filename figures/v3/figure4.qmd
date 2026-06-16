@@ -137,7 +137,7 @@ group_summary <- function(x, groups, B = 1000) {
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure4_dev_2"
+outfile_prefix <- "figure4"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -1191,7 +1191,7 @@ if (i == 1) {
   df_loadings_common_i <- df_loadings_common_i %>% 
         left_join(df_comparison_labels, by = "comparison") %>% 
     mutate(acronym = factor(acronym, levels = lvls_common_i)) %>% 
-    mutate(comparison = factor(comparison, levels = comparison_lvls)) %>% 
+    mutate(comparison = factor(comparison, levels = df_comparison_labels$comparison)) %>% 
     mutate(label = factor(label, levels = df_comparison_labels$label))
   
   plt_loadings_common_i <- ggplot(df_loadings_common_i, aes(x = LD1, y = acronym, col = group)) + 
@@ -1221,76 +1221,8 @@ if (i == 1) {
   list_loading_plts[[i]] <- patchworkGrob(plt_loadings_patchwork_i)
   
 }
-
-
-legend_height <- 20
-padding_width <- 10
-panel_width <- (fig_width - padding_width)/2
-padding_height <- 4
-panel_auc_height <- 100
-panel_loadings_height <- 300
-panel_label_height <- 15
-
-fig_widths <- c(panel_width, padding_width, panel_width)
-fig_heights <- c(panel_label_height, panel_auc_height, padding_height, panel_loadings_height, legend_height)
-
-fig_layout <- rbind(c(01, 02, 03),
-                    c(04, 05, 06),
-                    c(07, 07, 07),
-                    c(08, 09, 10),
-                    c(11, 11, 11))
-
-fig_grob <- arrangeGrob(panel_label_pond,
-                        zeroGrob(),
-                        panel_label_hbn,
-                        list_auc_plts[[1]],
-                        zeroGrob(),
-                        list_auc_plts[[2]],
-                        # rectGrob(),
-                        zeroGrob(),
-                        list_loading_plts[[1]],
-                        zeroGrob(),
-                        list_loading_plts[[2]],
-                        # gTree(children = gList(loadings_legend_grob, rectGrob(gp = gpar(fill = NA)))),
-                        loadings_legend_grob,
-                        layout_matrix = fig_layout,
-                        widths = unit(fig_widths, "bigpts"),
-                        heights = unit(fig_heights, "bigpts"))
-
-fig_height_pt <- sum(fig_heights)
-fig_width_pt <- sum(fig_widths)
-
-fig_height_in <- fig_height_pt/72
-fig_width_in <- fig_width_pt/72
-
-
-outfile <- paste0(outfile_prefix, ".pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig_width_in, "in"),
-    height = unit(fig_height_in, "in"))
-grid.draw(fig_grob)
-
-# pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - panel_auc_height + 11, "bigpts"),
-#                       just = "top",
-#                       width = unit(100, "bigpts"),
-#                       height = unit(20, "bigpts")))
-
-pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - 8, "bigpts"),
-                      x = unit(fig_width_pt - 7, "bigpts"),
-                      just = c("right", "top"),
-                      width = unit(100, "bigpts"),
-                      height = unit(20, "bigpts")))
-grid.draw(auc_legend)
-grid.text("Cluster solution (K)",
-          x = unit(1.0, "npc"),
-          y = unit(0.25, "npc"),
-          just = "right",
-          gp = gpar(fontsize = 6))
-# grid.rect()
-popViewport()
-invisible(dev.off())
 ```
+
 
 # Figure
 
@@ -1343,6 +1275,7 @@ fig_height_in <- fig_height_pt/72
 fig_width_in <- fig_width_pt/72
 
 
+
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -1368,5 +1301,12 @@ grid.text("Cluster solution (K)",
           gp = gpar(fontsize = 6))
 # grid.rect()
 popViewport()
+
+
+grid.text(label = c("A", "B"),
+          x = unit(c(6, 6), "bigpts"),
+          y = unit(c(fig_height_pt - 10, fig_height_pt - panel_label_height - panel_auc_height), "bigpts"),
+          gp = gpar(fontsize = 10, fontface = "bold"))
+
 invisible(dev.off())
 ```
