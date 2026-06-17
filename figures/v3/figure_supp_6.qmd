@@ -13,7 +13,6 @@ suppressPackageStartupMessages(library(grid))
 suppressPackageStartupMessages(library(gridExtra))
 ```
 
-
 ```{r env}
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
 SRCPATH <- Sys.getenv("SRCPATH")
@@ -23,7 +22,6 @@ source(file.path(SRCPATH, "processing.R"))
 source(file.path(SRCPATH, "analysis.R"))
 source(file.path(SRCPATH, "enrichment.R"))
 ```
-
 
 ```{r}
 # Output file prefix
@@ -40,7 +38,6 @@ if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 human_pipeline_dir <- file.path(PROJECTPATH, "data/human/derivatives/v3/", "700")
 human_cluster_dir <- file.path(human_pipeline_dir, "clusters", "resolution_3.0")
 ```
-
 
 ```{r mouse-pathways-import-reactome}
 # Path to base enrichment dir
@@ -163,20 +160,17 @@ df_pathways_all <- df_pathways_all %>%
 
 ```
 
-
 ```{r}
 df_pathways_subset <- read_csv("resources/pathways_subset.csv")
 
 df_pathway_labels <- df_pathways_subset
 ```
 
-
 ```{r}
 df_pathways_mouse_subset <- df_pathways_all %>% 
   filter(pathway %in% df_pathways_subset$pathway) %>% 
   arrange(pathway)
 ```
-
 
 ```{r}
 file_palette <- "POND_cluster_labels_colours.xlsx"
@@ -203,7 +197,6 @@ df_mouse_cluster_labels <- df_mouse_cluster_labels %>%
          k_new = as.numeric(k_new))
 
 ```
-
 
 # POND+ molecular pathway enrichment
 
@@ -245,14 +238,12 @@ df_human_variants_sankey <- df_human_variants_long %>%
          has_match = cluster_id %in% human_clusters_variants)
 ```
 
-
 ## POND+ sankey with variants
 
 ```{r}
 sankey_palette <- df_human_cluster_labels$colour_match
 names(sankey_palette) <- df_human_cluster_labels$cluster_id_new
 ```
-
 
 ```{r}
 df_human_sankey <- df_human_variants_long %>% 
@@ -299,7 +290,6 @@ human_sankey_grob <- ggplotGrob(plt_human_sankey)
 
 plt_human_sankey
 ```
-
 
 ```{r}
 df_human_sankey_annotations <- df_human_variants_long %>% 
@@ -349,7 +339,6 @@ human_sankey_grobs <- grobTree(human_sankey_grob,
                                human_sankey_annotations_grob)
 ```
 
-
 # MAPK-WNT cluster
 
 ```{r}
@@ -370,7 +359,6 @@ df_variant_matches_mapkwnt <- df_variant_matches_mapkwnt_new %>%
 
 df_variant_matches_mapkwnt
 ```
-
 
 ```{r}
 variants_mapkwnt <- df_variant_matches_mapkwnt$human_cluster_id_old
@@ -461,7 +449,6 @@ df_metrics_mapkwnt <- df_metrics %>%
   mutate(group = "mapkwnt")
 ```
 
-
 # Synaptic immune cluster
 
 ```{r}
@@ -530,7 +517,6 @@ df_pathways_human_subset <- df_pathways_human %>%
 
 ```
 
-
 ```{r}
 q_threshold <- 0.001
 
@@ -576,7 +562,6 @@ df_metrics_synaptic <- df_metrics %>%
   mutate(group = "synaptic")
 ```
 
-
 # Transcription cluster
 
 ```{r}
@@ -597,7 +582,6 @@ df_variant_matches_transcription <- df_variant_matches_transcription_new %>%
 
 df_variant_matches_transcription
 ```
-
 
 ```{r}
 variants_transcription <- df_variant_matches_transcription$human_cluster_id_old
@@ -690,9 +674,6 @@ df_metrics_transcriptional <- df_metrics %>%
   mutate(group = "transcription")
 ```
 
-
-
-
 ```{r}
 df_metrics_all <- bind_rows(df_metrics_mapkwnt,
                             df_metrics_transcriptional,
@@ -725,7 +706,6 @@ df_variants_wt %>%
   filter(nk == 4)
 ```
 
-
 ```{r}
 df_metrics_means <- df_metrics_all %>%
   select(-k) %>% 
@@ -736,7 +716,6 @@ df_metrics_means <- df_metrics_all %>%
             metric_mean = mean(x = value)) %>% 
   ungroup()
 ```
-
 
 ```{r}
 plt_metrics <- ggplot(df_metrics_means, aes(x = nk, y = metric_mean_wt, col = metric)) + 
@@ -761,7 +740,6 @@ plt_metrics <- ggplot(df_metrics_means, aes(x = nk, y = metric_mean_wt, col = me
         legend.key.size = unit(15, "pt"),
         legend.margin = margin())
 ```
-
 
 # Figure
 
@@ -814,4 +792,3 @@ grid.text(label = c("A", "B"),
 
 invisible(dev.off())
 ```
-
