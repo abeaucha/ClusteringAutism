@@ -75,263 +75,17 @@ demographics <- read_csv(demographics, show_col_types = FALSE)
 demographics
 ```
 
-# Diagnoses
 
-```{r}
-list_diagnoses <- list(
-  "POND" = tibble(DX = c("ASD", "OCD", "ADHD", "Sub-threshold OCD",
-                         "Anxiety", "Sub-threshold ADHD",
-                         "Intellectual Disability only", 
-                         "Tourette Syndrome", "Other", "Fragile X"),
-                  DX_new = c("ASD", "OCD", "ADHD", "OCD", "Other", 
-                             "ADHD", "Other", "Other", "Other", "Other")),
-  "HBN" = tibble(DX = c("ASD", "OCD", "ADHD", "Tourette Syndrome", "ID"),
-                 DX_new = c("ASD", "OCD", "ADHD", "Other", "Other"))
-)
-
-```
+# Univariate clinical measures
 
 ## POND+
+
 
 ```{r}
 file <- "data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv"
 file <- file.path(PROJECTPATH, file)
 df_clusters_pond <- read_csv(file, show_col_types = FALSE)
-
-df_clusters_pond_long <- df_clusters_pond %>% 
-  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
-  unite("cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
-  select(-nk_name)
-
-df_clusters_pond_dx <- df_clusters_pond_long %>% 
-  left_join(select(demographics, file, DX), by = c("ID" = "file")) %>% 
-  left_join(list_diagnoses$POND, by = "DX") %>% 
-  select(-DX, DX = DX_new) 
-
 ```
-
-```{r}
-nk_subset <- seq(2, 10, by = 2)
-
-dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
-
-list_pond_dx_plots <- vector(mode = "list", length = length(nk_subset))
-for (i in 1:length(nk_subset)) {
-  
-  nki <- nk_subset[i]
-  
-  df_clusters_pond_dx_K <- df_clusters_pond_dx %>% 
-    filter(nk == nki)   
-  
-  df_grid <- expand_grid(k = 1:nki, DX = dx_lvls)
-  
-  df_cluster_dx_summary <- df_clusters_pond_dx_K %>% 
-    group_by(cluster_id) %>% 
-    mutate(n_in_cluster = n()) %>% 
-    ungroup() %>% 
-    group_by(cluster_id, DX) %>% 
-    mutate(n_dx_in_cluster = n()) %>%
-    ungroup() %>% 
-    select(cluster_id, k, DX, n_in_cluster, n_dx_in_cluster)  %>% 
-    distinct() %>% 
-    mutate(prop_dx = n_dx_in_cluster/n_in_cluster) %>% 
-    right_join(df_grid, by = c("DX", "k")) %>% 
-    mutate(prop_dx = ifelse(is.na(prop_dx), 0, prop_dx),
-           k = factor(k),
-           label = paste0("K = ", nki))
-  
-  plt <- ggplot(df_cluster_dx_summary, aes(x = k, y = prop_dx, fill = DX)) + 
-    geom_col(position = "dodge") +
-    facet_grid(.~label) + 
-    labs(x = "POND+ cluster (k)",
-         fill = "Diagnosis") + 
-    theme_bw() +
-    theme(plot.margin = margin(l = 2, t = 2),
-          axis.title = element_text(size = 6),
-          axis.text = element_text(size = 6),
-          strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
-  
-  if (i == 1) {
-    plt <- plt + 
-      coord_cartesian(ylim = c(0, 1.0)) + 
-      labs(y = "") +
-      theme(axis.title.x = element_blank(),
-            legend.text = element_text(size = 6, margin = margin(l = 2)),
-            legend.title = element_text(size = 6, margin = margin(b = 2)),
-            legend.key.size = unit(10, "bigpts"),
-            legend.margin = margin(),
-            legend.box.margin = margin())
-    
-    diagnoses_legend_grob <- plt %>% 
-      ggplotGrob() %>% 
-      grid.force() %>% 
-      getGrob("guide-box-right.10-11-10-11")
-
-  }
-  
-  
-  if (i %in% 2:3) {
-    plt <- plt + 
-      coord_cartesian(ylim = c(0, 0.7)) + 
-      theme(axis.title.y = element_blank(),
-            axis.text.y = element_blank(),
-            axis.ticks.y = element_blank(),
-            axis.title.x = element_blank(),
-            plot.margin = margin(l = 2, t = 2))
-  }
-  
-  if (i == 4) {
-    plt <- plt + 
-      coord_cartesian(ylim = c(0, 1.0)) + 
-      labs(y = "Proportion per cluster") +
-      theme(axis.title.x = element_blank())
-  }
-  
-  if (i == 5) {
-    plt <- plt +
-      labs(y = "")
-  }
-  
-  plt <- plt + theme(legend.position = "none")
-  
-  list_pond_dx_plots[[i]] <- plt
-  
-}
-
-
-
-pond_dx_widths <- c(0.2461, 0.2930, 0.4609) 
-pond_dx_heights <- c(0.3125, 0.3125, 0.3750)
-pond_dx_layout <- rbind(c(01, 02, 03),
-                        c(05, 05, 05),
-                        c(04, 04, 04))
-
-pond_dx_grob <- arrangeGrob(list_pond_dx_plots[[1]],
-                            list_pond_dx_plots[[2]],
-                            list_pond_dx_plots[[3]],
-                            list_pond_dx_plots[[5]],
-                            list_pond_dx_plots[[4]],
-                            layout_matrix = pond_dx_layout,
-                            widths = unit(pond_dx_widths, "npc"),
-                            heights = unit(pond_dx_heights, "npc"))
-```
-
-## HBN
-
-```{r}
-file <- "data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv"
-file <- file.path(PROJECTPATH, file)
-df_clusters_hbn <- read_csv(file, show_col_types = FALSE)
-
-df_clusters_hbn_long <- df_clusters_hbn %>% 
-  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "k") %>% 
-  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) %>% 
-  unite("cluster_id", nk, k, sep = "-", remove = FALSE) %>% 
-  select(-nk_name)
-
-df_clusters_hbn_dx <- df_clusters_hbn_long %>% 
-  left_join(select(demographics, file, DX), by = c("ID" = "file")) %>% 
-  left_join(list_diagnoses$HBN, by = "DX") %>% 
-  select(-DX, DX = DX_new) 
-```
-
-```{r}
-nk_subset <- seq(2, 10, by = 2)
-
-dx_lvls <- c("ASD", "ADHD", "OCD", "Other")
-
-list_hbn_dx_plots <- vector(mode = "list", length = length(nk_subset))
-for (i in 1:length(nk_subset)) {
-  
-  nki <- nk_subset[i]
-  
-  df_clusters_hbn_dx_K <- df_clusters_hbn_dx %>% 
-    filter(nk == nki)   
-  
-  df_grid <- expand_grid(k = 1:nki,
-                         DX = dx_lvls)
-  
-  df_cluster_dx_summary <- df_clusters_hbn_dx_K %>% 
-    group_by(cluster_id) %>% 
-    mutate(n_in_cluster = n()) %>% 
-    ungroup() %>% 
-    group_by(cluster_id, DX) %>% 
-    mutate(n_dx_in_cluster = n()) %>%
-    ungroup() %>% 
-    select(cluster_id, k, DX, n_in_cluster, n_dx_in_cluster)  %>% 
-    distinct() %>% 
-    mutate(prop_dx = n_dx_in_cluster/n_in_cluster) %>% 
-    right_join(df_grid, by = c("DX", "k")) %>% 
-    mutate(prop_dx = ifelse(is.na(prop_dx), 0, prop_dx),
-           k = factor(k),
-           label = paste0("K = ", nki))
-  
-  plt <- ggplot(df_cluster_dx_summary, aes(x = k, y = prop_dx, fill = DX)) + 
-    geom_col(position = "dodge") +
-    facet_grid(.~label) + 
-    coord_cartesian(ylim = c(0, 1.0)) + 
-    labs(x = "HBN cluster (k)") + 
-    theme_bw() +
-    theme(legend.position = "none",
-          plot.margin = margin(l = 2, t = 2),
-          axis.title = element_text(size = 6),
-          axis.text = element_text(size = 6),
-          strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
-  
-  if (i == 1) {
-    plt <- plt + 
-      labs(y = "") +
-      theme(axis.title.x = element_blank())
-  }
-  
-  
-  if (i %in% 2:3) {
-    plt <- plt + 
-      theme(axis.title.y = element_blank(),
-            axis.text.y = element_blank(),
-            axis.ticks.y = element_blank(),
-            axis.title.x = element_blank(),
-            plot.margin = margin(l = 2, t = 2))
-  }
-  
-  if (i == 4) {
-    plt <- plt + 
-      labs(y = "Proportion per cluster") +
-      theme(axis.title.x = element_blank())
-  }
-  
-  if (i == 5) {
-    plt <- plt +
-      labs(y = "")
-  }
-  
-  
-  list_hbn_dx_plots[[i]] <- plt
-  
-}
-
-
-
-hbn_dx_widths <- c(0.2461, 0.2930, 0.4609) 
-hbn_dx_heights <- c(0.3125, 0.3125, 0.3750)
-hbn_dx_layout <- rbind(c(01, 02, 03),
-                        c(05, 05, 05),
-                       c(04, 04, 04))
-
-hbn_dx_grob <- arrangeGrob(list_hbn_dx_plots[[1]],
-                            list_hbn_dx_plots[[2]],
-                            list_hbn_dx_plots[[3]],
-                            list_hbn_dx_plots[[5]],
-                            list_hbn_dx_plots[[4]],
-                            layout_matrix = hbn_dx_layout,
-                            widths = unit(hbn_dx_widths, "npc"),
-                            heights = unit(hbn_dx_heights, "npc"))
-```
-
-# Univariate clinical measures
-
-## POND+
 
 ```{r import-pond-db}
 # Import full POND database
@@ -686,7 +440,7 @@ df_kw_plt_pond <- df_kw_clusters_pond %>%
 
 plt_pond_univariate <- ggplot(df_kw_plt_pond, aes(x = factor(nk), y = fct_rev(label), 
                                              col = var_explained, fill = var_explained_threshold)) +
-  geom_point(shape = 21, stroke = 1.0, size = 1.5) +
+  geom_point(shape = 21, stroke = 1.2, size = 2.5) +
   scale_fill_gradientn(colors = palette_univariate, limits = c(0, var_explained_max), na.value = "white", guide = "none") +
   scale_colour_gradientn(colors = palette_univariate,
                          limits = c(0, var_explained_max),
@@ -709,28 +463,6 @@ plt_pond_univariate <- ggplot(df_kw_plt_pond, aes(x = factor(nk), y = fct_rev(la
         plot.margin = margin(t = 2, l = 2))
 
 
-# plt_pond_univariate <- ggplot(df_kw_plt, 
-#                               aes(x = factor(nk), y = fct_rev(label), 
-#                                   fill = H_threshold)) + 
-#   geom_tile(col = "grey50") +
-#   scale_fill_gradientn(colors = palette_univariate,
-#                        limits = c(0, H_max), 
-#                        na.value = "grey90",
-#                        guide = guide_colourbar(barwidth = unit(12, "bigpts"),
-#                                                barheight = unit(100, "bigpts"))) +
-#   labs(x = "POND+ cluster solution (K)",
-#        y = "Clinical measure",
-#        fill = "H-statistic") +
-#   theme_bw() +
-#   theme(panel.grid.major = element_blank(),
-#         axis.title = element_text(size = 6),
-#         axis.text = element_text(size = 6),
-#         legend.text = element_text(size = 6, margin = margin(l = 2)),
-#         legend.title = element_text(size = 6, margin = margin(b = 2)),
-#         legend.margin = margin(),
-#         legend.box.margin = margin(),
-#         plot.margin = margin(t = 2, l = 2))
-
 
 univariate_legend_grob <- plt_pond_univariate %>% 
   ggplotGrob() %>% 
@@ -741,6 +473,13 @@ plt_pond_univariate <- plt_pond_univariate + theme(legend.position = "none")
 ```
 
 ## HBN
+
+```{r}
+file <- "data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv"
+file <- file.path(PROJECTPATH, file)
+df_clusters_hbn <- read_csv(file, show_col_types = FALSE)
+```
+
 
 ```{r}
 list_HBN_assessments <- list(
@@ -1141,7 +880,7 @@ df_kw_plt_hbn <- df_kw_clusters_hbn %>%
 
 plt_hbn_univariate <- ggplot(df_kw_plt_hbn, aes(x = factor(nk), y = fct_rev(label), 
                                              col = var_explained, fill = var_explained_threshold)) +
-  geom_point(shape = 21, stroke = 1.0, size = 1.5) +
+  geom_point(shape = 21, stroke = 1.2, size = 2.5) +
   scale_fill_gradientn(colors = palette_univariate, limits = c(0, var_explained_max), na.value = "white", guide = "none") +
   scale_colour_gradientn(colors = palette_univariate, limits = c(0, var_explained_max)) +
   labs(x = "HBN cluster solution (K)",
@@ -1155,30 +894,9 @@ plt_hbn_univariate <- ggplot(df_kw_plt_hbn, aes(x = factor(nk), y = fct_rev(labe
         legend.position = "none",
         plot.margin = margin(t = 2, l = 2))
 
-
-# plt_hbn_univariate <- ggplot(df_kw_plt, 
-#                               aes(x = factor(nk), 
-#                                   y = fct_rev(label),
-#                                   fill = H_threshold)) + 
-#   geom_tile(col = "grey50") +
-#   scale_fill_gradientn(colors = palette_univariate,
-#                        limits = c(0, H_max), 
-#                        na.value = "grey90",
-#                        guide = guide_colourbar(barwidth = unit(12, "bigpts"),
-#                                                barheight = unit(100, "bigpts"))) +
-#   labs(x = "HBN cluster solution (K)",
-#        y = "Clinical measure",
-#        fill = "H-statistic") +
-#   theme_bw() +
-#   theme(panel.grid.major = element_blank(),
-#         axis.title = element_text(size = 6),
-#         axis.text = element_text(size = 6),
-#         legend.position = "none",
-#         plot.margin = margin(t = 2, l = 2))
-
-
-plt_hbn_univariate
+# plt_hbn_univariate
 ```
+
 
 # Figure
 
@@ -1196,34 +914,26 @@ legend_width <- 35
 padding_width <- 10
 plotting_area <- fig_width - legend_width - padding_width
 panel_width <- plotting_area/2
-panel_dx_height <- 160
-padding_height <- 10
-panel_univar_height <- 200
+panel_univar_height <- 300
 panel_label_height <- 15
 
 fig_widths <- c(panel_width, padding_width, panel_width, legend_width)
-fig_heights <- c(panel_label_height, panel_dx_height, padding_height, panel_univar_height)
+fig_heights <- c(panel_univar_height)
 
 fig_layout <- rbind(c(10, 02, 11, NA),
                     c(01, 02, 03, 04),
                     c(05, 05, 05, 05),
                     c(06, 07, 08, 09))
 
-fig_grob <- arrangeGrob(pond_dx_grob, 
-                        zeroGrob(), #padding
-                        hbn_dx_grob, # HBN dx
-                        diagnoses_legend_grob, # dx legend
-                        zeroGrob(), #padding
-                        ggplotGrob(plt_pond_univariate),
+fig_layout <- rbind(1:4)
+
+fig_grob <- arrangeGrob(ggplotGrob(plt_pond_univariate),
                         zeroGrob(), #padding
                         ggplotGrob(plt_hbn_univariate), # HBN univariate
                         univariate_legend_grob,
-                        panel_label_pond,
-                        panel_label_hbn,
                         layout_matrix = fig_layout,
                         widths = unit(fig_widths, "bigpts"),
                         heights = unit(fig_heights, "bigpts"))
-
 
 fig_height_pt <- sum(fig_heights)
 fig_width_pt <- sum(fig_widths)
@@ -1238,10 +948,10 @@ pdf(file = outfile,
     width = unit(fig_width_in, "in"),
     height = unit(fig_height_in, "in"))
 grid.draw(fig_grob)
-grid.text(label = c("A", "B"), 
-          x = unit(c(7, 7), "bigpts"),
-          y = unit(c(377, 205), "bigpts"),
-          gp = gpar(fontsize = 10, fontface = "bold"))
+# grid.text(label = c("A", "B"), 
+#           x = unit(c(5, panel_width + padding_width + 5), "bigpts"),
+#           y = unit(fig_height_pt - 8, "bigpts"),
+#           gp = gpar(fontsize = 10, fontface = "bold"))
 invisible(dev.off())
 ```
 
@@ -1255,10 +965,10 @@ png(file = outfile,
     res = 600)
 
 grid.draw(fig_grob)
-grid.text(label = c("A", "B"), 
-          x = unit(c(7, 7), "bigpts"),
-          y = unit(c(377, 205), "bigpts"),
-          gp = gpar(fontsize = 10, fontface = "bold"))
+# grid.text(label = c("A", "B"), 
+#           x = unit(c(5, panel_width + padding_width + 5), "bigpts"),
+#           y = unit(fig_height_pt - 8, "bigpts"),
+#           gp = gpar(fontsize = 10, fontface = "bold"))
 
 invisible(dev.off())
 ```
