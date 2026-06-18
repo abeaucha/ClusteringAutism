@@ -774,8 +774,8 @@ for (l in 1:length(list_clusters_clinical)) {
   dev.off()
   
 }
-
 ```
+
 
 ## Pairwise LDA
 
@@ -1068,7 +1068,10 @@ nk_palette <- carto_pal(name = "PinkYl", n = 4)
 df_comparison_labels <- tibble(comparison = c("chromatin_synaptic", "mapkwnt_synaptic", "chromatin_mapkwnt"),
                                label = c("Transcription vs.\n Synaptic-Immune",
                                          "MAPK-WNT vs.\n Synaptic-Immune", 
-                                         "Transcription vs.\n MAPK-WNT")) 
+                                         "Transcription vs.\n MAPK-WNT"),
+                               label_loadings = c("Transcription vs.\n Synaptic-Immune\n (K = 7)",
+                                                  "MAPK-WNT vs.\n Synaptic-Immune\n (K = 7)", 
+                                                  "Transcription vs.\n MAPK-WNT\n (K = 7)")) 
 
 df_auc_comparisons <- list_lda %>% 
   map_dfr(function(x){x[["ROC"]]}) %>% 
@@ -1148,13 +1151,13 @@ for (i in 1:length(list_loading_plts)) {
   df_loadings_i <- df_loadings_i %>% 
     mutate(acronym = factor(acronym, levels = lvls_i)) %>% 
     mutate(comparison = factor(comparison, levels = df_comparison_labels$comparison)) %>% 
-    mutate(label = factor(label, levels = df_comparison_labels$label))
+    mutate(label_loadings = factor(label_loadings, levels = df_comparison_labels$label_loadings))
   
   plt_loadings_i <- ggplot(df_loadings_i, aes(x = LD1, y = acronym, col = group)) + 
     geom_vline(xintercept = 0) + 
     geom_segment(aes(xend = 0, yend = acronym)) + 
     geom_point() +
-    facet_grid(.~label) +
+    facet_grid(.~label_loadings) +
     coord_cartesian(xlim = c(-0.5, 0.5)) + 
     scale_x_continuous(breaks = c(-0.5, 0, 0.5)) + 
     scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2"),
@@ -1192,13 +1195,13 @@ if (i == 1) {
         left_join(df_comparison_labels, by = "comparison") %>% 
     mutate(acronym = factor(acronym, levels = lvls_common_i)) %>% 
     mutate(comparison = factor(comparison, levels = df_comparison_labels$comparison)) %>% 
-    mutate(label = factor(label, levels = df_comparison_labels$label))
+    mutate(label_loadings = factor(label_loadings, levels = df_comparison_labels$label_loadings))
   
   plt_loadings_common_i <- ggplot(df_loadings_common_i, aes(x = LD1, y = acronym, col = group)) + 
     geom_vline(xintercept = 0) + 
     geom_segment(aes(xend = 0, yend = acronym)) + 
     geom_point() +
-    facet_grid(.~label) +
+    facet_grid(.~label_loadings) +
     coord_cartesian(xlim = c(-0.5, 0.5)) + 
     scale_x_continuous(breaks = c(-0.5, 0, 0.5)) + 
     scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2"),
@@ -1238,7 +1241,7 @@ padding_width <- 10
 panel_width <- (fig_width - padding_width)/2
 padding_height <- 4
 panel_auc_height <- 100
-panel_loadings_height <- 300
+panel_loadings_height <- 310
 panel_label_height <- 15
 
 fig_widths <- c(panel_width, padding_width, panel_width)
