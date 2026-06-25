@@ -776,7 +776,6 @@ for (l in 1:length(list_clusters_clinical)) {
 }
 ```
 
-
 ## Pairwise LDA
 
 ```{r}
@@ -1052,7 +1051,8 @@ for (i in 1:length(list_lda)) {
            comparison = comparison_i,
            nk = nk_i)
   
-  list_lda[[i]] <- list(scores = df_lda_scores,
+  list_lda[[i]] <- list(data = df_multivariate,
+                        scores = df_lda_scores,
                         loadings = df_lda_loadings,
                         loadings_common = df_lda_loadings_common,
                         ROC = df_lda_roc)
@@ -1312,3 +1312,249 @@ grid.text(label = c("A", "B"),
 
 invisible(dev.off())
 ```
+
+```{r}
+df_lda_grid %>% 
+  filter(dataset == "HBN", nk == 7)
+```
+
+```{r}
+df_pond_scores <- bind_rows(list_lda[[4]]$data,
+                     list_lda[[5]]$data,
+                     list_lda[[6]]$data) %>% 
+  distinct() %>% 
+  mutate(dataset = "POND")
+
+
+df_hbn_scores <- bind_rows(list_lda[[16]]$data,
+                           list_lda[[17]]$data,
+                           list_lda[[18]]$data) %>% 
+  distinct() %>% 
+  mutate(dataset = "HBN")
+```
+
+```{r}
+pond_common_cols <- c("cbcl_ep_ts", "rbsallt", "cbcl_ip_ts", "fsiq", "scqtot", "adhd_i_sub", "adhd_hi_sub")
+
+colnames_new <- c("dataset", "group", "CBCL_EP", "RBS", "CBCL_IP", "FSIQ", "SCQ", "SWAN_I", "SWAN_HI")
+
+df_pond_scores_common <- df_pond_scores[,c("dataset", "group", pond_common_cols)]
+colnames(df_pond_scores_common) <- colnames_new
+
+hbn_common_cols <- c("CBCL_EP_T", "Score_Total", "CBCL_IP_T", "FSIQ", "SCQ_Total", "ADHD_I", "ADHD_HI")
+df_hbn_scores_common <- df_hbn_scores[,c("dataset", "group", hbn_common_cols)]
+colnames(df_hbn_scores_common) <- colnames_new
+
+df_scores_common <- bind_rows(df_pond_scores_common, df_hbn_scores_common)
+```
+
+```{r}
+mat_scores_common <- df_scores_common %>% 
+  select(-dataset, -group) %>% 
+  as.matrix() %>% 
+  scale()
+
+set.seed(123)
+umap_out <- uwot::umap2(X = mat_scores_common, n_components = 2)
+colnames(umap_out) <- paste0("U", 1:2)
+
+df_umap <- as_tibble(umap_out) %>% 
+  mutate(dataset = df_scores_common$dataset,
+         group = df_scores_common$group)
+
+df_umap_centroids <- df_umap %>% 
+  group_by(dataset, group) %>% 
+  summarise(U1_mean = mean(U1),
+            U2_mean = mean(U2)) %>% 
+  ungroup()
+
+ggplot(df_umap_centroids, aes(x = U1_mean, y = U2_mean, col = group, shape = dataset)) + 
+  geom_point(size = 5) +
+  labs(x = NULL, y = NULL) + 
+  # coord_equal(xlim = c(-0.5, 0.5),
+  #             ylim = c(-0.5, 0.5)) + 
+  scale_color_manual(values = c("darkorchid1", "seagreen2", "springgreen4")) +
+  # scale_shape_manual(values = c(21, 24)) + 
+  theme_bw()
+```
+
+```{r}
+mat_pond_scores_common <- df_pond_scores_common %>% 
+  select(-dataset, -group) %>% 
+  as.matrix() %>% 
+  scale()
+
+mat_hbn_scores_common <- df_hbn_scores_common %>% 
+  select(-dataset, -group) %>% 
+  as.matrix() %>% 
+  scale()
+
+mat_scores_common <- rbind(mat_pond_scores_common, mat_hbn_scores_common)
+
+set.seed(123)
+umap_out <- uwot::umap2(X = mat_scores_common, n_components = 2)
+colnames(umap_out) <- paste0("U", 1:2)
+
+df_umap <- as_tibble(umap_out) %>% 
+  mutate(dataset = df_scores_common$dataset,
+         group = df_scores_common$group)
+
+df_umap_centroids <- df_umap %>% 
+  group_by(dataset, group) %>% 
+  summarise(U1_mean = mean(U1),
+            U2_mean = mean(U2)) %>% 
+  ungroup()
+
+ggplot(df_umap_centroids, aes(x = U1_mean, y = U2_mean, col = group, shape = dataset)) + 
+  geom_point(size = 5) +
+  labs(x = NULL, y = NULL) + 
+  coord_equal(xlim = c(-0.5, 0.5),
+              ylim = c(-0.5, 0.5)) + 
+  scale_color_manual(values = c("darkorchid1", "seagreen2", "springgreen4")) +
+  # scale_shape_manual(values = c(21, 24)) + 
+  theme_bw()
+```
+
+```{r}
+df_pond_loadings <- bind_rows(list_lda[[4]]$loadings_common,
+                              list_lda[[5]]$loadings_common,
+                              list_lda[[6]]$loadings_common) %>% 
+  distinct() %>% 
+  mutate(dataset = "POND")
+
+df_pond_loadings <- df_pond_loadings %>% 
+  select(dataset, comparison, acronym, LD1) %>% 
+  pivot_wider(id_cols = c("dataset", "comparison"), names_from = "acronym", values_from = "LD1")
+
+
+df_hbn_loadings <- bind_rows(list_lda[[16]]$loadings_common,
+                             list_lda[[17]]$loadings_common,
+                             list_lda[[18]]$loadings_common) %>% 
+  distinct() %>% 
+  mutate(dataset = "HBN")
+
+df_hbn_loadings <- df_hbn_loadings %>% 
+  select(dataset, comparison, acronym, LD1) %>% 
+  pivot_wider(id_cols = c("dataset", "comparison"), names_from = "acronym", values_from = "LD1")
+
+df_loadings <- bind_rows(df_pond_loadings, 
+                         df_hbn_loadings)
+
+mat_loadings <- df_loadings %>% 
+  select(-dataset, -comparison)
+
+set.seed(123)
+umap_out <- uwot::umap2(X = mat_loadings, n_components = 2, n_neighbors = 5)
+colnames(umap_out) <- paste0("U", 1:2)
+
+df_umap <- as_tibble(umap_out) %>% 
+  mutate(dataset = df_loadings$dataset,
+         comparison = df_loadings$comparison)
+
+ggplot(df_umap, aes(x = U1, y = U2, col = comparison, shape = dataset)) + 
+  geom_point(size = 5) +
+  theme_bw()
+```
+
+```{r}
+neighbours <- 15
+
+mat_pond_scores <- df_pond_scores %>% 
+  select(-ID, -dataset, -group) %>% 
+  as.matrix() %>% 
+  scale()
+
+set.seed(123)
+pond_umap_out <- uwot::umap2(X = mat_pond_scores, n_components = 2, n_neighbors = neighbours)
+colnames(pond_umap_out) <- paste0("U", 1:2)
+
+df_pond_umap <- as_tibble(pond_umap_out) %>% 
+  mutate(dataset = df_pond_scores$dataset,
+         group = df_pond_scores$group)
+
+mat_hbn_scores <- df_hbn_scores %>% 
+  select(-ID, -dataset, -group) %>% 
+  as.matrix() %>% 
+  scale()
+
+set.seed(123)
+hbn_umap_out <- uwot::umap2(X = mat_hbn_scores, n_components = 2, n_neighbors = neighbours)
+colnames(hbn_umap_out) <- paste0("U", 1:2)
+
+df_hbn_umap <- as_tibble(hbn_umap_out) %>% 
+  mutate(dataset = df_hbn_scores$dataset,
+         group = df_hbn_scores$group)
+
+df_umap_full <- bind_rows(df_pond_umap, df_hbn_umap)
+
+df_umap_full_means <- df_umap_full %>% 
+  group_by(dataset, group) %>% 
+  summarise(x = mean(U1),
+            y = mean(U2)) %>% 
+  ungroup()
+
+ggplot(df_umap_full_means, aes(x = x, y = y, col = group, shape = dataset)) + 
+  geom_point(size = 5) + 
+  coord_equal(xlim = c(-0.3, 0.3),
+                  ylim = c(-0.3, 0.3)) + 
+  scale_colour_manual(values = c("darkorchid1", "seagreen2", "springgreen4")) + 
+  theme_bw()
+```
+
+```{r}
+pond_pca_out <- prcomp(x = mat_pond_scores)
+mat_pond_pca <- pond_pca_out$x[,1:2]
+
+df_pond_pca <- as_tibble(mat_pond_pca) %>% 
+  mutate(dataset = df_pond_scores$dataset,
+         group = df_pond_scores$group)
+
+hbn_pca_out <- prcomp(x = mat_hbn_scores)
+mat_hbn_pca <- hbn_pca_out$x[,1:2]
+
+df_hbn_pca <- as_tibble(mat_hbn_pca) %>% 
+  mutate(dataset = df_hbn_scores$dataset,
+         group = df_hbn_scores$group)
+
+df_pca_full <- bind_rows(df_pond_pca, df_hbn_pca)
+
+df_pca_full_means <- df_pca_full %>% 
+  group_by(dataset, group) %>% 
+  summarise(x = mean(PC1),
+            y = mean(PC2)) %>% 
+  ungroup()
+```
+
+```{r}
+ggplot(df_pca_full_means, aes(x = x, y = y, col = group, shape = dataset)) + 
+  geom_point(size = 5) + 
+  facet_grid(.~dataset) +
+  coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  scale_colour_manual(values = c("darkorchid1", "seagreen2", "springgreen4")) + 
+  theme_bw()
+```
+
+```{r}
+library(ggbiplot)
+
+ggbiplot(hbn_pca_out, groups = df_hbn_pca$group, ellipse = TRUE) +
+  theme_bw()
+```
+```{r}
+ggbiplot(pond_pca_out, groups = df_pond_pca$group, ellipse = TRUE, circle = TRUE) +
+  theme_bw()
+```
+
+
+```{r}
+as_tibble(pond_pca_out$rotation, rownames = "measure") %>% 
+  arrange(desc(abs(PC1))) %>% 
+  filter(measure %in% pond_common_cols)
+```
+
+```{r}
+as_tibble(hbn_pca_out$rotation, rownames = "measure") %>% 
+  arrange(desc(abs(PC1))) %>% 
+  filter(measure %in% hbn_common_cols)
+```
+
