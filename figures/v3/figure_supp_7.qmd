@@ -23,7 +23,6 @@ PROJECTPATH <- Sys.getenv("PROJECTPATH")
 SRCPATH <- Sys.getenv("SRCPATH")
 ```
 
-
 ```{r outputs}
 outfile_prefix <- "figure_S7"
 output_dir <- file.path("outputs", outfile_prefix)
@@ -40,7 +39,6 @@ demographics <- read_csv(demographics, show_col_types = FALSE)
 
 demographics
 ```
-
 
 # Human diagnoses
 
@@ -70,7 +68,6 @@ df_pond_cluster_labels <- readxl::read_excel("resources/POND_cluster_labels_colo
          k_new = as.numeric(k_new))
 ```
 
-
 ```{r}
 file <- "data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv"
 file <- file.path(PROJECTPATH, file)
@@ -91,6 +88,13 @@ df_clusters_pond_dx <- df_clusters_pond_long %>%
   left_join(select(demographics, file, DX), by = c("ID" = "file")) %>% 
   left_join(list_diagnoses$POND, by = "DX") %>% 
   select(-DX, DX = DX_new) 
+```
+
+```{r}
+df_clusters_pond_sizes <- df_clusters_pond_long %>% 
+  group_by(cluster_id, nk, k) %>% 
+  count() %>% 
+  ungroup()
 ```
 
 ```{r}
@@ -326,7 +330,6 @@ hbn_dx_grob <- arrangeGrob(list_hbn_dx_plots[[1]],
                             heights = unit(hbn_dx_heights, "npc"))
 ```
 
-
 # Mouse gene scores
 
 ```{r}
@@ -338,8 +341,6 @@ df_mouse_cluster_labels <- readxl::read_excel("resources/MICe_cluster_labels_col
          nk_new = as.numeric(nk_new),
          k_new = as.numeric(k_new))
 ```
-
-
 
 ```{r}
 file_model_names <- "../../data/mouse/derivatives/v3/107/model_names.csv"
@@ -386,7 +387,6 @@ df_mouse_cluster_scores <- df_mouse_cluster_scores %>%
 
 df_mouse_cluster_scores
 ```
-
 
 ```{r}
 df_mouse_cluster_eagle <- df_mouse_cluster_scores %>% 
@@ -482,9 +482,6 @@ theme(panel.grid.major = element_blank(),
 plt_mouse_sankey <- plt_mouse_sfari_sankey / plt_mouse_eagle_sankey + plot_layout(guides = "collect") &
   theme(plot.margin = margin(t = 6, l = 1))
 ```
-
-
-
 
 # Figure
 
