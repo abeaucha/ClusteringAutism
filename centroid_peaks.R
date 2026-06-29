@@ -16,6 +16,14 @@ human_datasets <- c("POND", "HBN")
 params_ids <- c(POND = "375", HBN = "861")
 
 
+# New labels ------
+
+file <- "figures/v3/resources/MICe_cluster_labels_colours.xlsx"
+df_mouse_labels <- readxl::read_excel(file)
+
+df_cluster_groups <- tibble(colour = c("darkorchid1", "springgreen4", "seagreen2", "sienna2"),
+                            motif = c("transcription", "MAPK-WNT", "synaptic-immune", "androgen"))
+
 
 # Centroid peaks -------
 
@@ -158,6 +166,7 @@ df_match_POND <- df_similarity_POND %>%
   group_by(nk, k) %>% 
   summarise(POND_match = any(match), .groups = "drop")
 
+
 outfile <- "MICe_POND_similarity.csv"
 write_csv(x = df_similarity_POND, file = outfile)
 
@@ -180,8 +189,23 @@ df_peaks_all <- df_peaks_all %>%
 df_peaks_all <- df_peaks_all %>%
   select(nk, k, POND_match, HBN_match, d1, d2, d3, x, y, z, label, structure, peak = value, `15q_pDp`:Wdfy3_HET)
 
-outfile <- "MICe_peaks.csv"
-write_csv(df_peaks_all, file = outfile)
+df_peaks_tmp <- df_peaks_all %>% 
+  unite(col = "cluster_id", nk, k, sep = "-", remove = TRUE)
+
+df_peaks_tmp <- df_peaks_tmp %>%  
+  left_join(select(df_mouse_labels, -colour), by = "cluster_id") %>% 
+  select(-cluster_id) %>% 
+  rename(cluster_id = cluster_id_new) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE)
+
+df_peaks_tmp <- df_peaks_tmp %>%  
+  select(cluster_id, nk, k, POND_match, HBN_match, d1, d2, d3, x, y, z, label, structure, peak, `15q_pDp`:Wdfy3_HET)
+
+# outfile <- "MICe_peaks.csv"
+# write_csv(df_peaks_all, file = outfile)
+
+outfile <- "MICe_peaks_new_cluster_labs.csv"
+write_csv(df_peaks_tmp, file = outfile)
 
 
 # Enrichment ------
@@ -303,5 +327,35 @@ df_pathways_all <- df_pathways_all %>%
   filter(!(Root == "Reproduction" & pathway == "Meiosis")) %>% 
   filter(!(Root == "DNA Replication" & pathway == "Synthesis of DNA"))  
 
-outfile <- "MICe_pathways.csv"
-write_csv(df_pathways_all, file = outfile)
+df_pathways_new_labs <- df_pathways_all %>% 
+  select(-nk, -k) %>% 
+  left_join(select(df_mouse_labels, -colour), by = "cluster_id") %>% 
+  select(-cluster_id) %>% 
+  rename(cluster_id = cluster_id_new) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE)
+
+# outfile <- "MICe_pathways.csv"
+# write_csv(df_pathways_all, file = outfile)
+
+outfile <- "MICe_pathways_new_cluster_labs.csv"
+write_csv(df_pathways_new_labs, file = outfile)
+
+
+# ------------------
+
+df_mouse_motifs <- df_mouse_labels %>% 
+  left_join(df_match_POND %>% 
+              unite(col = "cluster_id", nk, k, sep = "-"), by = "cluster_id") %>% 
+  left_join(df_match_HBN %>% 
+              unite(col = "cluster_id", nk, k, sep = "-"), by = "cluster_id") %>% 
+  select(-cluster_id) %>% 
+  rename(cluster_id = cluster_id_new) %>% 
+  separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE) %>% 
+  left_join(df_cluster_groups, by = "colour") %>% 
+  select(-colour)
+
+outfile <- "MICe_motifs_new_cluster_labs.csv"
+write_csv(df_mouse_motifs, file = outfile)
+
+
+
