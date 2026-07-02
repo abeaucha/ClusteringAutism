@@ -1060,6 +1060,345 @@ for (i in 1:length(list_lda)) {
 }
 ```
 
+# Panel: PCA
+
+```{r}
+df_lda_grid %>% 
+  filter(nk == 7)
+```
+
+```{r}
+df_pond_scores <- bind_rows(list_lda[[4]]$data,
+                            list_lda[[5]]$data,
+                            list_lda[[6]]$data) %>% 
+  distinct() %>% 
+  mutate(dataset = "POND",
+         group = as.character(group))
+
+
+df_hbn_scores <- bind_rows(list_lda[[16]]$data,
+                           list_lda[[17]]$data,
+                           list_lda[[18]]$data) %>% 
+  distinct() %>% 
+  mutate(dataset = "HBN",
+         group = as.character(group))
+
+mat_pond_scores <- df_pond_scores %>% 
+  select(-ID, -dataset, -group) %>% 
+  as.matrix() %>% 
+  scale()
+
+mat_hbn_scores <- df_hbn_scores %>% 
+  select(-ID, -dataset, -group) %>% 
+  as.matrix() %>% 
+  scale()
+```
+
+```{r}
+pond_pca_out <- prcomp(x = mat_pond_scores, center = TRUE, scale. = TRUE)
+mat_pond_pca <- pond_pca_out$x[,1:2]
+
+df_pond_pca <- as_tibble(mat_pond_pca) %>% 
+  mutate(dataset = df_pond_scores$dataset,
+         group = df_pond_scores$group)
+
+df_pond_pca_loadings <- pond_pca_out$rotation[,1:2] %>% 
+  as_tibble(rownames = "measure")
+
+hbn_pca_out <- prcomp(x = mat_hbn_scores, center = TRUE, scale. = TRUE)
+hbn_pca_out$x[, "PC1"] <- -1*hbn_pca_out$x[, "PC1"]
+hbn_pca_out$rotation[,"PC1"] <- -1*hbn_pca_out$rotation[,"PC1"]
+mat_hbn_pca <- hbn_pca_out$x[,1:2]
+
+df_hbn_pca_loadings <- hbn_pca_out$rotation[,1:2] %>% 
+  as_tibble(rownames = "measure")
+
+df_hbn_pca <- as_tibble(mat_hbn_pca) %>% 
+  mutate(dataset = df_hbn_scores$dataset,
+         group = df_hbn_scores$group)
+
+df_pca <- bind_rows(df_pond_pca, df_hbn_pca)
+
+df_pca_means <- df_pca %>% 
+  group_by(dataset, group) %>% 
+  summarise(x = mean(PC1),
+            y = mean(PC2),
+            .groups = "drop") 
+
+ggplot(df_pca_means, aes(x = x, y = y, col = group, shape = dataset)) + 
+  geom_point(size = 5) + 
+  facet_grid(.~dataset) +
+  coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2")) + 
+  theme_bw()
+```
+
+```{r}
+df_pond_pca_loadings <- pond_pca_out$rotation[,1:2] %>% 
+  as_tibble(rownames = "measure")
+
+plt_pond_pca_tmp <- ggplot(filter(df_pca_means, dataset == "POND"), aes(x = x, y = y, col = group)) + 
+  geom_point(size = 5) + 
+  geom_segment(data = df_pond_pca_loadings, 
+               inherit.aes = FALSE,
+               mapping = aes(x = PC1, y = PC2, xend = 0, yend = 0)) + 
+  geom_text(data = df_pond_pca_loadings,
+            inherit.aes = FALSE,
+            mapping = aes(x = PC1, y = PC2, label = measure),
+            size = 2) +
+  coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2")) + 
+  theme_bw() +
+  theme(legend.position = "none")
+
+outfile <- "pond_pca_tmp.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt_pond_pca_tmp)
+invisible(dev.off())
+```
+
+```{r}
+plt_hbn_pca_tmp <- ggplot(filter(df_pca_means, dataset == "HBN"), aes(x = x, y = y, col = group)) + 
+  geom_point(size = 5) + 
+  geom_segment(data = df_hbn_pca_loadings, 
+               inherit.aes = FALSE,
+               mapping = aes(x = PC1, y = PC2, xend = 0, yend = 0)) + 
+  geom_text(data = df_hbn_pca_loadings,
+            inherit.aes = FALSE,
+            mapping = aes(x = PC1, y = PC2, label = measure),
+            size = 2) +
+  coord_cartesian(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2")) + 
+  theme_bw() +
+  theme(legend.position = "none")
+
+outfile <- "hbn_pca_tmp.pdf"
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt_hbn_pca_tmp)
+invisible(dev.off())
+```
+
+```{r}
+pond_pca_measures <- c("cbcl_ep_ts", "abas_gccs", "rbsallt", "fsiq", "scqtot", "adhd_i_sub", "owl_olc_ss", "ssp_total_rs")
+
+hbn_pca_measures <- c("CBCL_EP_T", "CGAS_Score", "Score_Total", "FSIQ", "SCQ_Total", "ADHD_I", "TOWRE_Total_Scaled")
+
+
+df_group_labels <- tibble(group = c("chromatin", "mapkwnt", "synaptic"),
+                          label = c("Transcription", "MAPK-WNT", "Synaptic-Immune"))
+
+pt_size <- 4
+arrow_lw <- 0.25
+xlims <- c(-0.55, 0.55)
+ylims <- xlims
+
+df_pond_pca_loadings_plt <- df_pond_pca_loadings %>% 
+  filter(measure %in% pond_pca_measures)
+
+plt_pond_pca <- ggplot() + 
+  geom_segment(data = df_pond_pca_loadings_plt, 
+               inherit.aes = FALSE,
+               mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
+               arrow = arrow(length = unit(3, "pt")),
+               linewidth = arrow_lw, col = "grey25") + 
+  # geom_point(data = filter(df_pca, dataset == "POND"),
+  #            inherit.aes = FALSE,
+  #            mapping = aes(x = PC1, y = PC2, col = group),
+  #            size = 1) + 
+  geom_point(data = filter(df_pca_means, dataset == "POND"), 
+             inherit.aes = FALSE,
+             mapping = aes(x = x, y = y, col = group),
+             size = pt_size) +
+  # geom_text(data = df_pond_pca_loadings,
+  #           inherit.aes = FALSE,
+  #           mapping = aes(x = PC1, y = PC2, label = measure),
+  #           size = 1) +
+  # coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  coord_cartesian(xlim = xlims, ylim = ylims) +
+  scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2")) + 
+  labs(x = "PC1", y = "PC2") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        plot.margin = margin(t = 2, r = 2))
+
+plt_pond_pca_grob <- ggplotGrob(plt_pond_pca)
+
+
+df_hbn_pca_loadings_plt <- df_hbn_pca_loadings %>% 
+  filter(measure %in% hbn_pca_measures)
+
+
+plt_hbn_pca <- ggplot() + 
+  geom_segment(data = df_hbn_pca_loadings_plt, 
+               inherit.aes = FALSE,
+               mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
+               arrow = arrow(length = unit(3, "pt")),
+               linewidth = arrow_lw, col = "grey25") + 
+  geom_point(data = filter(df_pca_means, dataset == "HBN"), 
+             inherit.aes = FALSE,
+             mapping = aes(x = x, y = y, col = group),
+             size = pt_size) +
+  # geom_text(data = df_hbn_pca_loadings,
+  #           inherit.aes = FALSE,
+  #           mapping = aes(x = PC1, y = PC2, label = measure),
+  #           size = 1) +
+  # coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  coord_cartesian(xlim = xlims, ylim = ylims) +
+  scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2"),
+                      labels = df_group_labels$label) + 
+  labs(x = "PC1", y = "PC2", col = "Molecular group") +
+  guides(colour = guide_legend(override.aes = list(size = 3))) + 
+  theme_bw() +
+  theme(axis.title = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        plot.margin = margin(t = 2, r = 2),
+        legend.title = element_text(size = 6),
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(8, "pt"),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        # legend.background = element_rect(color = "black"),
+        legend.margin = margin(t = 4))
+
+
+pca_legend_grob <- plt_hbn_pca %>% ggplotGrob() %>% grid.force() %>% getGrob("guides.3-3-3-3")
+
+plt_hbn_pca <- plt_hbn_pca +
+  theme(legend.position = "none")
+
+panel_pca_label_pond <- gTree(children = gList(textGrob("POND+", x = 0.53, just = "centre", gp = gpar(fontsize = 8)),
+                                           segmentsGrob(x0 = 0.22, x1 = 1, y0 = 0.07, y1 = 0.07)))
+panel_pca_label_hbn <- gTree(children = gList(textGrob("HBN", x = 0.53, just = "centre", gp = gpar(fontsize = 8)),
+                                          segmentsGrob(x0 = 0.22, x1 = 1, y0 = 0.07, y1 = 0.07)))
+
+
+panel_width <- 256
+pca_padding_width <- 5
+panel_pca_width <- (panel_width - pca_padding_width)/2
+panel_pca_widths <- c(panel_pca_width, pca_padding_width, panel_pca_width)
+
+panel_label_height <- 15
+panel_legend_height <- 20
+panel_pca_height <- 150
+panel_pca_heights <- c(panel_label_height, panel_pca_height, panel_legend_height)
+
+panel_pca_layout <- rbind(1:3, 4:6, 7)
+
+panel_pca_grob <- arrangeGrob(panel_pca_label_pond,
+                              zeroGrob(),
+                              panel_pca_label_hbn,
+                              ggplotGrob(plt_pond_pca),
+                              zeroGrob(),
+                              ggplotGrob(plt_hbn_pca),
+                              pca_legend_grob,
+                              layout_matrix = panel_pca_layout,
+                              widths = panel_pca_widths,
+                              heights = panel_pca_heights)
+
+panel_pca_width_pt <- sum(panel_pca_widths)
+panel_pca_height_pt <- sum(panel_pca_heights)
+
+panel_pca_width_in <- panel_pca_width_pt/72
+panel_pca_height_in <- panel_pca_height_pt/72
+
+outfile <- paste0(outfile_prefix, "_panel_pca.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(panel_pca_width_in, "in"),
+    height = unit(panel_pca_height_in, "in"))
+grid.draw(panel_pca_grob)
+invisible(dev.off())
+```
+
+```{r}
+legend_height <- 20
+padding_width <- 10
+panel_width <- (fig_width - padding_width)/2
+padding_height <- 0
+panel_loadings_height <- 310
+panel_label_height <- 15
+
+fig_widths <- c(panel_width, padding_width, panel_width)
+fig_heights <- c(panel_pca_height, padding_height, panel_label_height, panel_loadings_height, legend_height)
+
+# fig_layout <- rbind(c(01, 02, 03),
+#                     c(04, 05, 06),
+#                     c(07, 07, 07),
+#                     c(08, 09, 10),
+#                     c(11, 11, 11))
+
+fig_layout <- rbind(c(01, 02, 03),
+                    c(04, 04, 04),
+                    c(05, 06, 07),
+                    c(08, 09, 10),
+                    c(11, 11, 11))
+
+fig_grob <- arrangeGrob(panel_pca_grob,
+                        zeroGrob(),
+                        panel_auc_grob,
+                        # rectGrob(),
+                        zeroGrob(),
+                        panel_label_pond, 
+                        zeroGrob(),
+                        panel_label_hbn,
+                        list_loading_plts[[1]],
+                        zeroGrob(),
+                        list_loading_plts[[2]],
+                        # gTree(children = gList(loadings_legend_grob, rectGrob(gp = gpar(fill = NA)))),
+                        loadings_legend_grob,
+                        layout_matrix = fig_layout,
+                        widths = unit(fig_widths, "bigpts"),
+                        heights = unit(fig_heights, "bigpts"))
+
+fig_height_pt <- sum(fig_heights)
+fig_width_pt <- sum(fig_widths)
+
+fig_height_in <- fig_height_pt/72
+fig_width_in <- fig_width_pt/72
+
+
+outfile <- paste0(outfile_prefix, ".pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(fig_width_in, "in"),
+    height = unit(fig_height_in, "in"))
+grid.draw(fig_grob)
+
+# pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - panel_auc_height + 11, "bigpts"),
+#                       just = "top",
+#                       width = unit(100, "bigpts"),
+#                       height = unit(20, "bigpts")))
+
+# pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - 8, "bigpts"),
+#                       x = unit(fig_width_pt - 7, "bigpts"),
+#                       just = c("right", "top"),
+#                       width = unit(100, "bigpts"),
+#                       height = unit(20, "bigpts")))
+# grid.draw(auc_legend)
+# grid.text("Cluster solution (K)",
+#           x = unit(1.0, "npc"),
+#           y = unit(0.25, "npc"),
+#           just = "right",
+#           gp = gpar(fontsize = 6))
+# popViewport()
+
+
+# grid.text(label = c("A", "B"),
+#           x = unit(c(6, 6), "bigpts"),
+#           y = unit(c(fig_height_pt - 10, fig_height_pt - panel_label_height - panel_auc_height), "bigpts"),
+#           gp = gpar(fontsize = 10, fontface = "bold"))
+
+invisible(dev.off())
+```
+
 # Panel: ROC AUC
 
 ```{r}
@@ -1093,21 +1432,24 @@ for (i in 1:length(human_datasets)) {
     scale_fill_manual(values = nk_palette) + 
     labs(x = "Molecular group comparison",
          y = "ROC AUC",
-         fill = NULL) +
+         fill = "Cluster solution (K)") +
     theme_bw() +
-    theme(axis.text.x = element_text(size = 6, color = "black"),
+    theme(axis.text.x = element_text(size = 5, color = "black", hjust = c(0.9, 0.65, 0.45)),
           # axis.text.x = element_text(angle = 20, hjust = 1, vjust = 1, size = 6),
           axis.text.y = element_text(size = 6),
           axis.title = element_text(size = 7),
+          plot.margin = margin(t = 2, r = 2),
           legend.position = "none")
   
   if (i == 1) {
     plt_auc <- plt_auc + 
       theme(legend.position = "bottom",
             legend.direction = "horizontal",
+            legend.title = element_text(size = 6),
             legend.text = element_text(size = 6),
-            legend.key.size = unit(10, "bigpts"),
-            legend.margin = margin())
+            legend.key.size = unit(8, "pt"),
+            # legend.background = element_rect(color = "black"),
+            legend.margin = margin(t = 4))
     
     auc_legend <- plt_auc %>% ggplotGrob() %>% grid.force() %>% getGrob("guides.3-3-3-3")
   }
@@ -1118,7 +1460,48 @@ for (i in 1:length(human_datasets)) {
   list_auc_plts[[i]] <- ggplotGrob(plt_auc)
   
 }
+
+
+panel_auc_label_pond <- gTree(children = gList(textGrob("POND+", x = 0.53, just = "centre", gp = gpar(fontsize = 8)),
+                                           segmentsGrob(x0 = 0.22, x1 = 1, y0 = 0.07, y1 = 0.07)))
+panel_auc_label_hbn <- gTree(children = gList(textGrob("HBN", x = 0.53, just = "centre", gp = gpar(fontsize = 8)),
+                                          segmentsGrob(x0 = 0.22, x1 = 1, y0 = 0.07, y1 = 0.07)))
+
+auc_padding_width <- pca_padding_width
+panel_auc_width <- (panel_width - auc_padding_width)/2
+panel_auc_widths <- c(panel_auc_width, auc_padding_width, panel_auc_width)
+
+panel_auc_height <- panel_pca_height
+panel_auc_heights <- c(panel_label_height, panel_auc_height, panel_legend_height)
+
+panel_auc_layout <- rbind(1:3, 4:6, 7)
+
+panel_auc_grob <- arrangeGrob(panel_auc_label_pond,
+                              zeroGrob(),
+                              panel_auc_label_hbn,
+                              list_auc_plts[[1]],
+                              zeroGrob(),
+                              list_auc_plts[[2]],
+                              auc_legend,
+                              layout_matrix = panel_auc_layout,
+                              widths = panel_auc_widths,
+                              heights = panel_auc_heights)
+
+panel_auc_width_pt <- sum(panel_auc_widths)
+panel_auc_height_pt <- sum(panel_auc_heights)
+
+panel_auc_width_in <- panel_auc_width_pt/72
+panel_auc_height_in <- panel_auc_height_pt/72
+
+outfile <- paste0(outfile_prefix, "_panel_auc.pdf")
+outfile <- file.path(output_dir, outfile)
+pdf(file = outfile,
+    width = unit(panel_auc_width_in, "in"),
+    height = unit(panel_auc_height_in, "in"))
+grid.draw(panel_auc_grob)
+invisible(dev.off())
 ```
+
 
 # Panel: LDA Loadings
 
@@ -1226,41 +1609,48 @@ if (i == 1) {
 }
 ```
 
+
 # Figure
 
 ```{r}
 panel_label_pond <- gTree(children = gList(textGrob("POND+", x = 0.53, gp = gpar(fontsize = 8)),
-                                           segmentsGrob(x0 = 0.10, x1 = 1, y0 = 0.07, y1 = 0.07)))
+                                           segmentsGrob(x0 = 0.10, x1 = 0.985, y0 = 0.07, y1 = 0.07)))
 panel_label_hbn <- gTree(children = gList(textGrob("HBN", x = 0.53, gp = gpar(fontsize = 8)),
-                                          segmentsGrob(x0 = 0.08, x1 = 1, y0 = 0.07, y1 = 0.07)))
+                                          segmentsGrob(x0 = 0.08, x1 = 0.985, y0 = 0.07, y1 = 0.07)))
 ```
+
 
 ```{r}
 legend_height <- 20
 padding_width <- 10
 panel_width <- (fig_width - padding_width)/2
-padding_height <- 4
-panel_auc_height <- 100
+padding_height <- 0
 panel_loadings_height <- 310
 panel_label_height <- 15
 
 fig_widths <- c(panel_width, padding_width, panel_width)
-fig_heights <- c(panel_label_height, panel_auc_height, padding_height, panel_loadings_height, legend_height)
+fig_heights <- c(panel_pca_height, padding_height, panel_label_height, panel_loadings_height, legend_height)
+
+# fig_layout <- rbind(c(01, 02, 03),
+#                     c(04, 05, 06),
+#                     c(07, 07, 07),
+#                     c(08, 09, 10),
+#                     c(11, 11, 11))
 
 fig_layout <- rbind(c(01, 02, 03),
-                    c(04, 05, 06),
-                    c(07, 07, 07),
+                    c(04, 04, 04),
+                    c(05, 06, 07),
                     c(08, 09, 10),
                     c(11, 11, 11))
 
-fig_grob <- arrangeGrob(panel_label_pond,
+fig_grob <- arrangeGrob(panel_pca_grob,
                         zeroGrob(),
-                        panel_label_hbn,
-                        list_auc_plts[[1]],
-                        zeroGrob(),
-                        list_auc_plts[[2]],
+                        panel_auc_grob,
                         # rectGrob(),
                         zeroGrob(),
+                        panel_label_pond, 
+                        zeroGrob(),
+                        panel_label_hbn,
                         list_loading_plts[[1]],
                         zeroGrob(),
                         list_loading_plts[[2]],
@@ -1277,7 +1667,6 @@ fig_height_in <- fig_height_pt/72
 fig_width_in <- fig_width_pt/72
 
 
-
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -1290,28 +1679,31 @@ grid.draw(fig_grob)
 #                       width = unit(100, "bigpts"),
 #                       height = unit(20, "bigpts")))
 
-pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - 8, "bigpts"),
-                      x = unit(fig_width_pt - 7, "bigpts"),
-                      just = c("right", "top"),
-                      width = unit(100, "bigpts"),
-                      height = unit(20, "bigpts")))
-grid.draw(auc_legend)
-grid.text("Cluster solution (K)",
-          x = unit(1.0, "npc"),
-          y = unit(0.25, "npc"),
-          just = "right",
-          gp = gpar(fontsize = 6))
-# grid.rect()
-popViewport()
+# pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - 8, "bigpts"),
+#                       x = unit(fig_width_pt - 7, "bigpts"),
+#                       just = c("right", "top"),
+#                       width = unit(100, "bigpts"),
+#                       height = unit(20, "bigpts")))
+# grid.draw(auc_legend)
+# grid.text("Cluster solution (K)",
+#           x = unit(1.0, "npc"),
+#           y = unit(0.25, "npc"),
+#           just = "right",
+#           gp = gpar(fontsize = 6))
+# popViewport()
 
 
-grid.text(label = c("A", "B"),
-          x = unit(c(6, 6), "bigpts"),
-          y = unit(c(fig_height_pt - 10, fig_height_pt - panel_label_height - panel_auc_height), "bigpts"),
-          gp = gpar(fontsize = 10, fontface = "bold"))
+# grid.text(label = c("A", "B"),
+#           x = unit(c(6, 6), "bigpts"),
+#           y = unit(c(fig_height_pt - 10, fig_height_pt - panel_label_height - panel_auc_height), "bigpts"),
+#           gp = gpar(fontsize = 10, fontface = "bold"))
 
 invisible(dev.off())
 ```
+
+
+
+# PCA things
 
 ```{r}
 df_lda_grid %>% 
@@ -1540,11 +1932,11 @@ library(ggbiplot)
 ggbiplot(hbn_pca_out, groups = df_hbn_pca$group, ellipse = TRUE) +
   theme_bw()
 ```
+
 ```{r}
 ggbiplot(pond_pca_out, groups = df_pond_pca$group, ellipse = TRUE, circle = TRUE) +
   theme_bw()
 ```
-
 
 ```{r}
 as_tibble(pond_pca_out$rotation, rownames = "measure") %>% 
@@ -1557,4 +1949,3 @@ as_tibble(hbn_pca_out$rotation, rownames = "measure") %>%
   arrange(desc(abs(PC1))) %>% 
   filter(measure %in% hbn_common_cols)
 ```
-
