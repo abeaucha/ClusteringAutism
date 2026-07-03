@@ -1123,10 +1123,22 @@ df_pca_means <- df_pca %>%
   group_by(dataset, group) %>% 
   summarise(x = mean(PC1),
             y = mean(PC2),
-            .groups = "drop") 
+            sd_x = sd(PC1),
+            sd_y = sd(PC2),
+            n = n(),
+            se_x = sd_x/sqrt(n),
+            se_y = sd_y/sqrt(n),
+            .groups = "drop")
 
+df_pca_means
+```
+
+
+```{r}
 ggplot(df_pca_means, aes(x = x, y = y, col = group, shape = dataset)) + 
   geom_point(size = 5) + 
+  geom_errorbar(aes(ymin = y - se_y, ymax = y + se_y)) +
+  geom_errorbarh(aes(xmin = x - se_x, xmax = x + se_x)) + 
   facet_grid(.~dataset) +
   coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
   scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2")) + 
@@ -1185,9 +1197,38 @@ invisible(dev.off())
 ```
 
 ```{r}
-pond_pca_measures <- c("cbcl_ep_ts", "abas_gccs", "rbsallt", "fsiq", "scqtot", "adhd_i_sub", "owl_olc_ss", "ssp_total_rs")
+pond_pca_measures <- c("OWLS" = "owl_olc_ss",
+                       "FSIQ" = "fsiq",
+                       "ABAS" = "abas_gccs",
+                       "SSP" = "ssp_total_rs",
+                       "SCQ" = "scqtot",
+                       "RBS-R" = "rbsallt",
+                       "CBCL" = "cbcl_ep_ts",
+                       "SWAN" = "adhd_i_sub")
+                     
+df_pond_pca_loadings_plt <- df_pond_pca_loadings %>% 
+  filter(measure %in% pond_pca_measures) %>% 
+  mutate(measure = factor(measure, levels = pond_pca_measures)) %>% 
+  arrange(measure) %>% 
+  mutate(label = names(pond_pca_measures)) %>%
+  mutate(x = PC1 + c(0.00, 0.14, 0.15, 0.12, -0.12, -0.15, -0.14, 0.00),
+         y = PC2 + c(0.05, 0.00, 0.00, 0.00, -0.03,  0.00,  0.00, 0.05))
 
-hbn_pca_measures <- c("CBCL_EP_T", "CGAS_Score", "Score_Total", "FSIQ", "SCQ_Total", "ADHD_I", "TOWRE_Total_Scaled")
+hbn_pca_measures <- c("TOWRE" = "TOWRE_Total_Scaled",
+                      "FSIQ" = "FSIQ",
+                      "CGAS" = "CGAS_Score",
+                      "SCQ" = "SCQ_Total", 
+                      "RBS-R" = "Score_Total",
+                      "CBCL" = "CBCL_EP_T", 
+                      "SWAN" = "ADHD_I")
+
+df_hbn_pca_loadings_plt <- df_hbn_pca_loadings %>% 
+    filter(measure %in% hbn_pca_measures) %>% 
+  mutate(measure = factor(measure, levels = hbn_pca_measures)) %>% 
+  arrange(measure) %>% 
+  mutate(label = names(hbn_pca_measures)) %>%
+  mutate(x = PC1 + c(0.00, 0.14, 0.14, -0.05, -0.15, -0.14, 0.00),
+         y = PC2 + c(0.05, 0.00, 0.00, -0.07,  0.00,  0.00, 0.07))
 
 
 df_group_labels <- tibble(group = c("chromatin", "mapkwnt", "synaptic"),
@@ -1197,9 +1238,6 @@ pt_size <- 4
 arrow_lw <- 0.25
 xlims <- c(-0.55, 0.55)
 ylims <- xlims
-
-df_pond_pca_loadings_plt <- df_pond_pca_loadings %>% 
-  filter(measure %in% pond_pca_measures)
 
 plt_pond_pca <- ggplot() + 
   geom_segment(data = df_pond_pca_loadings_plt, 
@@ -1215,10 +1253,10 @@ plt_pond_pca <- ggplot() +
              inherit.aes = FALSE,
              mapping = aes(x = x, y = y, col = group),
              size = pt_size) +
-  # geom_text(data = df_pond_pca_loadings,
-  #           inherit.aes = FALSE,
-  #           mapping = aes(x = PC1, y = PC2, label = measure),
-  #           size = 1) +
+  geom_text(data = df_pond_pca_loadings_plt,
+            inherit.aes = FALSE,
+            mapping = aes(x = x, y = y, label = label),
+            size = 6/(.pt)) +
   # coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
   coord_cartesian(xlim = xlims, ylim = ylims) +
   scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2")) + 
@@ -1232,10 +1270,6 @@ plt_pond_pca <- ggplot() +
 plt_pond_pca_grob <- ggplotGrob(plt_pond_pca)
 
 
-df_hbn_pca_loadings_plt <- df_hbn_pca_loadings %>% 
-  filter(measure %in% hbn_pca_measures)
-
-
 plt_hbn_pca <- ggplot() + 
   geom_segment(data = df_hbn_pca_loadings_plt, 
                inherit.aes = FALSE,
@@ -1246,11 +1280,10 @@ plt_hbn_pca <- ggplot() +
              inherit.aes = FALSE,
              mapping = aes(x = x, y = y, col = group),
              size = pt_size) +
-  # geom_text(data = df_hbn_pca_loadings,
-  #           inherit.aes = FALSE,
-  #           mapping = aes(x = PC1, y = PC2, label = measure),
-  #           size = 1) +
-  # coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
+  geom_text(data = df_hbn_pca_loadings_plt,
+            inherit.aes = FALSE,
+            mapping = aes(x = x, y = y, label = label),
+            size = 6/(.pt)) +
   coord_cartesian(xlim = xlims, ylim = ylims) +
   scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2"),
                       labels = df_group_labels$label) + 
@@ -1318,86 +1351,7 @@ grid.draw(panel_pca_grob)
 invisible(dev.off())
 ```
 
-```{r}
-legend_height <- 20
-padding_width <- 10
-panel_width <- (fig_width - padding_width)/2
-padding_height <- 0
-panel_loadings_height <- 310
-panel_label_height <- 15
 
-fig_widths <- c(panel_width, padding_width, panel_width)
-fig_heights <- c(panel_pca_height, padding_height, panel_label_height, panel_loadings_height, legend_height)
-
-# fig_layout <- rbind(c(01, 02, 03),
-#                     c(04, 05, 06),
-#                     c(07, 07, 07),
-#                     c(08, 09, 10),
-#                     c(11, 11, 11))
-
-fig_layout <- rbind(c(01, 02, 03),
-                    c(04, 04, 04),
-                    c(05, 06, 07),
-                    c(08, 09, 10),
-                    c(11, 11, 11))
-
-fig_grob <- arrangeGrob(panel_pca_grob,
-                        zeroGrob(),
-                        panel_auc_grob,
-                        # rectGrob(),
-                        zeroGrob(),
-                        panel_label_pond, 
-                        zeroGrob(),
-                        panel_label_hbn,
-                        list_loading_plts[[1]],
-                        zeroGrob(),
-                        list_loading_plts[[2]],
-                        # gTree(children = gList(loadings_legend_grob, rectGrob(gp = gpar(fill = NA)))),
-                        loadings_legend_grob,
-                        layout_matrix = fig_layout,
-                        widths = unit(fig_widths, "bigpts"),
-                        heights = unit(fig_heights, "bigpts"))
-
-fig_height_pt <- sum(fig_heights)
-fig_width_pt <- sum(fig_widths)
-
-fig_height_in <- fig_height_pt/72
-fig_width_in <- fig_width_pt/72
-
-
-outfile <- paste0(outfile_prefix, ".pdf")
-outfile <- file.path(output_dir, outfile)
-pdf(file = outfile,
-    width = unit(fig_width_in, "in"),
-    height = unit(fig_height_in, "in"))
-grid.draw(fig_grob)
-
-# pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - panel_auc_height + 11, "bigpts"),
-#                       just = "top",
-#                       width = unit(100, "bigpts"),
-#                       height = unit(20, "bigpts")))
-
-# pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - 8, "bigpts"),
-#                       x = unit(fig_width_pt - 7, "bigpts"),
-#                       just = c("right", "top"),
-#                       width = unit(100, "bigpts"),
-#                       height = unit(20, "bigpts")))
-# grid.draw(auc_legend)
-# grid.text("Cluster solution (K)",
-#           x = unit(1.0, "npc"),
-#           y = unit(0.25, "npc"),
-#           just = "right",
-#           gp = gpar(fontsize = 6))
-# popViewport()
-
-
-# grid.text(label = c("A", "B"),
-#           x = unit(c(6, 6), "bigpts"),
-#           y = unit(c(fig_height_pt - 10, fig_height_pt - panel_label_height - panel_auc_height), "bigpts"),
-#           gp = gpar(fontsize = 10, fontface = "bold"))
-
-invisible(dev.off())
-```
 
 # Panel: ROC AUC
 
@@ -1501,7 +1455,6 @@ pdf(file = outfile,
 grid.draw(panel_auc_grob)
 invisible(dev.off())
 ```
-
 
 # Panel: LDA Loadings
 
@@ -1609,7 +1562,6 @@ if (i == 1) {
 }
 ```
 
-
 # Figure
 
 ```{r}
@@ -1619,43 +1571,78 @@ panel_label_hbn <- gTree(children = gList(textGrob("HBN", x = 0.53, gp = gpar(fo
                                           segmentsGrob(x0 = 0.08, x1 = 0.985, y0 = 0.07, y1 = 0.07)))
 ```
 
-
 ```{r}
+panel_A_title <- gTree(children = gList(
+  textGrob(
+    label = "A", 
+    x = unit(3, "bigpts"), 
+    just = "left", gp = gpar(fontsize = 10, fontface = "bold")
+  ),
+  textGrob(
+    label = "Molecular group means and loadings for behavioural PCA at K = 7", 
+    x = unit(15, "bigpts"), 
+    just = "left", gp = gpar(fontsize = 8)
+  )))
+
+panel_B_title <- gTree(children = gList(
+  textGrob(
+    label = "B", 
+    x = unit(3, "bigpts"), 
+    just = "left", gp = gpar(fontsize = 10, fontface = "bold")
+  ),
+  textGrob(
+    label = "ROC AUC scores for pairwise molecular group LDAs", 
+    x = unit(15, "bigpts"), 
+    just = "left", gp = gpar(fontsize = 8)
+  )))
+
+panel_C_title <- gTree(children = gList(
+  textGrob(
+    label = "C", 
+    x = unit(3, "bigpts"), 
+    just = "left", gp = gpar(fontsize = 10, fontface = "bold")
+  ),
+  textGrob(
+    label = "Linear discriminant loadings for pairwise molecular group LDAs at K = 7", 
+    x = unit(15, "bigpts"),
+    just = "left", gp = gpar(fontsize = 8)
+  )))
+
 legend_height <- 20
 padding_width <- 10
 panel_width <- (fig_width - padding_width)/2
-padding_height <- 0
+padding_height <- 5
+title_height <- 15
 panel_loadings_height <- 310
 panel_label_height <- 15
 
 fig_widths <- c(panel_width, padding_width, panel_width)
-fig_heights <- c(panel_pca_height, padding_height, panel_label_height, panel_loadings_height, legend_height)
+fig_heights <- c(title_height, panel_pca_height, padding_height, title_height, panel_label_height, panel_loadings_height)
 
-# fig_layout <- rbind(c(01, 02, 03),
-#                     c(04, 05, 06),
-#                     c(07, 07, 07),
-#                     c(08, 09, 10),
-#                     c(11, 11, 11))
+
 
 fig_layout <- rbind(c(01, 02, 03),
-                    c(04, 04, 04),
-                    c(05, 06, 07),
-                    c(08, 09, 10),
-                    c(11, 11, 11))
+                    c(04, 05, 06),
+                    c(07, 07, 07),
+                    c(08, 08, 08),
+                    c(09, 10, 11),
+                    c(12, 13, 14))
 
-fig_grob <- arrangeGrob(panel_pca_grob,
+fig_grob <- arrangeGrob(panel_A_title, #title
+                        zeroGrob(), #pad
+                        panel_B_title, #title
+                        panel_pca_grob,
                         zeroGrob(),
                         panel_auc_grob,
                         # rectGrob(),
                         zeroGrob(),
+                        panel_C_title, # title
                         panel_label_pond, 
                         zeroGrob(),
                         panel_label_hbn,
                         list_loading_plts[[1]],
                         zeroGrob(),
                         list_loading_plts[[2]],
-                        # gTree(children = gList(loadings_legend_grob, rectGrob(gp = gpar(fill = NA)))),
-                        loadings_legend_grob,
                         layout_matrix = fig_layout,
                         widths = unit(fig_widths, "bigpts"),
                         heights = unit(fig_heights, "bigpts"))
@@ -1700,7 +1687,6 @@ grid.draw(fig_grob)
 
 invisible(dev.off())
 ```
-
 
 
 # PCA things
