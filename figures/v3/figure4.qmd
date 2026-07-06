@@ -1133,6 +1133,51 @@ df_pca_means <- df_pca %>%
 df_pca_means
 ```
 
+```{r}
+df_pca_boot <- tibble()
+for (i in 1:length(human_datasets)) {
+
+df_pca_dataset <- df_pca %>% 
+  filter(dataset == human_datasets[i]) %>% 
+  mutate(group = factor(group))
+
+df_pca_boot_dataset <- df_pca_dataset %>% 
+  pull(PC1) %>% 
+  bootstrap_sample_estimate(groups = df_pca_dataset$group) %>% 
+  colMeans() %>% 
+  enframe(name = "group", value = "x")
+
+df_pca_boot_dataset <- df_pca_boot_dataset %>% 
+  left_join(df_pca_dataset %>% 
+              pull(PC1) %>% 
+              bootstrap_sample_estimate_ci(groups = df_pca_dataset$group) %>% 
+              as_tibble(rownames = "group") %>% 
+              rename(x_lwr = lower, x_upr = upper),
+            by = "group")
+
+df_pca_boot_dataset <- df_pca_boot_dataset %>% 
+  left_join(df_pca_dataset %>% 
+              pull(PC2) %>% 
+              bootstrap_sample_estimate(groups = df_pca_dataset$group) %>% 
+              colMeans() %>% 
+              enframe(name = "group", value = "y"), 
+            by = "group")
+
+df_pca_boot_dataset <- df_pca_boot_dataset %>% 
+  left_join(df_pca_dataset %>% 
+              pull(PC2) %>% 
+              bootstrap_sample_estimate_ci(groups = df_pca_dataset$group) %>% 
+              as_tibble(rownames = "group") %>% 
+              rename(y_lwr = lower, y_upr = upper),
+            by = "group")
+
+df_pca_boot_dataset <- df_pca_boot_dataset %>% 
+  mutate(dataset = human_datasets[i])
+
+df_pca_boot <- bind_rows(df_pca_boot, df_pca_boot_dataset)
+
+}
+```
 
 ```{r}
 ggplot(df_pca_means, aes(x = x, y = y, col = group, shape = dataset)) + 
@@ -1197,6 +1242,8 @@ invisible(dev.off())
 ```
 
 ```{r}
+loadings_scaling <- 1.5
+
 pond_pca_measures <- c("OWLS" = "owl_olc_ss",
                        "FSIQ" = "fsiq",
                        "ABAS" = "abas_gccs",
@@ -1211,8 +1258,9 @@ df_pond_pca_loadings_plt <- df_pond_pca_loadings %>%
   mutate(measure = factor(measure, levels = pond_pca_measures)) %>% 
   arrange(measure) %>% 
   mutate(label = names(pond_pca_measures)) %>%
-  mutate(x = PC1 + c(0.00, 0.14, 0.15, 0.12, -0.12, -0.15, -0.14, 0.00),
-         y = PC2 + c(0.05, 0.00, 0.00, 0.00, -0.03,  0.00,  0.00, 0.05))
+  mutate(PC1 = loadings_scaling*PC1, PC2 = loadings_scaling*PC2) %>% 
+  mutate(x = PC1 + c(0.00, 0.25, 0.25, 0.20, -0.20, -0.30, -0.28, 0.00),
+         y = PC2 + c(0.10, 0.00, 0.05, 0.00, -0.03,  0.00,  0.00, 0.10))
 
 hbn_pca_measures <- c("TOWRE" = "TOWRE_Total_Scaled",
                       "FSIQ" = "FSIQ",
@@ -1227,8 +1275,9 @@ df_hbn_pca_loadings_plt <- df_hbn_pca_loadings %>%
   mutate(measure = factor(measure, levels = hbn_pca_measures)) %>% 
   arrange(measure) %>% 
   mutate(label = names(hbn_pca_measures)) %>%
-  mutate(x = PC1 + c(0.00, 0.14, 0.14, -0.05, -0.15, -0.14, 0.00),
-         y = PC2 + c(0.05, 0.00, 0.00, -0.07,  0.00,  0.00, 0.07))
+  mutate(PC1 = loadings_scaling*PC1, PC2 = loadings_scaling*PC2) %>% 
+  mutate(x = PC1 + c(0.00, 0.25,  0.25, -0.10, -0.30, -0.25, 0.00),
+         y = PC2 + c(0.10, 0.00, -0.10, -0.10,  0.00,  0.00, 0.12))
 
 
 df_group_labels <- tibble(group = c("chromatin", "mapkwnt", "synaptic"),
@@ -1236,28 +1285,38 @@ df_group_labels <- tibble(group = c("chromatin", "mapkwnt", "synaptic"),
 
 pt_size <- 4
 arrow_lw <- 0.25
-xlims <- c(-0.55, 0.55)
+xlims <- c(-1.2, 1.0)
 ylims <- xlims
+ylims <- c(-1.2, 0.8)
+err_alpha <- 0.5
 
 plt_pond_pca <- ggplot() + 
-  geom_segment(data = df_pond_pca_loadings_plt, 
-               inherit.aes = FALSE,
-               mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
-               arrow = arrow(length = unit(3, "pt")),
-               linewidth = arrow_lw, col = "grey25") + 
-  # geom_point(data = filter(df_pca, dataset == "POND"),
-  #            inherit.aes = FALSE,
-  #            mapping = aes(x = PC1, y = PC2, col = group),
-  #            size = 1) + 
-  geom_point(data = filter(df_pca_means, dataset == "POND"), 
+  # geom_segment(data = df_pond_pca_loadings_plt,
+  #              inherit.aes = FALSE,
+  #              mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
+  #              arrow = arrow(length = unit(3, "pt")),
+  #              linewidth = arrow_lw, col = "grey25") +
+  geom_linerange(data = filter(df_pca_boot, dataset == "POND"),
+                inherit.aes = FALSE,
+                mapping = aes(x = x, y = y, ymin = y_lwr, ymax = y_upr, col = group),
+                alpha = err_alpha) +
+  geom_linerange(data = filter(df_pca_boot, dataset == "POND"),
+                inherit.aes = FALSE,
+                mapping = aes(x = x, y = y, xmin = x_lwr, xmax = x_upr, col = group),
+                orientation = "y", alpha = err_alpha) +
+  geom_point(data = filter(df_pca_boot, dataset == "POND"), 
              inherit.aes = FALSE,
              mapping = aes(x = x, y = y, col = group),
              size = pt_size) +
+  geom_segment(data = df_pond_pca_loadings_plt,
+               inherit.aes = FALSE,
+               mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
+               arrow = arrow(length = unit(3, "pt")),
+               linewidth = arrow_lw, col = "grey25") +
   geom_text(data = df_pond_pca_loadings_plt,
             inherit.aes = FALSE,
             mapping = aes(x = x, y = y, label = label),
             size = 6/(.pt)) +
-  # coord_equal(xlim = c(-0.5, 0.5), ylim = c(-0.5, 0.5)) +
   coord_cartesian(xlim = xlims, ylim = ylims) +
   scale_colour_manual(values = c("darkorchid1", "springgreen4", "seagreen2")) + 
   labs(x = "PC1", y = "PC2") +
@@ -1271,15 +1330,28 @@ plt_pond_pca_grob <- ggplotGrob(plt_pond_pca)
 
 
 plt_hbn_pca <- ggplot() + 
-  geom_segment(data = df_hbn_pca_loadings_plt, 
-               inherit.aes = FALSE,
-               mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
-               arrow = arrow(length = unit(3, "pt")),
-               linewidth = arrow_lw, col = "grey25") + 
-  geom_point(data = filter(df_pca_means, dataset == "HBN"), 
+  # geom_segment(data = df_hbn_pca_loadings_plt,
+  #              inherit.aes = FALSE,
+  #              mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
+  #              arrow = arrow(length = unit(3, "pt")),
+  #              linewidth = arrow_lw, col = "grey25") +
+  geom_linerange(data = filter(df_pca_boot, dataset == "HBN"),
+                inherit.aes = FALSE,
+                mapping = aes(x = x, y = y, ymin = y_lwr, ymax = y_upr, col = group),
+                alpha = err_alpha) +
+  geom_linerange(data = filter(df_pca_boot, dataset == "HBN"),
+                inherit.aes = FALSE,
+                mapping = aes(x = x, y = y, xmin = x_lwr, xmax = x_upr, col = group),
+                orientation = "y", alpha = err_alpha) +
+  geom_point(data = filter(df_pca_boot, dataset == "HBN"), 
              inherit.aes = FALSE,
              mapping = aes(x = x, y = y, col = group),
              size = pt_size) +
+  geom_segment(data = df_hbn_pca_loadings_plt,
+               inherit.aes = FALSE,
+               mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
+               arrow = arrow(length = unit(3, "pt")),
+               linewidth = arrow_lw, col = "grey25") +
   geom_text(data = df_hbn_pca_loadings_plt,
             inherit.aes = FALSE,
             mapping = aes(x = x, y = y, label = label),
@@ -1320,7 +1392,7 @@ panel_pca_widths <- c(panel_pca_width, pca_padding_width, panel_pca_width)
 
 panel_label_height <- 15
 panel_legend_height <- 20
-panel_pca_height <- 150
+panel_pca_height <- 130
 panel_pca_heights <- c(panel_label_height, panel_pca_height, panel_legend_height)
 
 panel_pca_layout <- rbind(1:3, 4:6, 7)
@@ -1350,7 +1422,6 @@ pdf(file = outfile,
 grid.draw(panel_pca_grob)
 invisible(dev.off())
 ```
-
 
 
 # Panel: ROC AUC
@@ -1572,6 +1643,8 @@ panel_label_hbn <- gTree(children = gList(textGrob("HBN", x = 0.53, gp = gpar(fo
 ```
 
 ```{r}
+# BREAK
+
 panel_A_title <- gTree(children = gList(
   textGrob(
     label = "A", 
@@ -1617,7 +1690,7 @@ panel_loadings_height <- 310
 panel_label_height <- 15
 
 fig_widths <- c(panel_width, padding_width, panel_width)
-fig_heights <- c(title_height, panel_pca_height, padding_height, title_height, panel_label_height, panel_loadings_height)
+fig_heights <- c(title_height, panel_pca_height_pt, padding_height, title_height, panel_label_height, panel_loadings_height)
 
 
 
