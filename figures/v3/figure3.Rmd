@@ -1167,6 +1167,14 @@ grid.draw(heatmap_grob)
 dev.off()
 ```
 
+```{r}
+df_pathways_heatmap %>% 
+  filter(group == "D") %>% 
+  filter(pathway_label == "Chromatin modifying enzymes") %>% 
+  pull(NLQ) %>% 
+  mean()
+```
+
 
 # Figure
 

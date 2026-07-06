@@ -210,8 +210,6 @@ pond_dx_grob <- arrangeGrob(list_pond_dx_plots[[1]],
                             heights = unit(pond_dx_heights, "npc"))
 ```
 
-
-
 ## HBN
 
 ```{r}
@@ -350,7 +348,6 @@ hbn_dx_grob <- arrangeGrob(list_hbn_dx_plots[[1]],
                             widths = unit(hbn_dx_widths, "npc"),
                             heights = unit(hbn_dx_heights, "npc"))
 ```
-
 
 # Mouse gene scores
 
