@@ -88,13 +88,14 @@ df_clusters_pond_dx <- df_clusters_pond_long %>%
   left_join(select(demographics, file, DX), by = c("ID" = "file")) %>% 
   left_join(list_diagnoses$POND, by = "DX") %>% 
   select(-DX, DX = DX_new) 
-```
 
-```{r}
 df_clusters_pond_sizes <- df_clusters_pond_long %>% 
   group_by(cluster_id, nk, k) %>% 
   count() %>% 
-  ungroup()
+  ungroup() %>% 
+  mutate(label = paste0(k, "\n(", n, ")"))
+
+df_clusters_pond_sizes
 ```
 
 ```{r}
@@ -109,6 +110,11 @@ for (i in 1:length(nk_subset)) {
   
   df_clusters_pond_dx_K <- df_clusters_pond_dx %>% 
     filter(nk == nki)   
+  
+  labels_nk <- df_clusters_pond_sizes %>% 
+    filter(nk == nki) %>% 
+    arrange(k) %>% 
+    pull(label)
   
   df_grid <- expand_grid(k = 1:nki, DX = dx_lvls)
   
@@ -130,12 +136,13 @@ for (i in 1:length(nk_subset)) {
   plt <- ggplot(df_cluster_dx_summary, aes(x = k, y = prop_dx, fill = DX)) + 
     geom_col(position = "dodge") +
     facet_grid(.~label) + 
+    scale_x_discrete(labels = labels_nk) + 
     labs(x = "POND+ cluster (k)",
          fill = "Diagnosis") + 
     theme_bw() +
     theme(plot.margin = margin(l = 2, t = 2),
           axis.title = element_text(size = 6),
-          axis.text = element_text(size = 6),
+          axis.text = element_text(size = 5),
           strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
   
   if (i == 1) {
@@ -203,6 +210,8 @@ pond_dx_grob <- arrangeGrob(list_pond_dx_plots[[1]],
                             heights = unit(pond_dx_heights, "npc"))
 ```
 
+
+
 ## HBN
 
 ```{r}
@@ -235,6 +244,12 @@ df_clusters_hbn_dx <- df_clusters_hbn_long %>%
   left_join(select(demographics, file, DX), by = c("ID" = "file")) %>% 
   left_join(list_diagnoses$HBN, by = "DX") %>% 
   select(-DX, DX = DX_new) 
+
+df_clusters_hbn_sizes <- df_clusters_hbn_long %>% 
+  group_by(cluster_id, nk, k) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(label = paste0(k, "\n(", n, ")"))
 ```
 
 ```{r}
@@ -249,6 +264,11 @@ for (i in 1:length(nk_subset)) {
   
   df_clusters_hbn_dx_K <- df_clusters_hbn_dx %>% 
     filter(nk == nki)   
+  
+  labels_nk <- df_clusters_hbn_sizes %>% 
+    filter(nk == nki) %>% 
+    arrange(k) %>% 
+    pull(label)
   
   df_grid <- expand_grid(k = 1:nki,
                          DX = dx_lvls)
@@ -271,13 +291,14 @@ for (i in 1:length(nk_subset)) {
   plt <- ggplot(df_cluster_dx_summary, aes(x = k, y = prop_dx, fill = DX)) + 
     geom_col(position = "dodge") +
     facet_grid(.~label) + 
+    scale_x_discrete(labels = labels_nk) + 
     coord_cartesian(ylim = c(0, 1.0)) + 
     labs(x = "HBN cluster (k)") + 
     theme_bw() +
     theme(legend.position = "none",
           plot.margin = margin(l = 2, t = 2),
           axis.title = element_text(size = 6),
-          axis.text = element_text(size = 6),
+          axis.text = element_text(size = 5),
           strip.text = element_text(size = 6, margin = margin(t = 2, b = 2)))
   
   if (i == 1) {
@@ -329,6 +350,7 @@ hbn_dx_grob <- arrangeGrob(list_hbn_dx_plots[[1]],
                             widths = unit(hbn_dx_widths, "npc"),
                             heights = unit(hbn_dx_heights, "npc"))
 ```
+
 
 # Mouse gene scores
 
@@ -499,7 +521,7 @@ legend_width <- 35
 padding_width <- 10
 plotting_area <- fig_width - legend_width - padding_width
 panel_width <- plotting_area/2
-panel_dx_height <- 160
+panel_dx_height <- 180
 padding_height <- 10
 panel_sankey_height <- 350
 panel_label_height <- 15
