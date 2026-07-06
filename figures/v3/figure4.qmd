@@ -1423,7 +1423,6 @@ grid.draw(panel_pca_grob)
 invisible(dev.off())
 ```
 
-
 # Panel: ROC AUC
 
 ```{r}
@@ -1733,33 +1732,22 @@ pdf(file = outfile,
     width = unit(fig_width_in, "in"),
     height = unit(fig_height_in, "in"))
 grid.draw(fig_grob)
-
-# pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - panel_auc_height + 11, "bigpts"),
-#                       just = "top",
-#                       width = unit(100, "bigpts"),
-#                       height = unit(20, "bigpts")))
-
-# pushViewport(viewport(y = unit(fig_height_pt - panel_label_height - 8, "bigpts"),
-#                       x = unit(fig_width_pt - 7, "bigpts"),
-#                       just = c("right", "top"),
-#                       width = unit(100, "bigpts"),
-#                       height = unit(20, "bigpts")))
-# grid.draw(auc_legend)
-# grid.text("Cluster solution (K)",
-#           x = unit(1.0, "npc"),
-#           y = unit(0.25, "npc"),
-#           just = "right",
-#           gp = gpar(fontsize = 6))
-# popViewport()
-
-
-# grid.text(label = c("A", "B"),
-#           x = unit(c(6, 6), "bigpts"),
-#           y = unit(c(fig_height_pt - 10, fig_height_pt - panel_label_height - panel_auc_height), "bigpts"),
-#           gp = gpar(fontsize = 10, fontface = "bold"))
-
 invisible(dev.off())
 ```
+
+
+```{r}
+outfile <- paste0(outfile_prefix, ".png")
+outfile <- file.path(output_dir, outfile)
+png(file = outfile,
+    width = fig_width_in,
+    height = fig_height_in,
+    units = "in",
+    res = 600)
+grid.draw(fig_grob)
+invisible(dev.off())
+```
+
 
 
 # PCA things
