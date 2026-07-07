@@ -1060,6 +1060,7 @@ for (i in 1:length(list_lda)) {
 }
 ```
 
+
 # Panel: PCA
 
 ```{r}
@@ -1735,7 +1736,6 @@ grid.draw(fig_grob)
 invisible(dev.off())
 ```
 
-
 ```{r}
 outfile <- paste0(outfile_prefix, ".png")
 outfile <- file.path(output_dir, outfile)
@@ -1747,8 +1747,6 @@ png(file = outfile,
 grid.draw(fig_grob)
 invisible(dev.off())
 ```
-
-
 
 # PCA things
 
@@ -1973,26 +1971,3 @@ ggplot(df_pca_full_means, aes(x = x, y = y, col = group, shape = dataset)) +
   theme_bw()
 ```
 
-```{r}
-library(ggbiplot)
-
-ggbiplot(hbn_pca_out, groups = df_hbn_pca$group, ellipse = TRUE) +
-  theme_bw()
-```
-
-```{r}
-ggbiplot(pond_pca_out, groups = df_pond_pca$group, ellipse = TRUE, circle = TRUE) +
-  theme_bw()
-```
-
-```{r}
-as_tibble(pond_pca_out$rotation, rownames = "measure") %>% 
-  arrange(desc(abs(PC1))) %>% 
-  filter(measure %in% pond_common_cols)
-```
-
-```{r}
-as_tibble(hbn_pca_out$rotation, rownames = "measure") %>% 
-  arrange(desc(abs(PC1))) %>% 
-  filter(measure %in% hbn_common_cols)
-```
