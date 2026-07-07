@@ -478,7 +478,6 @@ grid.text(label = c("A", "B", "C"),
 invisible(dev.off())
 ```
 
-
 # Figure eigengap + ARI with inset
 
 ```{r}
