@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Figure 2"
 output: html_document
 date: "2025-10-08"
 ---
@@ -11,40 +11,42 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Initialization
 
-```{r}
-library(tidyverse)
-library(RMINC)
-library(ggalluvial)
-library(patchwork)
-library(MRIcrotome)
-library(grid)
-library(gridExtra)
-library(RColorBrewer)
-library(ggnewscale)
+```{r packages}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+suppressPackageStartupMessages(library(ggalluvial))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(MRIcrotome))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(ggnewscale))
 ```
 
-```{r}
+```{r environment}
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
 SRCPATH <- Sys.getenv("SRCPATH")
 ```
 
-```{r}
+```{r functions}
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
 source(file.path(SRCPATH, "analysis.R"))
 ```
 
-```{r}
-outfile_prefix <- "figure2"
+```{r paths}
+# Output file name and directory
+outfile_prefix <- "figure_2"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
-```
 
-```{r}
+# Path to cross-species directory
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
 
+# Human datasets
 human_datasets <- c("POND", "HBN")
 
+# Pipeline parameter sets
 params_ids <- c("POND" = "375", "HBN" = "861")
 # params_ids <- c("POND" = "852", "HBN" = "021")
 metadata <- file.path(pipeline_dir, "metadata.csv")
@@ -56,57 +58,33 @@ for (i in 1:length(params_ids)) {
   human_params_ids[i] <- pipeline_params[["input_1_id"]]
 }
 mouse_params_id <- pipeline_params[["input_2_id"]]
-```
 
-```{r}
+# Human pipeline directories
 human_pipeline_dirs <- file.path(PROJECTPATH, "data/human/derivatives/v3/", human_params_ids)
-
 human_cluster_dirs <- file.path(human_pipeline_dirs, "clusters", "resolution_3.0")
 human_centroid_dirs <- file.path(human_pipeline_dirs, "centroids", "resolution_0.8")
-```
 
-```{r}
+# Mouse pipeline directory
 mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/", mouse_params_id)
-
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters", "resolution_0.2")
 mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids", "resolution_0.05")
-```
 
-
-```{r}
 # Total figure dimensions in pts
 fig_width <- 612
-fig_height <- 792
-
-# Figure border dimensions in pts
-border_padding_width <- 4
-border_padding_height <- border_padding_width
-
-# Vertical padding between panels
-# panel_padding_height <- 50
-panel_padding_height <- border_padding_height
-
-# Total width and height of all panels, excluding padding
-panel_tot_width <- fig_width - 2*border_padding_width
-panel_tot_height <- fig_height - 2*border_padding_height - 2*panel_padding_height
-
-# Individual panel height
-panel_height <- panel_tot_height/3
-```
-
-```{r}
-nk_subset <- c(2, 6, 8)
 ```
 
 
-# Cluster similarity
+# Import clusters
 
-```{r eval = TRUE}
+```{r mouse-clusters, eval = TRUE}
+# Import mouse clusters
 mouse_cluster_file <- file.path(mouse_cluster_dir, "clusters.csv")
 df_mouse_clusters <- read_csv(mouse_cluster_file, show_col_types = FALSE)
 
+# Import updated mouse cluster labels
 df_mouse_cluster_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/MICe_cluster_labels_colours.xlsx"))
 
+# Clean up mouse cluster labels
 df_mouse_cluster_labels <- df_mouse_cluster_labels %>% 
   separate(col = "cluster_id", into = c("nk_old", "k_old"), remove = FALSE) %>% 
   separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
@@ -118,13 +96,13 @@ df_mouse_cluster_labels <- df_mouse_cluster_labels %>%
 df_mouse_cluster_labels
 ```
 
-
-
-```{r eval = TRUE}
+```{r human_clusters, eval = TRUE}
+# Import human clusters
 human_cluster_files <- file.path(human_cluster_dirs, "clusters.csv")
 list_human_clusters <- map(human_cluster_files, read_csv, show_col_types = FALSE)
 names(list_human_clusters) <- human_datasets
 
+# Convert human clusters to long format
 list_human_clusters_long <- map(.x = list_human_clusters, 
     .f = function(x) {
       x %>% 
@@ -133,15 +111,13 @@ list_human_clusters_long <- map(.x = list_human_clusters,
         select(-nk_name) %>%
         unite(col = "cluster_id", "nk", "k", sep = "-", remove = FALSE)
     })
-
-df_POND_cluster_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/POND_cluster_labels_colours.xlsx"))
-
-df_HBN_cluster_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/HBN_cluster_labels_colours.xlsx"))
-
-
 ```
 
+
+# Mouse-human similarity
+
 ```{r eval = TRUE}
+# Import cross-species similarity data
 list_similarity <- vector(mode = "list", length = length(human_datasets))
 names(list_similarity) <- human_datasets
 for (i in 1:length(list_similarity)) {
@@ -175,7 +151,6 @@ for (i in 1:length(list_similarity)) {
   
 }
 ```
-
 
 ```{r}
 matches_pond <- list_similarity$POND %>% 
@@ -237,20 +212,12 @@ df_cluster_groups_matches <- df_cluster_groups %>%
   select(mouse_cluster_id, nk, k, group)
 ```
 
+
+# Mouse Sankey
+
 ```{r}
-col2hex <- function(x, alpha = FALSE) {
-  args <- as.data.frame(t(col2rgb(x, alpha = alpha)))
-  args <- c(args, list(names = x, maxColorValue = 255))
-  do.call(rgb, args)
-}
-
-col2hex("springgreen4")
-col2hex("darkorchid1")
-col2hex("seagreen2")
+nk_subset <- c(2, 6, 8)
 ```
-
-
-# MICe Sankey
 
 ```{r}
 # Convert cluster information to long format
@@ -321,57 +288,6 @@ plt_mouse_sankey <- ggplot(df_mouse_sankey,
         panel.ontop = FALSE)
 
 plt_mouse_sankey
-```
-
-
-```{r}
-# df_mouse_sankey <- df_mouse_sankey %>% 
-#   mutate(nk = factor(nk), k = factor(k))
-# 
-# stratum_width <- 0.7
-# 
-# palette <- c("A" = "springgreen4",
-#              "B" = "sienna2",
-#              "C" = "seagreen2",
-#              "D" = "darkorchid1")
-# 
-# # palette <- c("A" = "springgreen4",
-# #              "B" = "seagreen2",
-# #              "C" = "#446F87",
-# #              "D" = "darkorchid1")
-# 
-# # Mouse cluster Sankey plot
-# plt_mouse_sankey <- ggplot(df_mouse_sankey,
-#                            aes(x = nk,
-#                                stratum = k,
-#                                alluvium = ID,
-#                                fill = group,
-#                                label = k)) + 
-#   geom_flow(stat = "alluvium", aes.flow = "backward", width = stratum_width, col = "grey30", linewidth = 0.15) + 
-#   geom_stratum(alpha = 1, width = stratum_width) +
-#   # geom_stratum(mapping = aes(col = group), alpha = 1, width = stratum_width) +
-#   # scale_x_discrete(position = "top") + 
-#   scale_x_discrete(position = "top", 
-#                    expand = expansion(add = c(stratum_width/2+0.020, stratum_width/2+0.005))) +
-#   scale_y_continuous(breaks = c(seq(0, 130, by = 20), nrow(df_mouse_clusters)),
-#                      expand = expansion(add = c(3, 2))) + 
-#   scale_fill_manual(values = palette, na.value = "grey80") + 
-#   scale_colour_manual(values = palette) + 
-#   labs(x = "Mouse clusters",
-#        y = "Number of models") + 
-#   # theme_void() + 
-#   theme_bw() +
-#   theme(panel.grid.major.x = element_blank(),
-#         panel.grid = element_blank(),
-#         legend.position = "none",
-#         panel.border = element_blank(),
-#         axis.text.x = element_blank(),
-#         axis.ticks.x = element_blank(),
-#         axis.title.x = element_blank(),
-#         axis.line.y.left = element_line(colour = "grey50"),
-#         panel.ontop = FALSE)
-# 
-# plt_mouse_sankey
 ```
 
 
