@@ -184,6 +184,11 @@ peakMotifData <- peaks2 %>%
          percMax = (n/totaln)*100) %>% 
   ungroup()
 
+peakMotifData %>% 
+  select(motif, lb, n, totaln, percMax)
+```
+
+```{r}
 df_peaks_plt <- peakMotifData %>% 
   mutate(motif = factor(motif, levels = motif_lvls))
 
