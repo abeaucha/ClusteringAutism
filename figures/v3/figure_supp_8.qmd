@@ -24,7 +24,7 @@ SRCPATH <- Sys.getenv("SRCPATH")
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure_S7"
+outfile_prefix <- "figure_S8"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```

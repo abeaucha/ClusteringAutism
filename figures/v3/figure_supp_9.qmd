@@ -59,7 +59,7 @@ consolidate_visits <- function(df, cols) {
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure_S8"
+outfile_prefix <- "figure_S9"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```
@@ -75,11 +75,9 @@ demographics <- read_csv(demographics, show_col_types = FALSE)
 demographics
 ```
 
-
 # Univariate clinical measures
 
 ## POND+
-
 
 ```{r}
 file <- "data/human/derivatives/v3/700/clusters/resolution_3.0/clusters.csv"
@@ -479,7 +477,6 @@ file <- "data/human/derivatives/v3/013/clusters/resolution_3.0/clusters.csv"
 file <- file.path(PROJECTPATH, file)
 df_clusters_hbn <- read_csv(file, show_col_types = FALSE)
 ```
-
 
 ```{r}
 list_HBN_assessments <- list(
@@ -896,7 +893,6 @@ plt_hbn_univariate <- ggplot(df_kw_plt_hbn, aes(x = factor(nk), y = fct_rev(labe
 
 # plt_hbn_univariate
 ```
-
 
 # Figure
 
