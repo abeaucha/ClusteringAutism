@@ -113,10 +113,31 @@ list_human_clusters_long <- map(.x = list_human_clusters,
     })
 ```
 
+```{r cluster-groups}
+# Mouse clusters corresponding to different groups/streams
+list_cluster_groups <- list("A" = c("5-1", "6-1", "7-1", "8-1", "9-1", "10-1"),
+                            "B" = c("5-3", "6-3", "7-3", "8-5", "9-4", "10-3"),
+                            "C" = c("5-5", "6-4", "7-4", "8-2", "9-5", "10-5"),
+                            "D" = c("5-4", "6-5", "7-7", "8-6", "9-2", "10-4"))
+
+# Convert list of cluster groups to data frame
+df_cluster_groups <- as_tibble(list_cluster_groups) %>% 
+  pivot_longer(cols = everything(), names_to = "group", values_to = "mouse_cluster_id")
+
+# Include groups for K = 2 and 4
+df_cluster_groups <- bind_rows(tibble(group = c("A", "D"), 
+                                      mouse_cluster_id = c("2-1", "2-2")),
+                               tibble(group = c("D", "B", "A"),
+                                      mouse_cluster_id = c("4-1", "4-3", "4-4")),
+                               df_cluster_groups) %>% 
+  separate(col = "mouse_cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
+  mutate(nk = as.numeric(nk), k = as.numeric(k))
+```
+
 
 # Mouse-human similarity
 
-```{r eval = TRUE}
+```{r mouse-human-similarity}
 # Import cross-species similarity data
 list_similarity <- vector(mode = "list", length = length(human_datasets))
 names(list_similarity) <- human_datasets
@@ -152,61 +173,26 @@ for (i in 1:length(list_similarity)) {
 }
 ```
 
-```{r}
-matches_pond <- list_similarity$POND %>% 
-  filter(match) %>% 
-  select(mouse_cluster_id, mouse_nk, mouse_k) %>% 
-  distinct() %>% 
-  arrange(mouse_nk, mouse_k) %>% 
-  pull(mouse_cluster_id)
-
-matches_hbn <- list_similarity$HBN %>% 
-  filter(match) %>% 
-  select(mouse_cluster_id, mouse_nk, mouse_k) %>% 
-  distinct() %>% 
-  arrange(mouse_nk, mouse_k) %>% 
-  pull(mouse_cluster_id)
-
-matches_both <- intersect(matches_pond, matches_hbn)
-
-matches_both
-length(matches_both)
-```
-
-
-```{r}
-list_cluster_groups <- list("A" = c("5-1", "6-1", "7-1", "8-1", "9-1", "10-1"),
-                            "B" = c("5-3", "6-3", "7-3", "8-5", "9-4", "10-3"),
-                            "C" = c("5-5", "6-4", "7-4", "8-2", "9-5", "10-5"),
-                            "D" = c("5-4", "6-5", "7-7", "8-6", "9-2", "10-4"))
-
-
-df_cluster_groups <- as_tibble(list_cluster_groups) %>% 
-  pivot_longer(cols = everything(), names_to = "group", values_to = "mouse_cluster_id")
-
-df_cluster_groups <- bind_rows(tibble(group = c("A", "D"), 
-                                      mouse_cluster_id = c("2-1", "2-2")),
-                               tibble(group = c("D", "B", "A"),
-                                      mouse_cluster_id = c("4-1", "4-3", "4-4")),
-                               df_cluster_groups) %>% 
-  separate(col = "mouse_cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) %>% 
-  mutate(nk = as.numeric(nk), k = as.numeric(k))
-
+```{r cluster-groups-similarity}
+# Identify mouse clusters with matches in POND
 has_match_pond <- list_similarity[[1]] %>% 
   filter(match) %>% 
   pull(mouse_cluster_id) %>% 
   unique()
 
+# Identify mouse clusters with matches in HBN
 has_match_hbn <- list_similarity[[2]] %>% 
   filter(match) %>% 
   pull(mouse_cluster_id) %>% 
   unique()
 
+# Add cross-species match information to cluster groups
 df_cluster_groups <- df_cluster_groups %>% 
   mutate(pond_match = mouse_cluster_id %in% has_match_pond,
          hbn_match = mouse_cluster_id %in% has_match_hbn,
          has_match = pond_match | hbn_match)
 
+# Filter cluster groups for those with matches
 df_cluster_groups_matches <- df_cluster_groups %>% 
   filter(has_match) %>% 
   select(mouse_cluster_id, nk, k, group)
@@ -215,7 +201,7 @@ df_cluster_groups_matches <- df_cluster_groups %>%
 
 # Mouse Sankey
 
-```{r}
+```{r sankey-prep}
 # Subset of cluster solutions to include
 nk_subset <- c(2, 6, 8)
 
@@ -237,33 +223,36 @@ df_mouse_sankey <- df_mouse_sankey %>%
   select(ID, cluster_id = cluster_id_new, nk = nk_new, k = k_new) %>%
   mutate(nk = factor(nk), k = factor(k))
 
-df_mouse_sankey
-```
 
 
-```{r}
+# Create palette for Sankey diagram
 df_palette <- df_mouse_cluster_labels %>% 
   filter(nk_old %in% nk_subset) %>% 
-  left_join(df_cluster_groups_matches %>% select(cluster_id = mouse_cluster_id, group),
+  left_join(df_cluster_groups_matches %>% 
+              select(cluster_id = mouse_cluster_id, group),
             by = "cluster_id") %>% 
   mutate(colour = ifelse(is.na(group), "grey80", colour)) %>% 
   select(cluster_id = cluster_id_new, nk = nk_new, k = k_new, colour)
 
+# Extract palette
 palette <- df_palette[["colour"]]
 names(palette) <- df_palette$cluster_id
-
 ```
 
-```{r}
+
+```{r sankey-plot}
+# Width of Sankey strata
 stratum_width <- 0.7
 
+# Generate Sankey
 plt_mouse_sankey <- ggplot(df_mouse_sankey,
                            aes(x = nk,
                                stratum = k,
                                alluvium = ID,
                                fill = cluster_id,
                                label = k)) + 
-  geom_flow(stat = "alluvium", aes.flow = "backward", width = stratum_width, col = "grey30", linewidth = 0.15) + 
+  geom_flow(stat = "alluvium", aes.flow = "backward", 
+            width = stratum_width, col = "grey30", linewidth = 0.15) + 
   geom_stratum(alpha = 1, width = stratum_width) +
   scale_x_discrete(position = "top", 
                    expand = expansion(add = c(stratum_width/2+0.020, stratum_width/2+0.005))) +
@@ -273,7 +262,6 @@ plt_mouse_sankey <- ggplot(df_mouse_sankey,
   scale_colour_manual(values = palette) + 
   labs(x = "Mouse clusters",
        y = "Number of models") + 
-  # theme_void() + 
   theme_bw() +
   theme(panel.grid.major.x = element_blank(),
         panel.grid = element_blank(),
@@ -288,7 +276,7 @@ plt_mouse_sankey <- ggplot(df_mouse_sankey,
 # Convert Sankey ggplot to grob
 mouse_sankey_grob <- ggplotGrob(plt_mouse_sankey)
 
-
+# Create a set of labels for Sankey clusters
 list_sankey_labels <- vector(mode = "list", length = length(nk_subset))
 names(list_sankey_labels) <- nk_subset
 for (i in 1:length(nk_subset)) {
@@ -298,18 +286,26 @@ for (i in 1:length(nk_subset)) {
   )
 }
 
-sankey_layout <- rbind(c(01, 01, 01, 01, 01, 01, 01),
-                       c(02, 03, 04, 05, 06, 07, 08),
-                       c(09, 09, 09, 09, 09, 09, 09))
 
+# Sankey panel heights
 sankey_heights <- c(30, 20, 435)
+
+# Sankey panel widths
 sankey_label_width <- 146
 sankey_border_width_l <- 43
 sankey_border_width_r <- 6
 sankey_padding_width <- (fig_width - 3*sankey_label_width - sankey_border_width_r - sankey_border_width_l)/2
+sankey_widths <- c(sankey_border_width_l, sankey_label_width, 
+                   sankey_padding_width, sankey_label_width, 
+                   sankey_padding_width, sankey_label_width, 
+                   sankey_border_width_r)
 
-sankey_widths <- c(sankey_border_width_l, sankey_label_width, sankey_padding_width, sankey_label_width, sankey_padding_width, sankey_label_width, sankey_border_width_r)
+# Sankey panel layout
+sankey_layout <- rbind(c(01, 01, 01, 01, 01, 01, 01),
+                       c(02, 03, 04, 05, 06, 07, 08),
+                       c(09, 09, 09, 09, 09, 09, 09))
 
+# Sankey grobs
 sankey_grob <- arrangeGrob(textGrob(label = "Mouse clusters", x = ),
                            zeroGrob(),
                            list_sankey_labels[["2"]],
@@ -329,7 +325,7 @@ sankey_grob <- arrangeGrob(textGrob(label = "Mouse clusters", x = ),
 
 ## Mouse slices
 
-```{r}
+```{r mouse-neuro-params}
 # Jacobians to display
 jacobians <- "relative"
 
@@ -376,7 +372,8 @@ mouse_slc_dim <- 1
 mouse_slc <- 92
 ```
 
-```{r}
+```{r mouse-neuro-slices}
+# Import slices for different K-k
 list_mouse_slices <- vector(mode = "list", length = length(nk_subset))
 names(list_mouse_slices) <- nk_subset
 for (i in 1:length(list_mouse_slices)) {
@@ -385,14 +382,17 @@ for (i in 1:length(list_mouse_slices)) {
   list_mouse_slices[[i]] <- vector(mode = "list", length = nki)
   for (k in 1:nki) {
     
+    # Get initial cluster K
     nk_init <- df_mouse_cluster_labels %>% 
       filter(nk_new == nki, k_new == k) %>% 
       pull(nk_old)
     
+    # Get initial cluster k
     k_init <- df_mouse_cluster_labels %>% 
       filter(nk_new == nki, k_new == k) %>% 
       pull(k_old)
     
+    # Import centroid image
     img <- import_cluster_map(imgdir = mouse_centroid_dir,
                               mask = mouse_mask_file,
                               nk = nk_init, k = k_init, 
@@ -406,8 +406,10 @@ for (i in 1:length(list_mouse_slices)) {
     overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
     overlay_threshold <- round(overlay_threshold, 2)
     
+    # Convert image to mincArray
     img <- mincArray(img)
     
+    # Generate slice grob
     img_grob <- sliceSeries(nrow = 1, ncol = 1, 
                             dimension = mouse_slc_dim, 
                             slices = mouse_slc) %>% 
@@ -427,7 +429,7 @@ for (i in 1:length(list_mouse_slices)) {
 
 ## Human slices
 
-```{r}
+```{r human-neuro-params}
 # Jacobians to display
 jacobians <- "relative"
 
@@ -481,7 +483,8 @@ human_slc <- list(
 
 ```
 
-```{r}
+```{r mouse-human-matches}
+# List of mouse-human matches
 list_matches <- list(
   "POND" = tibble(mouse_cluster_id = c("2-1", "2-2", "6-1", "6-4", "6-5", "8-1", "8-2", "8-5", "8-6"),
                   human_cluster_id = c("3-3", "2-1", "7-2", "6-2", "7-1", "9-5", "8-7", "8-4", "8-2")),
@@ -494,7 +497,8 @@ list_matches <- list(
 
 ### POND
 
-```{r}
+```{r human-neuro-slices-pond}
+# Import slices for different K-k
 list_human_slices_POND <- vector(mode = "list", length = length(nk_subset))
 names(list_human_slices_POND) <- nk_subset
 for (i in 1:length(list_human_slices_POND)) {
@@ -503,26 +507,31 @@ for (i in 1:length(list_human_slices_POND)) {
   list_human_slices_POND[[i]] <- vector(mode = "list", length = nki)
   for (k in 1:nki) {
     
+    # Get initial mouse cluster K
     nk_init <- df_mouse_cluster_labels %>% 
       filter(nk_new == nki, k_new == k) %>% 
       pull(nk_old)
     
+    # Get initial mouse cluster k
     k_init <- df_mouse_cluster_labels %>% 
       filter(nk_new == nki, k_new == k) %>% 
       pull(k_old)
     
     cluster_id <- paste0(nk_init, "-", k_init)
-    # cluster_id <- paste0(nki, "-", k)
     
+    # If mouse cluster has POND match, import POND slice
     if (cluster_id %in% list_matches[["POND"]]$mouse_cluster_id) {
       
+      # Matching POND cluster
       human_cluster_id <- list_matches[["POND"]] %>% 
         filter(mouse_cluster_id == cluster_id) %>% 
         pull(human_cluster_id)
       
+      # Get cluster K and k
       human_nk <- str_split(human_cluster_id, pattern = "-")[[1]][1]
       human_k <- str_split(human_cluster_id, pattern = "-")[[1]][2]
       
+      # Import centroid image
       img <- import_cluster_map(imgdir = human_centroid_dirs[1],
                                 mask = human_mask_file,
                                 nk = human_nk, k = human_k, 
@@ -536,9 +545,11 @@ for (i in 1:length(list_human_slices_POND)) {
       overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
       overlay_threshold <- round(overlay_threshold, 2)
       
+      # Convert to mincArray and crop
       img <- mincArray(img)
       img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
       
+      # Generate slice grob
       img_grob <- sliceSeries(nrow = 1, ncol = 1, 
                               dimension = human_slc_dim, 
                               slices = human_slc[[i]][k]) %>% 
@@ -551,20 +562,20 @@ for (i in 1:length(list_human_slices_POND)) {
       list_human_slices_POND[[i]][[k]] <- img_grob
       
     } else {
-      
-      # list_human_slices_POND[[i]][[k]] <- rectGrob(gp = gpar(fill = "black", alpha = 1.0))
-      # list_human_slices_POND[[i]][[k]] <- rectGrob(gp = gpar(fill = "white", alpha = 0.6))
+
+      # If no POND match, generate empty square      
       list_human_slices_POND[[i]][[k]] <- rectGrob(gp = gpar(fill = "grey93", alpha = 1.0))
-      # list_human_slices_POND[[i]][[k]] <- zeroGrob()
     
     }
   }
 }
 ```
 
+
 ### HBN
 
-```{r}
+```{r human-neuro-slices-hbn}
+# Import slices for different K-k
 list_human_slices_HBN <- vector(mode = "list", length = length(nk_subset))
 names(list_human_slices_HBN) <- nk_subset
 for (i in 1:length(list_human_slices_HBN)) {
@@ -573,10 +584,12 @@ for (i in 1:length(list_human_slices_HBN)) {
   list_human_slices_HBN[[i]] <- vector(mode = "list", length = nki)
   for (k in 1:nki) {
     
+    # Get initial mouse cluster K
     nk_init <- df_mouse_cluster_labels %>% 
       filter(nk_new == nki, k_new == k) %>% 
       pull(nk_old)
     
+    # Get initial mouse cluster k
     k_init <- df_mouse_cluster_labels %>% 
       filter(nk_new == nki, k_new == k) %>% 
       pull(k_old)
@@ -584,8 +597,10 @@ for (i in 1:length(list_human_slices_HBN)) {
     cluster_id <- paste0(nk_init, "-", k_init)
     # cluster_id <- paste0(nki, "-", k)
     
+    # If mouse cluster has HBN match, import HBN slice
     if (cluster_id %in% list_matches[["HBN"]]$mouse_cluster_id) {
       
+      # Matching HBN cluster
       human_cluster_id <- list_matches[["HBN"]] %>% 
         filter(mouse_cluster_id == cluster_id) %>% 
         pull(human_cluster_id)
@@ -593,6 +608,7 @@ for (i in 1:length(list_human_slices_HBN)) {
       human_nk <- str_split(human_cluster_id, pattern = "-")[[1]][1]
       human_k <- str_split(human_cluster_id, pattern = "-")[[1]][2]
       
+      # Import centroid image
       img <- import_cluster_map(imgdir = human_centroid_dirs[2],
                                 mask = human_mask_file,
                                 nk = human_nk, k = human_k, 
@@ -606,9 +622,11 @@ for (i in 1:length(list_human_slices_HBN)) {
       overlay_threshold[2] <- 0.8*max(abs(img[img != 0]))
       overlay_threshold <- round(overlay_threshold, 2)
       
+      # Convert to mincArray and crop
       img <- mincArray(img)
       img <- img[slices_dim_1, slices_dim_2, slices_dim_3]
       
+      # Generate slice grob
       img_grob <- sliceSeries(nrow = 1, ncol = 1, 
                               dimension = human_slc_dim, 
                               slices = human_slc[[i]][k]) %>% 
@@ -622,6 +640,7 @@ for (i in 1:length(list_human_slices_HBN)) {
       
     } else {
       
+      # If no HBN match, generate empty square
       list_human_slices_HBN[[i]][[k]] <- rectGrob(gp = gpar(fill = "grey93", alpha = 1.0))
     
     }
@@ -633,10 +652,12 @@ for (i in 1:length(list_human_slices_HBN)) {
 
 # Figure
 
-```{r}
+```{r neuro-ss-grobs}
+# Get full height of Sankey panel
 sankey_height <- sum(sankey_heights)
 
 # Parameters for slice series
+# Slice widths, and padding between mouse and human slices
 list_ss_params <- list(
   # K = 2
   list(ss_slc_w = 44,
@@ -663,7 +684,7 @@ for (i in 1:length(list_ss_dims)) {
   
 }
 
-
+# Neuroanatomy viewport parameters
 list_vp_params <- list(
   # K = 2
   list(x = 115,
@@ -676,6 +697,7 @@ list_vp_params <- list(
        y = sankey_height - c(102, 150, 210, 260, 303, 346, 395, 447))
 )
 
+# Neuroanatomy label grobs
 list_ss_labels_params <- vector(mode = "list", length = length(list_vp_params))
 for (i in 1:length(list_ss_labels_params)) {
   list_ss_labels_params[[i]] <- textGrob(label = c("MICe", "POND+", "HBN"),
@@ -684,7 +706,7 @@ for (i in 1:length(list_ss_labels_params)) {
                                          gp = gpar(fontsize = 9, col = "white"))
 }
 
-
+# Construct viewports for neuro slices
 list_vps <- list_vp_params
 for (i in 1:length(list_vps)) {
   
@@ -706,9 +728,10 @@ for (i in 1:length(list_vps)) {
   }
 }
 
-
+# Layout for neuro slice series
 ss_layout <- rbind(1:5)
 
+# Construct grobs for each slice series
 list_ss_grobs <- vector(mode = "list", length = length(nk_subset))
 names(list_ss_grobs) <- nk_subset
 for (i in 1:length(nk_subset)) {
@@ -731,30 +754,32 @@ for (i in 1:length(nk_subset)) {
     
   }
 }
+```
 
-
-
-# BREAK
-
+```{r neuro-ss-legend}
+# Params for neuroanatomy legend
 neuro_legend_width <- 130
 neuro_legend_height <- 40
 neuro_legend_x <- 115
 neuro_legend_y <- 570 - 307
 
+# Viewport for neuro legend
 neuro_legend_vp <- viewport(x = unit(neuro_legend_x, "bigpts"),
                             y = unit(neuro_legend_y, "bigpts"),
                             width = unit(neuro_legend_width, "bigpts"),
                             height = unit(neuro_legend_height, "bigpts"))
 
-
+# Positive and negative legend colours
 neuro_legend_pos_cols <- MRIcrotome:::defaultCol()
 neuro_legend_neg_cols <- MRIcrotome:::defaultRCol()
 
+# Positive and negative legend raster matrices
 neuro_legend_pos_mat <- matrix(data = neuro_legend_pos_cols,
                                nrow = 1, ncol = length(neuro_legend_pos_cols))
 neuro_legend_neg_mat <- matrix(data = rev(neuro_legend_neg_cols), 
                                nrow = 1, ncol = length(neuro_legend_neg_cols))
 
+# Postive and negative rasters
 neuro_legend_pos_raster <- rasterGrob(neuro_legend_pos_mat, 
                                       x = 1, y = 1,
                                       height = unit(15, "bigpts"), 
@@ -766,6 +791,7 @@ neuro_legend_neg_raster <- rasterGrob(neuro_legend_neg_mat,
                                       width = unit(60, "bigpts"),
                                       just = c("left", "top"))
 
+# Legend text values and grob
 neuro_legend_text_vals <- c(-1.00, -0.19, 0.19, 1.00)
 neuro_legend_text_labs <- sprintf("%.2f", neuro_legend_text_vals)
 neuro_legend_text <- textGrob(label = neuro_legend_text_labs,
@@ -773,42 +799,52 @@ neuro_legend_text <- textGrob(label = neuro_legend_text_labs,
                               y = unit(18, "bigpts"),
                               gp = gpar(fontsize = 9, col = "white"))
 
+# Legend title grob
 neuro_legend_title <- textGrob("Effect size", 
                                x = 0.5, y = unit(5, "bigpts"),
                                gp = gpar(fontsize = 9, col = "white"))
 
+# Construct full legend grob
 neuro_legend_grob <- gTree(children = gList(neuro_legend_pos_raster,
                                             neuro_legend_neg_raster,
                                             neuro_legend_text,
                                             neuro_legend_title))
+```
 
-
-
+```{r figure}
 # BREAK
 
+# Figure heights
 sankey_height <- sum(sankey_heights)
 fig_base_heights <- sankey_height
+
+# Figure widths
 fig_base_widths <- c(8, fig_width - 8)
 
+# Figure layout
 fig_base_layout <- rbind(c(01, 01))
 
+# Figure base grob (Sankey diagram)
 fig_base_grob <- arrangeGrob(sankey_grob,
                              layout_matrix = fig_base_layout,
                              widths = unit(fig_base_widths, "bigpts"),
                              heights = unit(fig_base_heights, "bigpts"))
 
+# Combine Sankey grob and neuro slices
 fig_grobs_list <- c(list(fig_base_grob),
                     reduce(list_ss_grobs, c),
                     list_ss_labels_params)
 fig_grobs <- do.call(grobTree, fig_grobs_list)
 
+# Figure dimensions in bigpts
 fig_width_pt <- sum(fig_base_widths)
 fig_height_pt <- sum(fig_base_heights)
 
+# Figure dimensions in inches
 fig_width_in <- fig_width_pt/72
 fig_height_in <- fig_height_pt/72
 
-
+# Export figure to PDF
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -818,11 +854,9 @@ grid.draw(fig_grobs)
 pushViewport(neuro_legend_vp)
 grid.draw(neuro_legend_grob)
 popViewport()
+invisible(dev.off())
 
-dev.off()
-```
-
-```{r}
+# Export figure to PNG
 outfile <- paste0(outfile_prefix, ".png")
 outfile <- file.path(output_dir, outfile)
 png(file = outfile,
@@ -834,6 +868,5 @@ grid.draw(fig_grobs)
 pushViewport(neuro_legend_vp)
 grid.draw(neuro_legend_grob)
 popViewport()
-
-dev.off()
+invisible(dev.off())
 ```
