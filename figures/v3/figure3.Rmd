@@ -26,10 +26,12 @@ suppressPackageStartupMessages(library(ggnewscale))
 # suppressPackageStartupMessages(library(viridis))
 ```
 
-```{r env}
+```{r environment}
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
 SRCPATH <- Sys.getenv("SRCPATH")
+```
 
+```{r functions}
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
 source(file.path(SRCPATH, "analysis.R"))
@@ -64,9 +66,7 @@ for (i in 1:length(params_ids)) {
 
 # Mouse parameter set ID
 mouse_params_id <- pipeline_params[["input_2_id"]]
-```
 
-```{r paths}
 # Human directories
 human_pipeline_dirs <- file.path(PROJECTPATH, "data/human/derivatives/v3/", human_params_ids)
 human_cluster_dirs <- file.path(human_pipeline_dirs, "clusters", "resolution_3.0")
@@ -77,48 +77,18 @@ mouse_pipeline_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/", mouse
 mouse_enrichment_dir <- file.path(mouse_pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025", "950", "NeighbourhoodEnrichment")
 mouse_cluster_dir <- file.path(mouse_pipeline_dir, "clusters", "resolution_0.2")
 mouse_centroid_dir <- file.path(mouse_pipeline_dir, "centroids", "resolution_0.05")
-```
 
-```{r fig-params}
 # Subset of clustering solutions to include
 nk_subset <- c(2, 6, 8)
 
 # Total figure dimensions in pts
 fig_width <- 612
-fig_height <- 792
-
-# # Figure border dimensions in pts
-# border_padding_width <- 4
-# border_padding_height <- border_padding_width
-# 
-# # Vertical padding between panels
-# # panel_padding_height <- 50
-# panel_padding_height <- border_padding_height
-# 
-# # Total width and height of all panels, excluding padding
-# panel_tot_width <- fig_width - 2*border_padding_width
-# panel_tot_height <- fig_height - 2*border_padding_height - 2*panel_padding_height
-# 
-# # Individual panel height
-# panel_height <- panel_tot_height/3
-```
-
-```{r}
-col2hex <- function(x, alpha = FALSE) {
-  args <- as.data.frame(t(col2rgb(x, alpha = alpha)))
-  args <- c(args, list(names = x, maxColorValue = 255))
-  do.call(rgb, args)
-}
-
-col2hex("springgreen4")
-col2hex("darkorchid1")
-col2hex("seagreen2")
 ```
 
 
 # Mouse-human cluster similarity
 
-```{r import-similarity, eval = TRUE}
+```{r import-similarity}
 # Import similarity data for POND and HBN
 list_similarity <- vector(mode = "list", length = length(human_datasets))
 names(list_similarity) <- human_datasets
@@ -172,8 +142,6 @@ list_cluster_groups <- list("A" = c("5-1", "6-1", "7-1", "8-1", "9-1", "10-1"),
                             "B" = c("5-3", "6-3", "7-3", "8-5", "9-4", "10-3"),
                             "C" = c("5-5", "6-4", "7-4", "8-2", "9-5", "10-5"),
                             "D" = c("5-4", "6-5", "7-7", "8-6", "9-2", "10-4"))
-# "E" = c("5-1", "6-6", "7-6", "8-7", "9-9", "10-9"),
-# "F" = c("5-2", "6-2", "7-2", "8-8", "9-6", "10-2"))
 
 # Convert groups list to df
 df_cluster_groups <- as_tibble(list_cluster_groups) %>% 
@@ -378,9 +346,6 @@ df_pca <- as_tibble(pca_out$x) %>%
          pathway = df_pca_in$pathway,
          level = df_pca_in$level)
 
-# ggplot(df_pca, aes(x = PC1, y = PC2)) + 
-#   geom_point()
-
 # PCA threshold at which to filter for pathways
 pca_threshold <- 5
 
@@ -452,48 +417,6 @@ df_pathway_hclust <- df_pathway_hclust %>%
   select(-pathway_cluster, pathway_cluster = pathway_cluster_new)
 ```
 
-```{r mouse-meta-clusters}
-# CODE TO GENERATE CLUSTER META-CLUSTERS FROM ENRICHMENT PATTERNS
-
-# Enrichment matrix for mouse clusters with human matches
-# mat_pathways_match <-
-#   df_pathways_subset %>%
-#   filter(cluster_id %in% mouse_clusters_match) %>% 
-#   mutate(NLQ = ifelse(NLQ > 30, 30, NLQ)) %>% 
-#   select(pathway, cluster_id, NLQ) %>%
-#   pivot_wider(id_cols = pathway, names_from = "cluster_id", values_from = "NLQ") %>%
-#   mutate(pathway = factor(pathway, levels = pathway_lvls_clustered)) %>% 
-#   arrange(pathway) %>% 
-#   column_to_rownames("pathway") %>% 
-#   as.matrix()
-
-# Run hierarchical clustering for clusters
-# cluster_hc <- hclust(d = dist(t(mat_pathways_match), method = "euclidean"))
-
-# Extract cluster order according to clustering
-# cluster_lvls <- cluster_hc[["labels"]]
-# cluster_order <- cluster_hc[["order"]]
-# cluster_order <- c(1, 6, 4, 7, 10, 13, 17, 2, 9, 11, 15, 18, 22, 25, 3,
-#                    5, 8, 12, 16, 20, 24, 23, 21, 14, 19)
-# cluster_lvls_clustered <- cluster_lvls[cluster_order]
-
-# Obtain cluster cluster order at selected solution
-# df_cluster_hclust <- cutree(cluster_hc, k = 5) %>% 
-#   enframe(name = "cluster_id", value = "cluster_cluster")
-
-# Relevel clusters to follow dendrogram order
-# df_cluster_cluster_lvls <- df_cluster_hclust %>% 
-#   mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_clustered)) %>% 
-#   arrange(cluster_id) %>% 
-#   select(cluster_cluster) %>% 
-#   distinct() %>% 
-#   mutate(cluster_cluster_new = 1:nrow(.))
-# 
-# df_cluster_hclust <- df_cluster_hclust %>% 
-#   left_join(df_cluster_cluster_lvls, by = "cluster_cluster") %>% 
-#   select(-cluster_cluster, cluster_cluster = cluster_cluster_new)
-```
-
 
 # Mouse enrichment polar plots and neuroanatomy
 
@@ -519,15 +442,12 @@ df_pathway_labels <- tibble(pathway = pathway_lvls_clustered,
                                               "Rho GTPases, Miro GTPases and RHOBTB3"),
                             acronym = c("SNR", "CRS", "AIS", "SRTK", "MAPK", "SSM", "CSIS", "PPIS", 
                                         "TACS", "RPII", "ERGE", "CME", "WNT", "NSD", "GTPases"))
-```
 
 
-```{r}
 df_pathway_labels %>% 
   left_join(df_pathway_hclust, by = "pathway") %>% 
   write_csv("resources/pathways_subset.csv")
 ```
-
 
 ```{r mouse-pathways-polar-plots}
 # Filter pathway data for mouse clusters with matches
@@ -781,7 +701,7 @@ for (i in 1:length(nk_subset)) {
 
 ## Combining panel elements
 
-```{r mouse-polar-neuro-panel}
+```{r mouse-polar-neuro-panel-nk}
 # Mouse slice dimensions in pixels
 mouse_width_px <- dim(mouse_anat_vol)[2]
 mouse_height_px <- dim(mouse_anat_vol)[3]
@@ -809,7 +729,6 @@ ss_width_pt <- polar_ss_width_tot_pt/nslc_tot
 ss_height_pt <- ss_width_pt
 
 # Height of polar plot based on ss width
-# fig4_polar_height_pt <- 2*fig4_mouse_ss_width_pt
 polar_height_pt <- 2*ss_width_pt
 
 # Iterate over nk selection
@@ -836,7 +755,6 @@ for (i in 1:length(list_mouse_slices)) {
   polar_panel_widths[ind_padding] <- polar_ss_padding_pt
   
   # Heights of the panel grids
-  # fig4_neuro_panel_heights <- c(20, 3, fig4_mouse_ss_height_pt, fig4_neuro_ss_padding_pt, fig4_polar_height_pt)
   polar_panel_heights <- c(20, 3, ss_height_pt, polar_ss_padding_pt, polar_height_pt)
   
   # Build the list of grobs for the panel
@@ -880,10 +798,9 @@ for (i in 1:length(list_mouse_slices)) {
   polar_widths_nopadding[i] <- polar_panel_width
   
 }
+```
 
-
-### BREAK HERE --------
-
+```{r mouse-polar-neuro-panel}
 # Total number of grobs in the neuro-polar panel
 ngrobs <- 2*nss-1
 
@@ -942,28 +859,11 @@ pheatmap_rowclust <- pheatmap(mat = mat_pathways_norm,
 heatmap_dendrogram_row_grob <- pheatmap_rowclust[["gtable"]][["grobs"]][[1]]
 ```
 
-```{r mouse-heatmap-dendrogram-col}
-# CODE TO EXTRACT COLUMN DENDROGRAM FOR META CLUSTERS
-
-# callback <- function(hc, mat) {
-#   cluster_order <- c(1, 6, 4, 7, 10, 13, 17, 2, 9, 11, 15, 18, 22, 25, 3,
-#                      5, 8, 12, 16, 20, 24, 23, 21, 14, 19)
-#   hc$order <- cluster_order
-#   return(hc)
-# }
-# 
-# pheatmap_colclust <- pheatmap(mat = mat_pathways_match,
-#                               cluster_col = TRUE, cluster_rows = FALSE,
-#                               clustering_distance_rows = "euclidean",
-#                               cutree_cols = 5, silent = TRUE)
-# # , clustering_callback = callback)
-# 
-# heatmap_dendrogram_col_grob <- pheatmap_colclust[["gtable"]][["grobs"]][[1]]
-```
-
-```{r}
+```{r mouse-cluster-labels}
+# Import custom mouse cluster labels
 df_mouse_cluster_labels <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/MICe_cluster_labels_colours.xlsx"))
 
+# Clean up labels
 df_mouse_cluster_labels <- df_mouse_cluster_labels %>% 
   separate(col = "cluster_id", into = c("nk_old", "k_old"), remove = FALSE) %>% 
   separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
@@ -975,51 +875,41 @@ df_mouse_cluster_labels <- df_mouse_cluster_labels %>%
 df_mouse_cluster_labels
 ```
 
-
 ```{r mouse-pathways-heatmap-main}
-# Extract cluster levels
-# cluster_lvls <- df_pathways_subset %>% 
-#   select(cluster_id, nk, k) %>% 
-#     filter(cluster_id %in% mouse_clusters_match) %>%
-#   distinct() %>% 
-#   arrange(nk, k) %>% 
-#   pull(cluster_id)  
-
+# Filter for mouse matches, and include pathway clustering information
 df_pathways_heatmap <- df_pathways_subset %>% 
   filter(cluster_id %in% mouse_clusters_match) %>% 
   left_join(df_pathway_hclust, by = "pathway") %>% 
   left_join(select(df_cluster_groups, cluster_id = mouse_cluster_id, group), 
             by = "cluster_id")
 
+# Join pathway labels
 df_pathways_heatmap <- df_pathways_heatmap %>%
   left_join(df_pathway_labels, by = "pathway") %>%
   mutate(pathway_label = factor(pathway_label, levels = df_pathway_labels$pathway_label))
 
-
+# Relabel clusters with custom labels
 df_pathways_heatmap <- df_pathways_heatmap %>% 
   select(-nk, -k) %>% 
   left_join(df_mouse_cluster_labels, by = "cluster_id") %>% 
   select(-cluster_id) %>% 
   rename(cluster_id = cluster_id_new, nk = nk_new, k = k_new) 
 
+# Extract cluster label lvls
 cluster_lvls_new_labels <- df_pathways_heatmap %>% 
   select(cluster_id, nk, k) %>% 
   distinct() %>% 
   arrange(nk, k) %>% 
   pull(cluster_id)  
 
+# Convert cluster IDs to factor
 df_pathways_heatmap <- df_pathways_heatmap %>% 
   mutate(cluster_id = factor(cluster_id, levels = cluster_lvls_new_labels))
 
-```
 
-
-```{r mouse-pathways-heatmap-main}
 # Clamped enrichment statistic
 NLQ_max <- 20
 q_threshold <- 0.001
-# q_threshold <- 0.01
-# q_threshold <- 0.05
 NLQ_threshold <- -log10(q_threshold)
 df_pathways_heatmap <- df_pathways_heatmap %>% 
   mutate(intensity = ifelse(NLQ > NLQ_max, NLQ_max, NLQ))
@@ -1029,7 +919,6 @@ heatmap_fill_lab <- "Enrichment (-log10(q))"
 # Heatmap palette
 heatmap_palette_cols <- brewer.pal(n = 9, name = "OrRd")
 heatmap_palette <- colorRampPalette(colors = heatmap_palette_cols)(255)
-# heatmap_palette <- magma(n = 255, direction = -1, begin = 0.3)
 
 # Heatmap plot
 plt_heatmap <- ggplot(df_pathways_heatmap, 
@@ -1074,19 +963,11 @@ plt_heatmap <- plt_heatmap +
   theme(legend.position = "none")
 ```
 
-
 ```{r mouse-pathways-heatmap-groups}
 # Data frame for cluster groups
 df_pathways_groups <- df_pathways_heatmap  %>% 
   select(cluster_id, group) %>% 
   mutate(y = "y")
-
-# df_pathways_groups <- df_pathways_heatmap %>% 
-#   select(mouse_cluster_id = cluster_id, cluster_cluster) %>% 
-#   distinct() %>% 
-#   left_join(df_cluster_groups, by = "mouse_cluster_id") %>% 
-#   mutate(y = "y",
-#          mouse_cluster_id = factor(mouse_cluster_id, levels = cluster_lvls_clustered))
 
 # Palette for cluster groups
 palette <- c("A" = "springgreen4",
@@ -1116,35 +997,36 @@ plt_heatmap_patchwork <- (plt_heatmap_groups / plot_spacer() / plt_heatmap) +
   plot_layout(heights = c(0.05, 0.015, 0.935)) &
   theme(plot.margin = margin(l = 0))
 
+plt_heatmap_patchwork
+```
+
+
+```{r mouse-pathways-heatmap-patchwork}
 # Convert to grob
 heatmap_patchwork_grob <- patchworkGrob(plt_heatmap_patchwork)
 ```
 
 ```{r mouse-pathways-heatmap-panel}
+# Heatmap panel widths
 heatmap_left_padding_width <- 6
 heatmap_row_dendrogram_width <- 26
-# heatmap_right_padding_width <- 170
-# heatmap_main_width <- fig_width - heatmap_left_padding_width - heatmap_row_dendrogram_width - heatmap_right_padding_width
 heatmap_main_width <- fig_width - heatmap_left_padding_width - heatmap_row_dendrogram_width
-
-# heatmap_widths <- c(heatmap_left_padding_width, heatmap_row_dendrogram_width, heatmap_main_width, heatmap_right_padding_width)
 heatmap_widths <- c(heatmap_left_padding_width, heatmap_row_dendrogram_width, heatmap_main_width)
 
+# Heatmap panel heights
 heatmap_height <- 240
-
 heatmap_col_dendrogram_height <- 25
 heatmap_top_padding_height <- 16
 heatmap_bottom_padding_height <- 38
-# heatmap_main_height <- 158
 heatmap_main_height <- heatmap_height - heatmap_top_padding_height - heatmap_bottom_padding_height
-
-# heatmap_heights <- c(heatmap_col_dendrogram_height, heatmap_top_padding_height, heatmap_main_height, heatmap_bottom_padding_height)
 heatmap_heights <- c(heatmap_top_padding_height, heatmap_main_height, heatmap_bottom_padding_height)
 
+# Heatmap panel layout
 heatmap_layout <- rbind(c(1, 2, 3),
                         c(1, 4, 3),
                         c(1, 5, 3))
 
+# Heatmap grob
 heatmap_grob <- arrangeGrob(zeroGrob(), 
                             zeroGrob(), 
                             heatmap_patchwork_grob,
@@ -1154,6 +1036,7 @@ heatmap_grob <- arrangeGrob(zeroGrob(),
                             widths = unit(heatmap_widths, "bigpts"),
                             heights = unit(heatmap_heights, "bigpts"))
 
+# Full heatmap width
 heatmap_width <- sum(heatmap_widths)
 
 outfile <- paste(outfile_prefix, "heatmap", sep = "_")
@@ -1167,47 +1050,39 @@ grid.draw(heatmap_grob)
 dev.off()
 ```
 
-```{r}
-df_pathways_heatmap %>% 
-  filter(group == "D") %>% 
-  filter(pathway_label == "Chromatin modifying enzymes") %>% 
-  pull(NLQ) %>% 
-  mean()
-```
-
 
 # Figure
 
-```{r}
-# fig_layout <- cbind(1:7)
-fig_layout <- cbind(1:5)
-
+```{r figure}
+# Figure widths
 fig_widths <- fig_width
 
-# human_variants_height <- 200
+# Figure heights
 panel_padding_height <- 20
-
-# fig_heights <- c(20, polar_height_pt, panel_padding_height, heatmap_height, 10, human_variants_height, empty_height)
 fig_heights <- c(20, polar_height_pt, panel_padding_height, heatmap_height, 5)
 
+# Figure layout
+fig_layout <- cbind(1:5)
+
+# Figure grob
 fig_grob <- arrangeGrob(textGrob("Mouse clusters"),
                         polar_grob,
                         zeroGrob(),
-                        # rectGrob(gp = gpar(fill = "white")),
                         heatmap_grob, 
                         zeroGrob(),
-                        # rectGrob(gp = gpar(fill = "white")),
                         layout_matrix = fig_layout,
                         widths = unit(fig_widths, "bigpts"),
                         heights = unit(fig_heights, "bigpts"))
 
-
+# Figure dimensions in bigpts
 fig_width_pt <- sum(fig_widths)
 fig_height_pt <- sum(fig_heights)
 
+# Figure dimensions in inches
 fig_width_in <- fig_width_pt/72
 fig_height_in <- fig_height_pt/72
 
+# Export figure to PDF
 outfile <- paste0(outfile_prefix, ".pdf")
 outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
@@ -1221,7 +1096,6 @@ pushViewport(viewport(x = unit(530, "bigpts"),
                       y = unit(25, "bigpts"),
                       width = unit(132, "bigpts"),
                       height = unit(25, "bigpts")))
-# grid.rect(gp = gpar(fill = "grey70"))
 grid.draw(heatmap_legend_grob)
 grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
           x = c(0.08, 0.93), y = 0.22,
@@ -1229,10 +1103,11 @@ grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
 popViewport()
 
 
-dev.off()
-```
+invisible(dev.off())
 
-```{r}
+
+
+# Export figure to PNG
 outfile <- paste0(outfile_prefix, ".png")
 outfile <- file.path(output_dir, outfile)
 png(file = outfile,
@@ -1254,6 +1129,6 @@ grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
           gp = gpar(fontsize = 9))
 popViewport()
 
-dev.off()
+invisible(dev.off())
 ```
 
