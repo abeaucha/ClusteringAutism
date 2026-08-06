@@ -12,7 +12,6 @@ suppressPackageStartupMessages(library(grid))
 suppressPackageStartupMessages(library(gridExtra))
 suppressPackageStartupMessages(library(ggbeeswarm))
 suppressPackageStartupMessages(library(patchwork))
-# suppressPackageStartupMessages(library(viridis))
 suppressPackageStartupMessages(library(rcartocolor))
 ```
 
@@ -1060,7 +1059,6 @@ for (i in 1:length(list_lda)) {
 }
 ```
 
-
 # Panel: PCA
 
 ```{r}
@@ -1623,9 +1621,15 @@ if (i == 1) {
           strip.background = element_rect(fill = "#A9A9A9"),
           legend.position = "none")
   
+  # plt_loadings_patchwork_i <- arrangeGrob(ggplotGrob(plt_loadings_common_i),
+  #                                         ggplotGrob(plt_loadings_i),
+  #                                         heights = c(0.2, 0.8))
+  # 
+  # list_loading_plts[[i]] <- plt_loadings_patchwork_i
   
-  plt_loadings_patchwork_i <- (plt_loadings_common_i / plt_loadings_i) + plot_layout(heights = c(0.2, 0.8)) &
-    theme(plot.margin = margin(b = 0, r = 2, t = 3))
+  plt_loadings_patchwork_i <- (plt_loadings_common_i / plt_loadings_i) + plot_layout(heights = c(0.2, 0.8))
+  # &
+    # theme(plot.margin = margin(b = 0, r = 2, t = 3))
   
   
   list_loading_plts[[i]] <- patchworkGrob(plt_loadings_patchwork_i)
@@ -1640,10 +1644,7 @@ panel_label_pond <- gTree(children = gList(textGrob("POND+", x = 0.53, gp = gpar
                                            segmentsGrob(x0 = 0.10, x1 = 0.985, y0 = 0.07, y1 = 0.07)))
 panel_label_hbn <- gTree(children = gList(textGrob("HBN", x = 0.53, gp = gpar(fontsize = 8)),
                                           segmentsGrob(x0 = 0.08, x1 = 0.985, y0 = 0.07, y1 = 0.07)))
-```
 
-```{r}
-# BREAK
 
 panel_A_title <- gTree(children = gList(
   textGrob(
@@ -1734,9 +1735,8 @@ pdf(file = outfile,
     height = unit(fig_height_in, "in"))
 grid.draw(fig_grob)
 invisible(dev.off())
-```
 
-```{r}
+
 outfile <- paste0(outfile_prefix, ".png")
 outfile <- file.path(output_dir, outfile)
 png(file = outfile,
@@ -1970,4 +1970,3 @@ ggplot(df_pca_full_means, aes(x = x, y = y, col = group, shape = dataset)) +
   scale_colour_manual(values = c("darkorchid1", "seagreen2", "springgreen4")) + 
   theme_bw()
 ```
-
