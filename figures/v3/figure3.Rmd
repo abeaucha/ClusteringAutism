@@ -960,7 +960,8 @@ heatmap_legend_grob <- plt_heatmap %>%
 
 # Remove legend from original plot
 plt_heatmap <- plt_heatmap + 
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        plot.margin = margin())
 ```
 
 ```{r mouse-pathways-heatmap-groups}
@@ -988,25 +989,21 @@ plt_heatmap_groups <- ggplot(df_pathways_groups, aes(x = cluster_id, y = 1, fill
         axis.ticks = element_blank(),
         strip.background.x = element_blank(),
         strip.text.x = element_blank(),
-        legend.position = "none")
-```
-
-```{r mouse-pathways-heatmap-patchwork}
-# Combine main heatmap and cluster groups
-plt_heatmap_patchwork <- (plt_heatmap_groups / plot_spacer() / plt_heatmap) +
-  plot_layout(heights = c(0.05, 0.015, 0.935)) &
-  theme(plot.margin = margin(l = 0))
-
-plt_heatmap_patchwork
-```
-
-
-```{r mouse-pathways-heatmap-patchwork}
-# Convert to grob
-heatmap_patchwork_grob <- patchworkGrob(plt_heatmap_patchwork)
+        legend.position = "none",
+        plot.margin = margin())
 ```
 
 ```{r mouse-pathways-heatmap-panel}
+heatmap_patchwork_grob <- arrangeGrob(ggplotGrob(plt_heatmap_groups),
+                                      zeroGrob(),
+                                      zeroGrob(),
+                                      ggplotGrob(plt_heatmap),
+                                      layout_matrix = rbind(c(01, 02),
+                                                            c(03, 03),
+                                                            c(04, 04)),
+                                      widths = c(0.713, 0.287),
+                                      heights = c(0.05, 0.015, 0.935))
+
 # Heatmap panel widths
 heatmap_left_padding_width <- 6
 heatmap_row_dendrogram_width <- 26
@@ -1102,6 +1099,11 @@ grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
           gp = gpar(fontsize = 9))
 popViewport()
 
+grid.text(label = c("MAPK-WNT", "Androgen Receptor",
+                    "Synaptic-Immune", "Transcription"),
+          x = c(0.145, 0.295, 0.43, 0.625), 
+          y = 0.5,
+          gp = gpar(fontsize = 8))
 
 invisible(dev.off())
 
@@ -1128,6 +1130,12 @@ grid.text(label = c(round(NLQ_threshold, 2), round(NLQ_max, 2)),
           x = c(0.08, 0.93), y = 0.22,
           gp = gpar(fontsize = 9))
 popViewport()
+
+grid.text(label = c("MAPK-WNT", "Androgen Receptor",
+                    "Synaptic-Immune", "Transcription"),
+          x = c(0.145, 0.295, 0.43, 0.625), 
+          y = 0.5,
+          gp = gpar(fontsize = 8))
 
 invisible(dev.off())
 ```
