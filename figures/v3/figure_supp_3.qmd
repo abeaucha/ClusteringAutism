@@ -77,16 +77,6 @@ df_mouse_sankey <- df_mouse_clusters_long %>%
 
 
 
-# df_palette <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/mouse_cluster_colours.xlsx"))
-# colour_set <- 1
-# palette <- df_palette[[paste0("colour_", colour_set)]]
-# names(palette) <- df_palette$cluster_id
-# 
-# df_palette <- df_palette %>% 
-#   separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE) %>% 
-#   mutate(nk = as.numeric(nk), k = as.numeric(k))
-
-
 df_palette <- df_cluster_labels %>% 
   select(cluster_id = cluster_id_new, nk = nk_new, k = k_new, colour)
 

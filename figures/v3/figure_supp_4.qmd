@@ -84,13 +84,6 @@ df_human_sankey <- df_human_clusters_long %>%
   )
 
 
-# df_palette <- readxl::read_excel(file.path(PROJECTPATH, "figures/v3/resources/human_cluster_colours_POND.xlsx"))
-# 
-# df_palette <- df_palette %>%
-#   left_join(df_cluster_labels, by = c("cluster_id" = "cluster_id_old")) %>%
-#   select(cluster_id = cluster_id_new, nk = nk_new, k = k_new, colour) %>%
-#     mutate(nk = as.numeric(nk), k = as.numeric(k))
-
 df_palette <- df_cluster_labels %>% 
   select(cluster_id = cluster_id_new, nk = nk_new, k = k_new, colour)
 
