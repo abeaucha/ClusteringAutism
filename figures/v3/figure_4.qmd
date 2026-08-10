@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Figure 4"
 format: html
 editor: visual
 ---
@@ -136,7 +136,7 @@ group_summary <- function(x, groups, B = 1000) {
 ```
 
 ```{r outputs}
-outfile_prefix <- "figure4"
+outfile_prefix <- "figure_4"
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
 ```

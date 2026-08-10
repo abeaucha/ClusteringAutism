@@ -40,7 +40,7 @@ source(file.path(SRCPATH, "enrichment.R"))
 
 ```{r params}
 # Output file prefix
-outfile_prefix <- "figure3"
+outfile_prefix <- "figure_3"
 
 # Output directory
 output_dir <- file.path("outputs", outfile_prefix)
