@@ -106,6 +106,7 @@ bootstrap_sample_estimate <- function(x, groups = NULL, estimate = "mean",
   
 }
 
+
 bootstrap_sample_estimate_ci <- function(x, groups = NULL, estimate = "mean", 
                                          interval = c(0.025, 0.975), B = 1000, 
                                          set_seed = TRUE) {
@@ -117,37 +118,24 @@ bootstrap_sample_estimate_ci <- function(x, groups = NULL, estimate = "mean",
   colnames(bootstrap_ci) <- c("lower", "upper")
   return(bootstrap_ci)
 }
-
-group_summary <- function(x, groups, B = 1000) {
-  
-  means <- split(x = x, f = groups) %>% 
-    sapply(mean) %>% 
-    matrix(ncol = 1, nrow = length(levels(groups)))
-  colnames(means) <- "mu"
-  
-  ci <- bootstrap_sample_estimate_ci(x = x, groups = groups, B = B)
-  
-  out <- cbind(means, ci)
-  rownames(out) <- levels(groups)
-  
-  return(out)
-  
-}
 ```
 
-```{r outputs}
+```{r params}
+# Output file prefix
 outfile_prefix <- "figure_4"
+
+# Output directory
 output_dir <- file.path("outputs", outfile_prefix)
 if (!(dir.exists(output_dir))) {dir.create(path = output_dir, recursive = TRUE)}
-```
 
-```{r pipeline-paths}
+# Pipeline directory
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
 
+# Human datasets
 human_datasets <- c("POND", "HBN")
 
+# Parameter sets
 params_ids <- c("POND" = "375", "HBN" = "861")
-# params_ids <- c("POND" = "852", "HBN" = "021")
 metadata <- file.path(pipeline_dir, "metadata.csv")
 human_params_ids <- character(2)
 for (i in 1:length(params_ids)) {
@@ -167,17 +155,18 @@ human_centroid_dirs <- file.path(human_pipeline_dirs, "centroids", "resolution_0
 
 # Human registration directory
 human_registration_dir <- file.path(PROJECTPATH, "data/human/registration/v3/")
-```
 
-```{r fig-params}
+
 # Total figure dimensions in pts
 fig_width <- 7.25*72
 fig_height <- 792
 ```
 
+
 # Transcriptomic cluster similarity
 
-```{r}
+```{r import-similarity}
+# Import similarity data
 params_ids <- c(params_ids, "POND_HBN" = "779")
 list_similarity <- vector(mode = "list", length = length(params_ids))
 names(list_similarity) <- names(params_ids)
@@ -212,9 +201,11 @@ for (i in 1:length(list_similarity)) {
 
 ```
 
+
 # Import cluster information
 
-```{r}
+```{r import-clusters}
+# Import POND and HBN clusters
 list_clusters <- vector(mode = "list", length = length(human_datasets))
 names(list_clusters) <- human_datasets
 for (i in 1:length(human_datasets)) {
@@ -222,13 +213,11 @@ for (i in 1:length(human_datasets)) {
   list_clusters[[i]] <- read_csv(clusters_file, show_col_types = FALSE)
 }
 
+# Files containing new labels 
 sankey_palette_files <- c("POND_cluster_labels_colours.xlsx",
                           "HBN_cluster_labels_colours.xlsx")
 
 
-```
-
-```{r}
 df_pond_cluster_labels <- readxl::read_excel(file.path("resources", sankey_palette_files[1])) %>% 
   separate(col = "cluster_id", into = c("nk_old", "k_old"), remove = FALSE) %>% 
   separate(col = "cluster_id_new", into = c("nk_new", "k_new"), remove = FALSE) %>%
@@ -955,7 +944,6 @@ df_lda_grid <- expand_grid(dataset = human_datasets,
 list_lda <- vector(mode = "list", length = nrow(df_lda_grid))
 
 for (i in 1:length(list_lda)) {
-  # for (i in 1:2) {
   
   dataset_i <- df_lda_grid[[i, "dataset"]]
   nk_i <- df_lda_grid[[i,"nk"]]
@@ -1290,11 +1278,6 @@ ylims <- c(-1.2, 0.8)
 err_alpha <- 0.5
 
 plt_pond_pca <- ggplot() + 
-  # geom_segment(data = df_pond_pca_loadings_plt,
-  #              inherit.aes = FALSE,
-  #              mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
-  #              arrow = arrow(length = unit(3, "pt")),
-  #              linewidth = arrow_lw, col = "grey25") +
   geom_linerange(data = filter(df_pca_boot, dataset == "POND"),
                 inherit.aes = FALSE,
                 mapping = aes(x = x, y = y, ymin = y_lwr, ymax = y_upr, col = group),
@@ -1329,11 +1312,6 @@ plt_pond_pca_grob <- ggplotGrob(plt_pond_pca)
 
 
 plt_hbn_pca <- ggplot() + 
-  # geom_segment(data = df_hbn_pca_loadings_plt,
-  #              inherit.aes = FALSE,
-  #              mapping = aes(xend = PC1, yend = PC2, x = 0, y = 0),
-  #              arrow = arrow(length = unit(3, "pt")),
-  #              linewidth = arrow_lw, col = "grey25") +
   geom_linerange(data = filter(df_pca_boot, dataset == "HBN"),
                 inherit.aes = FALSE,
                 mapping = aes(x = x, y = y, ymin = y_lwr, ymax = y_upr, col = group),
@@ -1621,16 +1599,7 @@ if (i == 1) {
           strip.background = element_rect(fill = "#A9A9A9"),
           legend.position = "none")
   
-  # plt_loadings_patchwork_i <- arrangeGrob(ggplotGrob(plt_loadings_common_i),
-  #                                         ggplotGrob(plt_loadings_i),
-  #                                         heights = c(0.2, 0.8))
-  # 
-  # list_loading_plts[[i]] <- plt_loadings_patchwork_i
-  
   plt_loadings_patchwork_i <- (plt_loadings_common_i / plt_loadings_i) + plot_layout(heights = c(0.2, 0.8))
-  # &
-    # theme(plot.margin = margin(b = 0, r = 2, t = 3))
-  
   
   list_loading_plts[[i]] <- patchworkGrob(plt_loadings_patchwork_i)
   
