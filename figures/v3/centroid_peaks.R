@@ -1,62 +1,88 @@
-library(tidyverse)
-library(RMINC)
 
+# Packages
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(RMINC))
+
+# Environment
 PROJECTPATH <- Sys.getenv("PROJECTPATH")
 SRCPATH <- Sys.getenv("SRCPATH")
 
+# Functions
 source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "processing.R"))
 source(file.path(SRCPATH, "analysis.R"))
 source(file.path(SRCPATH, "enrichment.R"))
 
+# Pipeline directory
 pipeline_dir <- file.path(PROJECTPATH, "data/cross_species/v3")
 
+# Human datasets
 human_datasets <- c("POND", "HBN")
 
+# Parameter set IDs
 params_ids <- c(POND = "375", HBN = "861")
 
+# Output directory
+output_dir <- "figures/v3/resources/"
+output_dir <- file.path(PROJECTPATH, output_dir)
 
-# New labels ------
 
+# MICe cluster labels ----------------------------------------------------------
+
+# Import mouse cluster labels
 file <- "figures/v3/resources/MICe_cluster_labels_colours.xlsx"
 df_mouse_labels <- readxl::read_excel(file)
 
-df_cluster_groups <- tibble(colour = c("darkorchid1", "springgreen4", "seagreen2", "sienna2"),
-                            motif = c("transcription", "MAPK-WNT", "synaptic-immune", "androgen"))
+# Define mouse cluster group names and colours
+df_cluster_groups <- tibble(
+  colour = c("darkorchid1", "springgreen4", "seagreen2", "sienna2"),
+  motif = c("transcription", "MAPK-WNT", "synaptic-immune", "androgen")
+)
 
 
-# Centroid peaks -------
+# Compute centroid peaks ------------------------------------------------------
 
+# Mouse centroid directory
 mouse_centroid_dir <- "data/mouse/derivatives/v3/107/centroids/scanbase/resolution_0.2/"
 
+# Max K and Jacobians type
 nk_max <- 10
 jacobians <- "relative"
 
+# Find peaks for all cluster centroids across all solutions
 df_peaks_all <- tibble()
 for (nk in 2:nk_max) {
   for (k in 1:nk) {
     
+    # Current centroid file
     centroid_file <- paste0("centroid_nk_", nk, "_k_", k, ".mnc")
     centroid_file <- file.path(mouse_centroid_dir, jacobians, centroid_file)
     
+    # Find peaks for given centroid
     df_peaks <- mincFindPeaks(inputStats = centroid_file)
     
+    # Convert to tibble
     df_peaks <- df_peaks %>% 
       as_tibble() %>% 
       mutate(nk = nk, k = k)
     
+    # Join with previous iteration
     df_peaks_all <- bind_rows(df_peaks_all, df_peaks)
     
   }
 }  
 
 
-# Atlas labels ------
+# Include DSURQE atlas labels -------------------------------------------------
 
+# Labels file
 labels <- "data/mouse/registration/reference_files/scanbase_second_level-nlin-3_labels_200um.mnc"
+
+# Import atlas label definitions
 defs <- "data/mouse/registration/reference_files/DSURQE_40micron_R_mapping.csv"
 defs <- read_csv(defs, show_col_types = FALSE)
 
+# Fix laterality
 defs_unilat <- defs %>% 
   filter(`right label` != `left label`)
 
@@ -74,6 +100,7 @@ defs_bilat <- defs %>%
 
 defs <- bind_rows(defs_right, defs_left, defs_bilat)
 
+# Get atlas labels at all peak locations
 df_peaks_all <- df_peaks_all %>% 
   mutate(label = 0, structure = "")
 for (i in 1:nrow(df_peaks_all)) {
@@ -98,8 +125,9 @@ for (i in 1:nrow(df_peaks_all)) {
 }
 
 
-# Effect sizes -------
+# Mouse model effect sizes ----------------------------------------------------
 
+# Effect size dir and files
 es_dir <- "data/mouse/derivatives/v3/107/effect_sizes/200/"
 es_files <- list.files(es_dir, pattern = "Relative_200.mnc")
 model_names <- es_files %>%
@@ -108,6 +136,7 @@ model_names <- es_files %>%
 es_mat <- matrix(data = 0, nrow = nrow(df_peaks_all), ncol = length(es_files))
 colnames(es_mat) <- model_names
 
+# Get the value of each effect size at every peak voxel
 for (i in 1:nrow(df_peaks_all)) {
 
   if (i %% 200 == 0) {message(paste0("i = ", i))}
@@ -124,9 +153,9 @@ for (i in 1:nrow(df_peaks_all)) {
 df_peaks_all <- bind_cols(df_peaks_all, as_tibble(es_mat))
 
 
-# Similarity ----
+# Mouse-human similarity ------------------------------------------------------
 
-
+# Import mouse-human similarity for POND and HBN
 list_similarity <- vector(mode = "list", length = length(params_ids))
 names(list_similarity) <- names(params_ids)
 for (i in 1:length(list_similarity)) {
@@ -158,6 +187,7 @@ for (i in 1:length(list_similarity)) {
   
 }  
 
+# Identify POND matches
 df_similarity_POND <- list_similarity[["POND"]]
 colnames(df_similarity_POND) <- str_replace(colnames(df_similarity_POND), "img1", "POND")
 colnames(df_similarity_POND) <- str_replace(colnames(df_similarity_POND), "img2", "MICe")
@@ -166,10 +196,11 @@ df_match_POND <- df_similarity_POND %>%
   group_by(nk, k) %>% 
   summarise(POND_match = any(match), .groups = "drop")
 
-
 outfile <- "MICe_POND_similarity.csv"
+outfile <- file.path(output_dir, outfile)
 write_csv(x = df_similarity_POND, file = outfile)
 
+# Identify HBN matches
 df_similarity_HBN <- list_similarity[["HBN"]]
 colnames(df_similarity_HBN) <- str_replace(colnames(df_similarity_HBN), "img1", "HBN")
 colnames(df_similarity_HBN) <- str_replace(colnames(df_similarity_HBN), "img2", "MICe")
@@ -179,36 +210,49 @@ df_match_HBN <- df_similarity_HBN %>%
   summarise(HBN_match = any(match), .groups = "drop")
 
 outfile <- "MICe_HBN_similarity.csv"
+outfile <- file.path(output_dir, outfile)
 write_csv(x = df_similarity_HBN, file = outfile)
 
 
+# Combine peaks information ---------------------------------------------------
+
+# Join POND and HBN match information to peaks data
 df_peaks_all <- df_peaks_all %>% 
   left_join(df_match_POND, by = c("nk", "k")) %>% 
   left_join(df_match_HBN, by = c("nk", "k")) 
 
+# Clean up columns
 df_peaks_all <- df_peaks_all %>%
-  select(nk, k, POND_match, HBN_match, d1, d2, d3, x, y, z, label, structure, peak = value, `15q_pDp`:Wdfy3_HET)
+  select(nk, k, POND_match, HBN_match, 
+         d1, d2, d3, x, y, z, 
+         label, structure, peak = value, 
+         `15q_pDp`:Wdfy3_HET)
 
+# Add new cluster labels
 df_peaks_tmp <- df_peaks_all %>% 
-  unite(col = "cluster_id", nk, k, sep = "-", remove = TRUE)
-
-df_peaks_tmp <- df_peaks_tmp %>%  
+  unite(col = "cluster_id", nk, k, sep = "-", remove = TRUE) %>% 
   left_join(select(df_mouse_labels, -colour), by = "cluster_id") %>% 
   select(-cluster_id) %>% 
   rename(cluster_id = cluster_id_new) %>% 
   separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE)
 
+# Clean up columns
 df_peaks_tmp <- df_peaks_tmp %>%  
-  select(cluster_id, nk, k, POND_match, HBN_match, d1, d2, d3, x, y, z, label, structure, peak, `15q_pDp`:Wdfy3_HET)
+  select(cluster_id, nk, k, POND_match, HBN_match, 
+         d1, d2, d3, x, y, z, 
+         label, structure, peak, 
+         `15q_pDp`:Wdfy3_HET)
 
 # outfile <- "MICe_peaks.csv"
+# outfile <- file.path(output_dir, outfile)
 # write_csv(df_peaks_all, file = outfile)
 
 outfile <- "MICe_peaks_new_cluster_labs.csv"
+outfile <- file.path(output_dir, outfile)
 write_csv(df_peaks_tmp, file = outfile)
 
 
-# Enrichment ------
+# Molecular pathway enrichment ------------------------------------------------
 
 # Path to base enrichment dir
 enrichment_dir <- file.path(PROJECTPATH, "data", "enrichment")
@@ -335,9 +379,11 @@ df_pathways_new_labs <- df_pathways_all %>%
   separate(col = "cluster_id", into = c("nk", "k"), remove = FALSE)
 
 # outfile <- "MICe_pathways.csv"
+# outfile <- file.path(output_dir, outfile)
 # write_csv(df_pathways_all, file = outfile)
 
 outfile <- "MICe_pathways_new_cluster_labs.csv"
+outfile <- file.path(output_dir, outfile)
 write_csv(df_pathways_new_labs, file = outfile)
 
 
@@ -355,6 +401,7 @@ df_mouse_motifs <- df_mouse_labels %>%
   select(-colour)
 
 outfile <- "MICe_motifs_new_cluster_labs.csv"
+outfile <- file.path(output_dir, outfile)
 write_csv(df_mouse_motifs, file = outfile)
 
 
