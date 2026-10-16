@@ -1,5 +1,8 @@
 #!/bin/bash
 
+set -eo pipefail
+trap 'echo "Setup failed at line $LINENO" >&2' ERR
+
 # Path to conda installation
 CONDA_PATH=$(conda info --base)
 
@@ -7,7 +10,7 @@ CONDA_PATH=$(conda info --base)
 source "${CONDA_PATH}"/etc/profile.d/conda.sh
 
 # Environment names 
-MINC_ENV_NAME="clustering-autism-minc-env"
+MINC_ENV_NAME="minc-env"
 ENV_NAME="clustering-autism-env"
 
 # Environment paths
@@ -15,8 +18,31 @@ MINC_ENV_PATH=${CONDA_PATH}/envs/${MINC_ENV_NAME}
 ENV_PATH=${CONDA_PATH}/envs/${ENV_NAME}
 
 # Create MINC environment and install minc-toolkit-v2
-echo -e "\nBuilding MINC environment..."
-conda create -n $MINC_ENV_NAME -c minc-forge minc-toolkit-v2 -y
+if [ -d "${MINC_ENV_PATH}/conda-meta" ]; then
+  echo -e "\nMINC environment ${MINC_ENV_NAME} already exists; skipping creation."
+else
+  echo -e "\nBuilding MINC environment..."
+  conda create -n "$MINC_ENV_NAME" -c minc-forge minc-toolkit-v2 -y
+fi
+
+# Validate both newly created and reused MINC environments.
+for tool in autocrop perl mincinfo mincresample mincreshape; do
+  if [ ! -x "${MINC_ENV_PATH}/bin/${tool}" ]; then
+    echo "Missing MINC dependency: ${MINC_ENV_PATH}/bin/${tool}" >&2
+    echo "Repair the ${MINC_ENV_NAME} environment before rerunning setup." >&2
+    exit 1
+  fi
+done
+
+(
+  export PATH="${MINC_ENV_PATH}/bin:$PATH"
+  export PERL5LIB="${MINC_ENV_PATH}/perl:${MINC_ENV_PATH}/pipeline${PERL5LIB:+:$PERL5LIB}"
+
+  autocrop -version
+  mincinfo -version
+  mincresample -version
+  mincreshape -version
+)
 
 # Create conda environment and install R
 echo -e "\nBuilding R environment..."
@@ -35,6 +61,9 @@ if [ -n "\${MINC_TOOLKIT}" ]; then
   export MINC_TOOLKIT_PREV="\${MINC_TOOLKIT}"
 fi
 export MINC_TOOLKIT=$MINC_ENV_PATH
+export CLUSTERING_AUTISM_PERL5LIB_WAS_SET=\${PERL5LIB+x}
+export CLUSTERING_AUTISM_PERL5LIB_PREV="\${PERL5LIB-}"
+export PERL5LIB="\${MINC_TOOLKIT}/perl:\${MINC_TOOLKIT}/pipeline\${PERL5LIB:+:\$PERL5LIB}"
 EOF
 
 # Unset $MINC_TOOLKIT upon deactivation
@@ -46,6 +75,13 @@ if [ -n "\${MINC_TOOLKIT_PREV}" ]; then
 else
   unset MINC_TOOLKIT
 fi
+if [ "\${CLUSTERING_AUTISM_PERL5LIB_WAS_SET}" = x ]; then
+  export PERL5LIB="\${CLUSTERING_AUTISM_PERL5LIB_PREV}"
+else
+  unset PERL5LIB
+fi
+unset CLUSTERING_AUTISM_PERL5LIB_WAS_SET
+unset CLUSTERING_AUTISM_PERL5LIB_PREV
 EOF
 
 # Activate conda environment
