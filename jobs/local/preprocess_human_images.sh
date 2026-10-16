@@ -7,6 +7,6 @@ trap 'status=$?; printf "ERROR: %s:%s: %s (exit %s)\n" \
   exit "$status"' ERR
 
 preprocess_human_images.py \
---imgdir data/human/registration/v3/jacobians/ \
---jacobians absolute \
+--imgdir $PROJECTPATH/data/human/registration/v3/jacobians/ \
+--jacobians relative \
 --nproc 8
