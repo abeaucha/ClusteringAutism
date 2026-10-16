@@ -1,5 +1,11 @@
 #!/bin/bash
 
+set -Eeuo pipefail
+
+trap 'status=$?; printf "ERROR: %s:%s: %s (exit %s)\n" \
+  "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" "$status" >&2; \
+  exit "$status"' ERR
+
 compute_cluster_similarity.py \
 --pipeline-dir data/cross_species/v3/ \
 --species human human \

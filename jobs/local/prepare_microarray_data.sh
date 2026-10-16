@@ -1,5 +1,11 @@
 #!/bin/bash
 
+set -Eeuo pipefail
+
+trap 'status=$?; printf "ERROR: %s:%s: %s (exit %s)\n" \
+  "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" "$status" >&2; \
+  exit "$status"' ERR
+
 prepare_microarray_data.py \
   --pipeline-dir data/human/expression/v3/ \
   --transforms \

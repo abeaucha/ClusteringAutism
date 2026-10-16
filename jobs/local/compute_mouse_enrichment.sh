@@ -1,5 +1,11 @@
 #!/bin/bash
 
+set -Eeuo pipefail
+
+trap 'status=$?; printf "ERROR: %s:%s: %s (exit %s)\n" \
+  "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" "$status" >&2; \
+  exit "$status"' ERR
+
 mouse_cluster_enrichment.R \
   --pipeline-dir data/mouse/derivatives/v3/ \
   --params-id 107 \

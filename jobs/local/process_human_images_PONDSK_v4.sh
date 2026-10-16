@@ -1,5 +1,11 @@
 #!/bin/bash
 
+set -Eeuo pipefail
+
+trap 'status=$?; printf "ERROR: %s:%s: %s (exit %s)\n" \
+  "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" "$status" >&2; \
+  exit "$status"' ERR
+
 process_human_images.py \
 --pipeline-dir data/human/derivatives/v4/ \
 --input-dir data/human/registration/v4/jacobians_resampled/resolution_0.8/ \
