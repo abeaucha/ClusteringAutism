@@ -54,3 +54,4 @@ analyses/.DS_Store
 air.toml
 .positai
 data
+.lintr
