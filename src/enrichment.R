@@ -103,10 +103,11 @@ get_model_genes <- function(models) {
 }
 
 
-get_homologs <- function(genes, species, ordered = T) {
+get_homologs <- function(genes, species, ordered = FALSE) {
   if (!exists("hom", envir = globalenv())) {
-    hom <<- read_tsv(
-      "http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt"
+    hom <- read_tsv(
+      "http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt",
+      show_col_types = FALSE
     )
   }
   species <- switch(
@@ -222,7 +223,12 @@ get_gene_neighbourhood <- function(
       stringID_B = stringId_B,
       gene_A = preferredName_A,
       gene_B = preferredName_B
-    )
+    ) %>%
+    left_join(
+      string_ids,
+      by = c("stringID_A" = "stringID", "gene_A" = "preferredName")
+    ) %>%
+    rename(gene_in = gene)
 
   return(neighbourhood)
 }
@@ -319,10 +325,8 @@ HGtest <- function(fg, bg, mset, qval = 0.05, cols = "Title", nodups = TRUE) {
 get_neighbourhood_enrichment <- function(
   target,
   background,
-  modules = "Human_Reactome_October_01_2023_symbol.gmt"
+  modules
 ) {
-  modules <- importMsigDBGMT(modules)
-
   # Convert mouse gene names to human
   fg <- get_homologs(target, "mouse", ordered = F)[["human_genes"]]
   bg <- get_homologs(background, "mouse", ordered = F)[["human_genes"]]
