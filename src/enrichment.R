@@ -451,3 +451,224 @@ get_module_sizes <- function(
     inner_join(modules[["MODULES"]], by = "ID")
   return(module_sizes)
 }
+
+#' Title
+#'
+#' @param clusters 
+#' @param gene_network 
+#' @param background_set 
+#' @param modules 
+#' @param string_score 
+#' @param nk_max 
+#' @param output_dir 
+#' @param permute 
+#' @param seed 
+#'
+#' @returns NULL
+compute_cluster_enrichment <- function(
+    clusters,
+    gene_network,
+    background_set,
+    modules,
+    string_score = 950,
+    nk_max = 10,
+    output_dir = "data/enrichment/StringDB_12.0_Bader_2025",
+    permute = FALSE,
+    seed = NULL
+) {
+  
+  # Add STRING score to output dir
+  output_dir <- file.path(output_dir, string_score)
+  
+  # If permutation, reshuffle cluster assignments
+  if (permute) {
+    output_dir <- file.path(output_dir, "permutations")
+    
+    if (is.null(seed)) {
+      seed <- sample(1:1E4, size = 1)
+    }
+    
+    output_dir <- file.path(output_dir, paste0("seed_", seed))
+    
+    set.seed(seed)
+    idx_sample <- sample(
+      seq_len(nrow(clusters)),
+      size = nrow(clusters),
+      replace = FALSE
+    )
+    
+    clusters$model <- clusters$model[idx_sample]
+    clusters$gene <- clusters$gene[idx_sample]
+  }
+  
+  # Construct output directories
+  output_dirs <- c(
+    file.path(output_dir, "NeighbourhoodInfo"),
+    file.path(output_dir, "NeighbourhoodEnrichment")
+  )
+  for (path in output_dirs) {
+    if (!dir.exists(path)) {
+      dir.create(path, recursive = TRUE)
+    }
+  }
+  
+  # Iterate over cluster solutions
+  for (nk in 2:nk_max) {
+    # Identify unique genes in each cluster
+    cluster_genes_nk <- clusters |>
+      select(cluster = paste0("nk", nk), gene) |>
+      unite(dup_select, "gene", "cluster", remove = FALSE) |>
+      filter(!duplicated(dup_select)) |>
+      select(cluster, gene)
+    
+    # Iterate over clusters in solution
+    for (k in 1:nk) {
+      message(paste0("On cluster ", nk, "-", k))
+      
+      # Pull genes for cluster
+      cluster_genes_k <- cluster_genes_nk %>%
+        filter(cluster == k) %>%
+        pull(gene)
+      
+      # Extract gene neighbourhood for cluster
+      neighbourhood_k <- gene_network %>%
+        filter(gene_in %in% cluster_genes_k)
+      
+      # Export gene neighbourhood
+      if (!permute) {
+        outfile <- paste(
+          "cluster_neighbourhood",
+          nk,
+          k,
+          string_score,
+          sep = "_"
+        )
+        outfile <- paste0(outfile, ".csv")
+        outfile <- file.path(output_dir, "NeighbourhoodInfo", outfile)
+        write_csv(neighbourhood_k, file = outfile)
+      }
+      
+      # Construct target set for cluster
+      target_set <- unique(c(
+        neighbourhood_k[["gene_A"]],
+        neighbourhood_k[["gene_B"]]
+      ))
+      
+      # Evaluate pathway enrichment for cluster
+      enrichment <- gene_set_enrichment(
+        target = target_set,
+        background = background_set,
+        modules = modules
+      )
+      
+      enrichment[["nk"]] <- nk
+      enrichment[["k"]] <- k
+      
+      outfile <- paste(
+        "cluster_pathway_enrichment",
+        nk,
+        k,
+        string_score,
+        sep = "_"
+      )
+      outfile <- paste0(outfile, ".csv")
+      outfile <- file.path(output_dir, "NeighbourhoodEnrichment", outfile)
+      write_csv(enrichment, file = outfile)
+    }
+  }
+}
+
+
+
+#' Run cluster-enrichment permutations in parallel
+#'
+#' @param clusters 
+#' @param gene_network 
+#' @param background_set 
+#' @param modules 
+#' @param string_score 
+#' @param nk_max 
+#' @param output_dir 
+#' @param B Positive integer number of permutations; seeds are seq_len(B).
+#' @param n_workers Positive integer maximum number of worker R processes.
+#'
+#' @return A data frame with seed, success, and error columns, in seed order.
+#'   Enrichment results are written to the seed-specific output directories.
+run_cluster_enrichment_permutations <- function(
+    clusters, gene_network, background_set, modules,
+    string_score = 950, nk_max = 10,
+    output_dir = "data/enrichment/StringDB_12.0_Bader_2025", 
+    B = 1000L, n_workers = 4L
+) {
+  # Reject invalid counts before starting any worker processes.
+  stopifnot(
+    length(B) == 1L, is.finite(B), B >= 1, B == floor(B),
+    length(n_workers) == 1L, is.finite(n_workers),
+    n_workers >= 1, n_workers == floor(n_workers)
+  )
+  
+  # Start separate R processes, with no more workers than permutations.
+  workers <- parallel::makePSOCKcluster(min(n_workers, B))
+  # Release workers and reset foreach to sequential execution on exit,
+  # including when setup or execution raises an error.
+  on.exit({
+    parallel::stopCluster(workers)
+    foreach::registerDoSEQ()
+  }, add = TRUE)
+  # doSNOW supplies the per-result progress callback used below.
+  doSNOW::registerDoSNOW(workers)
+  
+  # Only the parent process updates the bar; workers return their results.
+  progress <- utils::txtProgressBar(min = 0, max = B, style = 3)
+  on.exit(close(progress), add = TRUE)
+  snow_options <- list(
+    # Dispatch tasks dynamically so progress is reported for each seed.
+    preschedule = FALSE,
+    progress = function(n) utils::setTxtProgressBar(progress, n)
+  )
+  
+  # Keep relative input/output paths consistent with the parent R session.
+  parallel::clusterCall(workers, setwd, getwd())
+  
+  # Export shared data once per worker, including indirectly called helpers.
+  shared_objects <- c(
+    "compute_cluster_enrichment", "gene_set_enrichment", "HGtest",
+    "clusters", "gene_network", "background_set", "modules",
+    "string_score", "nk_max", "output_dir"
+  )
+  # Resolve names here and in enclosing environments. Each worker receives
+  # its own copy, reused across its assigned permutations.
+  parallel::clusterExport(workers, shared_objects, envir = environment())
+  
+  # Bind the operator locally without attaching foreach to the search path.
+  `%dopar%` <- foreach::`%dopar%`
+  foreach::foreach(
+    b = seq_len(B),
+    # Collect one small status row per seed instead of enrichment tables.
+    .combine = rbind,
+    .packages = "tidyverse",
+    # These objects were already exported during worker initialization.
+    .noexport = shared_objects,
+    .options.snow = snow_options
+  ) %dopar% {
+    # Record an analysis failure without abandoning the remaining seeds.
+    # Failed seeds also advance the bar, which counts completed attempts.
+    tryCatch({
+      compute_cluster_enrichment(
+        clusters = clusters,
+        gene_network = gene_network,
+        background_set = background_set,
+        modules = modules,
+        string_score = string_score,
+        nk_max = nk_max,
+        output_dir = output_dir,
+        permute = TRUE,
+        # The analysis sets its RNG seed and output directory from b.
+        seed = b
+      )
+      data.frame(seed = b, success = TRUE, error = NA_character_)
+    }, error = function(e) {
+      data.frame(seed = b, success = FALSE, error = conditionMessage(e))
+    })
+  }
+}
