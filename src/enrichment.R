@@ -453,9 +453,6 @@ get_module_sizes <- function(
 }
 
 
-string_score <- args$`gene-score`
-permute <- FALSE
-
 #' Title
 #'
 #' @param clusters 
