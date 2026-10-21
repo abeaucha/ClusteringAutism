@@ -21,7 +21,10 @@ option_list <- list(
     type = "character",
     default = "data/mouse/derivatives/"
   ),
-  make_option("--params-id", type = "character"),
+  make_option(
+    "--params-id", 
+  type = "character"
+  ),
   make_option(
     "--background-file",
     type = "character",
