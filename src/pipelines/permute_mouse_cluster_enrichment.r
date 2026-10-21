@@ -32,6 +32,7 @@ option_list <- list(
     type = "character",
     default = "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt"
   ),
+  make_option("--output-dir", type = "character"),
   make_option("--models", type = "character", default = "model_names.csv"),
   make_option("--gene-score", type = "numeric", default = 950),
   make_option("--n-permutations", type = "numeric", default = 1000L),
@@ -82,7 +83,12 @@ cluster_resolution <- params[["cluster_resolution"]]
 cluster_resolution <- sprintf("%.1f", cluster_resolution)
 
 # Define output directory
-output_dir <- file.path(pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025")
+
+if (is.null(args[["output-dir"]])) {
+  output_dir <- file.path(pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025")
+} else {
+  output_dir <- args[["output-dir"]]
+}
 
 # Cluster directory path
 clusters_dir <- file.path(pipeline_dir, "clusters", paste0("resolution_", cluster_resolution))
