@@ -103,7 +103,7 @@ get_model_genes <- function(models) {
 }
 
 
-get_homologs <- function(genes, species, ordered = FALSE) {
+get_homologs_old <- function(genes, species, ordered = FALSE) {
   if (!exists("hom", envir = globalenv())) {
     hom <- read_tsv(
       "http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt",
@@ -168,16 +168,83 @@ get_homologs <- function(genes, species, ordered = FALSE) {
 }
 
 
-#' Get the gene neighbourhood for a set of genes
+#' Fetch gene homologs
 #'
-#' @param genes (character vector) Genes whose neighbourhood to identify.
+#' @param genes (character vector) Vector of gene names
+#' @param species (character scalar) One of "mouse" or "human"
+#'
+#' @returns (tibble)
+fetch_gene_homologs <- function(genes, species) {
+  
+  # Update species name
+  species <- switch(
+    species,
+    mouse = {
+      "mouse, laboratory"
+    },
+    human = {
+      "human"
+    }
+  )
+  
+  # Get unique genes
+  genes <- unique(genes)
+  
+  # Fetch homologs database from JAX
+  hom <- read_tsv(
+    "http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt",
+    show_col_types = FALSE
+  )
+  
+  # Subset columns and get distinct entries
+  hom <- hom %>% 
+    select(`DB Class Key`, Symbol, `Common Organism Name`) %>% 
+    distinct()
+  
+  # Build data frame from input genes
+  hom_input <- tibble(Symbol = genes, `Common Organism Name` = species)
+  
+  # Get homolog information for input genes
+  hom_output <- hom_input %>% 
+    left_join(select(hom, `DB Class Key`, Symbol, `Common Organism Name`),
+              by = c("Symbol", "Common Organism Name")) %>% 
+    select(`DB Class Key`, SymbolInput = Symbol)
+  
+  # Get homolog information for mouse
+  hom_mouse <- hom %>% 
+    filter(`Common Organism Name` == "mouse, laboratory") %>% 
+    select(`DB Class Key`, SymbolMouse = Symbol)
+  
+  # Get homolog information for human
+  hom_human <- hom %>% 
+    filter(`Common Organism Name` == "human") %>% 
+    select(`DB Class Key`, SymbolHuman = Symbol)
+  
+  # Join mouse and human homologs to input
+  hom_output <- hom_output %>% 
+    left_join(hom_mouse, by = "DB Class Key") %>% 
+    left_join(hom_human, by = "DB Class Key")
+  
+  # Rename columns
+  hom_output <- hom_output %>% 
+    rename(HomologeneID = `DB Class Key`, GeneInput = SymbolInput,
+           GeneMouse = SymbolMouse, GeneHuman = SymbolHuman)
+  
+  return(hom_output)
+  
+}
+
+
+#' Get the STRING interaction network for a set of genes
+#'
+#' @param genes (character vector) Genes whose interaction network to build.
 #' @param score (numeric scalar) StringDB score for gene network confidence.
 #' @param stringdb_version (character scalar) StringDB version.
 #' @param limit (numeric scalar) Max number of records to return per gene from
 #' the StringDB API.
 #'
 #' @returns (data.frame, tbl) Neighbourhood information for the input genes.
-get_gene_neighbourhood <- function(
+build_gene_interaction_network <- function(
   genes,
   score = 950,
   stringdb_version = "12.0",
@@ -217,7 +284,7 @@ get_gene_neighbourhood <- function(
   )
 
   # Fetch gene neighbourhoods
-  neighbourhood <- read_tsv(api_query_interactions, show_col_types = FALSE) %>%
+  network <- read_tsv(api_query_interactions, show_col_types = FALSE) %>%
     rename(
       stringID_A = stringId_A,
       stringID_B = stringId_B,
@@ -230,7 +297,7 @@ get_gene_neighbourhood <- function(
     ) %>%
     rename(gene_in = gene)
 
-  return(neighbourhood)
+  return(network)
 }
 
 
@@ -346,6 +413,34 @@ get_neighbourhood_enrichment <- function(
   return(enrichment)
 }
 
+
+#' Evaluate the enrichment for a target set
+#'
+#' @param target (character vector) Target set of genes
+#' @param background (character vector) Background set of genes
+#' @param modules (character scalar) File (.gmt) containing the pathway modules
+#'
+#' @returns (data.frame, tbl) Enrichment data frame
+gene_set_enrichment <- function(
+    target,
+    background,
+    modules
+) {
+  
+  # Run hypergeometric test against pathway modules
+  enrichment <- HGtest(fg = target, bg = background, mset = modules)
+  
+  enrichment <- enrichment %>%
+    arrange(P.Value) %>%
+    mutate(
+      rank = 1:nrow(.),
+      adj.P.Val = p.adjust(P.Value, method = "fdr"),
+      NLQ = -log10(adj.P.Val)
+    ) %>%
+    select(rank, ID, Title, P.Value, adj.P.Val, NLQ, b, B, n, N, E)
+  
+  return(enrichment)
+}
 
 get_module_sizes <- function(
   modules = "Human_Reactome_June_01_2025_symbol.gmt"

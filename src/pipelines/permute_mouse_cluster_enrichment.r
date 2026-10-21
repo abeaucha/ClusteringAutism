@@ -27,9 +27,16 @@ source(file.path(SRCPATH, "utils.R"))
 source(file.path(SRCPATH, "enrichment.R"))
 
 
+
+# string_score <- 950
+# nk_max = 2
+# permute = FALSE
+# seed = NULL
+# nk <- 2; k <- 1
+
 compute_cluster_enrichment <- function(
     clusters,
-    neighbourhoods,
+    gene_network,
     background_set,
     modules,
     string_score = 950,
@@ -38,8 +45,11 @@ compute_cluster_enrichment <- function(
     permute = FALSE,
     seed = NULL
 ) {
+  
+    # Add STRING score to output dir
     output_dir <- file.path(output_dir, string_score)
 
+    # If permutation, reshuffle cluster assignments
     if (permute) {
         output_dir <- file.path(output_dir, "permutations")
 
@@ -60,6 +70,7 @@ compute_cluster_enrichment <- function(
         clusters$gene <- clusters$gene[idx_sample]
     }
 
+    # Construct output directories
     output_dirs <- c(
         file.path(output_dir, "NeighbourhoodInfo"),
         file.path(output_dir, "NeighbourhoodEnrichment")
@@ -83,21 +94,16 @@ compute_cluster_enrichment <- function(
         for (k in 1:nk) {
             message(paste0("On cluster ", nk, "-", k))
 
+            # Pull genes for cluster
             cluster_genes_k <- cluster_genes_nk %>%
                 filter(cluster == k) %>%
                 pull(gene)
 
-            # Construct gene neighbourhood for cluster
-            message("\tBuilding gene neighbourhood...")
-            # neighbourhood_k <- get_gene_neighbourhood(
-            #     genes = cluster_genes_k,
-            #     score = string_score
-            # )
-
             # Extract gene neighbourhood for cluster
-            neighbourhood_k <- neighbourhoods %>%
+            neighbourhood_k <- gene_network %>%
                 filter(gene_in %in% cluster_genes_k)
 
+            # Export gene neighbourhood
             if (!permute) {
                 outfile <- paste(
                     "cluster_neighbourhood",
@@ -118,13 +124,12 @@ compute_cluster_enrichment <- function(
             ))
 
             # Evaluate pathway enrichment for cluster
-            message("\tCalculating pathway enrichment...")
-            enrichment <- get_neighbourhood_enrichment(
-                target = target_set,
-                background = background_set,
-                modules = modules
+            enrichment <- gene_set_enrichment(
+              target = target_set,
+              background = background_set,
+              modules = modules
             )
-
+            
             enrichment[["nk"]] <- nk
             enrichment[["k"]] <- k
 
@@ -147,10 +152,11 @@ compute_cluster_enrichment <- function(
 
 pipeline_dir <- "data/mouse/derivatives/v3/"
 params_id <- "107"
-nk_max <- 2
+nk_max <- 10
 background_file <- "data/enrichment/sagittal_gene_table_normalized_filtered.csv"
 modules_file <- "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt"
 string_score <- 950
+permute <- FALSE
 
 # Complete pipeline directory path with parameter set id
 pipeline_dir <- file.path(pipeline_dir, params_id)
@@ -173,39 +179,49 @@ clusters <- clusters %>%
     select(-file) %>%
     rename(model = ID)
 
-# Import background set of genes
-background_genes_mouse <- read_csv(file = background_file, show_col_types = FALSE) |>
-    pull(msg.genes.acronym) |>
-    as.character()
-
-background_genes <- get_homologs(genes = background_genes_mouse,
-                                 species = "mouse")[["human_genes"]]
-
 # Import Bader Reactome pathway modules
 modules <- importMsigDBGMT(modules_file)
 
+# Construct background set of genes
+message("Building background gene set ...")
+background_set <- read_csv(file = background_file, show_col_types = FALSE) |>
+  pull(msg.genes.acronym) |>
+  as.character() %>% 
+  unique() |> 
+  fetch_gene_homologs(species = "mouse") |> 
+  filter(!is.na(GeneHuman)) |> 
+  pull(GeneHuman)
+
 # Compute gene interaction network for all genes in clusters
-neighbourhoods <- get_gene_neighbourhood(
-    genes = unique(clusters$gene),
-    score = string_score
+message("Building gene interaction network ...")
+gene_network <- build_gene_interaction_network(
+  genes = unique(clusters$gene),
+  score = string_score
 )
 
-neighbourhoods_all_genes <- unique(c(
-  neighbourhoods[["gene_A"]],
-  neighbourhoods[["gene_B"]]
-))
+# Extract a vector of all possible target genes
+# target_genes_all <- unique(c(gene_network[["gene_A"]], gene_network[["gene_B"]]))
 
-genes = unique(c(neighbourhoods[["gene_A"]], 
-                 neighbourhoods[["gene_B"]]))
-species <- "mouse"
+# Build data frame of human homologs for all target genes
+gene_network_hom <- fetch_gene_homologs(
+  genes = unique(c(gene_network[["gene_A"]], 
+                   gene_network[["gene_B"]])), 
+  species = "mouse"
+)
 
-list_neighbourhood_homologs <- get_homologs(genes = unique(c(neighbourhoods[["gene_A"]], 
-                                                             neighbourhoods[["gene_B"]])),
-                                            species = "mouse")
+# Get human gene homologues for gene network
+gene_network <- gene_network |> 
+  left_join(select(gene_network_hom, GeneInput, GeneHuman),
+            by = c("gene_A" = "GeneInput"), 
+            relationship = "many-to-many") |> 
+  select(-gene_A) |> 
+  rename(gene_A = GeneHuman) |> 
+  left_join(select(gene_network_hom, GeneInput, GeneHuman),
+            by = c("gene_B" = "GeneInput"),
+            relationship = "many-to-many") |> 
+  select(-gene_B) |> 
+  rename(gene_B = GeneHuman)
 
-list_neighbourhood_homologs$input_genes %>% length()
-list_neighbourhood_homologs$mouse_genes %>% length()
-list_neighbourhood_homologs$human_genes %>% length()
 
 # Define output directory
 # output_dir <- file.path(pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025")
@@ -220,16 +236,35 @@ seed <- NULL
 
 compute_cluster_enrichment(
     clusters = clusters,
-    neighbourhoods = neighbourhoods,
-    background_set = background_genes,
+    gene_network = gene_network,
+    background_set = background_set,
     modules = modules,
     string_score = string_score,
     nk_max = nk_max,
     output_dir = output_dir,
-    permute = permute,
+    permute = TRUE,
     seed = seed
 )
 
 # Questions
 # Should background_set be the file or the vector?
 # Should modules be the file or the list?
+# 
+# df_true <- read_csv("tmp/enrichment/StringDB_12.0_Bader_2025/950/NeighbourhoodEnrichment/cluster_pathway_enrichment_6_1_950.csv")
+# df_permute <- read_csv("tmp/enrichment/StringDB_12.0_Bader_2025/950/permutations/seed_5555/NeighbourhoodEnrichment/cluster_pathway_enrichment_6_1_950.csv")
+# 
+#  
+# colnames(df_true)
+# 
+# true_sig <- df_true |> 
+#   filter(adj.P.Val < 0.01) |> 
+#   pull(Title)
+# 
+# permute_sig <- df_permute |> 
+#   filter(adj.P.Val < 0.01) |> 
+#   pull(Title)
+# 
+# length(true_sig)
+# length(permute_sig)
+# 
+# length(intersect(true_sig, permute_sig))
