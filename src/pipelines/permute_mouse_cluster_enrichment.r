@@ -54,16 +54,19 @@ source(file.path(SRCPATH, "enrichment.R"))
 
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-pipeline_dir <- args[["pipeline-dir"]]
 
-# pipeline_dir <- "data/mouse/derivatives/v3/"
-# params_id <- "107"
-# nk_max <- 10
-# background_file <- "data/enrichment/sagittal_gene_table_normalized_filtered.csv"
-# modules_file <- "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt"
-# string_score <- 950
-# B <- 16L
-# n_workers <- 4L
+# args <- list(
+#   "pipeline-dir" = "data/mouse/derivatives/v3/",
+#   "params-id" = "107",
+#   "background-file" = "data/enrichment/sagittal_gene_table_normalized_filtered.csv",
+#   "modules-file" = "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt",
+#   "models" = "model_names.csv",
+#   "gene-score" = 950,
+#   "n-permutations" = 16L,
+#   "n-workers" = 4L
+# )
+
+pipeline_dir <- args[["pipeline-dir"]]
 
 # Get pipeline parameters
 metadata <- file.path(pipeline_dir, "metadata.csv")

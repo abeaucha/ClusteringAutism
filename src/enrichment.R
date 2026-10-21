@@ -452,6 +452,10 @@ get_module_sizes <- function(
   return(module_sizes)
 }
 
+
+string_score <- args$`gene-score`
+permute <- FALSE
+
 #' Title
 #'
 #' @param clusters 
@@ -479,16 +483,17 @@ compute_cluster_enrichment <- function(
   
   # Add STRING score to output dir
   output_dir <- file.path(output_dir, string_score)
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+  }
   
   # If permutation, reshuffle cluster assignments
   if (permute) {
     output_dir <- file.path(output_dir, "permutations")
     
     if (is.null(seed)) {
-      seed <- sample(1:1E4, size = 1)
+      seed <- sample(1E5, size = 1)
     }
-    
-    output_dir <- file.path(output_dir, paste0("seed_", seed))
     
     set.seed(seed)
     idx_sample <- sample(
@@ -501,19 +506,13 @@ compute_cluster_enrichment <- function(
     clusters$gene <- clusters$gene[idx_sample]
   }
   
-  # Construct output directories
-  output_dirs <- c(
-    file.path(output_dir, "NeighbourhoodInfo"),
-    file.path(output_dir, "NeighbourhoodEnrichment")
-  )
-  for (path in output_dirs) {
-    if (!dir.exists(path)) {
-      dir.create(path, recursive = TRUE)
-    }
-  }
-  
   # Iterate over cluster solutions
-  for (nk in 2:nk_max) {
+  nk_range <- 2:nk_max
+  list_enrichment <- vector(mode = "list", length = length(nk_range))
+  for (l in 1:length(nk_range)) {
+    
+    nk <- nk_range[l]
+    
     # Identify unique genes in each cluster
     cluster_genes_nk <- clusters |>
       select(cluster = paste0("nk", nk), gene) |>
@@ -522,6 +521,7 @@ compute_cluster_enrichment <- function(
       select(cluster, gene)
     
     # Iterate over clusters in solution
+    list_enrichment[[l]] <- vector(mode = "list", length = nk)
     for (k in 1:nk) {
       message(paste0("On cluster ", nk, "-", k))
       
@@ -533,20 +533,6 @@ compute_cluster_enrichment <- function(
       # Extract gene neighbourhood for cluster
       neighbourhood_k <- gene_network %>%
         filter(gene_in %in% cluster_genes_k)
-      
-      # Export gene neighbourhood
-      if (!permute) {
-        outfile <- paste(
-          "cluster_neighbourhood",
-          nk,
-          k,
-          string_score,
-          sep = "_"
-        )
-        outfile <- paste0(outfile, ".csv")
-        outfile <- file.path(output_dir, "NeighbourhoodInfo", outfile)
-        write_csv(neighbourhood_k, file = outfile)
-      }
       
       # Construct target set for cluster
       target_set <- unique(c(
@@ -564,19 +550,29 @@ compute_cluster_enrichment <- function(
       enrichment[["nk"]] <- nk
       enrichment[["k"]] <- k
       
-      outfile <- paste(
-        "cluster_pathway_enrichment",
-        nk,
-        k,
-        string_score,
-        sep = "_"
-      )
-      outfile <- paste0(outfile, ".csv")
-      outfile <- file.path(output_dir, "NeighbourhoodEnrichment", outfile)
-      write_csv(enrichment, file = outfile)
+      list_enrichment[[l]][[k]] <- enrichment
+      
     }
+    
+    list_enrichment[[l]] <- bind_rows(list_enrichment[[l]])
+    
   }
+  
+  df_enrichment <- bind_rows(list_enrichment)
+
+  outfile <- "cluster_pathway_enrichment"
+  
+  if (permute) {
+    outfile <- paste(outfile, "seed", seed, sep = "_")
+  }
+  
+  outfile <- paste0(outfile, ".csv")
+  # outfile <- file.path(output_dir, "NeighbourhoodEnrichment", outfile)
+  outfile <- file.path(output_dir, outfile)
+  write_csv(df_enrichment, file = outfile)
+    
 }
+
 
 
 
