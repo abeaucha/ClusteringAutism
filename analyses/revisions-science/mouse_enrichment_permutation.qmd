@@ -176,8 +176,8 @@ df_enrichment_permutations_WNT <- import_permutations_parallel(
       k_select = k_select,
       pathway_ids_keep = pathway_ids_keep,
       pathway_title = pathway_title,
-  workers = 1L)
-# workers = 32L)
+      workers = 32L)
+  # workers = 1L)
 ```
 
 ```{r}
@@ -199,25 +199,6 @@ ggplot(df_enrichment_permutations_WNT, aes(x = E)) +
 sum(df_enrichment_permutations_WNT$E >= df_enrichment_cluster_WNT$E)/nrow(df_enrichment_permutations_WNT)
 ```
 
-```{r}
-import_enrichment_permutation <- function(file, nk_select, k_select, pathway_ids_keep, pathway_title) {
-  
-    df_permutation <- read_csv(file, show_col_types = FALSE)
-    
-    df_permutation$seed <- file |> 
-      basename() |> 
-      str_extract("seed_[0-9]+") |> 
-      str_remove("seed_") |> 
-      as.numeric()
-    
-    df_permutation <- df_permutation |> 
-      filter(nk == nk_select, k == k_select) |> 
-      filter(ID %in% pathway_ids_keep) |> 
-      filter(Title == pathway_title)
-    
-    return(df_permutation)
-  }
-```
 
 
 ```{r}
@@ -286,26 +267,25 @@ import_enrichment_stat_parallel <- function(
 }
 ```
 
-```{r}
-mat <- import_enrichment_stat(file = permutation_files[1], ids = pathway_ids_keep, stat = "E")
-```
 
 ```{r}
-enrichment_array_E <- import_enrichment_stat_parallel(files = permutation_files,
+permutation_array_E <- import_enrichment_stat_parallel(files = permutation_files,
                                                       ids = pathway_ids_keep, 
                                                       stat = "E", 
-                                                      workers = 4)
+                                                      workers = 32L)
+
+saveRDS(permutation_array_E, file = file.path(enrichment_dir, "permutation_array_E.rds"))
 
 enrichment_array_NLQ <- import_enrichment_stat_parallel(files = permutation_files,
                                                         ids = pathway_ids_keep, 
                                                         stat = "NLQ", 
-                                                        workers = 4)
+                                                        workers = 32L)
 
 ```
 
 ```{r}
 df_enrichment <- df_enrichment |>
-  filter(ID %in% ids)
+  filter(ID %in% pathway_ids_keep)
 
 df_enrichment <- df_enrichment |> 
   unite(col = "cluster_id", c("nk", "k"), sep = "-", remove = FALSE)
@@ -319,13 +299,18 @@ cluster_lvls <- df_enrichment |>
 df_enrichment <- df_enrichment |> 
   mutate(cluster_id = factor(cluster_id, levels = cluster_lvls))
 
-cols <- c("ID", "cluster_id", "E")
-df_enrichment_E <- df_enrichment[,cols]
-
 mat_enrichment_E <- df_enrichment |> 
   select(ID, cluster_id, E) |> 
   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "E") |> 
   arrange(ID) |> 
+  column_to_rownames("ID") |> 
+  as.matrix()
+
+    mat_enrichment_pvals <- df_enrichment |> 
+    select(ID, cluster_id, P.Value) |> 
+    mutate(P.Value = ifelse(P.Value < 1/1001, 1/1001, P.Value)) |>
+  pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "P.Value") |> 
+    arrange(ID) |> 
   column_to_rownames("ID") |> 
   as.matrix()
   
@@ -335,6 +320,10 @@ mat_enrichment_E <- df_enrichment |>
     arrange(ID) |> 
   column_to_rownames("ID") |> 
   as.matrix()
+```
+
+```{r}
+sum(is.na(mat_enrichment_E))
 ```
 
 ```{r}
@@ -351,18 +340,77 @@ enrichment_qvals <- apply(enrichment_pvals, MARGIN = 2, FUN = p.adjust, method =
 enrichment_NLQ <- -log10(enrichment_qvals)
 
 min(enrichment_qvals, na.rm = TRUE)
-```
+min(enrichment_pvals, na.rm = TRUE)
 
+```
 
 ```{r}
-df_comparison <- tibble(NLQ_HG = as.numeric(mat_enrichment_NLQ),
-                        NLQ_permute = as.numeric(enrichment_NLQ))
-
-ggplot(df_comparison, aes(x = NLQ_HG, y = NLQ_permute)) + 
-  geom_point() + 
-  geom_abline(slope = 1)
+permutation_pvals_nk2 <- enrichment_pvals[,1:2]
+hypergeom_pvals_nk2 <- mat_enrichment_pvals[,1:2]
 ```
 
+```{r}
+df_comparison
+```
+
+```{r}
+# df_comparison <- tibble(pvals_HG = as.numeric(mat_enrichment_pvals),
+                        # pvals_permute = as.numeric(enrichment_pvals))
+
+df_comparison <- tibble(pvals_HG = as.numeric(hypergeom_pvals_nk2),
+                        pvals_permute = as.numeric(permutation_pvals_nk2))
+
+
+ggplot(df_comparison, aes(x = -log10(pvals_HG), y = -log10(pvals_permute))) + 
+  geom_point(size = 0.5) + 
+  # geom_abline(slope = 1) +
+  geom_vline(xintercept = -log10(0.05), col = "red") + 
+  geom_hline(yintercept = -log10(0.05), col = "red") +
+  coord_cartesian(xlim = c(0, -log10(1/1001)),ylim = c(0, -log10(1/1001))) + 
+  labs(x = "Hypergeometric Test p-value (-log10)",
+  y = "Permutation p-value (-log10)",
+  title = "Null hypothesis comparison for K = 2 cluster pathways") + 
+  theme_bw()
+```
+
+```{r}
+   mat_enrichment_pvals <- df_enrichment |> 
+    select(ID, cluster_id, P.Value) |> 
+    mutate(P.Value = ifelse(P.Value < 1/1001, 1/1001, P.Value)) |>
+  pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "P.Value") |> 
+    arrange(ID) |> 
+  column_to_rownames("ID") |> 
+  as.matrix()
+  
+  mat_enrichment_NLQ_limit <-  df_enrichment |> 
+  mutate(P.Value = ifelse(P.Value < 1/1001, 1/1001, P.Value)) |>
+  group_by(cluster_id) |>
+  mutate(q.value = p.adjust(P.Value, method = "fdr")) |>
+  ungroup() |>
+  mutate(NLQ = -log10(q.value)) |>
+    select(ID, cluster_id, NLQ) |> 
+  pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "NLQ") |> 
+    arrange(ID) |> 
+  column_to_rownames("ID") |> 
+  as.matrix()
+```
+
+```{r}
+df_comparison <- tibble(NLQ_HG = as.numeric(enrichment_NLQ[,1:2]),
+                        NLQ_permute = as.numeric(mat_enrichment_NLQ_limit[,1:2]))
+
+
+ggplot(df_comparison, aes(x = NLQ_HG, y = NLQ_permute)) + 
+  geom_point(size = 0.5) + 
+  # geom_abline(slope = 1) +
+  geom_vline(xintercept = -log10(0.05), col = "red") + 
+  geom_hline(yintercept = -log10(0.05), col = "red") +
+  coord_cartesian(xlim = c(0, -log10(1/1001)),ylim = c(0, -log10(1/1001))) + 
+  labs(x = "Hypergeometric Test p-value (-log10)",
+  y = "Permutation p-value (-log10)",
+  title = "Null hypothesis comparison for K = 2 cluster pathways") + 
+  theme_bw()
+```
 
 ```{r}
 df_permutation$seed <- file |> 
