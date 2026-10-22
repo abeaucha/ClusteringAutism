@@ -1,0 +1,155 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+SRCPATH <- Sys.getenv("SRCPATH")
+PROJECTPATH <- Sys.getenv("PROJECTPATH")
+
+source(file.path(SRCPATH, "enrichment.R"))
+```
+
+```{r}
+enrichment_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950")
+
+permutations_dir <- file.path(enrichment_dir, "permutations")
+```
+
+```{r}
+# Path to Reactome hierarchy file
+reactome_hierarchy <- file.path(PROJECTPATH,  "data/enrichment/reactome_hierarchy.csv")
+
+# Import Reactome hierarchy
+df_reactome_hierarchy <- read_csv(reactome_hierarchy, show_col_types = FALSE)
+
+# Initialize tree levels for root pathways
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(level = ifelse(is.na(ParentID), 0, NA))
+
+# Iterate lvl down the tree
+nmissing <- sum(is.na(df_reactome_hierarchy$level))
+lvl <- 0
+while (nmissing > 0) {
+  
+  df_reactome_lvl <- df_reactome_hierarchy %>% 
+    filter(level == lvl)
+  
+  # Iterate over nodes at given level
+  for (i in 1:nrow(df_reactome_lvl)){
+    
+    node <- df_reactome_lvl[[i, "Name"]]
+    
+    df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+      mutate(level = ifelse(is.na(Parent), 0, 
+                            ifelse(Parent == node, lvl+1, level)))
+    
+  }
+  
+  nmissing <- sum(is.na(df_reactome_hierarchy$level))
+  lvl <- lvl + 1
+  
+}
+
+# Clean up names
+df_reactome_hierarchy <- df_reactome_hierarchy %>% 
+  mutate(Name = str_replace_all(Name, "  ", " "),
+         Name = str_replace_all(Name, "/", " "))
+```
+
+```{r}
+# Bader Reactome gene sets
+module_file <- file.path(PROJECTPATH,  "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt")
+
+# Import Bader sets
+df_modules <- get_module_sizes(modules = module_file)
+
+# Clean up IDs
+df_modules <- df_modules %>% 
+  rename(IDBader = ID) %>% 
+  mutate(ID = IDBader %>% 
+           str_split_i("%", i = -1) %>% 
+           str_remove("R-HSA-") %>% 
+           str_remove("\\.[0-9]+"),
+         ID = paste0("R-HSA-", ID)) %>% 
+  mutate(Title = str_replace_all(Title, "  ", " "))
+
+# Include hierarchy information
+df_reactome <- inner_join(df_reactome_hierarchy,
+                          df_modules,
+                          by = "ID")
+
+# Pathways to keep
+pathway_ids_keep <- df_reactome %>% 
+  filter(B > 10) %>% 
+  pull(IDBader)
+```
+
+```{r}
+enrichment_file <- "cluster_pathway_enrichment.csv"
+enrichment_file <- file.path(enrichment_dir, enrichment_file)
+df_enrichment <- read_csv(enrichment_file, show_col_types = FALSE)
+
+nk_select <- 6
+k_select <- 1
+
+df_enrichment_cluster <- df_enrichment |> 
+filter(nk == nk_select, k == k_select)
+
+
+df_enrichment_cluster <- df_enrichment_cluster |> 
+  filter(ID %in% pathway_ids_keep)
+
+df_enrichment_cluster
+
+pathway_title <- "Signaling by WNT"
+```
+
+```{r}
+permutation_files <- list.files(permutations_dir)
+permutation_files <- file.path(permutations_dir, permutation_files)
+
+list_enrichment_permutations <- vector(mode = "list", length = length(permutation_files))
+for (i in 1:length(list_enrichment_permutations)) {
+  
+  df_enrichment_i <- read_csv(permutation_files[i], show_col_types = FALSE)
+  
+  df_enrichment_i$seed <- permutation_files[i] |> 
+    basename() |> 
+    str_extract("seed_[0-9]+") |> 
+    str_remove("seed_") |> 
+    as.numeric()
+  
+  df_enrichment_i <- df_enrichment_i |> 
+    filter(nk == nk_select, k == k_select) |> 
+    filter(ID %in% pathway_ids_keep) |> 
+    filter(Title == pathway_title)
+  
+  list_enrichment_permutations[[i]] <- df_enrichment_i
+    
+}
+
+df_enrichment_permutations_WNT <- bind_rows(list_enrichment_permutations)
+
+df_enrichment_permutations_WNT
+```
+
+```{r}
+df_enrichment_cluster_WNT <- df_enrichment_cluster |>
+  filter(Title == pathway_title)
+
+df_enrichment_cluster_WNT
+```
+
+```{r}
+ggplot(df_enrichment_permutations_WNT, aes(x = NLQ)) + 
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = df_enrichment_cluster_WNT$NLQ) + 
+  geom_vline(xintercept = median(df_enrichment_permutations_WNT$NLQ), col = "red") + 
+  theme_bw()
+```
