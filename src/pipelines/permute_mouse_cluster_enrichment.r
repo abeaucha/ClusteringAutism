@@ -35,11 +35,30 @@ option_list <- list(
     type = "character",
     default = "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt"
   ),
-  make_option("--output-dir", type = "character"),
-  make_option("--models", type = "character", default = "model_names.csv"),
-  make_option("--gene-score", type = "numeric", default = 950),
-  make_option("--n-permutations", type = "numeric", default = 1000L),
-  make_option("--n-workers", type = "numeric", default = 4L)
+  make_option(
+    "--output-dir", 
+    type = "character"
+    ),
+  make_option(
+    "--models", 
+    type = "character", 
+    default = "model_names.csv"
+    ),
+  make_option(
+    "--gene-score", 
+    type = "numeric",
+    default = 950
+    ),
+  make_option(
+    "--n-permutations",
+    type = "numeric", 
+    default = 1000L
+    ),
+  make_option(
+    "--n-workers",
+    type = "numeric",
+    default = 4L
+    )
 )
 
 # Environment variables ------------------------------------------------------
@@ -57,17 +76,6 @@ source(file.path(SRCPATH, "enrichment.R"))
 
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-
-# args <- list(
-#   "pipeline-dir" = "data/mouse/derivatives/v3/",
-#   "params-id" = "107",
-#   "background-file" = "data/enrichment/sagittal_gene_table_normalized_filtered.csv",
-#   "modules-file" = "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt",
-#   "models" = "model_names.csv",
-#   "gene-score" = 950,
-#   "n-permutations" = 16L,
-#   "n-workers" = 4L
-# )
 
 pipeline_dir <- args[["pipeline-dir"]]
 
@@ -89,12 +97,12 @@ cluster_resolution <- params[["cluster_resolution"]]
 cluster_resolution <- sprintf("%.1f", cluster_resolution)
 
 # Define output directory
-
 if (is.null(args[["output-dir"]])) {
   output_dir <- file.path(pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025")
 } else {
   output_dir <- args[["output-dir"]]
 }
+if (!dir.exists(output_dir)) {dir.create(output_dir, recursive = TRUE)}
 
 # Cluster directory path
 clusters_dir <- file.path(pipeline_dir, "clusters", paste0("resolution_", cluster_resolution))
@@ -154,9 +162,6 @@ gene_network <- gene_network |>
   select(-gene_B) |> 
   rename(gene_B = GeneHuman)
 
-
-
-# Parallel permutations -------------------------------------------------------
 
 message("Running permutations for cluster enrichment analysis ...")
 ti <- Sys.time()
