@@ -110,7 +110,6 @@ df_enrichment_cluster
 pathway_title <- "Signaling by WNT"
 ```
 
-
 ```{r}
 library(doParallel)
 library(foreach)
@@ -177,7 +176,8 @@ df_enrichment_permutations_WNT <- import_permutations_parallel(
       k_select = k_select,
       pathway_ids_keep = pathway_ids_keep,
       pathway_title = pathway_title,
-      workers = 32L)
+  workers = 1L)
+# workers = 32L)
 ```
 
 ```{r}
@@ -195,7 +195,185 @@ ggplot(df_enrichment_permutations_WNT, aes(x = E)) +
   theme_bw()
 ```
 
-
 ```{r}
 sum(df_enrichment_permutations_WNT$E >= df_enrichment_cluster_WNT$E)/nrow(df_enrichment_permutations_WNT)
 ```
+
+```{r}
+import_enrichment_permutation <- function(file, nk_select, k_select, pathway_ids_keep, pathway_title) {
+  
+    df_permutation <- read_csv(file, show_col_types = FALSE)
+    
+    df_permutation$seed <- file |> 
+      basename() |> 
+      str_extract("seed_[0-9]+") |> 
+      str_remove("seed_") |> 
+      as.numeric()
+    
+    df_permutation <- df_permutation |> 
+      filter(nk == nk_select, k == k_select) |> 
+      filter(ID %in% pathway_ids_keep) |> 
+      filter(Title == pathway_title)
+    
+    return(df_permutation)
+  }
+```
+
+
+```{r}
+
+import_enrichment_stat <- function(file, ids, stat = "E") {
+  
+  
+  df_permutation <- read_csv(file, show_col_types = FALSE)
+  
+  df_permutation <- df_permutation |>
+    filter(ID %in% ids)
+  
+  df_permutation <- df_permutation |> 
+    unite(col = "cluster_id", c("nk", "k"), sep = "-", remove = FALSE)
+  
+  cluster_lvls <- df_permutation |> 
+    select(nk, k, cluster_id) |> 
+    distinct() |> 
+    arrange(nk, k) |>
+    pull(cluster_id)
+  
+  df_permutation <- df_permutation |> 
+    mutate(cluster_id = factor(cluster_id, levels = cluster_lvls))
+  
+  cols <- c("ID", "cluster_id", stat)
+  df_permutation <- df_permutation[,cols]
+  
+  mat_permutation <- df_permutation |> 
+    pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = all_of(stat)) |> 
+    arrange(ID) |> 
+    column_to_rownames("ID") |> 
+    as.matrix()
+  
+  return(mat_permutation)
+  
+}
+
+
+import_enrichment_stat_parallel <- function(
+    files, ids, stat = "E",
+    workers = 4L
+) {
+  cl <- parallel::makeCluster(workers)
+  on.exit({
+    parallel::stopCluster(cl)
+    foreach::registerDoSEQ()
+  }, add = TRUE)
+  
+  doParallel::registerDoParallel(cl)
+  
+  results <- foreach(
+    file = files,
+    .packages = c("tidyverse"),
+    .export = "import_enrichment_stat"
+  ) %dopar% {
+    mat <- import_enrichment_stat(
+      file = file,
+      ids = ids, 
+      stat = stat
+    )
+  }
+  
+  enrichment_array <- simplify2array(results)
+  
+  return(enrichment_array)
+}
+```
+
+```{r}
+mat <- import_enrichment_stat(file = permutation_files[1], ids = pathway_ids_keep, stat = "E")
+```
+
+```{r}
+enrichment_array_E <- import_enrichment_stat_parallel(files = permutation_files,
+                                                      ids = pathway_ids_keep, 
+                                                      stat = "E", 
+                                                      workers = 4)
+
+enrichment_array_NLQ <- import_enrichment_stat_parallel(files = permutation_files,
+                                                        ids = pathway_ids_keep, 
+                                                        stat = "NLQ", 
+                                                        workers = 4)
+
+```
+
+```{r}
+df_enrichment <- df_enrichment |>
+  filter(ID %in% ids)
+
+df_enrichment <- df_enrichment |> 
+  unite(col = "cluster_id", c("nk", "k"), sep = "-", remove = FALSE)
+
+cluster_lvls <- df_enrichment |> 
+  select(nk, k, cluster_id) |> 
+  distinct() |> 
+  arrange(nk, k) |>
+  pull(cluster_id)
+
+df_enrichment <- df_enrichment |> 
+  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls))
+
+cols <- c("ID", "cluster_id", "E")
+df_enrichment_E <- df_enrichment[,cols]
+
+mat_enrichment_E <- df_enrichment |> 
+  select(ID, cluster_id, E) |> 
+  pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "E") |> 
+  arrange(ID) |> 
+  column_to_rownames("ID") |> 
+  as.matrix()
+  
+  mat_enrichment_NLQ <- df_enrichment |> 
+    select(ID, cluster_id, NLQ) |> 
+  pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "NLQ") |> 
+    arrange(ID) |> 
+  column_to_rownames("ID") |> 
+  as.matrix()
+```
+
+```{r}
+enrichment_array_true <- array(
+  rep(as.vector(mat_enrichment_E), times = dim(enrichment_array_E)[3]),
+  dim = dim(enrichment_array_E)
+)
+
+enrichment_pvals <- (rowSums(enrichment_array_E >= enrichment_array_true, dims = 2) + 1)/(dim(enrichment_array_E)[3] + 1)
+
+
+enrichment_qvals <- apply(enrichment_pvals, MARGIN = 2, FUN = p.adjust, method = "BH")
+
+enrichment_NLQ <- -log10(enrichment_qvals)
+
+min(enrichment_qvals, na.rm = TRUE)
+```
+
+
+```{r}
+df_comparison <- tibble(NLQ_HG = as.numeric(mat_enrichment_NLQ),
+                        NLQ_permute = as.numeric(enrichment_NLQ))
+
+ggplot(df_comparison, aes(x = NLQ_HG, y = NLQ_permute)) + 
+  geom_point() + 
+  geom_abline(slope = 1)
+```
+
+
+```{r}
+df_permutation$seed <- file |> 
+  basename() |> 
+  str_extract("seed_[0-9]+") |> 
+  str_remove("seed_") |> 
+  as.numeric()
+
+df_permutation <- df_permutation |> 
+  filter(nk == nk_select, k == k_select) |> 
+  filter(ID %in% pathway_ids_keep) |> 
+  filter(Title == pathway_title)
+```
+
