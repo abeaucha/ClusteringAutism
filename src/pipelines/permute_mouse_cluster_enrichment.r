@@ -159,6 +159,7 @@ gene_network <- gene_network |>
 # Parallel permutations -------------------------------------------------------
 
 message("Running permutations for cluster enrichment analysis ...")
+ti <- Sys.time()
 permutation_status <- run_cluster_enrichment_permutations(
   clusters = clusters,
   gene_network = gene_network,
@@ -170,6 +171,8 @@ permutation_status <- run_cluster_enrichment_permutations(
   B = args[["n-permutations"]], 
   n_workers = args[["n-workers"]]
 )
+tf <- Sys.time()
+print(difftime(tf, ti, units = "hours"))
 
 if (any(!permutation_status$success)) {
   warning("Some permutations failed; inspect permutation_status for details.")
