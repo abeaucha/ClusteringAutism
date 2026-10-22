@@ -24,15 +24,29 @@ option_list <- list(
     default = "data/mouse/derivatives/"
   ),
   make_option(
-    "--enrichment-dir",
-    type = "character",
-    default = "data/enrichment/"
+    "--params-id",
+    type = "character"
   ),
-  make_option("--params-id", type = "character"),
-  make_option("--models", type = "character", default = "model_names.csv"),
-  make_option("--gene-score", type = "numeric", default = 950),
-  make_option("--stringdb-version", type = "character", default = "12.0"),
-  make_option("--bader-version", type = "numeric", default = 2025)
+  make_option(
+    "--background-file",
+    type = "character",
+    default = "data/enrichment/sagittal_gene_table_normalized_filtered.csv"
+  ),
+  make_option(
+    "--modules-file",
+    type = "character",
+    default = "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt"
+  ),
+  make_option(
+    "--models", 
+    type = "character",
+    default = "model_names.csv"
+  ),
+  make_option(
+    "--gene-score", 
+    type = "numeric",
+    default = 950)
+  
 )
 
 
@@ -52,15 +66,10 @@ source(file.path(SRCPATH, "enrichment.R"))
 
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
-pipeline_dir <- args[["pipeline-dir"]]
-enrichment_dir <- args[["enrichment-dir"]]
-params_id <- args[["params-id"]]
-models <- args[["models"]]
-gene_score <- args[["gene-score"]]
-stringdb_version <- args[["stringdb-version"]]
-bader_version <- args[["bader-version"]]
 
-if (is.null(params_id)) {
+pipeline_dir <- args[["pipeline-dir"]]
+
+if (is.null(args[["params-id"]])) {
   stop("Specify the parameter set ID for the pipeline outputs.")
 }
 
@@ -68,11 +77,11 @@ if (is.null(params_id)) {
 metadata <- file.path(pipeline_dir, "metadata.csv")
 params <- fetch_params_metadata(
   metadata = metadata,
-  params = list(id = params_id)
+  params = list(id = args[["params-id"]])
 )
 
-# Update pipeline directory with parameter set ID
-pipeline_dir <- file.path(pipeline_dir, params_id)
+# Complete pipeline directory path with parameter set id
+pipeline_dir <- file.path(pipeline_dir, args[["params-id"]])
 
 # Get max number of clusters
 nk_max <- params[["cluster_nk_max"]]
@@ -81,131 +90,73 @@ nk_max <- params[["cluster_nk_max"]]
 cluster_resolution <- params[["cluster_resolution"]]
 cluster_resolution <- sprintf("%.1f", cluster_resolution)
 
-# Update cluster directory
-cluster_dir <- file.path(
-  pipeline_dir,
-  "clusters",
-  paste0("resolution_", cluster_resolution)
-)
+# Output directory
+output_dir <- file.path(pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025")
+if (!dir.exists(output_dir)) {dir.create(output_dir, recursive = TRUE)}
 
-# Model names dictionary
-models <- file.path(pipeline_dir, "model_names.csv")
-models <- get_model_genes(models)
+# Cluster directory path
+clusters_dir <- file.path(pipeline_dir, "clusters", paste0("resolution_", cluster_resolution))
 
 # Import clusters
-clusters <- file.path(cluster_dir, "clusters.csv")
-clusters <- read_csv(clusters, show_col_types = FALSE)
+clusters_file <- file.path(clusters_dir, "clusters.csv")
+clusters <- read_csv(file = clusters_file, show_col_types = FALSE)
+
+# Import model names dictionary
+models_file <- file.path(pipeline_dir, args[["models"]])
+models <- get_model_genes(models_file)
 
 # Join with model gene names (and filter for single genes)
-clusters <- clusters %>%
-  rename(file = ID) %>%
-  right_join(models, by = "file") %>%
-  select(-file) %>%
+clusters <- clusters |>
+  rename(file = ID) |>
+  right_join(models, by = "file") |>
+  select(-file) |>
   rename(model = ID)
 
-# Background set for enrichment analysis
-background_set <- file.path(
-  enrichment_dir,
-  "sagittal_gene_table_normalized_filtered.csv"
+# Import Bader Reactome pathway modules
+modules <- importMsigDBGMT(args[["modules-file"]])
+
+# Construct background set of genes
+message("Building background gene set ...")
+background_set <- read_csv(file = args[["background-file"]], show_col_types = FALSE) |>
+  pull(msg.genes.acronym) |>
+  as.character() |> 
+  unique() |> 
+  fetch_gene_homologs(species = "mouse") |> 
+  filter(!is.na(GeneHuman)) |> 
+  pull(GeneHuman)
+
+# Compute gene interaction network for all genes in clusters
+message("Building gene interaction network ...")
+gene_network <- build_gene_interaction_network(
+  genes = unique(clusters$gene),
+  score = args[["gene-score"]]
 )
-background_set <- read_csv(background_set, show_col_types = FALSE) %>%
-  pull(msg.genes.acronym) %>%
-  as.character()
 
-message(
-  paste(
-    paste("StringDB version:", stringdb_version),
-    paste("Bader version:", bader_version),
-    paste("Gene score:", gene_score),
-    sep = "\n"
-  )
+# Build data frame of human homologs for all target genes
+gene_network_hom <- fetch_gene_homologs(
+  genes = unique(c(gene_network[["gene_A"]], 
+                   gene_network[["gene_B"]])), 
+  species = "mouse"
 )
 
-# Create output directories if needed
-output_dirs <- c("NeighbourhoodEnrichment", "NeighbourhoodInfo")
-output_dirs <- file.path(
-  pipeline_dir,
-  "enrichment",
-  paste("StringDB", stringdb_version, "Bader", bader_version, sep = "_"),
-  gene_score,
-  output_dirs
-)
-for (path in output_dirs) {
-  if (!dir.exists(path)) {
-    dir.create(path, recursive = TRUE)
-  }
-}
+# Get human gene homologues for gene network
+gene_network <- gene_network |> 
+  left_join(select(gene_network_hom, GeneInput, GeneHuman),
+            by = c("gene_A" = "GeneInput"), 
+            relationship = "many-to-many") |> 
+  select(-gene_A) |> 
+  rename(gene_A = GeneHuman) |> 
+  left_join(select(gene_network_hom, GeneInput, GeneHuman),
+            by = c("gene_B" = "GeneInput"),
+            relationship = "many-to-many") |> 
+  select(-gene_B) |> 
+  rename(gene_B = GeneHuman)
 
-# Set path to Bader modules file
-if (bader_version == 2020) {
-  bader_modules <- file.path(
-    enrichment_dir,
-    "Human_Reactome_March_01_2020_symbol.gmt"
-  )
-} else if (bader_version == 2023) {
-  bader_modules <- file.path(
-    enrichment_dir,
-    "Human_Reactome_October_01_2023_symbol.gmt"
-  )
-} else if (bader_version == 2025) {
-  bader_modules <- file.path(
-    enrichment_dir,
-    "Human_Reactome_June_01_2025_symbol.gmt"
-  )
-} else {
-  stop(paste("Bader modules version", bader_version, "not found."))
-}
-
-# Iterate over cluster solutions
-for (nk in 2:nk_max) {
-  # Identify unique genes in each cluster
-  cluster_genes_nk <- clusters %>%
-    select(cluster = paste0("nk", nk), gene) %>%
-    unite(dup_select, "gene", "cluster", remove = FALSE) %>%
-    filter(!duplicated(dup_select)) %>%
-    select(cluster, gene)
-
-  # Iterate over clusters in solution
-  for (k in 1:nk) {
-    message(paste0("On cluster ", nk, "-", k))
-
-    cluster_genes_k <- cluster_genes_nk %>%
-      filter(cluster == k) %>%
-      pull(gene)
-
-    # Construct gene neighbourhood for cluster
-    message("\tBuilding gene neighbourhood...")
-    neighbourhood_k <- get_gene_neighbourhood(
-      genes = cluster_genes_k,
-      score = gene_score,
-      stringdb_version = stringdb_version
-    )
-
-    outfile <- paste("cluster_neighbourhood", nk, k, gene_score, sep = "_")
-    outfile <- paste0(outfile, ".csv")
-    outfile <- file.path(output_dirs[2], outfile)
-    write_csv(neighbourhood_k, file = outfile)
-
-    # Construct target set for cluster
-    target_set <- unique(c(
-      neighbourhood_k[["gene_A"]],
-      neighbourhood_k[["gene_B"]]
-    ))
-
-    # Evaluate pathway enrichment for cluster
-    message("\tCalculating pathway enrichment...")
-    enrichment <- get_neighbourhood_enrichment(
-      target = target_set,
-      background = background_set,
-      modules = bader_modules
-    )
-
-    enrichment[["nk"]] <- nk
-    enrichment[["k"]] <- k
-
-    outfile <- paste("cluster_pathway_enrichment", nk, k, gene_score, sep = "_")
-    outfile <- paste0(outfile, ".csv")
-    outfile <- file.path(output_dirs[1], outfile)
-    write_csv(enrichment, file = outfile)
-  }
-}
+# Evaluate cluster enrichment analysis
+compute_cluster_enrichment(clusters = clusters,
+                           gene_network = gene_network,
+                           background_set = background_set,
+                           modules = modules,
+                           string_score = args[["gene-score"]],
+                           nk_max = nk_max,
+                           output_dir = output_dir)
