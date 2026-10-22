@@ -110,33 +110,74 @@ df_enrichment_cluster
 pathway_title <- "Signaling by WNT"
 ```
 
+
+```{r}
+library(doParallel)
+library(foreach)
+
+import_enrichment_permutation <- function(file, nk_select, k_select, pathway_ids_keep, pathway_title) {
+  
+    df_permutation <- read_csv(file, show_col_types = FALSE)
+    
+    df_permutation$seed <- file |> 
+      basename() |> 
+      str_extract("seed_[0-9]+") |> 
+      str_remove("seed_") |> 
+      as.numeric()
+    
+    df_permutation <- df_permutation |> 
+      filter(nk == nk_select, k == k_select) |> 
+      filter(ID %in% pathway_ids_keep) |> 
+      filter(Title == pathway_title)
+    
+    return(df_permutation)
+  }
+
+
+
+import_permutations_parallel <- function(
+    files, nk_select, k_select, pathway_ids_keep, pathway_title,
+    workers = 4L
+) {
+  cl <- parallel::makeCluster(workers)
+  on.exit({
+    parallel::stopCluster(cl)
+    foreach::registerDoSEQ()
+  }, add = TRUE)
+
+  doParallel::registerDoParallel(cl)
+
+  results <- foreach(
+    file = files,
+    .packages = c("readr", "dplyr", "stringr"),
+    .export = "import_enrichment_permutation"
+  ) %dopar% {
+    import_enrichment_permutation(
+      file = file,
+      nk_select = nk_select,
+      k_select = k_select,
+      pathway_ids_keep = pathway_ids_keep,
+      pathway_title = pathway_title
+    )
+  }
+
+  bind_rows(results)
+}
+```
+
 ```{r}
 permutation_files <- list.files(permutations_dir)
 permutation_files <- file.path(permutations_dir, permutation_files)
 
-list_enrichment_permutations <- vector(mode = "list", length = length(permutation_files))
-for (i in 1:length(list_enrichment_permutations)) {
-  
-  df_enrichment_i <- read_csv(permutation_files[i], show_col_types = FALSE)
-  
-  df_enrichment_i$seed <- permutation_files[i] |> 
-    basename() |> 
-    str_extract("seed_[0-9]+") |> 
-    str_remove("seed_") |> 
-    as.numeric()
-  
-  df_enrichment_i <- df_enrichment_i |> 
-    filter(nk == nk_select, k == k_select) |> 
-    filter(ID %in% pathway_ids_keep) |> 
-    filter(Title == pathway_title)
-  
-  list_enrichment_permutations[[i]] <- df_enrichment_i
-    
-}
+pathway_title <- "Signaling by WNT"
 
-df_enrichment_permutations_WNT <- bind_rows(list_enrichment_permutations)
-
-df_enrichment_permutations_WNT
+df_enrichment_permutations_WNT <- import_permutations_parallel(
+  files = permutation_files,
+       nk_select = nk_select,
+      k_select = k_select,
+      pathway_ids_keep = pathway_ids_keep,
+      pathway_title = pathway_title,
+      workers = 32L)
 ```
 
 ```{r}
@@ -147,9 +188,14 @@ df_enrichment_cluster_WNT
 ```
 
 ```{r}
-ggplot(df_enrichment_permutations_WNT, aes(x = NLQ)) + 
+ggplot(df_enrichment_permutations_WNT, aes(x = E)) + 
   geom_histogram(bins = 50) +
-  geom_vline(xintercept = df_enrichment_cluster_WNT$NLQ) + 
-  geom_vline(xintercept = median(df_enrichment_permutations_WNT$NLQ), col = "red") + 
+  geom_vline(xintercept = df_enrichment_cluster_WNT$E) + 
+  geom_vline(xintercept = median(df_enrichment_permutations_WNT$E), col = "red") + 
   theme_bw()
+```
+
+
+```{r}
+sum(df_enrichment_permutations_WNT$E >= df_enrichment_cluster_WNT$E)/nrow(df_enrichment_permutations_WNT)
 ```
