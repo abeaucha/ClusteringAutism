@@ -338,8 +338,6 @@ mat_enrichment_qvals_clamped <-  df_enrichment |>
   as.matrix()
 ```
 
-
-
 ```{r}
 array_enrichment_E <- array(
   rep(as.vector(mat_enrichment_E), times = dim(permutation_array_E)[3]),
@@ -356,7 +354,6 @@ min(permutation_qvals, na.rm = TRUE)
 min(permutation_pvals, na.rm = TRUE)
 
 ```
-
 
 ```{r}
 
@@ -409,14 +406,12 @@ print(plt_null_qvals)
 invisible(dev.off())
 ```
 
-
 ```{r}
 file <- file.path(PROJECTPATH, "figures/v3/resources", "MICe_cluster_labels_colours.xlsx")
 df_mouse_cluster_labels <- readxl::read_excel(file)
 
 df_mouse_cluster_labels
 ```
-
 
 ```{r}
 pathway <- "Signaling by WNT"
@@ -475,7 +470,6 @@ invisible(dev.off())
 df_enrichment |> filter(cluster_id == "9-5")
 ```
 
-
 ```{r}
 pathway <- "Protein-protein interactions at synapses"
 
@@ -527,7 +521,6 @@ print(plt_null_wnt)
 invisible(dev.off())
 
 ```
-
 
 ```{r}
 pathway <- "Protein-protein interactions at synapses"
@@ -581,7 +574,6 @@ invisible(dev.off())
 
 ```
 
-
 ```{r}
 cluster_select <- "2-2"
 
@@ -610,7 +602,6 @@ plt_null_qvals <- ggplot(df_qvals_cluster,
 plt_null_qvals
 ```
 
-
 ```{r}
 df_enrichment |> 
   filter(cluster_id == "2-1") |> 
@@ -630,7 +621,6 @@ idx_pathway <- rownames(mat_enrichment_E) == pathway_id
 permutation_pvals[idx_pathway,1]
 ```
 
-
 ```{r}
 outfile <- "enrichment_null_comparison_pvals.pdf"
 pdf(file = outfile,
@@ -640,3 +630,212 @@ print(plt_null_pvals)
 invisible(dev.off())
 ```
 
+# Anatomical segregation of pathways
+
+```{r}
+max_med_diff <- function(x, na.rm = FALSE) {
+  x_max <- max(x, na.rm = na.rm)
+  x_med <- median(x, na.rm = na.rm)
+  return(x_max - x_med)
+}
+
+compute_empirical_pvalues <- function(x, samples) {
+  
+  if (is.null(dim(samples))) {
+    n_dims <- 1
+    n_samples <- length(samples)
+    x_rep <- rep(x, n_samples)
+    pvals <- (sum(samples >= x_rep) + 1)/(n_samples + 1)
+  } else {
+    n_dims <- length(dim(samples))
+    n_samples <- dim(samples)[n_dims]
+    x_rep <- array(rep(as.vector(x), times = n_samples),
+                   dim = dim(samples))
+    pvals <- (rowSums(samples >= x_rep, dims = n_dims-1) + 1)/(n_samples + 1)
+  }
+  
+  return(pvals)
+}
+```
+
+
+## Single nk, single pathway
+
+```{r}
+nk <- 8
+pathway <- "Protein-protein interactions at synapses"
+
+pathway_id <- df_enrichment |> 
+  filter(Title == pathway) |> 
+  pull(ID) |> 
+  unique()
+
+idx_pathway <- which(rownames(mat_enrichment_E) == pathway_id)
+
+idx_clusters <- which(str_detect(colnames(mat_enrichment_E), paste0(nk, "-")))
+
+E_pathway_nk <- mat_enrichment_E[idx_pathway, idx_clusters]
+
+E_max_med_diff <- max_med_diff(x = E_pathway_nk)
+
+samples_E_pathway_nk <- permutation_array_E[idx_pathway, idx_clusters,]
+
+E_max_med_diff_samples <- apply(samples_E_pathway_nk, MARGIN = 2, FUN = max_med_diff, na.rm = TRUE)
+
+pval <- compute_empirical_pvalues(x = E_max_med_diff, samples = E_max_med_diff_samples)
+
+plt_title <- paste0("Cluster solution (nk): ", nk, "\nPathway: ", pathway)
+plt_caption <- paste0("Empirical p-value: ", round(pval, 4))
+
+plt <- tibble(x = E_max_med_diff_samples) |> 
+  ggplot(aes(x = x)) + 
+  geom_histogram(binwidth = 2) +
+  geom_vline(xintercept = E_max_med_diff, col = "red") +
+  labs(x = "Max(E) - Median(E)",
+       title = plt_title,
+       caption = plt_caption) +
+  theme_bw()
+
+outfile <- "enrichment_max_med_nk_8_PPI.pdf"
+pdf(file = outfile,
+    width = unit(6, "in"),
+    height = unit(6, "in"))
+print(plt)
+invisible(dev.off())
+```
+
+## Single nk, all pathways
+
+How do we multiplex this?
+
+
+```{r}
+# Select cluster solution
+nk <- 8
+idx_clusters <- which(str_detect(colnames(mat_enrichment_E), paste0(nk, "-")))
+mat_E_nk <- mat_enrichment_E[,idx_clusters]
+
+# Remove pathways with all NA
+idx_all_missing <- rowSums(is.na(mat_E_nk)) == nk
+mat_E_nk <- mat_E_nk[!idx_all_missing,]
+
+# Compute true max-med diff
+E_max_med_diff <- apply(mat_E_nk, MARGIN = 1, FUN = max_med_diff, na.rm = TRUE)
+
+# Filter samples for pathways and clusters
+samples_E_nk <- permutation_array_E[!idx_all_missing, idx_clusters, ]
+E_max_med_diff_samples <- apply(samples_E_nk, MARGIN = c(1,3), FUN = max_med_diff, na.rm = TRUE)
+
+E_max_med_diff_pvals <- compute_empirical_pvalues(x = E_max_med_diff, samples = E_max_med_diff_samples)
+
+tibble(pvals = E_max_med_diff_pvals) |> 
+  ggplot(aes(x = -log10(pvals))) + 
+  geom_histogram() + 
+  geom_vline(xintercept = -log10(0.05), col = "red") + 
+  theme_bw()
+```
+
+## All nk, all pathways
+
+```{r}
+compute_max_med_statistics <- function(enrichment, enrichment_samples, nk_range = 2:10) {
+  
+  mat_stats <- matrix(data = 0, nrow = nrow(enrichment), ncol = length(nk_range))
+  mat_pvals <- matrix(data = 0, nrow = nrow(enrichment), ncol = length(nk_range))
+  list_samples <- vector(mode = "list", length = length(nk_range))
+  for (i in 1:length(nk_range)) {
+    
+    nk <- nk_range[i]
+    
+    message(paste0("On nk = ", nk))
+    
+    idx_clusters <- which(str_detect(colnames(enrichment), paste0(nk, "-")))
+    enrichment_nk <- enrichment[,idx_clusters]
+    
+    # Compute true max-med diff
+    stats <- apply(enrichment_nk, MARGIN = 1, FUN = max_med_diff, na.rm = TRUE)
+    
+    # Filter samples for pathways and clusters
+    enrichment_samples_nk <- enrichment_samples[, idx_clusters, ]
+    stat_samples <- suppressWarnings(
+      apply(enrichment_samples_nk, MARGIN = c(1,3), FUN = max_med_diff, na.rm = TRUE)
+      )
+    
+    pvals <- compute_empirical_pvalues(x = stat, samples = stat_samples)
+    
+    mat_stats[,i] <- stats
+    mat_pvals[,i] <- pvals
+    list_samples[[i]] <- stat_samples
+    
+  }
+  
+  colnames(mat_stats) <- colnames(mat_pvals) <- paste0("nk", nk_range)
+  rownames(mat_stats) <- rownames(mat_pvals) <- rownames(enrichment)
+  names(list_samples) <- paste0("nk", nk_range)
+  
+  return(list(stats = mat_stats,
+              pvals = mat_pvals,
+              samples = list_samples))
+  
+}
+```
+
+```{r}
+tmp <- compute_max_med_statistics(enrichment = mat_enrichment_E,
+                                  enrichment_samples = permutation_array_E,
+                                  nk_range = 4:10)
+```
+```{r}
+df_pvals <- as_tibble(tmp$pvals, rownames = "ID")
+
+df_pvals_long <- df_pvals |> 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "pvals") 
+
+ggplot(df_pvals_long, aes(x = -log10(pvals))) + 
+  geom_histogram() +
+  facet_wrap(~nk_name)
+```
+
+```{r}
+n_samples <- 250
+n_samples <- nrow(df_pvals)
+
+set.seed(123)
+plt <- df_pvals |> 
+  sample_n(size = n_samples)  |> 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "pvals") |> 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) |> 
+  ggplot(aes(x = nk, y = -log10(pvals), group = ID)) + 
+  geom_line(col = "grey50", linewidth = 0.05) + 
+  geom_point() + 
+  geom_hline(yintercept = -log10(0.05), col = "red", linetype = "dashed") + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  labs(x = "Cluster solution (nk)",
+       y = "-log10(p)",
+       title = "Max(E) - Median(E) p-values for all pathways") + 
+  theme_bw()
+
+outfile <- "enrichment_max_med_pvalues.pdf"
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt)
+invisible(dev.off())
+```
+
+```{r}
+df_pvals |> 
+  filter(nk4 < 0.05)
+```
+
+```{r}
+df_pvals |> 
+  filter(nk4 < 0.05) |> 
+  filter(nk10 < 0.05)
+```
+
+```{r}
+df_pvals |> 
+  filter(nk4 >= 0.05) |> 
+  filter(nk10 < 0.05)
+```
