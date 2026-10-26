@@ -22,8 +22,8 @@ option_list <- list(
     default = "data/mouse/derivatives/"
   ),
   make_option(
-    "--params-id", 
-  type = "character"
+    "--params-id",
+    type = "character"
   ),
   make_option(
     "--background-file",
@@ -36,29 +36,34 @@ option_list <- list(
     default = "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt"
   ),
   make_option(
-    "--output-dir", 
+    "--output-dir",
     type = "character"
-    ),
+  ),
   make_option(
-    "--models", 
-    type = "character", 
+    "--models",
+    type = "character",
     default = "model_names.csv"
-    ),
+  ),
   make_option(
-    "--gene-score", 
+    "--gene-score",
     type = "numeric",
     default = 950
-    ),
+  ),
+  make_option(
+    "--simplify",
+    type = "character",
+    default = "true"
+  ),
   make_option(
     "--n-permutations",
-    type = "numeric", 
+    type = "numeric",
     default = 1000L
-    ),
+  ),
   make_option(
     "--n-workers",
     type = "numeric",
     default = 4L
-    )
+  )
 )
 
 # Environment variables ------------------------------------------------------
@@ -89,6 +94,8 @@ params <- fetch_params_metadata(
 # Complete pipeline directory path with parameter set id
 pipeline_dir <- file.path(pipeline_dir, args[["params-id"]])
 
+simplify <- ifelse(args[["simplify"]] == "true", TRUE, FALSE)
+
 # Get max number of clusters
 nk_max <- params[["cluster_nk_max"]]
 
@@ -98,14 +105,25 @@ cluster_resolution <- sprintf("%.1f", cluster_resolution)
 
 # Define output directory
 if (is.null(args[["output-dir"]])) {
-  output_dir <- file.path(pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025")
+  output_dir <- file.path(
+    pipeline_dir,
+    "enrichment",
+    "StringDB_12.0_Bader_2025",
+    args[["gene-score"]]
+  )
 } else {
   output_dir <- args[["output-dir"]]
 }
-if (!dir.exists(output_dir)) {dir.create(output_dir, recursive = TRUE)}
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
 
 # Cluster directory path
-clusters_dir <- file.path(pipeline_dir, "clusters", paste0("resolution_", cluster_resolution))
+clusters_dir <- file.path(
+  pipeline_dir,
+  "clusters",
+  paste0("resolution_", cluster_resolution)
+)
 
 # Import clusters
 clusters_file <- file.path(clusters_dir, "clusters.csv")
@@ -117,22 +135,25 @@ models <- get_model_genes(models_file)
 
 # Join with model gene names (and filter for single genes)
 clusters <- clusters |>
-    rename(file = ID) |>
-    right_join(models, by = "file") |>
-    select(-file) |>
-    rename(model = ID)
+  rename(file = ID) |>
+  right_join(models, by = "file") |>
+  select(-file) |>
+  rename(model = ID)
 
 # Import Bader Reactome pathway modules
 modules <- importMsigDBGMT(args[["modules-file"]])
 
 # Construct background set of genes
 message("Building background gene set ...")
-background_set <- read_csv(file = args[["background-file"]], show_col_types = FALSE) |>
+background_set <- read_csv(
+  file = args[["background-file"]],
+  show_col_types = FALSE
+) |>
   pull(msg.genes.acronym) |>
-  as.character() |> 
-  unique() |> 
-  fetch_gene_homologs(species = "mouse") |> 
-  filter(!is.na(GeneHuman)) |> 
+  as.character() |>
+  unique() |>
+  fetch_gene_homologs(species = "mouse") |>
+  filter(!is.na(GeneHuman)) |>
   pull(GeneHuman)
 
 # Compute gene interaction network for all genes in clusters
@@ -144,28 +165,31 @@ gene_network <- build_gene_interaction_network(
 
 # Build data frame of human homologs for all target genes
 gene_network_hom <- fetch_gene_homologs(
-  genes = unique(c(gene_network[["gene_A"]], 
-                   gene_network[["gene_B"]])), 
+  genes = unique(c(gene_network[["gene_A"]], gene_network[["gene_B"]])),
   species = "mouse"
 )
 
 # Get human gene homologues for gene network
-gene_network <- gene_network |> 
-  left_join(select(gene_network_hom, GeneInput, GeneHuman),
-            by = c("gene_A" = "GeneInput"), 
-            relationship = "many-to-many") |> 
-  select(-gene_A) |> 
-  rename(gene_A = GeneHuman) |> 
-  left_join(select(gene_network_hom, GeneInput, GeneHuman),
-            by = c("gene_B" = "GeneInput"),
-            relationship = "many-to-many") |> 
-  select(-gene_B) |> 
+gene_network <- gene_network |>
+  left_join(
+    select(gene_network_hom, GeneInput, GeneHuman),
+    by = c("gene_A" = "GeneInput"),
+    relationship = "many-to-many"
+  ) |>
+  select(-gene_A) |>
+  rename(gene_A = GeneHuman) |>
+  left_join(
+    select(gene_network_hom, GeneInput, GeneHuman),
+    by = c("gene_B" = "GeneInput"),
+    relationship = "many-to-many"
+  ) |>
+  select(-gene_B) |>
   rename(gene_B = GeneHuman)
 
 
 message("Running permutations for cluster enrichment analysis ...")
 ti <- Sys.time()
-permutation_status <- run_cluster_enrichment_permutations(
+results <- run_cluster_enrichment_permutations(
   clusters = clusters,
   gene_network = gene_network,
   background_set = background_set,
@@ -173,12 +197,48 @@ permutation_status <- run_cluster_enrichment_permutations(
   string_score = args[["gene-score"]],
   nk_max = nk_max,
   output_dir = output_dir,
-  B = args[["n-permutations"]], 
+  simplify = simplify,
+  B = args[["n-permutations"]],
   n_workers = args[["n-workers"]]
 )
 tf <- Sys.time()
 print(difftime(tf, ti, units = "hours"))
 
-if (any(!permutation_status$success)) {
-  warning("Some permutations failed; inspect permutation_status for details.")
+success <- vapply(results, `[[`, logical(1), "success")
+if (any(!success)) {
+  warning("Some permutations failed; inspect results for details.")
+}
+
+
+if (simplify) {
+  
+  successful <- Filter(
+    function(x) x$success,
+    results
+  )
+  
+  if (length(successful) == 0L) {
+    stop("All permutations failed.")
+  }
+  
+  enrichment_array <- simplify2array(
+    lapply(successful, function(x) {
+      x$result$enrichment
+    })
+  )
+  
+  p_array <- simplify2array(
+    lapply(successful, function(x) {
+      x$result$`p-values`
+    })
+  )
+  
+  outfile <- "cluster_pathway_enrichment_permutations.rds"
+  outfile <- file.path(output_dir, outfile)
+  saveRDS(
+    list("enrichment" = enrichment_array,
+         "p-values" = p_array,
+         "seeds" = vapply(successful, `[[`, integer(1), "seed")),
+    file = outfile
+  )
 }

@@ -67,6 +67,15 @@ source(file.path(SRCPATH, "enrichment.R"))
 # Parse command line args
 args <- parse_args(OptionParser(option_list = option_list))
 
+# args <- list(
+#   "pipeline-dir" = "data/mouse/derivatives/v3/",
+#   "params-id" = "107",
+#   "background-file" = "data/enrichment/sagittal_gene_table_normalized_filtered.csv",
+#   "modules-file" = "data/enrichment/Human_Reactome_June_01_2025_symbol.gmt",
+#   "models" = "model_names.csv",
+#   "gene-score" = 950
+# )
+
 pipeline_dir <- args[["pipeline-dir"]]
 
 if (is.null(args[["params-id"]])) {
@@ -91,7 +100,7 @@ cluster_resolution <- params[["cluster_resolution"]]
 cluster_resolution <- sprintf("%.1f", cluster_resolution)
 
 # Output directory
-output_dir <- file.path(pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025")
+output_dir <- file.path(pipeline_dir, "enrichment", "StringDB_12.0_Bader_2025", args[["gene-score"]])
 if (!dir.exists(output_dir)) {dir.create(output_dir, recursive = TRUE)}
 
 # Cluster directory path
@@ -153,10 +162,15 @@ gene_network <- gene_network |>
   rename(gene_B = GeneHuman)
 
 # Evaluate cluster enrichment analysis
-compute_cluster_enrichment(clusters = clusters,
-                           gene_network = gene_network,
-                           background_set = background_set,
-                           modules = modules,
-                           string_score = args[["gene-score"]],
-                           nk_max = nk_max,
-                           output_dir = output_dir)
+enrichment <- compute_cluster_enrichment(clusters = clusters,
+                                         gene_network = gene_network,
+                                         background_set = background_set,
+                                         modules = modules,
+                                         string_score = args[["gene-score"]],
+                                         nk_max = nk_max)
+
+# Export enrichment data
+outfile <- "cluster_pathway_enrichment"
+outfile <- paste0(outfile, ".csv")
+outfile <- file.path(output_dir, outfile)
+write_csv(enrichment, file = outfile)

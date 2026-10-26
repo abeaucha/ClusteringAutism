@@ -103,70 +103,6 @@ get_model_genes <- function(models) {
 }
 
 
-get_homologs_old <- function(genes, species, ordered = FALSE) {
-  if (!exists("hom", envir = globalenv())) {
-    hom <- read_tsv(
-      "http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt",
-      show_col_types = FALSE
-    )
-  }
-  species <- switch(
-    species,
-    mouse = {
-      "mouse, laboratory"
-    },
-    human = {
-      "human"
-    }
-  )
-
-  if (ordered) {
-    genes_human <- genes_mouse <- c()
-    prog <- txtProgressBar(max = length(genes), style = 3)
-    for (i in 1:length(genes)) {
-      g <- genes[i]
-      homologene_ids <- hom$`DB Class Key`[which(
-        (hom$Symbol == g) & hom$`Common Organism Name` == species
-      )]
-      genes_mouse <- c(
-        genes_mouse,
-        hom$Symbol[which(
-          (hom$`DB Class Key` %in% homologene_ids) &
-            (hom$`Common Organism Name` == "mouse, laboratory")
-        )]
-      )
-      genes_human <- c(
-        genes_human,
-        hom$Symbol[which(
-          (hom$`DB Class Key` %in% homologene_ids) &
-            (hom$`Common Organism Name` == "human")
-        )]
-      )
-      setTxtProgressBar(prog, i)
-    }
-    close(prog)
-  } else {
-    # Faster, but unordered
-    homologene_ids <- hom$`DB Class Key`[which(
-      (hom$Symbol %in% genes) & hom$`Common Organism Name` == species
-    )]
-    genes_mouse <- hom$Symbol[which(
-      (hom$`DB Class Key` %in% homologene_ids) &
-        (hom$`Common Organism Name` == "mouse, laboratory")
-    )]
-    genes_human <- hom$Symbol[which(
-      (hom$`DB Class Key` %in% homologene_ids) &
-        (hom$`Common Organism Name` == "human")
-    )]
-  }
-
-  return(list(
-    input_genes = genes,
-    mouse_genes = genes_mouse,
-    human_genes = genes_human
-  ))
-}
-
 
 #' Fetch gene homologs
 #'
@@ -175,7 +111,6 @@ get_homologs_old <- function(genes, species, ordered = FALSE) {
 #'
 #' @returns (tibble)
 fetch_gene_homologs <- function(genes, species) {
-  
   # Update species name
   species <- switch(
     species,
@@ -186,52 +121,57 @@ fetch_gene_homologs <- function(genes, species) {
       "human"
     }
   )
-  
+
   # Get unique genes
   genes <- unique(genes)
-  
+
   # Fetch homologs database from JAX
   hom <- read_tsv(
     "http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt",
     show_col_types = FALSE
   )
-  
+
   # Subset columns and get distinct entries
-  hom <- hom %>% 
-    select(`DB Class Key`, Symbol, `Common Organism Name`) %>% 
+  hom <- hom %>%
+    select(`DB Class Key`, Symbol, `Common Organism Name`) %>%
     distinct()
-  
+
   # Build data frame from input genes
   hom_input <- tibble(Symbol = genes, `Common Organism Name` = species)
-  
+
   # Get homolog information for input genes
-  hom_output <- hom_input %>% 
-    left_join(select(hom, `DB Class Key`, Symbol, `Common Organism Name`),
-              by = c("Symbol", "Common Organism Name")) %>% 
+  hom_output <- hom_input %>%
+    left_join(
+      select(hom, `DB Class Key`, Symbol, `Common Organism Name`),
+      by = c("Symbol", "Common Organism Name")
+    ) %>%
     select(`DB Class Key`, SymbolInput = Symbol)
-  
+
   # Get homolog information for mouse
-  hom_mouse <- hom %>% 
-    filter(`Common Organism Name` == "mouse, laboratory") %>% 
+  hom_mouse <- hom %>%
+    filter(`Common Organism Name` == "mouse, laboratory") %>%
     select(`DB Class Key`, SymbolMouse = Symbol)
-  
+
   # Get homolog information for human
-  hom_human <- hom %>% 
-    filter(`Common Organism Name` == "human") %>% 
+  hom_human <- hom %>%
+    filter(`Common Organism Name` == "human") %>%
     select(`DB Class Key`, SymbolHuman = Symbol)
-  
+
   # Join mouse and human homologs to input
-  hom_output <- hom_output %>% 
-    left_join(hom_mouse, by = "DB Class Key") %>% 
+  hom_output <- hom_output %>%
+    left_join(hom_mouse, by = "DB Class Key") %>%
     left_join(hom_human, by = "DB Class Key")
-  
+
   # Rename columns
-  hom_output <- hom_output %>% 
-    rename(HomologeneID = `DB Class Key`, GeneInput = SymbolInput,
-           GeneMouse = SymbolMouse, GeneHuman = SymbolHuman)
-  
+  hom_output <- hom_output %>%
+    rename(
+      HomologeneID = `DB Class Key`,
+      GeneInput = SymbolInput,
+      GeneMouse = SymbolMouse,
+      GeneHuman = SymbolHuman
+    )
+
   return(hom_output)
-  
 }
 
 
@@ -382,37 +322,6 @@ HGtest <- function(fg, bg, mset, qval = 0.05, cols = "Title", nodups = TRUE) {
 }
 
 
-#' Evaluate the enrichment for a target set
-#'
-#' @param target (character vector) Target set of genes
-#' @param background (character vector) Background set of genes
-#' @param modules (character scalar) File (.gmt) containing the pathway modules
-#'
-#' @returns (data.frame, tbl) Enrichment data frame
-get_neighbourhood_enrichment <- function(
-  target,
-  background,
-  modules
-) {
-  # Convert mouse gene names to human
-  fg <- get_homologs(target, "mouse", ordered = F)[["human_genes"]]
-  bg <- get_homologs(background, "mouse", ordered = F)[["human_genes"]]
-
-  # Run hypergeometric test against pathway modules
-  enrichment <- HGtest(fg = fg, bg = bg, mset = modules)
-
-  enrichment <- enrichment %>%
-    arrange(P.Value) %>%
-    mutate(
-      rank = 1:nrow(.),
-      adj.P.Val = p.adjust(P.Value, method = "fdr"),
-      NLQ = -log10(adj.P.Val)
-    ) %>%
-    select(rank, ID, Title, P.Value, adj.P.Val, NLQ, b, B, n, N, E)
-
-  return(enrichment)
-}
-
 
 #' Evaluate the enrichment for a target set
 #'
@@ -422,14 +331,13 @@ get_neighbourhood_enrichment <- function(
 #'
 #' @returns (data.frame, tbl) Enrichment data frame
 gene_set_enrichment <- function(
-    target,
-    background,
-    modules
+  target,
+  background,
+  modules
 ) {
-  
   # Run hypergeometric test against pathway modules
   enrichment <- HGtest(fg = target, bg = background, mset = modules)
-  
+
   enrichment <- enrichment %>%
     arrange(P.Value) %>%
     mutate(
@@ -438,7 +346,7 @@ gene_set_enrichment <- function(
       NLQ = -log10(adj.P.Val)
     ) %>%
     select(rank, ID, Title, P.Value, adj.P.Val, NLQ, b, B, n, N, E)
-  
+
   return(enrichment)
 }
 
@@ -453,19 +361,7 @@ get_module_sizes <- function(
 }
 
 
-#' Title
-#'
-#' @param clusters 
-#' @param gene_network 
-#' @param background_set 
-#' @param modules 
-#' @param string_score 
-#' @param nk_max 
-#' @param output_dir 
-#' @param permute 
-#' @param seed 
-#'
-#' @returns NULL
+
 compute_cluster_enrichment <- function(
     clusters,
     gene_network,
@@ -473,20 +369,12 @@ compute_cluster_enrichment <- function(
     modules,
     string_score = 950,
     nk_max = 10,
-    output_dir = "data/enrichment/StringDB_12.0_Bader_2025",
     permute = FALSE,
     seed = NULL
 ) {
   
-  # Add STRING score to output dir
-  output_dir <- file.path(output_dir, string_score)
-  if (!dir.exists(output_dir)) {
-    dir.create(output_dir, recursive = TRUE)
-  }
-  
   # If permutation, reshuffle cluster assignments
   if (permute) {
-    output_dir <- file.path(output_dir, "permutations")
     
     if (is.null(seed)) {
       seed <- sample(1E5, size = 1)
@@ -507,7 +395,6 @@ compute_cluster_enrichment <- function(
   nk_range <- 2:nk_max
   list_enrichment <- vector(mode = "list", length = length(nk_range))
   for (l in 1:length(nk_range)) {
-    
     nk <- nk_range[l]
     
     # Identify unique genes in each cluster
@@ -548,69 +435,103 @@ compute_cluster_enrichment <- function(
       enrichment[["k"]] <- k
       
       list_enrichment[[l]][[k]] <- enrichment
-      
     }
     
     list_enrichment[[l]] <- bind_rows(list_enrichment[[l]])
-    
   }
   
-  df_enrichment <- bind_rows(list_enrichment)
-
-  outfile <- "cluster_pathway_enrichment"
+  df_enrichment <- bind_rows(list_enrichment) |> 
+    unite(col = "cluster_id", c("nk", "k"), sep = "-", remove = FALSE)
   
-  if (permute) {
-    outfile <- paste(outfile, "seed", seed, sep = "_")
-  }
+  return(df_enrichment)
   
-  outfile <- paste0(outfile, ".csv")
-  # outfile <- file.path(output_dir, "NeighbourhoodEnrichment", outfile)
-  outfile <- file.path(output_dir, outfile)
-  write_csv(df_enrichment, file = outfile)
-    
 }
 
 
-
+enrichment_to_matrices <- function(df) {
+  
+  # Get cluster ID levels
+  cluster_lvls <- df |> 
+    select(cluster_id, nk, k) |> 
+    distinct() |> 
+    arrange(nk, k) |> 
+    pull(cluster_id)
+  
+  # Create enrichment matrix
+  mat_enrichment <- df |> 
+    select(ID, cluster_id, E) |> 
+    mutate(cluster_id = factor(cluster_id, levels = cluster_lvls)) |> 
+    arrange(ID) |> 
+    pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "E") |> 
+    column_to_rownames("ID") |> 
+    as.matrix()
+  
+  # Create p-value matrix
+  mat_pvals <- df |> 
+    select(ID, cluster_id, P.Value) |> 
+    mutate(cluster_id = factor(cluster_id, levels = cluster_lvls)) |> 
+    arrange(ID) |> 
+    pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "P.Value") |> 
+    column_to_rownames("ID") |> 
+    as.matrix()
+  
+  return(list("enrichment" = mat_enrichment,
+              "p-values" = mat_pvals))
+  
+}
 
 #' Run cluster-enrichment permutations in parallel
 #'
-#' @param clusters 
-#' @param gene_network 
-#' @param background_set 
-#' @param modules 
-#' @param string_score 
-#' @param nk_max 
-#' @param output_dir 
+#' @param clusters
+#' @param gene_network
+#' @param background_set
+#' @param modules
+#' @param string_score
+#' @param nk_max
+#' @param output_dir
 #' @param B Positive integer number of permutations; seeds are seq_len(B).
 #' @param n_workers Positive integer maximum number of worker R processes.
 #'
 #' @return A data frame with seed, success, and error columns, in seed order.
 #'   Enrichment results are written to the seed-specific output directories.
 run_cluster_enrichment_permutations <- function(
-    clusters, gene_network, background_set, modules,
-    string_score = 950, nk_max = 10,
-    output_dir = "data/enrichment/StringDB_12.0_Bader_2025", 
-    B = 1000L, n_workers = 4L
+  clusters,
+  gene_network,
+  background_set,
+  modules,
+  string_score = 950,
+  nk_max = 10,
+  simplify = TRUE,
+  output_dir = "data/enrichment/StringDB_12.0_Bader_2025",
+  B = 1000L,
+  n_workers = 4L
 ) {
   # Reject invalid counts before starting any worker processes.
   stopifnot(
-    length(B) == 1L, is.finite(B), B >= 1, B == floor(B),
-    length(n_workers) == 1L, is.finite(n_workers),
-    n_workers >= 1, n_workers == floor(n_workers)
+    length(B) == 1L,
+    is.finite(B),
+    B >= 1,
+    B == floor(B),
+    length(n_workers) == 1L,
+    is.finite(n_workers),
+    n_workers >= 1,
+    n_workers == floor(n_workers)
   )
-  
+
   # Start separate R processes, with no more workers than permutations.
   workers <- parallel::makePSOCKcluster(min(n_workers, B))
   # Release workers and reset foreach to sequential execution on exit,
   # including when setup or execution raises an error.
-  on.exit({
-    parallel::stopCluster(workers)
-    foreach::registerDoSEQ()
-  }, add = TRUE)
+  on.exit(
+    {
+      parallel::stopCluster(workers)
+      foreach::registerDoSEQ()
+    },
+    add = TRUE
+  )
   # doSNOW supplies the per-result progress callback used below.
   doSNOW::registerDoSNOW(workers)
-  
+
   # Only the parent process updates the bar; workers return their results.
   progress <- utils::txtProgressBar(min = 0, max = B, style = 3)
   on.exit(close(progress), add = TRUE)
@@ -619,49 +540,83 @@ run_cluster_enrichment_permutations <- function(
     preschedule = FALSE,
     progress = function(n) utils::setTxtProgressBar(progress, n)
   )
-  
+
   # Keep relative input/output paths consistent with the parent R session.
   parallel::clusterCall(workers, setwd, getwd())
-  
+
   # Export shared data once per worker, including indirectly called helpers.
   shared_objects <- c(
-    "compute_cluster_enrichment", "gene_set_enrichment", "HGtest",
-    "clusters", "gene_network", "background_set", "modules",
-    "string_score", "nk_max", "output_dir"
+    "compute_cluster_enrichment",
+    "enrichment_to_matrices",
+    "gene_set_enrichment",
+    "HGtest",
+    "clusters",
+    "gene_network",
+    "background_set",
+    "modules",
+    "string_score",
+    "nk_max",
+    "output_dir"
   )
   # Resolve names here and in enclosing environments. Each worker receives
   # its own copy, reused across its assigned permutations.
   parallel::clusterExport(workers, shared_objects, envir = environment())
-  
+
   # Bind the operator locally without attaching foreach to the search path.
   `%dopar%` <- foreach::`%dopar%`
   foreach::foreach(
     b = seq_len(B),
     # Collect one small status row per seed instead of enrichment tables.
-    .combine = rbind,
+    # .combine = rbind,
     .packages = "tidyverse",
     # These objects were already exported during worker initialization.
     .noexport = shared_objects,
     .options.snow = snow_options
-  ) %dopar% {
-    # Record an analysis failure without abandoning the remaining seeds.
-    # Failed seeds also advance the bar, which counts completed attempts.
-    tryCatch({
-      compute_cluster_enrichment(
-        clusters = clusters,
-        gene_network = gene_network,
-        background_set = background_set,
-        modules = modules,
-        string_score = string_score,
-        nk_max = nk_max,
-        output_dir = output_dir,
-        permute = TRUE,
-        # The analysis sets its RNG seed and output directory from b.
-        seed = b
+  ) %dopar%
+    {
+      # Record an analysis failure without abandoning the remaining seeds.
+      # Failed seeds also advance the bar, which counts completed attempts.
+      tryCatch(
+        {
+          enrichment <- compute_cluster_enrichment(
+            clusters = clusters,
+            gene_network = gene_network,
+            background_set = background_set,
+            modules = modules,
+            string_score = string_score,
+            nk_max = nk_max,
+            permute = TRUE,
+            # The analysis sets its RNG seed and output directory from b.
+            seed = b
+          )
+          
+          if (simplify) {
+            result <- enrichment_to_matrices(enrichment)
+          } else {
+            outfile <- "cluster_pathway_enrichment"
+            outfile <- paste(outfile, "seed", b, sep = "_")
+            outfile <- paste0(outfile, ".csv")
+            outfile <- file.path(output_dir, outfile)
+            write_csv(enrichment, file = outfile)
+            result <- NULL
+          }
+          
+          list(
+            seed = b,
+            success = TRUE,
+            result = result,
+            error = NA_character_
+          )
+          
+        },
+        error = function(e) {
+            list(
+              seed = b,
+              success = FALSE,
+              result = NULL,
+              error = conditionMessage(e)
+            )
+        }
       )
-      data.frame(seed = b, success = TRUE, error = NA_character_)
-    }, error = function(e) {
-      data.frame(seed = b, success = FALSE, error = conditionMessage(e))
-    })
-  }
+    }
 }
