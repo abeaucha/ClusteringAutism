@@ -504,6 +504,7 @@ run_cluster_enrichment_permutations <- function(
   simplify = TRUE,
   output_dir = "data/enrichment/StringDB_12.0_Bader_2025",
   B = 1000L,
+  seed_start = 1L,
   n_workers = 4L
 ) {
   # Reject invalid counts before starting any worker processes.
@@ -565,7 +566,7 @@ run_cluster_enrichment_permutations <- function(
   # Bind the operator locally without attaching foreach to the search path.
   `%dopar%` <- foreach::`%dopar%`
   foreach::foreach(
-    b = seq_len(B),
+    b = seq.int(from = seed_start, length.out = B),
     # Collect one small status row per seed instead of enrichment tables.
     # .combine = rbind,
     .packages = "tidyverse",

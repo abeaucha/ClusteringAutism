@@ -60,6 +60,11 @@ option_list <- list(
     default = 1000L
   ),
   make_option(
+    "--seed-start",
+    type = "numeric",
+    default = 1L
+  ),
+  make_option(
     "--n-workers",
     type = "numeric",
     default = 4L
@@ -95,6 +100,7 @@ params <- fetch_params_metadata(
 pipeline_dir <- file.path(pipeline_dir, args[["params-id"]])
 
 simplify <- ifelse(args[["simplify"]] == "true", TRUE, FALSE)
+seed_start <- args[["seed-start"]]
 
 # Get max number of clusters
 nk_max <- params[["cluster_nk_max"]]
@@ -199,6 +205,7 @@ results <- run_cluster_enrichment_permutations(
   output_dir = output_dir,
   simplify = simplify,
   B = args[["n-permutations"]],
+  seed_start = seed_start,
   n_workers = args[["n-workers"]]
 )
 tf <- Sys.time()
@@ -210,7 +217,9 @@ if (any(!success)) {
 }
 
 if (simplify) {
-  outfile <- "cluster_pathway_enrichment_permutations.rds"
+  outfile <- "cluster_pathway_enrichment_permutations"
+  outfile <- paste(outfile, seed_start, (seed_start + B - 1), sep = "_")
+  outfile <- paste0(outfile, ".rds")
   outfile <- file.path(output_dir, outfile)
   saveRDS(results, file = outfile)
 }
