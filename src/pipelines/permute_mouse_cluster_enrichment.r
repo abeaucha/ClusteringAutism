@@ -209,36 +209,41 @@ if (any(!success)) {
   warning("Some permutations failed; inspect results for details.")
 }
 
-
 if (simplify) {
-  
-  successful <- Filter(
-    function(x) x$success,
-    results
-  )
-  
-  if (length(successful) == 0L) {
-    stop("All permutations failed.")
-  }
-  
-  enrichment_array <- simplify2array(
-    lapply(successful, function(x) {
-      x$result$enrichment
-    })
-  )
-  
-  p_array <- simplify2array(
-    lapply(successful, function(x) {
-      x$result$`p-values`
-    })
-  )
-  
   outfile <- "cluster_pathway_enrichment_permutations.rds"
   outfile <- file.path(output_dir, outfile)
-  saveRDS(
-    list("enrichment" = enrichment_array,
-         "p-values" = p_array,
-         "seeds" = vapply(successful, `[[`, integer(1), "seed")),
-    file = outfile
-  )
+  saveRDS(results, file = outfile)
 }
+
+# if (simplify) {
+#   
+#   successful <- Filter(
+#     function(x) x$success,
+#     results
+#   )
+#   
+#   if (length(successful) == 0L) {
+#     stop("All permutations failed.")
+#   }
+#   
+#   enrichment_array <- simplify2array(
+#     lapply(successful, function(x) {
+#       x$result$enrichment
+#     })
+#   )
+#   
+#   p_array <- simplify2array(
+#     lapply(successful, function(x) {
+#       x$result$`p-values`
+#     })
+#   )
+#   
+#   outfile <- "cluster_pathway_enrichment_permutations.rds"
+#   outfile <- file.path(output_dir, outfile)
+#   saveRDS(
+#     list("enrichment" = enrichment_array,
+#          "p-values" = p_array,
+#          "seeds" = vapply(successful, `[[`, integer(1), "seed")),
+#     file = outfile
+#   )
+# }
