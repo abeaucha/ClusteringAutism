@@ -10,6 +10,7 @@ permute_mouse_cluster_enrichment.r \
   --pipeline-dir $PROJECTPATH/data/mouse/derivatives/v3/ \
   --params-id 107 \
   --gene-score 950 \
+  --seed-start 1 \
   --n-permutations 10000 \
   --n-workers 32
   
