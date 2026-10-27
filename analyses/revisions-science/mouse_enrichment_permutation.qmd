@@ -230,6 +230,9 @@ import_enrichment_stat_parallel <- function(
 ```
 
 ```{r}
+run <- FALSE
+if (run) {
+
 permutation_dir <- file.path(enrichment_dir, "permutations")
 permutation_files <- list.files(permutation_dir)
 permutation_files <- file.path(permutation_dir, permutation_files)
@@ -239,6 +242,8 @@ permutation_array_E_from_files <- import_enrichment_stat_parallel(files = permut
                                                                   workers = 32L)
 
 saveRDS(permutation_array_E_from_files, file = file.path(enrichment_dir, "permutation_array_E_from_files.rds"))
+
+}
 ```
 
 
