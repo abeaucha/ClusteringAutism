@@ -8,6 +8,7 @@ editor: visual
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(doParallel))
 suppressPackageStartupMessages(library(foreach))
+suppressPackageStartupMessages(library(patchwork))
 ```
 
 ```{r functions}
@@ -18,21 +19,21 @@ source(file.path(SRCPATH, "enrichment.R"))
 
 import_enrichment_permutation <- function(file, nk_select, k_select, pathway_ids_keep, pathway_title) {
   
-    df_permutation <- read_csv(file, show_col_types = FALSE)
-    
-    df_permutation$seed <- file |> 
-      basename() |> 
-      str_extract("seed_[0-9]+") |> 
-      str_remove("seed_") |> 
-      as.numeric()
-    
-    df_permutation <- df_permutation |> 
-      filter(nk == nk_select, k == k_select) |> 
-      filter(ID %in% pathway_ids_keep) |> 
-      filter(Title == pathway_title)
-    
-    return(df_permutation)
-  }
+  df_permutation <- read_csv(file, show_col_types = FALSE)
+  
+  df_permutation$seed <- file |> 
+    basename() |> 
+    str_extract("seed_[0-9]+") |> 
+    str_remove("seed_") |> 
+    as.numeric()
+  
+  df_permutation <- df_permutation |> 
+    filter(nk == nk_select, k == k_select) |> 
+    filter(ID %in% pathway_ids_keep) |> 
+    filter(Title == pathway_title)
+  
+  return(df_permutation)
+}
 
 
 
@@ -45,9 +46,9 @@ import_permutations_parallel <- function(
     parallel::stopCluster(cl)
     foreach::registerDoSEQ()
   }, add = TRUE)
-
+  
   doParallel::registerDoParallel(cl)
-
+  
   results <- foreach(
     file = files,
     .packages = c("readr", "dplyr", "stringr"),
@@ -61,7 +62,7 @@ import_permutations_parallel <- function(
       pathway_title = pathway_title
     )
   }
-
+  
   bind_rows(results)
 }
 
@@ -232,26 +233,31 @@ import_enrichment_stat_parallel <- function(
 ```{r}
 run <- FALSE
 if (run) {
-
-permutation_dir <- file.path(enrichment_dir, "permutations")
-permutation_files <- list.files(permutation_dir)
-permutation_files <- file.path(permutation_dir, permutation_files)
-permutation_array_E_from_files <- import_enrichment_stat_parallel(files = permutation_files,
-                                                                  ids = NULL, 
-                                                                  stat = "E", 
-                                                                  workers = 32L)
-
-saveRDS(permutation_array_E_from_files, file = file.path(enrichment_dir, "permutation_array_E_from_files.rds"))
-
+  
+  permutation_dir <- file.path(enrichment_dir, "permutations")
+  permutation_files <- tibble(files = list.files(permutation_dir)) |>
+    mutate(seed = files |> 
+             str_remove("cluster_pathway_enrichment_seed_") |> 
+             str_remove(".csv") |> 
+             as.integer()) |> 
+    arrange(seed) |> 
+    pull(files)
+  permutation_files <- file.path(permutation_dir, permutation_files)
+  permutation_array_E_from_files <- import_enrichment_stat_parallel(files = permutation_files,
+                                                                    ids = NULL, 
+                                                                    stat = "E", 
+                                                                    workers = 32L)
+  
+  saveRDS(permutation_array_E_from_files, file = file.path(enrichment_dir, "permutation_array_E_from_files.rds"))
+  
 }
 ```
 
 
 ```{r}
 # Import permutations results
-# list_permutations <- readRDS(file = file.path(enrichment_dir, "cluster_pathway_enrichment_permutations_1_10000.rds"))
-# list_permutations <- readRDS(file = file.path(enrichment_dir, "cluster_pathway_enrichment_permutations_1_10000.rds"))
-list_permutations <- readRDS(file = file.path("../../permutations_test", "cluster_pathway_enrichment_permutations_1_2.rds"))
+list_permutations <- readRDS(file = file.path(enrichment_dir, "cluster_pathway_enrichment_permutations_1_10000.rds"))
+# list_permutations <- readRDS(file = file.path("../../permutations_test", "cluster_pathway_enrichment_permutations_1_2.rds"))
 
 # Extract permutations enrichment values
 permutation_array_E <- simplify2array(map(.x = list_permutations, 
@@ -269,35 +275,29 @@ B <- dim(permutation_array_E)[length(dim(permutation_array_E))]
 ```
 
 ```{r}
-permutation_array_E_init <- readRDS(file = file.path(enrichment_dir, "permutation_array_E.rds"))
-
-
-i <- 2
-
-idx_pathways <- rownames(list_permutations[[i]]$result$enrichment) %in% pathway_ids_keep
-
-permutations_E_new_i <- list_permutations[[i]]$result$enrichment[idx_pathways,]
-permutations_E_init_i <- permutation_array_E_init[,,i]
-
-sum(rownames(permutations_E_new_i) != rownames(permutations_E_init_i))
-sum(colnames(permutations_E_new_i) != colnames(permutations_E_init_i))
-
-print(sum(permutations_E_new_i != permutations_E_init_i, na.rm = TRUE))
-
-sum(abs(permutations_E_new_i - permutations_E_init_i) > 1e-1, na.rm = TRUE)
-```
-
-```{r}
 idx_pathways <- rownames(permutation_array_E) %in% pathway_ids_keep
 permutation_array_E <- permutation_array_E[idx_pathways,,]
 ```
 
 ```{r}
-colnames(permutation_array_E_init[,,1])
-
-colnames(permutation_array_E[,,1])
-
-sum(permutation_array_E_init[,,1] != permutation_array_E[,,1], na.rm = TRUE)
+# permutation_array_E_from_files <- readRDS(file = file.path(enrichment_dir, "permutation_array_E_from_files.rds"))
+# 
+# 
+# i_rds <- 100
+# i_csv <- 3
+# 
+# idx_pathways <- rownames(list_permutations[[i_rds]]$result$enrichment) %in% pathway_ids_keep
+# permutations_E_from_rds <- list_permutations[[i_rds]]$result$enrichment[idx_pathways,]
+# 
+# idx_pathways <- rownames(permutation_array_E_from_files) %in% pathway_ids_keep
+# permutations_E_from_csv <- permutation_array_E_from_files[idx_pathways,,i_csv]
+# 
+# sum(rownames(permutations_E_from_rds) != rownames(permutations_E_from_csv))
+# sum(colnames(permutations_E_from_rds) != colnames(permutations_E_from_csv))
+# 
+# print(sum(permutations_E_from_rds != permutations_E_from_csv, na.rm = TRUE))
+# 
+# sum(abs(permutations_E_from_rds - permutations_E_from_csv) > 1e-2, na.rm = TRUE)
 ```
 
 ```{r import-enrichment}
@@ -336,40 +336,10 @@ mat_enrichment_pvals <- df_enrichment |>
   arrange(ID) |> 
   column_to_rownames("ID") |> 
   as.matrix()
-
-# mat_enrichment_pvals_clamped <- df_enrichment |> 
-#   select(ID, cluster_id, P.Value) |> 
-#   mutate(P.Value = ifelse(P.Value < 1/1001, 1/1001, P.Value)) |>
-#   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "P.Value") |> 
-#   arrange(ID) |> 
-#   column_to_rownames("ID") |> 
-#   as.matrix()
-# 
-# mat_enrichment_qvals <- df_enrichment |> 
-#   select(ID, cluster_id, adj.P.Val) |> 
-#   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "adj.P.Val") |> 
-#   arrange(ID) |> 
-#   column_to_rownames("ID") |> 
-#   as.matrix()
-# 
-# mat_enrichment_NLQ <- df_enrichment |> 
-#   select(ID, cluster_id, NLQ) |> 
-#   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "NLQ") |> 
-#   arrange(ID) |> 
-#   column_to_rownames("ID") |> 
-#   as.matrix()
-# 
-# mat_enrichment_qvals_clamped <-  df_enrichment |> 
-#   mutate(P.Value = ifelse(P.Value < 1/1001, 1/1001, P.Value)) |>
-#   group_by(cluster_id) |>
-#   mutate(q.value = p.adjust(P.Value, method = "fdr")) |>
-#   ungroup() |>
-#   select(ID, cluster_id, q.value) |> 
-#   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "q.value") |> 
-#   arrange(ID) |> 
-#   column_to_rownames("ID") |> 
-#   as.matrix()
 ```
+
+
+# Comparison between hypergeometric and resampled p-values
 
 ```{r}
 # Compute p-values based on permutation samples
@@ -377,17 +347,18 @@ permutation_pvals <- compute_empirical_pvalues(x = mat_enrichment_E,
                                                samples = permutation_array_E)
 
 
-permutation_pvals[1:5, 1:5]
-
 min(permutation_pvals, na.rm = TRUE)
 ```
 
 ```{r}
+# Smallest possible p-value
 pvals_permute_min <- 1/(B + 1)
 
+# Data frame to compare HG and permuted p-values
 df_compare_pvals <- tibble(pvals_HG = as.numeric(mat_enrichment_pvals),
                            pvals_permute = as.numeric(permutation_pvals))
 
+# Plot p-value comparison at full range
 plt_null_pvals_full <- ggplot(df_compare_pvals, aes(x = -log10(pvals_HG), y = -log10(pvals_permute))) + 
   geom_point(size = 0.2) + 
   # geom_abline(slope = 1) +
@@ -395,11 +366,11 @@ plt_null_pvals_full <- ggplot(df_compare_pvals, aes(x = -log10(pvals_HG), y = -l
   geom_hline(yintercept = -log10(0.05), col = "red") +
   scale_x_continuous(breaks = seq(0, 100, by = 10)) + 
   labs(x = "Hypergeometric Test p-value (-log10)",
-  y = "Permutation p-value (-log10)",
-  title = "Parametric p-values full range") + 
+       y = "Permutation p-value (-log10)",
+       title = "Parametric p-values full range") + 
   theme_bw()
 
-
+# Clamped HG p-values based on empirical minimum
 df_compare_pvals_clamped <- df_compare_pvals |> 
   mutate(pvals_HG = ifelse(pvals_HG < pvals_permute_min, pvals_permute_min, pvals_HG))
 
@@ -414,12 +385,11 @@ plt_null_pvals_clamped <- ggplot(df_compare_pvals_clamped, aes(x = -log10(pvals_
   scale_x_continuous(breaks = axis_breaks) + 
   scale_y_continuous(breaks = axis_breaks) + 
   labs(x = "Hypergeometric Test p-value (-log10)",
-  y = "Permutation p-value (-log10)",
-  title = "Parametric p-values clamped") + 
+       y = "Permutation p-value (-log10)",
+       title = "Parametric p-values clamped") + 
   theme_bw()
 
-library(patchwork)
-
+# Patchwork for p-value comparison
 plt_null_pvals <- (plt_null_pvals_clamped + plt_null_pvals_full) +
   plot_layout(widths = c(0.40, 0.60)) +
   plot_annotation(title = "Null hypothesis comparison for all cluster pathways",  tag_levels = "A")
@@ -445,7 +415,7 @@ mat_enrichment_qvals <- df_enrichment |>
   as.matrix()
 
 # Compute q-values based on clamped parametric p-values
-mat_enrichment_qvals_clamped <-  df_enrichment |>
+mat_enrichment_qvals_clamped <- df_enrichment |>
   mutate(P.Value = ifelse(P.Value < pvals_permute_min, pvals_permute_min, P.Value)) |>
   group_by(cluster_id) |>
   mutate(q.value = p.adjust(P.Value, method = "fdr")) |>
@@ -470,8 +440,8 @@ plt_null_qvals_full <- ggplot(df_compare_qvals, aes(x = -log10(qvals_HG), y = -l
   geom_hline(yintercept = -log10(0.05), col = "red") +
   scale_x_continuous(breaks = seq(0, 100, by = 10)) + 
   labs(x = "Hypergeometric Test q-value (-log10)",
-  y = "Permutation q-value (-log10)",
-  title = "Parametric q-values full range") + 
+       y = "Permutation q-value (-log10)",
+       title = "Parametric q-values full range") + 
   theme_bw()
 
 axis_breaks <- c(0, -log10(c(0.05, 0.01, 0.001, 0.0001, 0.00001)))
@@ -485,8 +455,8 @@ plt_null_qvals_clamped <- ggplot(df_compare_qvals_clamped, aes(x = -log10(qvals_
   scale_x_continuous(breaks = axis_breaks) + 
   scale_y_continuous(breaks = axis_breaks) + 
   labs(x = "Hypergeometric Test q-value (-log10)",
-  y = "Permutation q-value (-log10)",
-  title = "Parametric q-values clamped") + 
+       y = "Permutation q-value (-log10)",
+       title = "Parametric q-values clamped") + 
   theme_bw()
 
 plt_null_qvals <- (plt_null_qvals_clamped + plt_null_qvals_full) +
@@ -500,6 +470,80 @@ pdf(file = outfile,
 print(plt_null_qvals)
 invisible(dev.off())
 ```
+
+
+What are we finding so far? 
+- There are four categories of results:
+1. Not significant ever
+2. Significant in the parametric test only
+3. Significant in the permutation test only
+4. Significant in both the permutation and parametric tests
+
+This is for all pathways across all clusters
+
+
+```{r}
+df_permutation_qvals <- permutation_qvals |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "q.value") |> 
+  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
+  mutate(nk = as.integer(nk), k = as.integer(k))
+
+df_hypergeometric_qvals <- mat_enrichment_qvals_clamped |>
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "q.value") |> 
+  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
+  mutate(nk = as.integer(nk), k = as.integer(k))
+
+
+# Pathways to keep
+pathway_ids_lvl_0_1 <- df_reactome |> 
+  filter(B > 10) |> 
+  filter(level < 2) |> 
+  pull(IDBader)
+
+df_permutation_qvals_0_1 <- df_permutation_qvals |> 
+  filter(ID %in% pathway_ids_lvl_0_1)
+
+df_hypergeometric_qvals_0_1 <- df_hypergeometric_qvals |> 
+  filter(ID %in% pathway_ids_lvl_0_1)
+
+df_compare_qvals_0_1 <- inner_join(df_hypergeometric_qvals_0_1 |> 
+             rename(q.value.HG = q.value), 
+           df_permutation_qvals_0_1  |> 
+             rename(q.value.permute = q.value), 
+           by = c("ID", "cluster_id", "nk", "k"))
+
+ggplot(df_compare_qvals_0_1, aes(x = -log10(q.value.HG), y = -log10(q.value.permute))) + 
+  geom_point(size = 0.2) + 
+  # geom_abline(slope = 1) +
+  geom_vline(xintercept = -log10(0.05), col = "red") + 
+  geom_hline(yintercept = -log10(0.05), col = "red") +
+  scale_x_continuous(breaks = axis_breaks) +
+  scale_y_continuous(breaks = axis_breaks) +
+  labs(x = "Hypergeometric Test q-value (-log10)",
+       y = "Permutation q-value (-log10)",
+       title = "Parametric q-values clamped") + 
+  theme_bw()
+```
+
+```{r}
+pathways_sig_permutation <- df_permutation_qvals_0_1 |> 
+  filter(q.value < 0.05) |> 
+  pull(ID) |> 
+  unique()
+
+
+pathways_sig_hypergeometric <- df_permutation_qvals_0_1 |> 
+  filter(q.value < 0.05) |> 
+  pull(ID) |> 
+  unique()
+
+
+```
+
+
+
 
 ```{r}
 file <- file.path(PROJECTPATH, "figures/v3/resources", "MICe_cluster_labels_colours.xlsx")
@@ -680,8 +724,8 @@ length(pathways_transcription_nk4[!(pathways_transcription_nk4 %in% pathways_tra
 ```{r}
 df_enrichment_permutations <- df_enrichment_permutations |> 
   left_join(df_enrichment |> 
-  select(ID, cluster_id, p.value.HG = P.Value, q.value.HG = adj.P.Val),
-  by = c("ID", "cluster_id"))
+              select(ID, cluster_id, p.value.HG = P.Value, q.value.HG = adj.P.Val),
+            by = c("ID", "cluster_id"))
 ```
 
 ```{r}
@@ -689,7 +733,7 @@ tmp <- df_enrichment_permutations |>
   filter(cluster_id_new %in% clusters_human_match) |> 
   filter(colour == "darkorchid1") |>
   # filter(colour == "seagreen2") #|> 
-# filter(colour == "springgreen4") |> 
+  # filter(colour == "springgreen4") |> 
   # filter(nk %in% seq(2, 10, by = 2))
   mutate(p.value.HG = ifelse(p.value.HG < 1/(B+1), 1/(B+1), p.value.HG))
 
@@ -701,7 +745,7 @@ ggplot(tmp, aes(x = -log10(p.value.HG), y = -log10(p.value))) +
   scale_x_continuous(breaks = axis_breaks) + 
   scale_y_continuous(breaks = axis_breaks) + 
   labs(x = "Hypergeometric Test q-value (-log10)",
-  y = "Permutation q-value (-log10)") + 
+       y = "Permutation q-value (-log10)") + 
   theme_bw()
 ```
 
@@ -716,7 +760,7 @@ df_permute_sig <- permutation_pvals |>
   as_tibble(rownames = "ID") |> 
   pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "p.value") |> 
   mutate(significant = p.value < 0.05) |> 
-select(ID, cluster_id, permute_significant = significant)
+  select(ID, cluster_id, permute_significant = significant)
 
 ids_remove <- df_permute_sig |> 
   filter(is.na(permute_significant)) |> 
@@ -765,7 +809,7 @@ df_permute_sig <- permutation_qvals |>
   as_tibble(rownames = "ID") |> 
   pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "p.value") |> 
   mutate(significant = p.value < 0.05) |> 
-select(ID, cluster_id, permute_qvals = p.value, permute_significant = significant)
+  select(ID, cluster_id, permute_qvals = p.value, permute_significant = significant)
 
 ids_remove <- df_permute_sig |> 
   filter(is.na(permute_significant)) |> 
@@ -852,8 +896,8 @@ plt_null_wnt <- ggplot(df_pathway_pvals,
   scale_x_continuous(breaks = seq(0, 100, by = 5)) + 
   coord_cartesian(ylim = c(0, -log10(1/1001))) + 
   labs(x = "Hypergeometric Test p-value (-log10)",
-  y = "Permutation p-value (-log10)",
-  title = paste0("Null hypothesis comparison: ", pathway)) + 
+       y = "Permutation p-value (-log10)",
+       title = paste0("Null hypothesis comparison: ", pathway)) + 
   theme_bw()
 
 outfile <- "enrichment_null_comparison_WNT.pdf"
@@ -908,8 +952,8 @@ plt_null_wnt <- ggplot(df_pathway_pvals,
   scale_x_continuous(breaks = seq(0, 100, by = 5)) + 
   coord_cartesian(ylim = c(0, -log10(1/1001))) + 
   labs(x = "Hypergeometric Test p-value (-log10)",
-  y = "Permutation p-value (-log10)",
-  title = paste0("Null hypothesis comparison: ", pathway)) + 
+       y = "Permutation p-value (-log10)",
+       title = paste0("Null hypothesis comparison: ", pathway)) + 
   theme_bw()
 
 outfile <- "enrichment_null_comparison_PPI_pvals.pdf"
@@ -960,8 +1004,8 @@ plt_null_wnt <- ggplot(df_pathway_qvals,
   scale_x_continuous(breaks = seq(0, 100, by = 5)) + 
   coord_cartesian(ylim = c(0, -log10(1/1001))) + 
   labs(x = "Hypergeometric Test q-value (-log10)",
-  y = "Permutation q-value (-log10)",
-  title = paste0("Null hypothesis comparison: ", pathway)) + 
+       y = "Permutation q-value (-log10)",
+       title = paste0("Null hypothesis comparison: ", pathway)) + 
   theme_bw()
 
 outfile <- "enrichment_null_comparison_PPI_qvals.pdf"
@@ -983,7 +1027,7 @@ cluster_id_old <- df_mouse_cluster_labels |>
 idx_cluster <-  which(colnames(mat_enrichment_qvals) == cluster_id_old)
 
 df_qvals_cluster <- tibble(qvals_HG = as.numeric(mat_enrichment_qvals[,idx_cluster]),
-                        qvals_permute = as.numeric(permutation_qvals[,idx_cluster]))
+                           qvals_permute = as.numeric(permutation_qvals[,idx_cluster]))
 
 plt_null_qvals <- ggplot(df_qvals_cluster, 
                          aes(x = -log10(qvals_HG), 
@@ -994,8 +1038,8 @@ plt_null_qvals <- ggplot(df_qvals_cluster,
   geom_hline(yintercept = -log10(0.05), col = "red") +
   scale_x_continuous(breaks = seq(0, 100, by = 10)) + 
   labs(x = "Hypergeometric Test p-value (-log10)",
-  y = "Permutation p-value (-log10)",
-  title = "Null hypothesis comparison for all cluster pathways") + 
+       y = "Permutation p-value (-log10)",
+       title = "Null hypothesis comparison for all cluster pathways") + 
   theme_bw()
 
 plt_null_qvals
@@ -1156,7 +1200,7 @@ compute_max_med_statistics <- function(enrichment, enrichment_samples, nk_range 
     enrichment_samples_nk <- enrichment_samples[, idx_clusters, ]
     stat_samples <- suppressWarnings(
       apply(enrichment_samples_nk, MARGIN = c(1,3), FUN = max_med_diff, na.rm = TRUE)
-      )
+    )
     
     pvals <- compute_empirical_pvalues(x = stat, samples = stat_samples)
     
