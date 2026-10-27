@@ -55,3 +55,4 @@ air.toml
 .positai
 data
 .lintr
+analyses/revisions-science/*.pdf
