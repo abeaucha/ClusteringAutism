@@ -101,6 +101,7 @@ pipeline_dir <- file.path(pipeline_dir, args[["params-id"]])
 
 simplify <- ifelse(args[["simplify"]] == "true", TRUE, FALSE)
 seed_start <- args[["seed-start"]]
+B <- args[["n-permutations"]]
 
 # Get max number of clusters
 nk_max <- params[["cluster_nk_max"]]
@@ -192,6 +193,7 @@ gene_network <- gene_network |>
   select(-gene_B) |>
   rename(gene_B = GeneHuman)
 
+# print(paste0("simplify: ", simplify))
 
 message("Running permutations for cluster enrichment analysis ...")
 ti <- Sys.time()
@@ -204,12 +206,38 @@ results <- run_cluster_enrichment_permutations(
   nk_max = nk_max,
   output_dir = output_dir,
   simplify = simplify,
-  B = args[["n-permutations"]],
+  # simplify = TRUE,
+  B = B,
   seed_start = seed_start,
   n_workers = args[["n-workers"]]
+  # n_workers = 2L
 )
 tf <- Sys.time()
 print(difftime(tf, ti, units = "hours"))
+
+
+# TEST - REMOVE
+
+# for (b in 1:B) {
+# 
+# cluster_lvls <- results[[b]]$test |> 
+#   select(cluster_id, nk, k) |> 
+#   distinct() |> 
+#   arrange(nk, k) |> 
+#   pull(cluster_id)
+# 
+# mat_enrichment_test <- results[[b]]$test |> 
+#   select(ID, cluster_id, E) |> 
+#   mutate(cluster_id = factor(cluster_id, levels = cluster_lvls)) |> 
+#   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "E") |> 
+#   arrange(ID) |> 
+#   column_to_rownames("ID") |> 
+#   as.matrix()
+# 
+# testsum <- sum(mat_enrichment_test != results[[b]]$result[["enrichment"]], na.rm = TRUE)
+# print(paste0("Outer Testsum: ", testsum))
+# 
+# }
 
 success <- vapply(results, `[[`, logical(1), "success")
 if (any(!success)) {

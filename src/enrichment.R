@@ -461,8 +461,8 @@ enrichment_to_matrices <- function(df) {
   mat_enrichment <- df |> 
     select(ID, cluster_id, E) |> 
     mutate(cluster_id = factor(cluster_id, levels = cluster_lvls)) |> 
-    arrange(ID) |> 
     pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "E") |> 
+    arrange(ID) |> 
     column_to_rownames("ID") |> 
     as.matrix()
   
@@ -470,8 +470,8 @@ enrichment_to_matrices <- function(df) {
   mat_pvals <- df |> 
     select(ID, cluster_id, P.Value) |> 
     mutate(cluster_id = factor(cluster_id, levels = cluster_lvls)) |> 
-    arrange(ID) |> 
     pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "P.Value") |> 
+    arrange(ID) |> 
     column_to_rownames("ID") |> 
     as.matrix()
   
@@ -520,7 +520,7 @@ run_cluster_enrichment_permutations <- function(
   )
 
   # Start separate R processes, with no more workers than permutations.
-  workers <- parallel::makePSOCKcluster(min(n_workers, B))
+  workers <- parallel::makePSOCKcluster(min(n_workers, B), outfile = "")
   # Release workers and reset foreach to sequential execution on exit,
   # including when setup or execution raises an error.
   on.exit(
@@ -602,10 +602,37 @@ run_cluster_enrichment_permutations <- function(
             result <- NULL
           }
           
+          # result <- enrichment_to_matrices(enrichment)
+          # 
+          # outfile <- "cluster_pathway_enrichment"
+          # outfile <- paste(outfile, "seed", b, sep = "_")
+          # outfile <- paste0(outfile, ".csv")
+          # outfile <- file.path(output_dir, outfile)
+          # write_csv(enrichment, file = outfile)
+          # 
+          # # TEST - REMOVE
+          # cluster_lvls <- enrichment |> 
+          #   select(cluster_id, nk, k) |> 
+          #   distinct() |> 
+          #   arrange(nk, k) |> 
+          #   pull(cluster_id)
+          # 
+          # mat_enrichment_test <- enrichment |> 
+          #   select(ID, cluster_id, E) |> 
+          #   mutate(cluster_id = factor(cluster_id, levels = cluster_lvls)) |> 
+          #   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "E") |> 
+          #   arrange(ID) |> 
+          #   column_to_rownames("ID") |> 
+          #   as.matrix()
+          # 
+          # testsum <- sum(mat_enrichment_test != result[["enrichment"]], na.rm = TRUE)
+          # print(paste0("run_cluster_enrichment_permutations Testsum: ", testsum))
+          
           list(
             seed = b,
             success = TRUE,
             result = result,
+            test = enrichment,
             error = NA_character_
           )
           
@@ -615,6 +642,7 @@ run_cluster_enrichment_permutations <- function(
               seed = b,
               success = FALSE,
               result = NULL,
+              test = NULL,
               error = conditionMessage(e)
             )
         }

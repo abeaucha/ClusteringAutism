@@ -11,13 +11,23 @@ permute_mouse_cluster_enrichment.r \
   --params-id 107 \
   --gene-score 950 \
   --seed-start 1 \
-  --n-permutations 10000 \
+  --n-permutations 100 \
   --n-workers 32
   
 # permute_mouse_cluster_enrichment.r \
 #   --pipeline-dir $PROJECTPATH/data/mouse/derivatives/v3/ \
 #   --params-id 107 \
 #   --gene-score 950 \
+#   --output-dir $PROJECTPATH/permutations_test/ \
 #   --simplify true \
-#   --n-permutations 4 \
+#   --n-permutations 2 \
+#   --n-workers 2
+  
+# permute_mouse_cluster_enrichment.r \
+#   --pipeline-dir $PROJECTPATH/data/mouse/derivatives/v3/ \
+#   --params-id 107 \
+#   --gene-score 950 \
+#   --output-dir $PROJECTPATH/permutations_test/ \
+#   --simplify false \
+#   --n-permutations 2 \
 #   --n-workers 2
