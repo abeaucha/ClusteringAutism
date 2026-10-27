@@ -520,7 +520,7 @@ run_cluster_enrichment_permutations <- function(
   )
 
   # Start separate R processes, with no more workers than permutations.
-  workers <- parallel::makePSOCKcluster(min(n_workers, B), outfile = "")
+  workers <- parallel::makePSOCKcluster(min(n_workers, B))
   # Release workers and reset foreach to sequential execution on exit,
   # including when setup or execution raises an error.
   on.exit(
