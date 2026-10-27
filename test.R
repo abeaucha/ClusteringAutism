@@ -9,7 +9,7 @@ for (i in 1:100) {
 file <- paste0("cluster_pathway_enrichment_seed_", i, ".csv")
 
 # file_full <- "permutations_test/cluster_pathway_enrichment_seed_1.csv"
-file_full <- file.path("data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950/", file)
+file_full <- file.path("data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950/permutations/", file)
 
 df_1 <- read_csv(file_full) 
 
