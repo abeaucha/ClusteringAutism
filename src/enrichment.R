@@ -606,7 +606,6 @@ run_cluster_enrichment_permutations <- function(
             seed = b,
             success = TRUE,
             result = result,
-            test = enrichment,
             error = NA_character_
           )
           
@@ -616,7 +615,6 @@ run_cluster_enrichment_permutations <- function(
               seed = b,
               success = FALSE,
               result = NULL,
-              test = NULL,
               error = conditionMessage(e)
             )
         }
