@@ -216,6 +216,9 @@ if (any(!success)) {
   warning("Some permutations failed; inspect results for details.")
 }
 
+# If simplify, export results list as RDS
+# If not simplify, each permutation data frame is exported from within
+# run_cluster_enrichment_permutations()
 if (simplify) {
   outfile <- "cluster_pathway_enrichment_permutations"
   outfile <- paste(outfile, seed_start, (seed_start + B - 1), sep = "_")
