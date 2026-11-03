@@ -7,7 +7,8 @@ trap 'status=$?; printf "ERROR: %s:%s: %s (exit %s)\n" \
   exit "$status"' ERR
 
 batch_size=1000
-B=10000
+#B=10000
+B=1000
 
 for seed_start in $(seq 1 "$batch_size" "$((B - batch_size + 1))"); do
 
