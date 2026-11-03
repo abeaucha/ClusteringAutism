@@ -361,7 +361,19 @@ get_module_sizes <- function(
 }
 
 
-
+#' Compute Reactome pathway enrichment for all clusters
+#'
+#' @param clusters 
+#' @param gene_network 
+#' @param background_set 
+#' @param modules 
+#' @param string_score 
+#' @param nk_max 
+#' @param permute 
+#' @param seed 
+#' @param equal_clusters
+#'
+#' @returns
 compute_cluster_enrichment <- function(
     clusters,
     gene_network,
@@ -370,7 +382,8 @@ compute_cluster_enrichment <- function(
     string_score = 950,
     nk_max = 10,
     permute = FALSE,
-    seed = NULL
+    seed = NULL,
+    equal_clusters = FALSE
 ) {
   
   # If permutation, reshuffle cluster assignments
@@ -379,16 +392,28 @@ compute_cluster_enrichment <- function(
     if (is.null(seed)) {
       seed <- sample(1E5, size = 1)
     }
-    
     set.seed(seed)
-    idx_sample <- sample(
-      seq_len(nrow(clusters)),
-      size = nrow(clusters),
-      replace = FALSE
-    )
     
-    clusters$model <- clusters$model[idx_sample]
-    clusters$gene <- clusters$gene[idx_sample]
+    if (equal_clusters) {
+      
+      # Generate random equal sized cluster labels for each nk
+      for (nk in 2:nk_max) {
+        labels <- rep(seq_len(nk), length.out = nrow(clusters))
+        clusters[[paste0("nk", nk)]] <- sample(labels, 
+                                               size = length(labels), 
+                                               replace = FALSE)
+      }
+    } else {
+      
+      # Sample rows (models) while keeping all labels fixed
+      idx_sample <- sample(seq_len(nrow(clusters)),
+                           size = nrow(clusters),
+                           replace = FALSE)
+      
+      clusters$model <- clusters$model[idx_sample]
+      clusters$gene <- clusters$gene[idx_sample]
+      
+    }
   }
   
   # Iterate over cluster solutions
@@ -488,8 +513,11 @@ enrichment_to_matrices <- function(df) {
 #' @param modules
 #' @param string_score
 #' @param nk_max
+#' @param equal_clusters
+#' @param simplify
 #' @param output_dir
 #' @param B Positive integer number of permutations; seeds are seq_len(B).
+#' @param seed_start
 #' @param n_workers Positive integer maximum number of worker R processes.
 #'
 #' @return A data frame with seed, success, and error columns, in seed order.
@@ -501,6 +529,7 @@ run_cluster_enrichment_permutations <- function(
   modules,
   string_score = 950,
   nk_max = 10,
+  equal_clusters = FALSE,
   simplify = TRUE,
   output_dir = "data/enrichment/StringDB_12.0_Bader_2025",
   B = 1000L,
@@ -557,6 +586,7 @@ run_cluster_enrichment_permutations <- function(
     "modules",
     "string_score",
     "nk_max",
+    "equal_clusters",
     "output_dir"
   )
   # Resolve names here and in enclosing environments. Each worker receives
@@ -586,6 +616,7 @@ run_cluster_enrichment_permutations <- function(
             modules = modules,
             string_score = string_score,
             nk_max = nk_max,
+            equal_clusters = equal_clusters,
             permute = TRUE,
             # The analysis sets its RNG seed and output directory from b.
             seed = b

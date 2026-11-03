@@ -50,6 +50,11 @@ option_list <- list(
     default = 950
   ),
   make_option(
+    "--equal-clusters",
+    type = "character",
+    default = "false"
+  ),
+  make_option(
     "--simplify",
     type = "character",
     default = "true"
@@ -99,6 +104,7 @@ params <- fetch_params_metadata(
 # Complete pipeline directory path with parameter set id
 pipeline_dir <- file.path(pipeline_dir, args[["params-id"]])
 
+equal_clusters <- ifelse(args[["equal-clusters"]] == "true", TRUE, FALSE)
 simplify <- ifelse(args[["simplify"]] == "true", TRUE, FALSE)
 seed_start <- args[["seed-start"]]
 B <- args[["n-permutations"]]
@@ -202,6 +208,7 @@ results <- run_cluster_enrichment_permutations(
   modules = modules,
   string_score = args[["gene-score"]],
   nk_max = nk_max,
+  equal_clusters = equal_clusters,
   output_dir = output_dir,
   simplify = simplify,
   B = B,

@@ -18,7 +18,9 @@ for seed_start in $(seq 1 "$batch_size" "$((B - batch_size + 1))"); do
        --params-id 107 \
        --gene-score 950 \
        --seed-start "$seed_start" \
-       --n-permutations 1000 \
+       --equal-clusters true \
+       --output-dir "$PROJECTPATH/data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950/permutations_equal_clusters/" \
+       --n-permutations "$batch_size" \
        --n-workers 32
 
 done
