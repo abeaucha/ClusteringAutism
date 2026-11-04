@@ -14,13 +14,23 @@ for seed_start in $(seq 1 "$batch_size" "$((B - batch_size + 1))"); do
 
     echo "Starting permutation batch at seed $seed_start"
 
-   permute_mouse_cluster_enrichment.r \
+   # permute_mouse_cluster_enrichment.r \
+   #     --pipeline-dir "$PROJECTPATH/data/mouse/derivatives/v3/" \
+   #     --params-id 107 \
+   #     --gene-score 950 \
+   #     --seed-start "$seed_start" \
+   #     --equal-clusters true \
+   #     --output-dir "$PROJECTPATH/data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950/permutations_equal_clusters/" \
+   #     --n-permutations "$batch_size" \
+   #     --n-workers 32
+       
+   permute_mouse_cluster_enrichment_no_andr.r \
        --pipeline-dir "$PROJECTPATH/data/mouse/derivatives/v3/" \
        --params-id 107 \
        --gene-score 950 \
        --seed-start "$seed_start" \
-       --equal-clusters true \
-       --output-dir "$PROJECTPATH/data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950/permutations_equal_clusters/" \
+       --equal-clusters false \
+       --output-dir "$PROJECTPATH/data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950/permutations_no_andr/" \
        --n-permutations "$batch_size" \
        --n-workers 32
 
