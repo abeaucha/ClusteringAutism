@@ -361,6 +361,7 @@ get_module_sizes <- function(
 }
 
 
+
 #' Compute Reactome pathway enrichment for all clusters
 #'
 #' @param clusters 
@@ -420,6 +421,8 @@ compute_cluster_enrichment <- function(
   nk_range <- 2:nk_max
   list_enrichment <- vector(mode = "list", length = length(nk_range))
   for (l in 1:length(nk_range)) {
+    
+    # Extract current nk
     nk <- nk_range[l]
     
     # Identify unique genes in each cluster
@@ -429,9 +432,16 @@ compute_cluster_enrichment <- function(
       filter(!duplicated(dup_select)) |>
       select(cluster, gene)
     
+    # Extract range of k values
+    k_range <- sort(unique(clusters[[paste0("nk", nk)]]))
+    
     # Iterate over clusters in solution
-    list_enrichment[[l]] <- vector(mode = "list", length = nk)
-    for (k in 1:nk) {
+    list_enrichment[[l]] <- vector(mode = "list", length = length(k_range))
+    for (ll in 1:length(k_range)) {
+      
+      # Select current k
+      k <- k_range[ll]
+      
       message(paste0("On cluster ", nk, "-", k))
       
       # Pull genes for cluster
@@ -459,7 +469,7 @@ compute_cluster_enrichment <- function(
       enrichment[["nk"]] <- nk
       enrichment[["k"]] <- k
       
-      list_enrichment[[l]][[k]] <- enrichment
+      list_enrichment[[l]][[ll]] <- enrichment
     }
     
     list_enrichment[[l]] <- bind_rows(list_enrichment[[l]])
