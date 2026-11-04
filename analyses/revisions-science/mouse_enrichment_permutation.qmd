@@ -4,6 +4,8 @@ format: html
 editor: visual
 ---
 
+# Initialization
+
 ```{r packages}
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(doParallel))
@@ -17,84 +19,139 @@ PROJECTPATH <- Sys.getenv("PROJECTPATH")
 
 source(file.path(SRCPATH, "enrichment.R"))
 
-import_enrichment_permutation <- function(file, nk_select, k_select, pathway_ids_keep, pathway_title) {
-  
-  df_permutation <- read_csv(file, show_col_types = FALSE)
-  
-  df_permutation$seed <- file |> 
-    basename() |> 
-    str_extract("seed_[0-9]+") |> 
-    str_remove("seed_") |> 
-    as.numeric()
-  
-  df_permutation <- df_permutation |> 
-    filter(nk == nk_select, k == k_select) |> 
-    filter(ID %in% pathway_ids_keep) |> 
-    filter(Title == pathway_title)
-  
-  return(df_permutation)
-}
-
-
-
-import_permutations_parallel <- function(
-    files, nk_select, k_select, pathway_ids_keep, pathway_title,
-    workers = 4L
-) {
-  cl <- parallel::makeCluster(workers)
-  on.exit({
-    parallel::stopCluster(cl)
-    foreach::registerDoSEQ()
-  }, add = TRUE)
-  
-  doParallel::registerDoParallel(cl)
-  
-  results <- foreach(
-    file = files,
-    .packages = c("readr", "dplyr", "stringr"),
-    .export = "import_enrichment_permutation"
-  ) %dopar% {
-    import_enrichment_permutation(
-      file = file,
-      nk_select = nk_select,
-      k_select = k_select,
-      pathway_ids_keep = pathway_ids_keep,
-      pathway_title = pathway_title
-    )
-  }
-  
-  bind_rows(results)
-}
 
 #' Compute empirical p-values
 #'
 #' @param x An array-like object of rank p (e.g. vector or matrix)
 #' @param samples An array-like object of rank p+1, with the added dimension
 #' containing null samples of x
+#' @param normalize Option to normalize tail sums for p-values
 #'
 #' @returns An array-like object of the same size as x containing p-values
-compute_empirical_pvalues <- function(x, samples) {
+compute_empirical_pvalues <- function(x, samples, normalize = TRUE) {
   
   if (is.null(dim(samples))) {
     n_dims <- 1
     n_samples <- length(samples)
     x_rep <- rep(x, n_samples)
-    pvals <- (sum(samples >= x_rep) + 1)/(n_samples + 1)
+    pvals <- sum(samples >= x_rep)
   } else {
     n_dims <- length(dim(samples))
     n_samples <- dim(samples)[n_dims]
     x_rep <- array(rep(as.vector(x), times = n_samples),
                    dim = dim(samples))
-    pvals <- (rowSums(samples >= x_rep, dims = n_dims-1) + 1)/(n_samples + 1)
+    pvals <- rowSums(samples >= x_rep, dims = n_dims-1)
+  }
+  
+  if (normalize) {
+    pvals <- (pvals + 1)/(n_samples + 1)
   }
   
   return(pvals)
 }
+
+
+#' Compute empirical p-values from sample batch files
+#'
+#' @param x 
+#' @param batch_files 
+#'
+#' @returns
+compute_batched_pvalues_v1 <- function(x, batch_files) {
+  
+  B <- 0
+  tail_sum <- matrix(data = 0, nrow = nrow(x), ncol = ncol(x))
+  for (i in 1:length(batch_files)) {
+    
+    message(paste("On batch", i, "of", length(batch_files), "..."))
+    
+    # Import permutations enrichment values
+    samples_batch <- simplify2array(
+      map(.x = readRDS(file = batch_files[i]), .f = function(x){x$result$enrichment})
+    )
+    gc()
+    
+    B_batch <- dim(samples_batch)[length(dim(samples_batch))]
+    
+    # Compute tail sum for batch
+    tail_sum_batch <- compute_empirical_pvalues(x = x, samples = samples_batch, 
+                                                normalize = FALSE)
+    
+    # Update tail sum and number of samples
+    tail_sum <- tail_sum + tail_sum_batch
+    B <- B + B_batch
+    
+  }
+
+  # Compute p-values  
+  pvals <- (tail_sum + 1)/(B + 1)
+  rownames(pvals) <- rownames(x)
+  colnames(pvals) <- colnames(x)
+  
+  gc()
+  
+  return(pvals)
+
+}
+
+
+#' Compute empirical p-values from batches of samples
+#'
+#' @param x An array-like object of rank p
+#' @param batch_files (character vector) Files (RDS) containing permutation samples
+#' of the same size as x
+#' @param transform (function) Optional function to transform x and batch samples
+#' @param ... Optional arguments to transform function
+#'
+#' @returns An array of p-values of the same size as x
+compute_batched_pvalues <- function(x, batch_files, transform = identity, ...) {
+  
+  x <- transform(x, ...)
+  
+  B <- 0
+  if (is.null(dim(x))) {
+    tail_sum <- numeric(length(x))
+  } else {
+    tail_sum <- matrix(data = 0, nrow = nrow(x), ncol = ncol(x))
+  }
+  for (i in 1:length(batch_files)) {
+    
+    message(paste("On batch", i, "of", length(batch_files), "..."))
+    
+    # Import permutations enrichment values
+    samples_batch <- simplify2array(
+      map(.x = readRDS(file = batch_files[i]), 
+          .f = function(x){x$result$enrichment})
+    )
+    gc()
+    
+    B_batch <- dim(samples_batch)[length(dim(samples_batch))]
+    
+    samples_batch <- apply(X = samples_batch, MARGIN = 3, FUN = transform, ...)
+    
+    # Compute tail sum for batch
+    tail_sum_batch <- compute_empirical_pvalues(x = x, samples = samples_batch, 
+                                                normalize = FALSE)
+    
+    # Update tail sum and number of samples
+    tail_sum <- tail_sum + tail_sum_batch
+    B <- B + B_batch
+    
+  }
+  
+  # Compute p-values  
+  pvals <- (tail_sum + 1)/(B + 1)
+  rownames(pvals) <- rownames(x)
+  colnames(pvals) <- colnames(x)
+  
+  gc()
+  
+  return(pvals)
+  
+}
 ```
 
-```{r paths}
-enrichment_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950")
-```
+# Import
 
 ```{r import-reactome-hierarchy}
 # Path to Reactome hierarchy file
@@ -159,156 +216,44 @@ df_reactome <- inner_join(df_reactome_hierarchy,
                           df_modules,
                           by = "ID")
 
+# Some pathways have multiple parents. Clean those
+ids_multiple <- df_reactome |> 
+  group_by(ID) |> 
+  count() |> 
+  filter(n > 1) |> 
+  pull(ID)
+
+df_reactome_unique <- df_reactome |> 
+  filter(!(ID %in% ids_multiple))
+
+df_reactome_multiple <- df_reactome |> 
+  filter(ID %in% ids_multiple)
+
+df_reactome_multiple <- df_reactome_multiple |> 
+  filter(!(Root %in% c("Cell Cycle", "Signal Transduction",
+                       "Metabolism of proteins", "Sensory Perception")))
+
+df_reactome <- bind_rows(df_reactome_unique, df_reactome_multiple)
+
 # Pathways to keep
 pathway_ids_keep <- df_reactome %>% 
+  filter(Root != "Disease") |> 
   filter(B > 10) %>% 
   pull(IDBader)
 ```
 
-```{r}
-import_enrichment_stat <- function(file, ids, stat = "E") {
-  
-  
-  df <- read_csv(file, show_col_types = FALSE)
-  
-  # df <- df |>
-  #   filter(ID %in% ids)
-  
-  df <- df |> 
-    unite(col = "cluster_id", c("nk", "k"), sep = "-", remove = FALSE)
-  
-  cluster_lvls <- df |> 
-    select(nk, k, cluster_id) |> 
-    distinct() |> 
-    arrange(nk, k) |>
-    pull(cluster_id)
-  
-  df <- df |> 
-    mutate(cluster_id = factor(cluster_id, levels = cluster_lvls))
-  
-  cols <- c("ID", "cluster_id", stat)
-  df <- df[,cols]
-  
-  mat <- df |> 
-    pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = all_of(stat)) |> 
-    arrange(ID) |> 
-    column_to_rownames("ID") |> 
-    as.matrix()
-  
-  return(mat)
-  
-}
-
-
-import_enrichment_stat_parallel <- function(
-    files, ids, stat = "E",
-    workers = 4L
-) {
-  cl <- parallel::makeCluster(workers)
-  on.exit({
-    parallel::stopCluster(cl)
-    foreach::registerDoSEQ()
-  }, add = TRUE)
-  
-  doParallel::registerDoParallel(cl)
-  
-  results <- foreach(
-    file = files,
-    .packages = c("tidyverse"),
-    .export = "import_enrichment_stat"
-  ) %dopar% {
-    mat <- import_enrichment_stat(
-      file = file,
-      ids = ids, 
-      stat = stat
-    )
-  }
-  
-  enrichment_array <- simplify2array(results)
-  
-  return(enrichment_array)
-}
-```
-
-```{r}
-run <- FALSE
-if (run) {
-  
-  permutation_dir <- file.path(enrichment_dir, "permutations")
-  permutation_files <- tibble(files = list.files(permutation_dir)) |>
-    mutate(seed = files |> 
-             str_remove("cluster_pathway_enrichment_seed_") |> 
-             str_remove(".csv") |> 
-             as.integer()) |> 
-    arrange(seed) |> 
-    pull(files)
-  permutation_files <- file.path(permutation_dir, permutation_files)
-  permutation_array_E_from_files <- import_enrichment_stat_parallel(files = permutation_files,
-                                                                    ids = NULL, 
-                                                                    stat = "E", 
-                                                                    workers = 32L)
-  
-  saveRDS(permutation_array_E_from_files, file = file.path(enrichment_dir, "permutation_array_E_from_files.rds"))
-  
-}
-```
-
-
-```{r}
-# Import permutations results
-list_permutations <- readRDS(file = file.path(enrichment_dir, "cluster_pathway_enrichment_permutations_1_10000.rds"))
-# list_permutations <- readRDS(file = file.path("../../permutations_test", "cluster_pathway_enrichment_permutations_1_2.rds"))
-
-# Extract permutations enrichment values
-permutation_array_E <- simplify2array(map(.x = list_permutations, 
-                                          .f = function(x){x$result$enrichment}))
-gc()
-# permutation_array_pvals <- simplify2array(map(.x = list_permutations, 
-#                                               .f = function(x){x$result$`p-values`}))
-# gc()
-
-# Remove full permutations list
-rm("list_permutations"); gc()
-
-# Get the number of permutations
-B <- dim(permutation_array_E)[length(dim(permutation_array_E))]
-```
-
-```{r}
-idx_pathways <- rownames(permutation_array_E) %in% pathway_ids_keep
-permutation_array_E <- permutation_array_E[idx_pathways,,]
-```
-
-```{r}
-# permutation_array_E_from_files <- readRDS(file = file.path(enrichment_dir, "permutation_array_E_from_files.rds"))
-# 
-# 
-# i_rds <- 100
-# i_csv <- 3
-# 
-# idx_pathways <- rownames(list_permutations[[i_rds]]$result$enrichment) %in% pathway_ids_keep
-# permutations_E_from_rds <- list_permutations[[i_rds]]$result$enrichment[idx_pathways,]
-# 
-# idx_pathways <- rownames(permutation_array_E_from_files) %in% pathway_ids_keep
-# permutations_E_from_csv <- permutation_array_E_from_files[idx_pathways,,i_csv]
-# 
-# sum(rownames(permutations_E_from_rds) != rownames(permutations_E_from_csv))
-# sum(colnames(permutations_E_from_rds) != colnames(permutations_E_from_csv))
-# 
-# print(sum(permutations_E_from_rds != permutations_E_from_csv, na.rm = TRUE))
-# 
-# sum(abs(permutations_E_from_rds - permutations_E_from_csv) > 1e-2, na.rm = TRUE)
+```{r import-mouse-cluster-labs}
+file <- file.path(PROJECTPATH, "figures/v3/resources", "MICe_cluster_labels_colours.xlsx")
+df_mouse_cluster_labels <- readxl::read_excel(file)
 ```
 
 ```{r import-enrichment}
+enrichment_dir <- file.path(PROJECTPATH, "data/mouse/derivatives/v3/107/enrichment/StringDB_12.0_Bader_2025/950")
+
 # Import enrichment data
 enrichment_file <- "cluster_pathway_enrichment.csv"
 enrichment_file <- file.path(enrichment_dir, enrichment_file)
 df_enrichment <- read_csv(enrichment_file, show_col_types = FALSE)
-
-# Filter enrichment for pathways kept
-df_enrichment <- df_enrichment |>
-  filter(ID %in% pathway_ids_keep)
 
 # Get cluster ID levels
 cluster_lvls <- df_enrichment |> 
@@ -322,46 +267,156 @@ df_enrichment <- df_enrichment |>
   mutate(cluster_id = factor(cluster_id, levels = cluster_lvls))
 
 # Build matrix of enrichment values
-mat_enrichment_E <- df_enrichment |> 
+mat_E_all <- df_enrichment |> 
   select(ID, cluster_id, E) |> 
   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "E") |> 
   arrange(ID) |> 
   column_to_rownames("ID") |> 
   as.matrix()
 
-# Build matrix of p-values
-mat_enrichment_pvals <- df_enrichment |> 
+# Build matrix of enrichment values
+mat_p_hypergeom_all <- df_enrichment |> 
   select(ID, cluster_id, P.Value) |> 
   pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "P.Value") |> 
   arrange(ID) |> 
   column_to_rownames("ID") |> 
   as.matrix()
+
+# Filter for pathway subset
+idx_pathways <- rownames(mat_E_all) %in% pathway_ids_keep
+mat_E <- mat_E_all[idx_pathways,]
+mat_p_hypergeom <- mat_p_hypergeom_all[idx_pathways,]
 ```
 
+```{r compute-enrichment-pvals}
+# Get permutation files
+permutations_dir <- file.path(enrichment_dir, "permutations")
+df_permutation_files <- tibble(file = list.files(permutations_dir)) |> 
+  mutate(seed_start = file |> 
+           str_remove("cluster_pathway_enrichment_permutations_") |> 
+           str_remove("_[0-9]+.rds") |> 
+           as.integer(),
+         seed_end = file |> 
+           str_remove("cluster_pathway_enrichment_permutations_[0-9]+_") |> 
+           str_remove(".rds") |> 
+           as.integer()) |> 
+  mutate(file = file.path(permutations_dir, file)) |> 
+  mutate(B = seed_end - seed_start + 1) |> 
+  arrange(seed_start)
 
-# Comparison between hypergeometric and resampled p-values
+# Get the number of permutations
+B <- df_permutation_files |> pull(B) |> sum()
 
-```{r}
-# Compute p-values based on permutation samples
-permutation_pvals <- compute_empirical_pvalues(x = mat_enrichment_E, 
-                                               samples = permutation_array_E)
+# Compute empirical p-values based on permutation samples
+mat_p_permutations_all <- compute_batched_pvalues(x = mat_E_all, 
+                                                  batch_files = df_permutation_files$file)
 
-
-min(permutation_pvals, na.rm = TRUE)
+# Filter for pathway subset
+idx_pathways <- rownames(mat_p_permutations_all) %in% pathway_ids_keep
+mat_p_permutations <- mat_p_permutations_all[idx_pathways,]
 ```
+
+```{r human-matches}
+# Mouse clusters with human matches (these are "new" cluster labels)
+clusters_human_match <- c("2-1", "3-1", "4-1", "5-1", "6-1", "7-1", "8-1", 
+                          "7-5", "8-5", "9-5", "10-5", 
+                          "5-2", "6-3", "7-4", "8-4", "9-4", "10-4",
+                          "2-2", "3-3", "4-4", "5-5", "6-6", "7-7", "8-8", "10-10")
+
+df_clusters_human_match <- tibble(cluster_id_new = cluster_lvls) |> 
+  mutate(match = cluster_id_new %in% clusters_human_match,
+         label = ifelse(match, "*", "")) |> 
+   separate(col = "cluster_id_new", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
+   mutate(nk = as.integer(nk), k = as.integer(k))
+  
+df_clusters_human_match
+```
+
+# Comparison between hypergeometric and permutation significance
+
+## Comparison of p-values
 
 ```{r}
 # Smallest possible p-value
 pvals_permute_min <- 1/(B + 1)
 
-# Data frame to compare HG and permuted p-values
-df_compare_pvals <- tibble(pvals_HG = as.numeric(mat_enrichment_pvals),
-                           pvals_permute = as.numeric(permutation_pvals))
+df_permutation_pvals <- mat_p_permutations |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "p.value") 
+
+# Correct permutation p-values for MC
+mat_q_permutations <- apply(mat_p_permutations, MARGIN = 2, FUN = p.adjust, method = "BH")
+
+# Convert permutations q-value data to long data frame
+df_permutation_qvals <- mat_q_permutations |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "q.value") 
+
+df_permutation_stats <- inner_join(df_permutation_pvals, 
+                                   df_permutation_qvals, 
+                                   by = c("ID", "cluster_id"))
+```
+
+```{r}
+# Convert hypergeometric q-value data to long data frame
+df_hypergeometric_pvals <- mat_p_hypergeom |>
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "p.value")  
+
+df_hypergeometric_qvals_full <- df_enrichment |>
+  filter(ID %in% pathway_ids_keep) |> 
+  select(ID, cluster_id, q.value.full = adj.P.Val)
+
+df_hypergeometric_qvals <- df_enrichment |>
+  filter(ID %in% pathway_ids_keep) |> 
+  mutate(P.Value = ifelse(P.Value < pvals_permute_min, pvals_permute_min, P.Value)) |>
+  group_by(cluster_id) |>
+  mutate(q.value = p.adjust(P.Value, method = "fdr")) |>
+  ungroup() |>
+  select(ID, cluster_id, q.value)
+
+df_hypergeometric_stats <- df_hypergeometric_pvals |> 
+  inner_join(df_hypergeometric_qvals_full, by = c("ID", "cluster_id")) |> 
+  inner_join(df_hypergeometric_qvals, by = c("ID", "cluster_id"))
+
+```
+
+```{r}
+df_compare_nulls <- inner_join(
+  df_permutation_stats |> 
+    rename(p.value.permute = p.value,
+           q.value.permute = q.value),
+  df_hypergeometric_stats |> 
+    rename(p.value.hypergeom = p.value,
+           q.value.hypergeom = q.value,
+           q.value.hypergeom.full = q.value.full),
+  by = c("ID", "cluster_id")
+)
+
+df_compare_nulls <- df_compare_nulls |> 
+  filter(!is.na(p.value.permute))
+
+df_compare_nulls <- df_compare_nulls |> 
+  left_join(df_enrichment |> 
+              select(ID, cluster_id, E),
+            by = c("ID", "cluster_id")) 
+```
+
+```{r}
+df_plot_pvals <- df_compare_nulls |> 
+  select(ID, cluster_id, p.value.permute, p.value.hypergeom) |> 
+  mutate(p.value.hypergeom.clamped = ifelse(p.value.hypergeom < pvals_permute_min,
+                                            pvals_permute_min, 
+                                            p.value.hypergeom))
+
+axis_breaks <- c(0, -log10(c(0.05, 0.01, 0.001, 0.0001, 0.00001)))
+axis_breaks <- round(axis_breaks, 2)
 
 # Plot p-value comparison at full range
-plt_null_pvals_full <- ggplot(df_compare_pvals, aes(x = -log10(pvals_HG), y = -log10(pvals_permute))) + 
+plt_null_pvals_full <- ggplot(df_plot_pvals, 
+                              aes(x = -log10(p.value.hypergeom), 
+                                  y = -log10(p.value.permute))) + 
   geom_point(size = 0.2) + 
-  # geom_abline(slope = 1) +
   geom_vline(xintercept = -log10(0.05), col = "red") + 
   geom_hline(yintercept = -log10(0.05), col = "red") +
   scale_x_continuous(breaks = seq(0, 100, by = 10)) + 
@@ -370,16 +425,10 @@ plt_null_pvals_full <- ggplot(df_compare_pvals, aes(x = -log10(pvals_HG), y = -l
        title = "Parametric p-values full range") + 
   theme_bw()
 
-# Clamped HG p-values based on empirical minimum
-df_compare_pvals_clamped <- df_compare_pvals |> 
-  mutate(pvals_HG = ifelse(pvals_HG < pvals_permute_min, pvals_permute_min, pvals_HG))
-
-axis_breaks <- c(0, -log10(c(0.05, 0.01, 0.001, 0.0001, 0.00001)))
-axis_breaks <- round(axis_breaks, 2)
-
-plt_null_pvals_clamped <- ggplot(df_compare_pvals_clamped, aes(x = -log10(pvals_HG), y = -log10(pvals_permute))) + 
+plt_null_pvals_clamped <- ggplot(df_plot_pvals,
+                                 aes(x = -log10(p.value.hypergeom.clamped),
+                                     y = -log10(p.value.permute))) + 
   geom_point(size = 0.2) + 
-  # geom_abline(slope = 1) +
   geom_vline(xintercept = -log10(0.05), col = "red") + 
   geom_hline(yintercept = -log10(0.05), col = "red") +
   scale_x_continuous(breaks = axis_breaks) + 
@@ -392,7 +441,8 @@ plt_null_pvals_clamped <- ggplot(df_compare_pvals_clamped, aes(x = -log10(pvals_
 # Patchwork for p-value comparison
 plt_null_pvals <- (plt_null_pvals_clamped + plt_null_pvals_full) +
   plot_layout(widths = c(0.40, 0.60)) +
-  plot_annotation(title = "Null hypothesis comparison for all cluster pathways",  tag_levels = "A")
+  plot_annotation(title = "Null hypothesis comparison for all cluster pathways",
+                  tag_levels = "A")
 
 outfile <- "enrichment_null_comparison_pvals.pdf"
 pdf(file = outfile,
@@ -402,40 +452,19 @@ print(plt_null_pvals)
 invisible(dev.off())
 ```
 
+## Comparison of q-values
+
 ```{r}
-# Correct permutation p-values for MC
-permutation_qvals <- apply(permutation_pvals, MARGIN = 2, FUN = p.adjust, method = "BH")
+df_plot_qvals <- df_compare_nulls |> 
+  select(ID, cluster_id, starts_with("q.value"))
 
-# Build matrix of parametric q-values
-mat_enrichment_qvals <- df_enrichment |>
-  select(ID, cluster_id, adj.P.Val) |>
-  pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "adj.P.Val") |>
-  arrange(ID) |>
-  column_to_rownames("ID") |>
-  as.matrix()
+axis_breaks <- c(0, -log10(c(0.05, 0.01, 0.001, 0.0001, 0.00001)))
+axis_breaks <- round(axis_breaks, 2)
 
-# Compute q-values based on clamped parametric p-values
-mat_enrichment_qvals_clamped <- df_enrichment |>
-  mutate(P.Value = ifelse(P.Value < pvals_permute_min, pvals_permute_min, P.Value)) |>
-  group_by(cluster_id) |>
-  mutate(q.value = p.adjust(P.Value, method = "fdr")) |>
-  ungroup() |>
-  select(ID, cluster_id, q.value) |>
-  pivot_wider(id_cols = "ID", names_from = "cluster_id", values_from = "q.value") |>
-  arrange(ID) |>
-  column_to_rownames("ID") |>
-  as.matrix()
-
-df_compare_qvals <- tibble(qvals_HG = as.numeric(mat_enrichment_qvals),
-                           qvals_permute = as.numeric(permutation_qvals))
-
-df_compare_qvals_clamped <- tibble(qvals_HG = as.numeric(mat_enrichment_qvals_clamped),
-                                   qvals_permute = as.numeric(permutation_qvals))
-
-
-plt_null_qvals_full <- ggplot(df_compare_qvals, aes(x = -log10(qvals_HG), y = -log10(qvals_permute))) + 
+plt_null_qvals_full <- ggplot(df_plot_qvals, 
+                              aes(x = -log10(q.value.hypergeom.full), 
+                                  y = -log10(q.value.permute))) + 
   geom_point(size = 0.2) + 
-  # geom_abline(slope = 1) +
   geom_vline(xintercept = -log10(0.05), col = "red") + 
   geom_hline(yintercept = -log10(0.05), col = "red") +
   scale_x_continuous(breaks = seq(0, 100, by = 10)) + 
@@ -444,12 +473,10 @@ plt_null_qvals_full <- ggplot(df_compare_qvals, aes(x = -log10(qvals_HG), y = -l
        title = "Parametric q-values full range") + 
   theme_bw()
 
-axis_breaks <- c(0, -log10(c(0.05, 0.01, 0.001, 0.0001, 0.00001)))
-axis_breaks <- round(axis_breaks, 2)
-
-plt_null_qvals_clamped <- ggplot(df_compare_qvals_clamped, aes(x = -log10(qvals_HG), y = -log10(qvals_permute))) + 
+plt_null_qvals_clamped <- ggplot(df_plot_qvals, 
+                                 aes(x = -log10(q.value.hypergeom),
+                                     y = -log10(q.value.permute))) + 
   geom_point(size = 0.2) + 
-  # geom_abline(slope = 1) +
   geom_vline(xintercept = -log10(0.05), col = "red") + 
   geom_hline(yintercept = -log10(0.05), col = "red") +
   scale_x_continuous(breaks = axis_breaks) + 
@@ -471,50 +498,47 @@ print(plt_null_qvals)
 invisible(dev.off())
 ```
 
-
-What are we finding so far? 
-- There are four categories of results:
-1. Not significant ever
-2. Significant in the parametric test only
-3. Significant in the permutation test only
-4. Significant in both the permutation and parametric tests
+What are we finding so far? - There are four categories of results: 1. Not significant ever 2. Significant in the parametric test only 3. Significant in the permutation test only 4. Significant in both the permutation and parametric tests
 
 This is for all pathways across all clusters
 
+```{r comparison-qvals-bins}
+# q-value threshold for significance
+q_threshold <- 0.05
 
-```{r}
-df_permutation_qvals <- permutation_qvals |> 
-  as_tibble(rownames = "ID") |> 
-  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "q.value") |> 
+df_compare_nulls <- df_compare_nulls |> 
   separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
   mutate(nk = as.integer(nk), k = as.integer(k))
 
-df_hypergeometric_qvals <- mat_enrichment_qvals_clamped |>
-  as_tibble(rownames = "ID") |> 
-  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "q.value") |> 
-  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
-  mutate(nk = as.integer(nk), k = as.integer(k))
+# Significance bins
+bins <- c("Neither", "Hypergeometric", "Permutation", "Both")
 
+# Sort pathway-cluster pairs into significance bins
+df_compare_nulls <- df_compare_nulls |> 
+  mutate(sig_bin = case_when(
+    q.value.hypergeom >= q_threshold & q.value.permute >= q_threshold ~ "Neither",
+    q.value.hypergeom < q_threshold & q.value.permute >= q_threshold ~ "Hypergeometric",
+    q.value.hypergeom >= q_threshold & q.value.permute < q_threshold ~ "Permutation",
+    q.value.hypergeom < q_threshold & q.value.permute < q_threshold ~ "Both"
+  )) |> 
+  mutate(sig_bin = factor(sig_bin, levels = bins))
 
-# Pathways to keep
-pathway_ids_lvl_0_1 <- df_reactome |> 
-  filter(B > 10) |> 
-  filter(level < 2) |> 
-  pull(IDBader)
+# Join with Reactome information
+df_compare_nulls <- df_compare_nulls |> 
+  left_join(df_reactome |> 
+              select(ID = IDBader, Name, Parent, Root, level, B),
+  by = "ID") 
 
-df_permutation_qvals_0_1 <- df_permutation_qvals |> 
-  filter(ID %in% pathway_ids_lvl_0_1)
+# Join with mouse cluster labels
+df_compare_nulls <- df_compare_nulls |> 
+  left_join(df_mouse_cluster_labels, by = "cluster_id")
+```
 
-df_hypergeometric_qvals_0_1 <- df_hypergeometric_qvals |> 
-  filter(ID %in% pathway_ids_lvl_0_1)
+```{r comparison-qvals-bins-0-1}
+df_compare_qvals_0_1 <- df_compare_nulls |> 
+  filter(level < 2)
 
-df_compare_qvals_0_1 <- inner_join(df_hypergeometric_qvals_0_1 |> 
-             rename(q.value.HG = q.value), 
-           df_permutation_qvals_0_1  |> 
-             rename(q.value.permute = q.value), 
-           by = c("ID", "cluster_id", "nk", "k"))
-
-ggplot(df_compare_qvals_0_1, aes(x = -log10(q.value.HG), y = -log10(q.value.permute))) + 
+ggplot(df_compare_qvals_0_1, aes(x = -log10(q.value.hypergeom), y = -log10(q.value.permute))) + 
   geom_point(size = 0.2) + 
   # geom_abline(slope = 1) +
   geom_vline(xintercept = -log10(0.05), col = "red") + 
@@ -523,27 +547,1061 @@ ggplot(df_compare_qvals_0_1, aes(x = -log10(q.value.HG), y = -log10(q.value.perm
   scale_y_continuous(breaks = axis_breaks) +
   labs(x = "Hypergeometric Test q-value (-log10)",
        y = "Permutation q-value (-log10)",
-       title = "Parametric q-values clamped") + 
+       title = "Distributions of q-values for level 0-1 pathways") + 
   theme_bw()
 ```
 
 ```{r}
-pathways_sig_permutation <- df_permutation_qvals_0_1 |> 
-  filter(q.value < 0.05) |> 
-  pull(ID) |> 
+df_bin_grid <- expand_grid(cluster_id = cluster_lvls, 
+                           sig_bin = bins)
+
+df_sig_bins <- df_compare_qvals_0_1 |> 
+  select(cluster_id = cluster_id_new, sig_bin) |> 
+   group_by(cluster_id, sig_bin) |> 
+   count() |> 
+   ungroup() |> 
+   right_join(df_bin_grid, by = c("cluster_id", "sig_bin")) |> 
+   mutate(n = ifelse(is.na(n), 0, n))
+
+df_sig_bins <- df_sig_bins |> 
+   separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
+   mutate(nk = as.integer(nk), k = as.integer(k),
+          cluster_id = factor(cluster_id, levels = cluster_lvls),
+          sig_bin = factor(sig_bin, levels = bins))
+
+
+nk_subset <- seq(2, 10, 2)
+nk_labels <- paste0("nk = ", nk_subset)
+
+plt_sig_bins_0_1 <- df_sig_bins |> 
+  filter(nk %in% c(2, 4, 6, 8, 10)) |> 
+  mutate(label = ifelse(cluster_id %in% clusters_human_match, "*", "")) |> 
+  mutate(nk_label = paste0("nk = ", nk),
+         nk_label = factor(nk_label, levels = nk_labels)) |> 
+  ggplot(aes(x = factor(k), y = n, fill = sig_bin, alpha = sig_bin)) + 
+  geom_col(position = "dodge") +
+  geom_text(mapping = aes(label = label, y = -5)) + 
+  facet_wrap(~nk_label, scales = "free_x", space = "free_x") +
+  scale_alpha_manual(values = c(0.3, 1, 1, 1), guide = "none") + 
+  labs(x = "Cluster (k)",
+       y = "Number of pathways",
+       fill = NULL,
+       title = "Number of significant level 0-1 pathways (q < 0.05)") + 
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+
+outfile <- "enrichment_significant_bins_lvls_0_1.pdf"
+pdf(file = outfile,
+    width = unit(12, "in"),
+    height = unit(6, "in"))
+print(plt_sig_bins_0_1)
+invisible(dev.off())
+```
+
+```{r}
+df_sig_bins <- df_compare_nulls |> 
+  select(cluster_id = cluster_id_new, sig_bin) |> 
+  group_by(cluster_id, sig_bin) |> 
+  count() |> 
+  ungroup() |> 
+  right_join(df_bin_grid, by = c("cluster_id", "sig_bin")) |> 
+  mutate(n = ifelse(is.na(n), 0, n))
+
+df_sig_bins <- df_sig_bins |> 
+   separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
+   mutate(nk = as.integer(nk), k = as.integer(k),
+          cluster_id = factor(cluster_id, levels = cluster_lvls),
+          sig_bin = factor(sig_bin, levels = bins))
+
+nk_subset <- seq(2, 10, 2)
+nk_labels <- paste0("nk = ", nk_subset)
+
+plt_sig_bins <- df_sig_bins |> 
+  mutate(label = ifelse(cluster_id %in% clusters_human_match, "*", "")) |> 
+  filter(nk %in% c(2, 4, 6, 8, 10)) |> 
+  mutate(nk_label = paste0("nk = ", nk),
+         nk_label = factor(nk_label, levels = nk_labels)) |> 
+  ggplot(aes(x = factor(k), y = n, fill = sig_bin, alpha = sig_bin)) + 
+  geom_col(position = "dodge") +
+  geom_text(mapping = aes(label = label, y = -50)) + 
+  facet_wrap(~nk_label, scales = "free_x", space = "free_x") +
+  scale_alpha_manual(values = c(0.3, 1, 1, 1), guide = "none") + 
+  labs(x = "Cluster (k)",
+       y = "Number of pathways",
+       fill = NULL,
+       title = "Number of significant pathways (q < 0.05)") + 
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+outfile <- "enrichment_significant_bins.pdf"
+pdf(file = outfile,
+    width = unit(12, "in"),
+    height = unit(6, "in"))
+print(plt_sig_bins)
+invisible(dev.off())
+```
+
+## 
+
+```{r}
+df_pathway_subset <- read_csv("../../figures/v3/resources/pathways_subset.csv")
+```
+
+```{r}
+cluster_ids_andr <- c("7-5", "8-5", "9-5", "10-5")
+
+df_compare_nulls |> 
+  semi_join(df_pathway_subset, by = c("Name" = "pathway")) |> 
+  filter(q.value.permute < 0.05) |> 
+  arrange(colour, nk) 
+```
+
+```{r}
+df_compare_nulls |> 
+  semi_join(df_pathway_subset, by = c("Name" = "pathway")) |> 
+  filter(p.value.permute < 0.05) |> 
+  arrange(colour, nk) 
+```
+
+
+## Permutations with equal-sized clusters
+
+```{r}
+# Get permutation files
+permutations_eq_dir <- file.path(enrichment_dir, "permutations_equal_clusters")
+df_permutation_eq_files <- tibble(file = list.files(permutations_eq_dir)) |> 
+  mutate(seed_start = file |> 
+           str_remove("cluster_pathway_enrichment_permutations_") |> 
+           str_remove("_[0-9]+.rds") |> 
+           as.integer(),
+         seed_end = file |> 
+           str_remove("cluster_pathway_enrichment_permutations_[0-9]+_") |> 
+           str_remove(".rds") |> 
+           as.integer()) |> 
+  mutate(file = file.path(permutations_eq_dir, file)) |> 
+  mutate(B = seed_end - seed_start + 1) |> 
+  arrange(seed_start)
+
+# Get the number of permutations
+B_eq <- df_permutation_eq_files |> pull(B) |> sum()
+
+# Compute empirical p-values based on permutation samples
+mat_p_permutations_eq <- compute_batched_pvalues(x = mat_E_all, 
+                                                 batch_files = df_permutation_eq_files$file)
+
+# Filter for pathway subset
+idx_pathways <- rownames(mat_p_permutations_eq) %in% pathway_ids_keep
+mat_p_permutations_eq <- mat_p_permutations_eq[idx_pathways,]
+
+
+# Compute empirical p-values based on permutation samples
+mat_p_permutations_native <- compute_batched_pvalues(x = mat_E_all, 
+                                                     batch_files = df_permutation_files$file[1])
+
+# Filter for pathway subset
+idx_pathways <- rownames(mat_p_permutations_native) %in% pathway_ids_keep
+mat_p_permutations_native <- mat_p_permutations_native[idx_pathways,]
+```
+
+```{r}
+df_permutations_eq <- mat_p_permutations_eq |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, 
+               names_to = "cluster_id",
+               values_to = "p.value.eq")
+
+df_permutations_native <- mat_p_permutations_native |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, 
+               names_to = "cluster_id", 
+               values_to = "p.value.native")
+
+df_permutations_compare <- inner_join(df_permutations_native,
+                                      df_permutations_eq,
+                                      by = c("ID", "cluster_id")) |> 
+  separate(col = "cluster_id", into = c("nk", "k"), 
+           sep = "-", remove = FALSE) |> 
+  mutate(nk = as.integer(nk), k = as.integer(k)) |> 
+  filter(!is.na(p.value.native))
+
+df_permutations_compare <- df_permutations_compare |> 
+  group_by(cluster_id) |> 
+  mutate(q.value.native = p.adjust(p.value.native, method = "fdr"),
+         q.value.eq = p.adjust(p.value.eq, method = "fdr")) |> 
+  ungroup()
+
+df_permutations_compare <- df_permutations_compare |> 
+  mutate(q.value.native.all = p.adjust(p.value.native, method = "fdr"),
+         q.value.eq.all = p.adjust(p.value.eq, method = "fdr"))  
+
+df_permutations_compare <- df_permutations_compare |> 
+  mutate(p_significant = p.value.native < 0.05 | p.value.eq < 0.05,
+         q_significant = q.value.native < 0.05 | q.value.eq < 0.05,
+         q_significant_all = q.value.native.all < 0.05 | q.value.eq.all < 0.05) 
+
+df_permutations_compare <- df_permutations_compare |> 
+  mutate(nk_label = paste0("nk = ", nk),
+         nk_label = factor(nk_label, levels = paste0("nk = ", nk_subset)))
+
+cluster_group_colours <- df_mouse_cluster_labels |>
+  pull(colour) |> 
   unique()
 
+df_permutations_compare <- df_permutations_compare |> 
+  left_join(df_mouse_cluster_labels, by = "cluster_id") |> 
+  mutate(colour = factor(colour, levels = cluster_group_colours))
+```
 
-pathways_sig_hypergeometric <- df_permutation_qvals_0_1 |> 
-  filter(q.value < 0.05) |> 
-  pull(ID) |> 
-  unique()
 
+```{r}
+nk_subset <- seq(2, 10, 2)
 
+pt_size <- 0.5
+axis_max <- 3.0
+axis_expand <- 0.3
+
+set.seed(123)
+
+plt_pvals_compare <- df_permutations_compare |> 
+  filter(nk %in% nk_subset) |> 
+  ggplot(aes(x = -log10(p.value.native), 
+             y = -log10(p.value.eq),
+             col = colour)) + 
+             # col = p_significant)) +
+  annotate(geom = "rect", 
+           x = 0, y = 0,
+           xmax = -log10(0.05), ymax = -log10(0.05),
+           fill = "grey70",
+           alpha = 0.5) + 
+  geom_point(size = pt_size,
+             position = position_jitter(width = 0.05, height = 0.05)) +
+  geom_vline(xintercept = -log10(0.05), col = "red") + 
+  geom_hline(yintercept = -log10(0.05), col = "red") + 
+  geom_abline(slope = 1, col = "blue", alpha = 0.25) + 
+  facet_wrap(~nk_label, ncol = 5) + 
+  scale_x_continuous(expand = expansion(add = axis_expand)) + 
+  scale_y_continuous(expand = expansion(add = axis_expand)) + 
+  scale_colour_manual(values = cluster_group_colours, guide = "none") + 
+  coord_equal(xlim = c(0, axis_max), ylim = c(0, axis_max)) + 
+  labs(x = "p-value with native cluster sizes (-log10)",
+       y = "p-value with equal cluster sizes (-log10)",
+       title = "Nominal p-values") +
+  theme_bw()
+
+plt_qvals_compare <- df_permutations_compare |> 
+  filter(nk %in% nk_subset) |> 
+  ggplot(aes(x = -log10(q.value.native),
+             y = -log10(q.value.eq),
+             col = colour)) + 
+             # col = q_significant)) +
+    annotate(geom = "rect", 
+           x = 0, y = 0,
+           xmax = -log10(0.05), ymax = -log10(0.05),
+           fill = "grey70",
+           alpha = 0.5) + 
+  geom_point(size = pt_size,
+             position = position_jitter(width = 0.05, height = 0.05)) +
+  geom_vline(xintercept = -log10(0.05), col = "red") + 
+  geom_hline(yintercept = -log10(0.05), col = "red") + 
+  geom_abline(slope = 1, col = "blue", alpha = 0.25) + 
+  facet_wrap(~nk_label, ncol = 5) + 
+  scale_x_continuous(expand = expansion(add = axis_expand)) + 
+  scale_y_continuous(expand = expansion(add = axis_expand)) + 
+  scale_colour_manual(values = cluster_group_colours, guide = "none") + 
+  coord_equal(xlim = c(0, axis_max), ylim = c(0, axis_max)) + 
+  labs(x = "q-value with native cluster sizes (-log10)",
+       y = "q-value with equal cluster sizes (-log10)",
+       title = "FDR-corrected p-values") +
+  theme_bw()
+
+# plt_qvals_all_compare <- df_permutations_compare |> 
+#   filter(nk %in% nk_subset) |> 
+#   ggplot(aes(x = -log10(q.value.native.all),
+#              y = -log10(q.value.eq.all),
+#              col = colour)) + 
+#     annotate(geom = "rect", 
+#            x = 0, y = 0,
+#            xmax = -log10(0.05), ymax = -log10(0.05),
+#            fill = "grey70",
+#            alpha = 0.5) + 
+#   geom_point(size = pt_size,
+#              position = position_jitter(width = 0.05, height = 0.05)) +
+#   geom_vline(xintercept = -log10(0.05), col = "red") + 
+#   geom_hline(yintercept = -log10(0.05), col = "red") + 
+#   geom_abline(slope = 1, col = "blue", alpha = 0.25) + 
+#   facet_wrap(~nk_label, ncol = 5) + 
+#   scale_x_continuous(expand = expansion(add = axis_expand)) + 
+#   scale_y_continuous(expand = expansion(add = axis_expand)) + 
+#   scale_colour_manual(values = cluster_group_colours, guide = "none") + 
+#   coord_equal(xlim = c(0, axis_max), ylim = c(0, axis_max)) + 
+#   labs(x = "q-value with native cluster sizes (-log10)",
+#        y = "q-value with equal cluster sizes (-log10)",
+#        title = "FDR-corrected p-values") +
+#   theme_bw()
+
+plt <- (plt_pvals_compare / plt_qvals_compare) +
+  plot_annotation(title = "Comparison of enrichment resampled p-values using native vs. equal cluster sizes")
+
+outfile <- "enrichment_pval_comparison_native_vs_equal_clusters.pdf"
+pdf(file = outfile,
+    width = unit(12, "in"),
+    height = unit(7, "in"))
+print(plt)
+invisible(dev.off())
 ```
 
 
 
+## Dev
+
+```{r}
+df_pathways_permutation_only <- df_compare_qvals |> 
+  filter(sig_bin == "Permutation")
+
+  
+df_pathways_permutation_only |> 
+  pull(colour) |>
+  unique()
+  
+```
+
+```{r}
+df_pathways_permutation_only |> 
+  filter(colour == "darkorchid1", level < 2) |> 
+  select(Name, Root, level) |> 
+  distinct() |> 
+  arrange(level)
+```
+
+```{r}
+df_pathways_permutation_only |> 
+  filter(colour == "sienna2", level < 2) |> 
+  select(Name, Root, level) |> 
+  distinct() |> 
+  arrange(level)
+```
+
+```{r}
+df_pathways_permutation_only |> 
+  filter(colour == "hotpink2", level < 2) |> 
+  select(Name, Root, level) |> 
+  distinct() |> 
+  arrange(level)
+```
+
+```{r}
+df_pathways_permutation_only |> 
+  filter(colour == "darkslategrey", level < 3) |> 
+  select(Name, Root, level) |> 
+  distinct() |> 
+  arrange(level)
+```
+
+# Are pathways more focused?
+
+```{r}
+#' Compute the difference between maximum and median
+#'
+#' @param x (numeric vector) Vector of values
+#' @param na.rm (logical scalar) 
+#'
+#' @returns (numeric scalar) 
+max_med_diff <- function(x, na.rm = FALSE) {
+  
+  x_max <- max(x, na.rm = na.rm)
+  x_med <- median(x, na.rm = na.rm)
+  return(x_max - x_med)
+}
+
+
+compute_max_med_diff <- function(x, nk, clusters_drop = NULL) {
+  
+  if (!is.null(clusters_drop)) {
+  idx_drop <- colnames(x) %in% clusters_drop
+  } else {
+    idx_drop <- logical(ncol(x))
+  }
+  idx_nk <- str_detect(colnames(x), paste0(nk, "-"))
+  idx_clusters <- which(idx_nk & !idx_drop)
+  x_nk <- x[,idx_clusters]
+ 
+  max_med <- suppressWarnings(
+    apply(x_nk, MARGIN = 1, FUN = max_med_diff, na.rm = TRUE) 
+  )
+
+  return(max_med)  
+}
+
+
+compute_max_med_pvalues <- function(x, batch_files, nk_range, clusters_drop = NULL, workers = NULL) {
+  
+  # If no workers provided, match nk_range
+  if (is.null(workers)) {
+    workers <- length(nk_range)
+  }
+  
+  # Initialize cluster
+  cl <- parallel::makeCluster(workers)
+  on.exit({
+    parallel::stopCluster(cl)
+    foreach::registerDoSEQ()
+  }, add = TRUE)
+  
+  doParallel::registerDoParallel(cl)
+  
+  # Compute batched p-values
+  results <- foreach(
+    nk = nk_range,
+    .packages = c("tidyverse"),
+    .export = c("compute_batched_pvalues",
+                "compute_max_med_diff", 
+                "max_med_diff", 
+                "compute_empirical_pvalues")
+  ) %dopar% {
+    compute_batched_pvalues(x = x, 
+                             batch_files = batch_files,
+                             transform = compute_max_med_diff,
+                             nk = nk,
+                            clusters_drop = clusters_drop)
+  }
+  
+  results <- simplify2array(results)
+  colnames(results) <- paste0("nk", nk_range)
+  
+  return(results)
+  
+}
+```
+
+```{r}
+# Compute max-med statistic for nk = 4 to 10
+nk_range <- 4:10
+mat_max_med <- matrix(data = 0, nrow = nrow(mat_E_all), ncol = length(nk_range))
+for (j in 1:ncol(mat_max_med)) {
+  mat_max_med[,j] <- compute_max_med_diff(x = mat_E_all, nk = nk_range[j])
+}
+
+rownames(mat_max_med) <- rownames(mat_E_all)
+colnames(mat_max_med) <- paste0("nk", nk_range)
+
+# Filter for pathway subset
+idx_pathways <- rownames(mat_max_med) %in% pathway_ids_keep
+mat_max_med <- mat_max_med[idx_pathways,]
+
+# Filter for complete cases
+idx_complete <- complete.cases(mat_max_med)
+mat_max_med <- mat_max_med[idx_complete,]
+
+# Create stats data frame
+df_max_med_stats <- mat_max_med |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "max_med_stat") |> 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) |> 
+  select(-nk_name)
+```
+
+```{r}
+# Compute empirical p-values for max-median difference
+# 49 seconds for 1000 permutations
+ti <- Sys.time()
+mat_max_med_pvals <- compute_max_med_pvalues(x = mat_E_all, 
+                                             batch_files = df_permutation_files$file[1],
+                                             nk_range = 4:10)
+tf <- Sys.time()
+print(tf-ti)
+
+# Filter for pathway subset
+idx_pathways <- rownames(mat_max_med_pvals) %in% pathway_ids_keep
+mat_max_med_pvals <- mat_max_med_pvals[idx_pathways,]
+
+# Filter for complete cases
+idx_complete <- complete.cases(mat_max_med_pvals)
+mat_max_med_pvals <- mat_max_med_pvals[idx_complete,]
+```
+
+```{r}
+df_max_med_pvals <- mat_max_med_pvals |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "p.value") |> 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) |> 
+  select(-nk_name)
+
+df_max_med_pvals <- df_max_med_pvals |> 
+  group_by(nk) |> 
+  mutate(q.value = p.adjust(p.value, method = "fdr")) |> 
+  ungroup()
+
+df_max_med_stats <- df_max_med_stats |> 
+  left_join(df_max_med_pvals, 
+            by = c("ID", "nk"))
+
+# Join with Reactome information
+df_max_med_stats <- df_max_med_stats |> 
+  left_join(df_reactome |> 
+              select(ID = IDBader, Name, Parent, Root, level, B),
+  by = "ID") 
+```
+
+```{r}
+plt_max_med_pvals <- ggplot(df_max_med_stats, aes(x = nk, y = -log10(p.value), group = ID)) + 
+  geom_line(col = "grey50", linewidth = 0.05) + 
+  geom_point() + 
+  geom_hline(yintercept = -log10(0.05), col = "red", linetype = "dashed") + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 10, by = 1)) + 
+  # coord_cartesian(ylim = c(0, 3)) + 
+  labs(x = "Cluster solution (nk)",
+       y = "-log10(p)",
+       title = "Max(E) - Median(E) p-values for all pathways") + 
+  theme_bw()
+
+outfile <- "enrichment_max_med_pvalues.pdf"
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt_max_med_pvals)
+invisible(dev.off())
+
+plt_max_med_pvals
+```
+
+```{r}
+df_max_med_stats |> 
+  mutate(p_significant = p.value < 0.05) |> 
+  group_by(nk) |> 
+  summarise(n_significant = sum(p_significant))
+```
+
+```{r}
+plt_max_med_qvals <- ggplot(df_max_med_stats, aes(x = nk, y = -log10(q.value), group = ID)) + 
+  geom_line(col = "grey50", linewidth = 0.05) + 
+  geom_point() + 
+  geom_hline(yintercept = -log10(0.05), col = "red", linetype = "dashed") + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 10, by = 1)) + 
+  coord_cartesian(ylim = c(0, 3)) + 
+  labs(x = "Cluster solution (nk)",
+       y = "-log10(p)",
+       title = "Max(E) - Median(E) q-values for all pathways") + 
+  theme_bw()
+
+outfile <- "enrichment_max_med_qvalues.pdf"
+pdf(file = outfile,
+    width = unit(10, "in"),
+    height = unit(6, "in"))
+print(plt_max_med_qvals)
+invisible(dev.off())
+
+plt_max_med_qvals
+
+```
+
+```{r}
+df_pathway_subset <- read_csv("../../figures/v3/resources/pathways_subset.csv")
+
+df_max_med_stats |> 
+  semi_join(df_pathway_subset, by = c("Name" = "pathway")) |> 
+  filter(q.value < 0.05)
+```
+
+```{r}
+df_max_med_stats |> 
+  semi_join(df_pathway_subset, by = c("Name" = "pathway")) |> 
+  filter(p.value < 0.05)
+```
+
+```{r}
+df_max_med_significant <- df_max_med_stats |> 
+  filter(q.value < 0.05)
+
+df_max_med_significant |> 
+  filter(nk == 10)
+```
+
+```{r}
+df_compare_nulls |> 
+  select(ID, cluster_id, nk, k, E, cluster_id_new, colour) |> 
+  semi_join(df_max_med_significant, by = c("ID", "nk")) |> 
+  group_by(ID, nk) |> 
+  filter(E == max(E))
+  
+```
+
+
+
+## Analysis without Andr
+
+```{r}
+nk_range <- 4:10
+mat_max_med_no_andr <- matrix(data = 0, nrow = nrow(mat_E_all), ncol = length(nk_range))
+for (j in 1:ncol(mat_max_med)) {
+  mat_max_med_no_andr[,j] <- compute_max_med_diff(x = mat_E_all,
+                                                  nk = nk_range[j],
+                                                  clusters_drop = cluster_ids_andr)
+}
+rownames(mat_max_med_no_andr) <- rownames(mat_E_all_no_andr)
+colnames(mat_max_med_no_andr) <- paste0("nk", nk_range)
+
+# Filter for pathway subset
+idx_pathways <- rownames(mat_max_med_no_andr) %in% pathway_ids_keep
+mat_max_med_no_andr <- mat_max_med_no_andr[idx_pathways,]
+
+# Filter for complete cases
+idx_complete <- complete.cases(mat_max_med_no_andr)
+mat_max_med_no_andr <- mat_max_med_no_andr[idx_complete,]
+
+df_max_med_stats_no_andr <- mat_max_med_no_andr |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "max_med_stat") |> 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) |> 
+  select(-nk_name)
+
+```
+
+```{r}
+# Compute empirical p-values for max-median difference
+# 49 seconds for 1000 permutations
+ti <- Sys.time()
+mat_max_med_pvals_no_andr <- compute_max_med_pvalues(x = mat_E_all, 
+                                                     batch_files = df_permutation_files$file[1],
+                                                     nk_range = 4:10,
+                                                     clusters_drop = cluster_ids_andr)
+tf <- Sys.time()
+print(tf-ti)
+
+# Filter for pathway subset
+idx_pathways <- rownames(mat_max_med_pvals_no_andr) %in% pathway_ids_keep
+mat_max_med_pvals_no_andr <- mat_max_med_pvals_no_andr[idx_pathways,]
+
+# Filter for complete cases
+idx_complete <- complete.cases(mat_max_med_pvals_no_andr)
+mat_max_med_pvals_no_andr <- mat_max_med_pvals_no_andr[idx_complete,]
+```
+
+```{r}
+df_max_med_pvals_no_andr <- mat_max_med_pvals_no_andr |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "p.value") |> 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) |> 
+  select(-nk_name)
+
+df_max_med_pvals_no_andr <- df_max_med_pvals_no_andr |> 
+  group_by(nk) |> 
+  mutate(q.value = p.adjust(p.value, method = "fdr")) |> 
+  ungroup()
+
+df_max_med_stats_no_andr <- df_max_med_stats_no_andr |> 
+  left_join(df_max_med_pvals_no_andr, 
+            by = c("ID", "nk"))
+
+# Join with Reactome information
+df_max_med_stats_no_andr <- df_max_med_stats_no_andr |> 
+  left_join(df_reactome |> 
+              select(ID = IDBader, Name, Parent, Root, level, B),
+  by = "ID") 
+```
+
+```{r}
+df_max_med_stats_no_andr |> 
+  semi_join(df_pathway_subset, by = c("Name" = "pathway")) |> 
+  filter(p.value < 0.05) |> 
+  arrange(ID, nk)
+```
+
+```{r}
+ggplot(df_max_med_stats_no_andr, aes(x = nk, y = -log10(p.value), group = ID)) + 
+  geom_line(col = "grey50", linewidth = 0.05) + 
+  geom_point() + 
+  geom_hline(yintercept = -log10(0.05), col = "red", linetype = "dashed") + 
+  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
+  scale_y_continuous(breaks = seq(0, 10, by = 1)) + 
+  # coord_cartesian(ylim = c(0, 3)) + 
+  labs(x = "Cluster solution (nk)",
+       y = "-log10(p)",
+       title = "Max(E) - Median(E) p-values for all pathways") + 
+  theme_bw()
+```
+
+```{r}
+df_max_med_significant_no_andr <- df_max_med_stats_no_andr |> 
+  filter(p.value < 0.05)
+
+tmp <- df_compare_nulls |> 
+  filter(!(cluster_id %in% cluster_ids_andr)) |> 
+  select(ID, cluster_id, nk, k, E, Name, Root, cluster_id_new, colour) |> 
+  semi_join(df_max_med_significant_no_andr, by = c("ID", "nk")) |> 
+  group_by(ID, nk) |> 
+  filter(E == max(E)) |> 
+  ungroup()
+
+tmp |> 
+  group_by(nk, colour) |> 
+  count()
+```
+
+```{r}
+tmp |> 
+  filter(colour == "seagreen2") |> 
+  arrange(nk)
+```
+
+```{r}
+df_compare_nulls |> 
+  filter(nk == 5, Name == "Ion channel transport")
+```
+
+```{r}
+df_max_med_stats_no_andr |> 
+  filter(nk == 5, Name == "Ion channel transport")
+```
+
+```{r}
+df_max_med_stats_andr_compare <- df_max_med_stats |> 
+  select(ID, nk, max_med_stat, p.value, q.value, Name) |> 
+  left_join(df_max_med_stats_no_andr |> 
+              select(ID, nk,
+                     max_med_stat_no_andr = max_med_stat,
+                     p.value_no_andr = p.value,
+                     q.value_no_andr = q.value),
+            by = c("ID", "nk"))
+
+df_max_med_stats_andr_compare <- df_max_med_stats_andr_compare |> 
+  mutate(p_significant = p.value_no_andr < 0.05,
+         q_significant = q.value_no_andr < 0.05)
+
+
+ggplot(df_max_med_stats_andr_compare, aes(x = max_med_stat, y = max_med_stat_no_andr, col = q_significant)) + 
+  geom_point()
+```
+
+```{r}
+df_max_med_stats |> 
+  filter(q.value < 0.05)
+```
+
+## Permutations with equal-sized clusters
+
+
+
+
+```{r}
+# Compute empirical p-values for max-median difference
+# 49 seconds for 1000 permutations
+ti <- Sys.time()
+mat_max_med_pvals_eq <- compute_max_med_pvalues(x = mat_E_all, 
+                                                batch_files = df_permutation_eq_files$file[1],
+                                                nk_range = 4:10)
+tf <- Sys.time()
+print(tf-ti)
+
+# Filter for pathway subset
+idx_pathways <- rownames(mat_max_med_pvals_eq) %in% pathway_ids_keep
+mat_max_med_pvals_eq <- mat_max_med_pvals_eq[idx_pathways,]
+
+# Filter for complete cases
+idx_complete <- complete.cases(mat_max_med_pvals_eq)
+mat_max_med_pvals_eq <- mat_max_med_pvals_eq[idx_complete,]
+```
+
+```{r}
+df_max_med_pvals_eq <- mat_max_med_pvals_eq |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "p.value") |> 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) |> 
+  select(-nk_name)
+
+df_max_med_pvals_eq <- df_max_med_pvals_eq |> 
+  group_by(nk) |> 
+  mutate(q.value = p.adjust(p.value, method = "fdr")) |> 
+  ungroup()
+```
+
+
+```{r}
+df_max_med_pvals <- mat_max_med_pvals |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "p.value") |> 
+  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) |> 
+  select(-nk_name)
+
+df_max_med_pvals <- df_max_med_pvals |> 
+  group_by(nk) |> 
+  mutate(q.value = p.adjust(p.value, method = "fdr")) |> 
+  ungroup()
+
+```
+
+
+```{r}
+df_max_med_compare <- inner_join(
+  df_max_med_pvals |> 
+    rename(p.value.native = p.value,
+           q.value.native = q.value),
+  df_max_med_pvals_eq |> 
+    rename(p.value.eq = p.value,
+           q.value.eq = q.value),
+  by = c("ID", "nk")
+) 
+
+df_max_med_compare <- df_max_med_compare |> 
+  mutate(p_significant = p.value.native < 0.05 | p.value.eq < 0.05,
+         q_significant = q.value.native < 0.05 | q.value.eq < 0.05) 
+
+df_max_med_compare <- df_max_med_compare |> 
+  mutate(nk_label = paste0("nk = ", nk),
+         nk_label = factor(nk_label, levels = paste0("nk = ", nk_subset)))
+```
+
+
+```{r}
+set.seed(123)
+df_enrichment_max <- df_enrichment |> 
+  select(ID, cluster_id, nk,  E) |> 
+  filter(ID %in% pathway_ids_keep) |> 
+  filter(nk > 3) |> 
+  group_by(ID, nk) |> 
+  filter(E == max(E)) |> 
+  ungroup() |> 
+  group_by(ID, nk) |> 
+  sample_n(size = 1) |> 
+  ungroup()
+
+df_enrichment_max <- df_enrichment_max |> 
+  left_join(df_mouse_cluster_labels, by = "cluster_id") |> 
+  mutate(colour = factor(colour, levels = cluster_group_colours))
+
+df_max_med_compare <- df_max_med_compare |>
+  left_join(df_enrichment_max, by = c("ID", "nk"))
+```
+
+```{r}
+nk_subset <- seq(2, 10, 2)
+
+pt_size <- 0.5
+axis_max <- 3.0
+axis_expand <- 0.3
+
+set.seed(123)
+
+plt_max_med_pvals_compare <- df_max_med_compare |> 
+  filter(nk %in% nk_subset) |> 
+  ggplot(aes(x = -log10(p.value.native), 
+             y = -log10(p.value.eq),
+             col = colour)) + 
+             # col = p_significant)) +
+    annotate(geom = "rect", 
+           x = 0, y = 0,
+           xmax = -log10(0.05), ymax = -log10(0.05),
+           fill = "grey70",
+           alpha = 0.5) + 
+  geom_point(size = pt_size,
+             position = position_jitter(width = 0.05, height = 0.05)) +
+  geom_vline(xintercept = -log10(0.05), col = "red") + 
+  geom_hline(yintercept = -log10(0.05), col = "red") + 
+  geom_abline(slope = 1, col = "blue", alpha = 0.25) + 
+  facet_wrap(~nk_label, ncol = 5) + 
+  scale_x_continuous(expand = expansion(add = axis_expand)) + 
+  scale_y_continuous(expand = expansion(add = axis_expand)) + 
+  scale_colour_manual(values = cluster_group_colours, guide = "none") +
+  coord_equal(xlim = c(0, axis_max), ylim = c(0, axis_max)) + 
+  labs(x = "p-value with native cluster sizes (-log10)",
+       y = "p-value with equal cluster sizes (-log10)",
+       title = "Nominal p-values") +
+  theme_bw()
+
+plt_max_med_qvals_compare <- df_max_med_compare |> 
+  filter(nk %in% nk_subset) |> 
+  ggplot(aes(x = -log10(q.value.native),
+             y = -log10(q.value.eq),
+             col = colour)) + 
+             # col = q_significant)) +
+      annotate(geom = "rect", 
+           x = 0, y = 0,
+           xmax = -log10(0.05), ymax = -log10(0.05),
+           fill = "grey70",
+           alpha = 0.5) + 
+  geom_point(size = pt_size,
+             position = position_jitter(width = 0.05, height = 0.05)) +
+  geom_vline(xintercept = -log10(0.05), col = "red") + 
+  geom_hline(yintercept = -log10(0.05), col = "red") + 
+  geom_abline(slope = 1, col = "blue", alpha = 0.25) + 
+  facet_wrap(~nk_label, ncol = 5) + 
+    scale_x_continuous(expand = expansion(add = axis_expand)) + 
+  scale_y_continuous(expand = expansion(add = axis_expand)) + 
+  scale_colour_manual(values = cluster_group_colours, guide = "none") +
+  coord_equal(xlim = c(0, axis_max), ylim = c(0, axis_max)) + 
+  labs(x = "q-value with native cluster sizes (-log10)",
+       y = "q-value with equal cluster sizes (-log10)",
+       title = "FDR-corrected p-values") +
+  theme_bw()
+
+plt <- (plt_max_med_pvals_compare / plt_max_med_qvals_compare) +
+  plot_annotation(title = "Comparison of max-med resampled p-values using native vs. equal cluster sizes")
+
+outfile <- "max_med_pval_comparison_native_vs_equal_clusters.pdf"
+pdf(file = outfile,
+    width = unit(12, "in"),
+    height = unit(7, "in"))
+print(plt)
+invisible(dev.off())
+```
+
+
+
+```{r}
+min_pval <- df_max_med_compare |> 
+  pull(p.value.native) |> 
+  min()
+
+df_max_med_compare |> 
+  filter(nk == 4) |> 
+  filter(p.value.native == min_pval, 
+         p.value.eq == min_pval)
+```
+
+
+
+# Anatomical segregation of pathways
+
+## UMAP analysis
+
+```{r}
+# Get complete cases
+idx_complete <- complete.cases(mat_E)
+
+# Run UMAP
+set.seed(123)
+umap_out <- uwot::umap2(X = t(mat_E[idx_complete,]), ret_model = TRUE)
+colnames(umap_out$embedding) <- paste0("U", 1:2)
+
+# Convert to data frame and add grouping information
+df_umap <- as_tibble(umap_out$embedding, rownames = "cluster_id") |> 
+  left_join(df_mouse_cluster_labels, by = "cluster_id")
+
+group_colours <- df_umap |> 
+  pull(colour) |> 
+  unique() |> 
+  sort()
+
+ggplot(df_umap, aes(x = U1, y = U2, fill = colour)) + 
+  geom_point(shape = 21, size = 3, col = "grey50") +
+  scale_fill_manual(values = group_colours) +
+  coord_cartesian(xlim = c(-4, 6), ylim = c(-5, 4)) + 
+  theme_bw()
+```
+
+```{r}
+cluster_enrichment_dist <- dist(x = umap_out$embedding)
+
+df_cluster_enrichment_dist <- tibble(x = as.numeric(dist_euclidean))
+
+ggplot(df_cluster_enrichment_dist, aes(x = x, after_stat(density))) + 
+  geom_histogram()
+```
+
+```{r}
+batch_file <- df_permutation_files$file[1]
+
+# Import permutations enrichment values
+samples_batch <- simplify2array(
+  map(.x = readRDS(file = batch_file), 
+      .f = function(x){x$result$enrichment})
+)
+gc()
+
+idx_pathways <- rownames(samples_batch) %in% pathway_ids_keep
+samples_batch <- samples_batch[idx_pathways,,]
+
+samples_batch <- samples_batch[idx_complete,,]
+```
+
+```{r}
+n_permutations <- 1000
+
+list_samples_umap <- vector(mode = "list", length = n_permutations)
+mat_samples_umap_dist <- matrix(data = 0, nrow = nrow(df_cluster_enrichment_dist), ncol = n_permutations)
+for (b in 1:n_permutations) {
+
+set.seed(123)
+umap_sample <- uwot::umap_transform(X = t(samples_batch[,,b]), model = umap_out)
+colnames(umap_sample) <- paste0("U", 1:2)
+
+list_samples_umap[[b]] <- umap_sample |> 
+  as_tibble(rownames = "cluster_id") |> 
+  mutate(seed = b)
+
+mat_samples_umap_dist[,b] <- as.numeric(dist(x = umap_sample))
+
+}
+```
+
+```{r}
+df_samples_umap <- bind_rows(list_samples_umap)
+
+df_samples_umap <- df_samples_umap |> 
+  left_join(df_mouse_cluster_labels, by = "cluster_id")
+
+df_samples_umap <- df_samples_umap |> 
+  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
+  mutate(nk = as.integer(nk), k = as.integer(k))
+
+ggplot(df_samples_umap, aes(x = U1, y = U2)) + 
+  geom_point(alpha = 0.05) +
+  geom_point(data = df_umap, mapping = aes(fill = colour), 
+             shape = 21, size = 3, col = "grey50") + 
+  scale_fill_manual(values = group_colours) +
+  coord_cartesian(xlim = c(-4, 6), ylim = c(-5, 4)) + 
+  theme_bw()
+```
+
+```{r}
+colnames(mat_samples_umap_dist) <- paste0("X", 1:ncol(mat_samples_umap_dist))
+
+df_samples_umap_dist <- mat_samples_umap_dist |> 
+  as_tibble() |> 
+  mutate(ID = 1:nrow(mat_samples_umap_dist)) |> 
+pivot_longer(cols = -ID, names_to = "seed", values_to = "dist") |> 
+  mutate(seed = as.integer(str_remove(seed, "X")))
+
+df_samples_umap_dist |> 
+  filter(seed == 1) |> 
+  ggplot(aes(x = dist, group = seed, y = after_stat(density))) + 
+  # geom_density(alpha = 0.2) +
+  geom_histogram() +
+  geom_histogram(data = df_cluster_enrichment_dist,
+                 inherit.aes = FALSE,
+                 mapping = aes(x = x, y = after_stat(density)),
+                 fill = "red",
+                 alpha = 0.5) +
+  theme_bw()
+```
+
+```{r}
+df_cluster_enrichment_dist <- df_cluster_enrichment_dist |> 
+  mutate(ID = 1:nrow(df_cluster_enrichment_dist))
+
+tmp <- df_samples_umap_dist |> 
+  left_join(df_cluster_enrichment_dist, by = "ID")
+
+tmp2 <- tmp |> 
+  filter(seed %in% 1:3)
+ 
+ggplot(tmp2, aes(x = x, y = dist)) + 
+  geom_point()
+
+```
+
+```{r}
+cluster_enrichment_dist <- dist(x = umap_out$embedding)
+
+df_cluster_enrichment_dist <- tibble(x = as.numeric(dist_euclidean))
+
+ggplot(df_cluster_enrichment_dist, aes(x = x)) + 
+  geom_histogram()
+```
+
+# Dev
 
 ```{r}
 file <- file.path(PROJECTPATH, "figures/v3/resources", "MICe_cluster_labels_colours.xlsx")
@@ -724,7 +1782,7 @@ length(pathways_transcription_nk4[!(pathways_transcription_nk4 %in% pathways_tra
 ```{r}
 df_enrichment_permutations <- df_enrichment_permutations |> 
   left_join(df_enrichment |> 
-              select(ID, cluster_id, p.value.HG = P.Value, q.value.HG = adj.P.Val),
+              select(ID, cluster_id, p.value.hypergeom = P.Value, q.value.hypergeom = adj.P.Val),
             by = c("ID", "cluster_id"))
 ```
 
@@ -735,9 +1793,9 @@ tmp <- df_enrichment_permutations |>
   # filter(colour == "seagreen2") #|> 
   # filter(colour == "springgreen4") |> 
   # filter(nk %in% seq(2, 10, by = 2))
-  mutate(p.value.HG = ifelse(p.value.HG < 1/(B+1), 1/(B+1), p.value.HG))
+  mutate(p.value.hypergeom = ifelse(p.value.hypergeom < 1/(B+1), 1/(B+1), p.value.hypergeom))
 
-ggplot(tmp, aes(x = -log10(p.value.HG), y = -log10(p.value))) + 
+ggplot(tmp, aes(x = -log10(p.value.hypergeom), y = -log10(p.value))) + 
   geom_point(size = 0.2) + 
   geom_vline(xintercept = -log10(0.05), col = "red") + 
   geom_hline(yintercept = -log10(0.05), col = "red") +
@@ -747,113 +1805,6 @@ ggplot(tmp, aes(x = -log10(p.value.HG), y = -log10(p.value))) +
   labs(x = "Hypergeometric Test q-value (-log10)",
        y = "Permutation q-value (-log10)") + 
   theme_bw()
-```
-
-```{r}
-df_HG_sig <- mat_enrichment_pvals |> 
-  as_tibble(rownames = "ID") |> 
-  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "p.value") |> 
-  mutate(significant = p.value < 0.05) |> 
-  select(ID, cluster_id, HG_significant = significant)
-
-df_permute_sig <- permutation_pvals |> 
-  as_tibble(rownames = "ID") |> 
-  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "p.value") |> 
-  mutate(significant = p.value < 0.05) |> 
-  select(ID, cluster_id, permute_significant = significant)
-
-ids_remove <- df_permute_sig |> 
-  filter(is.na(permute_significant)) |> 
-  pull(ID) |> 
-  unique()
-
-df_permute_sig <- df_permute_sig |> 
-  filter(!(ID %in% ids_remove))
-
-df_HG_sig <- df_HG_sig |> 
-  filter(!(ID %in% ids_remove))
-
-df_pval_significance_comparison <- inner_join(df_HG_sig, df_permute_sig, by = c("ID", "cluster_id")) |> 
-  mutate(group = case_when(!HG_significant & !permute_significant ~ "None",
-                           HG_significant & !permute_significant ~ "HG",
-                           !HG_significant & permute_significant ~ "Permutation",
-                           HG_significant & permute_significant ~ "Both")) |> 
-  mutate(group = factor(group, levels = c("None", "HG", "Permutation", "Both"))) |> 
-  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE)
-
-tmp <- df_significance_comparison |> 
-  filter(nk == 2)
-
-tmp <- df_significance_comparison |> 
-  filter(group != "None") |> 
-  group_by(cluster_id, nk, k, group) |> 
-  count() |> 
-  ungroup() |> 
-  mutate(cluster_id = factor(cluster_id, levels = cluster_lvls),
-         nk = as.numeric(nk)) |> 
-  filter(nk %in% c(2, 4, 6, 8, 10))
-
-
-ggplot(tmp, aes(x = cluster_id, y = n, fill = fct_rev(group))) + 
-  geom_col() + facet_wrap(~nk, scales = "free_x")
-```
-
-```{r}
-df_HG_sig <- mat_enrichment_qvals |> 
-  as_tibble(rownames = "ID") |> 
-  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "p.value") |> 
-  mutate(significant = p.value < 0.05) |> 
-  select(ID, cluster_id, HG_qvals = p.value, HG_significant = significant)
-
-df_permute_sig <- permutation_qvals |> 
-  as_tibble(rownames = "ID") |> 
-  pivot_longer(cols = -ID, names_to = "cluster_id", values_to = "p.value") |> 
-  mutate(significant = p.value < 0.05) |> 
-  select(ID, cluster_id, permute_qvals = p.value, permute_significant = significant)
-
-ids_remove <- df_permute_sig |> 
-  filter(is.na(permute_significant)) |> 
-  pull(ID) |> 
-  unique()
-
-df_permute_sig <- df_permute_sig |> 
-  filter(!(ID %in% ids_remove))
-
-df_HG_sig <- df_HG_sig |> 
-  filter(!(ID %in% ids_remove))
-
-df_qval_significance_comparison <- inner_join(df_HG_sig, df_permute_sig, by = c("ID", "cluster_id")) |> 
-  mutate(group = case_when(!HG_significant & !permute_significant ~ "None",
-                           HG_significant & !permute_significant ~ "HG",
-                           !HG_significant & permute_significant ~ "Permutation",
-                           HG_significant & permute_significant ~ "Both")) |> 
-  mutate(group = factor(group, levels = c("None", "HG", "Permutation", "Both"))) |> 
-  separate(col = "cluster_id", into = c("nk", "k"), sep = "-", remove = FALSE) |> 
-  left_join(df_enrichment |> 
-              select(ID, Title) |> 
-              distinct(), 
-            by = "ID")
-```
-
-```{r}
-file <- file.path(PROJECTPATH, "figures/v3/resources", "MICe_cluster_labels_colours.xlsx")
-df_mouse_cluster_labels <- readxl::read_excel(file)
-
-df_mouse_cluster_labels
-```
-
-```{r}
-df_qval_significance_comparison |> 
-  left_join(df_mouse_cluster_labels, by = "cluster_id") |> 
-  filter(cluster_id_new == "7-4") |> 
-  filter(permute_qvals < 0.05)
-```
-
-```{r}
-file <- file.path(PROJECTPATH, "figures/v3/resources", "MICe_cluster_labels_colours.xlsx")
-df_mouse_cluster_labels <- readxl::read_excel(file)
-
-df_mouse_cluster_labels
 ```
 
 ```{r}
@@ -868,7 +1819,7 @@ idx_pathway <- rownames(mat_enrichment_E) == pathway_id
 
 df_pathway_pvals <- inner_join(
   mat_enrichment_pvals[idx_pathway,] |> 
-    enframe(name = "cluster_id", value = "pvals_HG"),
+    enframe(name = "cluster_id", value = "pvals_hypergeom"),
   permutation_pvals[idx_pathway,] |> 
     enframe(name = "cluster_id", value = "pvals_permute"), 
   by = "cluster_id"
@@ -884,7 +1835,7 @@ df_pathway_pvals <- df_pathway_pvals |>
 
 
 plt_null_wnt <- ggplot(df_pathway_pvals, 
-                       aes(x = -log10(pvals_HG), 
+                       aes(x = -log10(pvals_hypergeom), 
                            y = -log10(pvals_permute),
                            label = cluster_id,
                            col = nk)) + 
@@ -910,10 +1861,6 @@ invisible(dev.off())
 ```
 
 ```{r}
-df_enrichment |> filter(cluster_id == "9-5")
-```
-
-```{r}
 pathway <- "Protein-protein interactions at synapses"
 
 pathway_id <- df_enrichment |> 
@@ -925,7 +1872,7 @@ idx_pathway <- rownames(mat_enrichment_E) == pathway_id
 
 df_pathway_pvals <- inner_join(
   mat_enrichment_pvals[idx_pathway,] |> 
-    enframe(name = "cluster_id", value = "pvals_HG"),
+    enframe(name = "cluster_id", value = "pvals_hypergeom"),
   permutation_pvals[idx_pathway,] |> 
     enframe(name = "cluster_id", value = "pvals_permute"), 
   by = "cluster_id"
@@ -940,7 +1887,7 @@ df_pathway_pvals <- df_pathway_pvals |>
   mutate(nk = factor(as.numeric(nk)))
 
 plt_null_wnt <- ggplot(df_pathway_pvals, 
-                       aes(x = -log10(pvals_HG), 
+                       aes(x = -log10(pvals_hypergeom), 
                            y = -log10(pvals_permute),
                            label = cluster_id,
                            col = nk)) + 
@@ -977,7 +1924,7 @@ idx_pathway <- rownames(mat_enrichment_E) == pathway_id
 
 df_pathway_qvals <- inner_join(
   mat_enrichment_qvals[idx_pathway,] |> 
-    enframe(name = "cluster_id", value = "qvals_HG"),
+    enframe(name = "cluster_id", value = "pvals_hypergeom"),
   permutation_qvals[idx_pathway,] |> 
     enframe(name = "cluster_id", value = "qvals_permute"), 
   by = "cluster_id"
@@ -992,7 +1939,7 @@ df_pathway_qvals <- df_pathway_qvals |>
   mutate(nk = factor(as.numeric(nk)))
 
 plt_null_wnt <- ggplot(df_pathway_qvals, 
-                       aes(x = -log10(qvals_HG), 
+                       aes(x = -log10(pvals_hypergeom), 
                            y = -log10(qvals_permute),
                            label = cluster_id,
                            col = nk)) + 
@@ -1026,11 +1973,11 @@ cluster_id_old <- df_mouse_cluster_labels |>
 
 idx_cluster <-  which(colnames(mat_enrichment_qvals) == cluster_id_old)
 
-df_qvals_cluster <- tibble(qvals_HG = as.numeric(mat_enrichment_qvals[,idx_cluster]),
+df_qvals_cluster <- tibble(pvals_hypergeom = as.numeric(mat_enrichment_qvals[,idx_cluster]),
                            qvals_permute = as.numeric(permutation_qvals[,idx_cluster]))
 
 plt_null_qvals <- ggplot(df_qvals_cluster, 
-                         aes(x = -log10(qvals_HG), 
+                         aes(x = -log10(pvals_hypergeom), 
                              y = -log10(qvals_permute))) + 
   geom_point(size = 0.2) + 
   # geom_abline(slope = 1) +
@@ -1071,213 +2018,4 @@ pdf(file = outfile,
     height = unit(6, "in"))
 print(plt_null_pvals)
 invisible(dev.off())
-```
-
-# Anatomical segregation of pathways
-
-```{r}
-max_med_diff <- function(x, na.rm = FALSE) {
-  x_max <- max(x, na.rm = na.rm)
-  x_med <- median(x, na.rm = na.rm)
-  return(x_max - x_med)
-}
-
-compute_empirical_pvalues <- function(x, samples) {
-  
-  if (is.null(dim(samples))) {
-    n_dims <- 1
-    n_samples <- length(samples)
-    x_rep <- rep(x, n_samples)
-    pvals <- (sum(samples >= x_rep) + 1)/(n_samples + 1)
-  } else {
-    n_dims <- length(dim(samples))
-    n_samples <- dim(samples)[n_dims]
-    x_rep <- array(rep(as.vector(x), times = n_samples),
-                   dim = dim(samples))
-    pvals <- (rowSums(samples >= x_rep, dims = n_dims-1) + 1)/(n_samples + 1)
-  }
-  
-  return(pvals)
-}
-```
-
-## Single nk, single pathway
-
-```{r}
-nk <- 8
-pathway <- "Protein-protein interactions at synapses"
-
-pathway_id <- df_enrichment |> 
-  filter(Title == pathway) |> 
-  pull(ID) |> 
-  unique()
-
-idx_pathway <- which(rownames(mat_enrichment_E) == pathway_id)
-
-idx_clusters <- which(str_detect(colnames(mat_enrichment_E), paste0(nk, "-")))
-
-E_pathway_nk <- mat_enrichment_E[idx_pathway, idx_clusters]
-
-E_max_med_diff <- max_med_diff(x = E_pathway_nk)
-
-samples_E_pathway_nk <- permutation_array_E[idx_pathway, idx_clusters,]
-
-E_max_med_diff_samples <- apply(samples_E_pathway_nk, MARGIN = 2, FUN = max_med_diff, na.rm = TRUE)
-
-pval <- compute_empirical_pvalues(x = E_max_med_diff, samples = E_max_med_diff_samples)
-
-plt_title <- paste0("Cluster solution (nk): ", nk, "\nPathway: ", pathway)
-plt_caption <- paste0("Empirical p-value: ", round(pval, 4))
-
-plt <- tibble(x = E_max_med_diff_samples) |> 
-  ggplot(aes(x = x)) + 
-  geom_histogram(binwidth = 2) +
-  geom_vline(xintercept = E_max_med_diff, col = "red") +
-  labs(x = "Max(E) - Median(E)",
-       title = plt_title,
-       caption = plt_caption) +
-  theme_bw()
-
-outfile <- "enrichment_max_med_nk_8_PPI.pdf"
-pdf(file = outfile,
-    width = unit(6, "in"),
-    height = unit(6, "in"))
-print(plt)
-invisible(dev.off())
-```
-
-## Single nk, all pathways
-
-How do we multiplex this?
-
-```{r}
-# Select cluster solution
-nk <- 8
-idx_clusters <- which(str_detect(colnames(mat_enrichment_E), paste0(nk, "-")))
-mat_E_nk <- mat_enrichment_E[,idx_clusters]
-
-# Remove pathways with all NA
-idx_all_missing <- rowSums(is.na(mat_E_nk)) == nk
-mat_E_nk <- mat_E_nk[!idx_all_missing,]
-
-# Compute true max-med diff
-E_max_med_diff <- apply(mat_E_nk, MARGIN = 1, FUN = max_med_diff, na.rm = TRUE)
-
-# Filter samples for pathways and clusters
-samples_E_nk <- permutation_array_E[!idx_all_missing, idx_clusters, ]
-E_max_med_diff_samples <- apply(samples_E_nk, MARGIN = c(1,3), FUN = max_med_diff, na.rm = TRUE)
-
-E_max_med_diff_pvals <- compute_empirical_pvalues(x = E_max_med_diff, samples = E_max_med_diff_samples)
-
-tibble(pvals = E_max_med_diff_pvals) |> 
-  ggplot(aes(x = -log10(pvals))) + 
-  geom_histogram() + 
-  geom_vline(xintercept = -log10(0.05), col = "red") + 
-  theme_bw()
-```
-
-## All nk, all pathways
-
-```{r}
-compute_max_med_statistics <- function(enrichment, enrichment_samples, nk_range = 2:10) {
-  
-  mat_stats <- matrix(data = 0, nrow = nrow(enrichment), ncol = length(nk_range))
-  mat_pvals <- matrix(data = 0, nrow = nrow(enrichment), ncol = length(nk_range))
-  list_samples <- vector(mode = "list", length = length(nk_range))
-  for (i in 1:length(nk_range)) {
-    
-    nk <- nk_range[i]
-    
-    message(paste0("On nk = ", nk))
-    
-    idx_clusters <- which(str_detect(colnames(enrichment), paste0(nk, "-")))
-    enrichment_nk <- enrichment[,idx_clusters]
-    
-    # Compute true max-med diff
-    stats <- apply(enrichment_nk, MARGIN = 1, FUN = max_med_diff, na.rm = TRUE)
-    
-    # Filter samples for pathways and clusters
-    enrichment_samples_nk <- enrichment_samples[, idx_clusters, ]
-    stat_samples <- suppressWarnings(
-      apply(enrichment_samples_nk, MARGIN = c(1,3), FUN = max_med_diff, na.rm = TRUE)
-    )
-    
-    pvals <- compute_empirical_pvalues(x = stat, samples = stat_samples)
-    
-    mat_stats[,i] <- stats
-    mat_pvals[,i] <- pvals
-    list_samples[[i]] <- stat_samples
-    
-  }
-  
-  colnames(mat_stats) <- colnames(mat_pvals) <- paste0("nk", nk_range)
-  rownames(mat_stats) <- rownames(mat_pvals) <- rownames(enrichment)
-  names(list_samples) <- paste0("nk", nk_range)
-  
-  return(list(stats = mat_stats,
-              pvals = mat_pvals,
-              samples = list_samples))
-  
-}
-```
-
-```{r}
-tmp <- compute_max_med_statistics(enrichment = mat_enrichment_E,
-                                  enrichment_samples = permutation_array_E,
-                                  nk_range = 4:10)
-```
-
-```{r}
-df_pvals <- as_tibble(tmp$pvals, rownames = "ID")
-
-df_pvals_long <- df_pvals |> 
-  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "pvals") 
-
-ggplot(df_pvals_long, aes(x = -log10(pvals))) + 
-  geom_histogram() +
-  facet_wrap(~nk_name)
-```
-
-```{r}
-n_samples <- 250
-n_samples <- nrow(df_pvals)
-
-set.seed(123)
-plt <- df_pvals |> 
-  sample_n(size = n_samples)  |> 
-  pivot_longer(cols = -ID, names_to = "nk_name", values_to = "pvals") |> 
-  mutate(nk = as.numeric(str_remove(nk_name, "nk"))) |> 
-  ggplot(aes(x = nk, y = -log10(pvals), group = ID)) + 
-  geom_line(col = "grey50", linewidth = 0.05) + 
-  geom_point() + 
-  geom_hline(yintercept = -log10(0.05), col = "red", linetype = "dashed") + 
-  scale_x_continuous(breaks = seq(1, 20, by = 1)) + 
-  labs(x = "Cluster solution (nk)",
-       y = "-log10(p)",
-       title = "Max(E) - Median(E) p-values for all pathways") + 
-  theme_bw()
-
-outfile <- "enrichment_max_med_pvalues.pdf"
-pdf(file = outfile,
-    width = unit(10, "in"),
-    height = unit(6, "in"))
-print(plt)
-invisible(dev.off())
-```
-
-```{r}
-df_pvals |> 
-  filter(nk4 < 0.05)
-```
-
-```{r}
-df_pvals |> 
-  filter(nk4 < 0.05) |> 
-  filter(nk10 < 0.05)
-```
-
-```{r}
-df_pvals |> 
-  filter(nk4 >= 0.05) |> 
-  filter(nk10 < 0.05)
 ```
