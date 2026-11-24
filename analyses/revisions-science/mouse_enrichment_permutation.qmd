@@ -1198,6 +1198,7 @@ plt_max_med_pvals <- ggplot(df_max_med_stats, aes(x = nk, y = -log10(p.value), g
   theme_bw()
 
 outfile <- "enrichment_max_med_pvalues.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
     height = unit(6, "in"))
@@ -1228,6 +1229,7 @@ plt_max_med_qvals <- ggplot(df_max_med_stats, aes(x = nk, y = -log10(q.value), g
   theme_bw()
 
 outfile <- "enrichment_max_med_qvalues.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
     height = unit(6, "in"))
@@ -1574,6 +1576,7 @@ plt <- (plt_max_med_pvals_compare / plt_max_med_qvals_compare) +
   plot_annotation(title = "Comparison of max-med resampled p-values using native vs. equal cluster sizes")
 
 outfile <- "max_med_pval_comparison_native_vs_equal_clusters.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(12, "in"),
     height = unit(7, "in"))
@@ -1652,17 +1655,18 @@ integrate <- function(y, x = NULL) {
 #'
 #' @returns
 integrate_enrichment_curves <- function(x, cluster_stream, normalize = TRUE) {
+  
+  x <- x[, colnames(x) %in% cluster_stream]
 
-x <- x[, colnames(x) %in% cluster_stream]
-
-if (normalize) {
-  x0 <- matrix(rep(x[,1], ncol(x)), nrow = nrow(x))
-  x <- x - x0
-}
-
-I <- apply(x, MARGIN = 1,  FUN = integrate)
-
-return(I)
+  # If normalize, subtract nk = 2 value  
+  if (normalize) {
+    x0 <- matrix(rep(x[,1], ncol(x)), nrow = nrow(x))
+    x <- x - x0
+  }
+  
+  I <- apply(x, MARGIN = 1,  FUN = integrate)
+  
+  return(I)
 
 }
 ```
@@ -1678,6 +1682,8 @@ list_cluster_streams <- list(
 ```
 
 ## Analysis of synaptic-immune stream
+
+### Compute enrichment curve AUCs and p-values
 
 ```{r}
 # Extract cluster stream for synaptic group
@@ -1704,6 +1710,8 @@ df_enrichment_cluster_stream <- df_enrichment_cluster_stream |>
   left_join(df_enrichment_cluster_stream_nk2, by = "ID") |> 
   mutate(E_norm = E - E0)
 ```
+
+#### Enrichment normalized to nk = 2
 
 ```{r}
 # Compute enrichment integrals for all pathways
@@ -1741,9 +1749,94 @@ df_enrichment_cluster_stream_auc <- inner_join(
 df_enrichment_cluster_stream_auc <- df_enrichment_cluster_stream_auc |> 
   left_join(select(df_reactome, ID = IDBader, Name),
             by = "ID")
+
+df_enrichment_cluster_stream_auc <- df_enrichment_cluster_stream_auc |> 
+  mutate(q.value = p.adjust(p.value, method = "fdr"))  
 ```
 
+#### Enrichment un-normalized
+
+```{r}
+# Compute enrichment integrals for all pathways
+enrichment_cluster_stream_auc_unnormed <- integrate_enrichment_curves(
+  x = mat_E_all, 
+  cluster_stream = cluster_group_ids,
+  normalize = FALSE
+)
+
+# Compute empirical p-values for enrichment integrals
+enrichment_cluster_stream_auc_unnormed_pvals <- compute_batched_pvalues(
+  x = mat_E_all, 
+  batch_files = df_permutation_files$file[1], 
+  transform = integrate_enrichment_curves, 
+  cluster_stream = cluster_group_ids,
+  normalize = FALSE
+)
+
+# Filter enrichment integrals and p-values for desired pathways
+enrichment_cluster_stream_auc_unnormed <- enrichment_cluster_stream_auc_unnormed[idx_pathways]
+enrichment_cluster_stream_auc_unnormed_pvals <- enrichment_cluster_stream_auc_unnormed_pvals[idx_pathways]
+
+# Filter enrichment integrals and p-values for complete data 
+idx_complete <- !is.na(enrichment_cluster_stream_auc_unnormed)
+enrichment_cluster_stream_auc_unnormed <- enrichment_cluster_stream_auc_unnormed[idx_complete]
+enrichment_cluster_stream_auc_unnormed_pvals <- enrichment_cluster_stream_auc_unnormed_pvals[idx_complete]
+
+# Join enrichment integrals and p-values data
+df_enrichment_cluster_stream_auc_unnormed <- inner_join(
+  enrichment_cluster_stream_auc_unnormed |> 
+    enframe(name = "ID", value = "AUC"),
+  enrichment_cluster_stream_auc_unnormed_pvals |> 
+    enframe(name = "ID", value = "p.value"),
+  by = "ID"
+)
+
+df_enrichment_cluster_stream_auc_unnormed <- df_enrichment_cluster_stream_auc_unnormed |> 
+  left_join(select(df_reactome, ID = IDBader, Name),
+            by = "ID")
+
+df_enrichment_cluster_stream_auc_unnormed <- df_enrichment_cluster_stream_auc_unnormed |> 
+  mutate(q.value = p.adjust(p.value, method = "fdr"))  
+```
+
+#### Comparison of norm vs. not
+
+```{r}
+df_auc_pval_compare <- inner_join(
+df_enrichment_cluster_stream_auc |> 
+  select(ID, p.value.norm = p.value, q.value.norm = q.value),
+df_enrichment_cluster_stream_auc_unnormed |> 
+  select(ID, p.value.unnorm = p.value, q.value.unnorm = q.value),
+by = "ID"
+)
+
+ggplot(df_auc_pval_compare, 
+       aes(x = -log10(p.value.norm), y = -log10(p.value.unnorm))) +
+  geom_point() +
+    geom_vline(xintercept = -log10(0.05), col = "red") + 
+  geom_hline(yintercept = -log10(0.05), col = "red") +
+  coord_equal(xlim = c(0, 3), ylim = c(0,3)) + 
+  labs(x = "Normalized p-value (-log10)",
+       y = "Un-normalized p-value (-log10)") + 
+  theme_bw()
+```
+
+```{r}
+df_enrichment_cluster_stream_auc |> 
+  pull(q.value) |> 
+  min()
+```
+
+```{r}
+df_enrichment_cluster_stream_auc_unnormed |> 
+  pull(q.value) |> 
+  min()
+```
+
+
 ### Plot: Enrichment curves for all pathways
+
+Plot enrichment curves and AUC values for all pathways for the synaptic stream
 
 ```{r}
 df_auc_plot <- df_enrichment_cluster_stream |> 
@@ -1779,6 +1872,7 @@ plt_synaptic <- (plt1 | plt2) +
   plot_layout(widths = c(0.6, 0.4))
 
 outfile <- paste0("cluster_stream_", stream_colour, "_all_pathways.pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
     height = unit(5, "in"))
@@ -1790,7 +1884,8 @@ invisible(dev.off())
 df_enrichment_cluster_stream_auc |> 
   mutate(q.value = p.adjust(p.value, method = "fdr")) |> 
   filter(p.value < 0.05) |> 
-  arrange(AUC)
+  select(Name, AUC, p.value, q.value) |> 
+  arrange(p.value) 
 ```
 
 ### Import enrichment AUC nulls
@@ -1838,7 +1933,10 @@ df_auc_nulls <- df_auc_nulls |>
 
 ```
 
-### Plot: Enrichment curves with small but significant
+
+### Plot: Enrichment curves with small AUC but significant
+
+Some of the significant enrichment curves have small AUC compared to others. Let's make sure that isn't an error
 
 ```{r}
 df_small_auc <- df_enrichment_cluster_stream_auc |> 
@@ -1870,18 +1968,13 @@ plt_small_auc_2 <- df_auc_nulls |>
   theme_bw()
 
 (plt_small_auc_1 / plt_small_auc_2)
-
-
 ```
+
+Significance makes sense given the null distributions
 
 ### Enrichment curves for pathway subset
 
-```{r import-auc-nulls}
-# ggplot(df_auc_nulls, aes(x = AUC)) + 
-#   geom_histogram(binwidth = 5, fill = "grey70", col = "grey20") +
-#   coord_cartesian(xlim = c(-100, 100)) +
-#   theme_bw()
-```
+Examine the enrichment curves for the PCA subset of 15 pathways
 
 ```{r}
 # Filter synaptic group AUC values for pathway subset
@@ -1919,6 +2012,7 @@ plt_subset_2 <- ggplot(df_synaptic_auc_subset,
 
 
 outfile <- paste0("cluster_stream_", stream_colour, "_subset_pathways_curves.pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
     height = unit(4, "in"))
@@ -1926,6 +2020,7 @@ print(plt_subset_1)
 invisible(dev.off())
 
 outfile <- paste0("cluster_stream_", stream_colour, "_subset_pathways_auc.pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(6, "in"),
     height = unit(5, "in"))
@@ -1939,6 +2034,9 @@ df_synaptic_auc_subset |>
   mutate(q.value = p.adjust(p.value, method = "fdr")) |> 
   arrange(p.value)
 ```
+
+Nominally significant pathways are "Adaptive Immune System" and "Protein-protein interactions at synapses". Significant at FDR < 0.10. 
+
 
 ### Max-AUC familywise error correction
 
@@ -1964,6 +2062,7 @@ plt_max_null <- ggplot(df_auc_nulls_subset_max, aes(x = AUC.max)) +
   theme_bw()
 
 outfile <- paste0("cluster_stream_", stream_colour, "_subset_max_null.pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(8, "in"),
     height = unit(4, "in"))
@@ -2085,6 +2184,7 @@ plt_max_null_scaled <- ggplot(df_auc_nulls_scaled_subset_max, aes(x = AUC.max)) 
   theme_bw()
 
 outfile <- paste0("cluster_stream_", stream_colour, "_subset_max_null_scaled.pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(8, "in"),
     height = unit(4, "in"))
@@ -2215,6 +2315,7 @@ patchwork_max_E <- (plt_max_E / plt_max_E_subset) +
   plot_annotation(title = "Synaptic-immune cluster stream maximum enrichment")
 
 outfile <- paste0("cluster_stream_", stream_colour, "_max_E.pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(6, "in"),
     height = unit(6, "in"))
@@ -2335,6 +2436,7 @@ patchwork_mean_E <- (plt_mean_E / plt_mean_E_subset) +
   plot_annotation(title = "Synaptic-immune cluster stream maximum enrichment")
 
 outfile <- paste0("cluster_stream_", stream_colour, "_mean_E.pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(6, "in"),
     height = unit(6, "in"))
