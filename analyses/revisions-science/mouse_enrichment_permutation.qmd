@@ -126,6 +126,12 @@ return(pvals)
 
 ```
 
+```{r}
+output_dir <- file.path("outputs", "mouse_enrichment_permutation")
+if (!dir.exists(output_dir)) {dir.create(output_dir, recursive = TRUE)}
+```
+
+
 # Import
 
 ```{r import-reactome-hierarchy}
@@ -449,12 +455,14 @@ plt_null_pvals <- (plt_null_pvals_clamped + plt_null_pvals_full) +
                   tag_levels = "A")
 
 outfile <- "enrichment_null_comparison_pvals.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
     height = unit(6, "in"))
 print(plt_null_pvals)
 invisible(dev.off())
 ```
+
 
 ## Plot: Comparison of q-values between permutation and hypergeometric
 
@@ -493,6 +501,7 @@ plt_null_qvals <- (plt_null_qvals_clamped + plt_null_qvals_full) +
   plot_annotation(title = "Null hypothesis comparison for all cluster pathways",  tag_levels = "A")
 
 outfile <- "enrichment_null_comparison_qvals.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
     height = unit(6, "in"))
@@ -515,6 +524,7 @@ plt_null_pvals_qvals <- (plt_pvals + plt_qvals) +
                   tag_levels = "A")
 
 outfile <- "enrichment_null_comparison_pvals_qvals.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(10, "in"),
     height = unit(6, "in"))
@@ -597,6 +607,7 @@ plt <- (plt_pvals_groups / plt_qvals_groups) +
 
 # Export
 outfile <- "enrichment_null_comparison_pvals_qvals_coloured.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(12, "in"),
     height = unit(7, "in"))
@@ -641,6 +652,7 @@ plt_pathway <- ggplot(df_plot_pathway,
   theme_bw()
 
 outfile <- paste0("enrichment_null_comparison_", pathway_acronym, "_pvals.pdf")
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(6, "in"),
     height = unit(6, "in"))
@@ -744,6 +756,7 @@ plt_sig_bins_0_1 <- df_sig_bins |>
 
 
 outfile <- "enrichment_significant_bins_lvls_0_1.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(12, "in"),
     height = unit(6, "in"))
@@ -787,6 +800,7 @@ plt_sig_bins <- df_sig_bins |>
   theme(legend.position = "bottom")
 
 outfile <- "enrichment_significant_bins.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(12, "in"),
     height = unit(6, "in"))
@@ -972,6 +986,7 @@ plt <- (plt_pvals_compare / plt_qvals_compare) +
   plot_annotation(title = "Comparison of enrichment resampled p-values using native vs. equal cluster sizes")
 
 outfile <- "enrichment_pval_comparison_native_vs_equal_clusters.pdf"
+outfile <- file.path(output_dir, outfile)
 pdf(file = outfile,
     width = unit(12, "in"),
     height = unit(7, "in"))

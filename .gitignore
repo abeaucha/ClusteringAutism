@@ -56,3 +56,4 @@ air.toml
 data
 .lintr
 analyses/revisions-science/*.pdf
+analyses/revisions-science/outputs/
