@@ -1647,21 +1647,53 @@ integrate <- function(y, x = NULL) {
   
 }
 
+
+#' Fetch initial cluster IDs from a set of new IDs
+#'
+#' @param cluster_ids (character vector) Cluster IDs
+#' @param mapping (tibble) Data frame mapping new and old IDs
+#'
+#' @returns (character vector) Initial cluster IDs
+fetch_initial_cluster_ids <- function(cluster_ids, mapping) {
+  mapping |> 
+    filter(cluster_id_new %in% cluster_ids) |> 
+    pull(cluster_id)
+}
+
+#' Subset a matrix for clusters
+#'
+#' @param cluster_stream_ids (character vector) Cluster IDs to extract
+#' @param x (matrix) Matrix of values with clusters in columns. Colnames must
+#' be cluster IDs.
+#'
+#' @returns (matrix) Matrix subset for the clusters specified.
+extract_clusters <- function(cluster_ids, x) {
+  x[,colnames(x) %in% cluster_ids]
+}
+
+
+normalize_stream_enrichment <- function(x) {
+  x - matrix(rep(x[,1], ncol(x)), nrow = nrow(x))
+}
+
+
 #' Integrate enrichment curves for a cluster stream
 #'
 #' @param x (matrix) Matrix of enrichment values (rows) across clusters (columns)
 #' @param cluster_stream (character vector) Cluster IDs for cluster stream
-#' @param normalize 
+#' @param normalize (logical scalar) Normalize enrichment curves before integrating
 #'
 #' @returns
 integrate_enrichment_curves <- function(x, cluster_stream, normalize = TRUE) {
   
-  x <- x[, colnames(x) %in% cluster_stream]
+  # x <- x[, colnames(x) %in% cluster_stream]
+  x <- extract_clusters(cluster_stream, x)
 
   # If normalize, subtract nk = 2 value  
   if (normalize) {
-    x0 <- matrix(rep(x[,1], ncol(x)), nrow = nrow(x))
-    x <- x - x0
+    # x0 <- matrix(rep(x[,1], ncol(x)), nrow = nrow(x))
+    # x <- x - x0
+    x <- normalize_stream_enrichment(x)
   }
   
   I <- apply(x, MARGIN = 1,  FUN = integrate)
@@ -1669,21 +1701,108 @@ integrate_enrichment_curves <- function(x, cluster_stream, normalize = TRUE) {
   return(I)
 
 }
+
+
+#' Compute enrichment curve AUC statistics
+#'
+#' @param cluster_stream (character vector) Cluster IDs in stream
+#' @param enrichment (matrix) Pathway-by-cluster enrichment matrix
+#' @param permutation_files (character vector) Files (RDS) containing permutation samples
+#' of the same size as x
+#' @param normalize (logical scalar) Normalize enrichment curves before integrating
+#'
+#' @returns (tibble) Data frame of AUC values and associated p-values
+compute_enrichment_auc_stats <- function(cluster_stream, enrichment, 
+                                         permutation_files, normalize = TRUE) {
+ 
+  auc <-  integrate_enrichment_curves(x = enrichment, 
+                                      cluster_stream = cluster_stream,
+                                      normalize = normalize)
+
+  auc_pvals <- compute_batched_pvalues(
+    x = enrichment, 
+    batch_files = permutation_files, 
+    transform = integrate_enrichment_curves, 
+    cluster_stream = cluster_stream,
+    normalize = normalize
+  )
+
+    # Join enrichment integrals and p-values data
+  df_auc <- inner_join(enframe(auc, name = "ID", value = "AUC"),
+                       enframe(auc_pvals, name = "ID", value = "p.value"),
+                       by = "ID")
+  
+  return(df_auc)
+}
 ```
 
 ```{r}
-list_cluster_streams <- list(
+# List of stream cluster IDs based on "new" labels
+list_cluster_streams_new_ids <- list(
   "seagreen2" = c("2-1", "3-3", "4-1", "5-2", "6-3", "7-4", "8-4", "9-4", "10-4"),
   "springgreen4" = c("2-1", "3-1", "4-1", "5-1", "6-1", "7-1", "8-1", "9-1", "10-1"),
   "deeppink4" = c("2-2", "3-2", "4-3", "5-4", "6-5", "7-6", "8-7", "9-8", "10-9"),
   "sienna2" = c("2-1", "3-1", "4-2", "5-3", "6-4", "7-5", "8-5", "9-5", "10-5"),
   "darkorchid1" = c("2-2", "3-3", "4-4", "5-5", "6-6", "7-7", "8-8", "9-9", "10-10")
 )
+
+# Fetch the initial cluster labels for the streams
+list_cluster_streams_ids <- map(.x = list_cluster_streams_new_ids,
+                                .f = fetch_initial_cluster_ids,
+                                mapping = df_mouse_cluster_labels)
 ```
+
 
 ## Analysis of synaptic-immune stream
 
 ### Compute enrichment curve AUCs and p-values
+
+```{r}
+idx_complete <- complete.cases(mat_E_all)
+idx_pathways_keep <- rownames(mat_E_all) %in% pathway_ids_keep
+idx_pathways <- idx_complete & idx_pathways_keep
+
+# Fetch the enrichment values for each cluster stream
+list_cluster_streams_E <- map(.x = list_cluster_streams_ids,
+                              .f = extract_clusters,
+                              x = mat_E_all)
+
+# Compute the AUC statistics for each cluster stream
+list_enrichment_auc_stats <- map(.x = list_cluster_streams_ids,
+                                 .f = compute_enrichment_auc_stats,
+                                 enrichment = mat_E_all,
+                                 permutation_files = df_permutation_files$file[1],
+                                 normalize = FALSE)
+
+# Filter for desired pathways and apply FDR correction
+list_enrichment_auc_stats <- list_enrichment_auc_stats |> 
+  map(.f = function(x) {x[idx_pathways,]}) |> 
+  map(.f = function(x) {mutate(x, q.value = p.adjust(p.value, method = "fdr"))})
+```
+
+
+```{r}
+# Normalize the enrichment curves for each stream
+list_cluster_streams_E_norm <- map(.x = list_cluster_streams_E, 
+                                   .f = normalize_stream_enrichment)
+
+# Compute the AUC statistics for each normalized cluster stream
+list_enrichment_auc_stats_norm <- map(.x = list_cluster_streams_ids,
+                                      .f = compute_enrichment_auc_stats,
+                                      enrichment = mat_E_all,
+                                      permutation_files = df_permutation_files$file[1],
+                                      normalize = TRUE)
+
+# Filter for desired pathways and apply FDR correction
+list_enrichment_auc_stats_norm <- list_enrichment_auc_stats_norm |> 
+  map(.f = function(x) {x[idx_pathways,]}) |> 
+  map(.f = function(x) {mutate(x, q.value = p.adjust(p.value, method = "fdr"))})
+```
+
+
+
+
+
 
 ```{r}
 # Extract cluster stream for synaptic group
@@ -1710,6 +1829,8 @@ df_enrichment_cluster_stream <- df_enrichment_cluster_stream |>
   left_join(df_enrichment_cluster_stream_nk2, by = "ID") |> 
   mutate(E_norm = E - E0)
 ```
+
+
 
 #### Enrichment normalized to nk = 2
 
@@ -1834,9 +1955,9 @@ df_enrichment_cluster_stream_auc_unnormed |>
 ```
 
 
-### Plot: Enrichment curves for all pathways
+### Plot: Normalized enrichment curves for all pathways
 
-Plot enrichment curves and AUC values for all pathways for the synaptic stream
+Plot normalized enrichment curves and AUC values for all pathways for the synaptic stream
 
 ```{r}
 df_auc_plot <- df_enrichment_cluster_stream |> 
@@ -1890,6 +2011,8 @@ df_enrichment_cluster_stream_auc |>
 
 ### Import enrichment AUC nulls
 
+#### Normalized to nk = 2
+
 ```{r import-auc-nulls}
 # Get complete cases
 idx_complete <- complete.cases(mat_E)
@@ -1934,6 +2057,39 @@ df_auc_nulls <- df_auc_nulls |>
 ```
 
 
+#### Un-normalized
+
+```{r}
+mat_auc_nulls_unnormed <- matrix(data = 0, nrow = nrow(samples_batch), ncol = B)
+for (b in 1:B) {
+  mat_auc_nulls_unnormed[,b] <- integrate_enrichment_curves(
+    x = samples_batch[,,b], 
+    cluster_stream = cluster_group_ids,
+    normalize = FALSE
+    )
+}
+
+# Filter for pathways and complete observations
+mat_auc_nulls_unnormed <- mat_auc_nulls_unnormed[idx_pathways,]
+mat_auc_nulls_unnormed <- mat_auc_nulls_unnormed[idx_complete,]
+rownames(mat_auc_nulls_unnormed) <- rownames(mat_E_complete)
+colnames(mat_auc_nulls_unnormed) <- paste0("X", 1:ncol(mat_auc_nulls_unnormed))
+
+# Convert to long form data frame
+df_auc_nulls_unnormed <- mat_auc_nulls_unnormed |> 
+  as_tibble(rownames = "ID") |> 
+  pivot_longer(cols = -ID, names_to = "cols", values_to = "AUC") |> 
+  mutate(seed = as.integer(str_remove(cols, "X"))) |> 
+  select(-cols)
+
+df_auc_nulls_unnormed <- df_auc_nulls_unnormed |> 
+  left_join(df_reactome |> 
+              select(ID = IDBader, Name),
+            by = "ID")
+
+```
+
+
 ### Plot: Enrichment curves with small AUC but significant
 
 Some of the significant enrichment curves have small AUC compared to others. Let's make sure that isn't an error
@@ -1971,6 +2127,7 @@ plt_small_auc_2 <- df_auc_nulls |>
 ```
 
 Significance makes sense given the null distributions
+
 
 ### Enrichment curves for pathway subset
 
@@ -2037,8 +2194,27 @@ df_synaptic_auc_subset |>
 
 Nominally significant pathways are "Adaptive Immune System" and "Protein-protein interactions at synapses". Significant at FDR < 0.10. 
 
+What if we look at un-normalized enrichment curves?
+
+```{r}
+# Filter synaptic group AUC values for pathway subset
+df_enrichment_cluster_stream_auc_unnormed |> 
+  semi_join(df_pathway_subset, by = "ID") |> 
+  mutate(Name = factor(Name, levels = df_pathway_subset$pathway)) |> 
+  mutate(q.value = p.adjust(p.value, method = "fdr")) |> 
+  mutate(significant = p.value < 0.05) |> 
+  select(Name, AUC, p.value, q.value) |> 
+  arrange(p.value)
+```
+
+Doesn't change the pattern. FDR-adjusted p-values become slightly worse. 
+
 
 ### Max-AUC familywise error correction
+
+Let's see if using a different multiple corrections method does anything. Using a "max T" type procedure. 
+
+#### Normalized enrichment AUC
 
 ```{r}
 # Filter for pathways in PCA subset
@@ -2083,58 +2259,79 @@ df_synaptic_auc_subset |>
   select(Name, AUC, p.value, p.value.maxE)
 ```
 
-```{r}
-# For each 
-mat_auc_nulls_subset_probs <- t(apply(mat_auc_nulls_subset, MARGIN = 1,
-  function(x) rank(-x, ties.method = "max") / length(x)
-))
+#### Un-normalized enrichment AUC
 
-# For each pathway, compute the min tail probability over permutations
-df_auc_nulls_subset_pvals_min <- apply(mat_auc_nulls_subset_probs, 2, min) |>
-    enframe(name = "col", value = "p.min") |> 
-    mutate(seed = as.integer(str_remove(col, "X")),
-           p.min.log = -log10(p.min)) |> 
+```{r}
+# Filter synaptic group AUC values for pathway subset
+df_synaptic_auc_unnormed_subset <- df_enrichment_cluster_stream_auc_unnormed |> 
+  semi_join(df_pathway_subset, by = "ID") |> 
+  mutate(Name = factor(Name, levels = df_pathway_subset$pathway)) |> 
+  mutate(significant = p.value < 0.05)
+
+# df_synaptic_subset <- df_enrichment_cluster_stream_auc_unnormed |> 
+#   semi_join(df_pathway_subset, by = "ID") |> 
+#   mutate(Name = factor(Name, levels = df_pathway_subset$pathway))
+```
+
+
+```{r}
+# Filter for pathways in PCA subset
+idx <- rownames(mat_auc_nulls_unnormed) %in% df_pathway_subset$ID
+mat_auc_nulls_unnormed_subset <- mat_auc_nulls_unnormed[idx,]
+
+# For each pathway, compute the max over permutations
+df_auc_nulls_unnormed_subset_max <- apply(mat_auc_nulls_unnormed_subset, 2, max) |>
+    enframe(name = "col", value = "AUC.max") |> 
+    mutate(seed = as.integer(str_remove(col, "X"))) |> 
     select(-col)
 
-ggplot(df_auc_nulls_subset_pvals_min, aes(x = p.min.log)) +
-  geom_histogram(fill = "grey70", col = "grey30", binwidth = 0.07) +
-  geom_vline(xintercept = -log10(df_synaptic_auc_subset$p.value),
+ggplot(df_auc_nulls_unnormed_subset_max, aes(x = AUC.max)) +
+  geom_histogram(fill = "grey70", col = "grey30", binwidth = 5) +
+  geom_vline(xintercept = df_synaptic_auc_unnormed_subset$AUC,
              colour = stream_colour) +
+  scale_x_continuous(breaks = seq(-1000, 1000, by = 50)) + 
+  labs(x = "AUC",
+       y = NULL,
+       title = "Null distribution of synaptic-immune maximum enrichment AUC") + 
   theme_bw()
 ```
 
 ```{r}
-df_synaptic_auc_subset <- df_synaptic_auc_subset |> 
-  mutate(p.value.minP = 0)
-
-for (i in 1:nrow(df_synaptic_auc_subset)) {
-  p_samples <- -log10(df_auc_nulls_subset_pvals_min$p.min)
-  p_true <- -log10(df_synaptic_auc_subset[[i, "p.value"]])
-  pval <- (sum(p_samples >= p_true)+1)/(B+1)
-  df_synaptic_auc_subset[[i, "p.value.minP"]] <- pval
+df_synaptic_auc_unnormed_subset <- df_synaptic_auc_unnormed_subset |> 
+  mutate(p.value.maxE = 0)
+for (i in 1:nrow(df_synaptic_auc_unnormed_subset)) {
+  pval <- (sum(df_auc_nulls_unnormed_subset_max$AUC.max >= df_synaptic_auc_unnormed_subset[[i, "AUC"]])+1)/(B+1)
+  df_synaptic_auc_unnormed_subset[[i, "p.value.maxE"]] <- pval
 }
 
-df_synaptic_auc_subset |> 
-  arrange(p.value.minP)
+df_synaptic_auc_unnormed_subset |> 
+  arrange(p.value.maxE) |> 
+  select(Name, AUC, p.value, p.value.maxE)
 ```
 
-### Standardizing AUC?
+#### Standardized AUC
+
+Running a max-T procedure on raw enrichment values doesn't make much sense because the fold-enrichment varies substantially across pathways. So let's compute a standardized AUC based on the null distributions. 
 
 ```{r}
+# Compute mean and SD for each pathway
 df_auc_nulls_summary <- df_auc_nulls |> 
   group_by(ID) |> 
   summarise(AUC_mean = mean(AUC),
             AUC_sd = sd(AUC)) |> 
   ungroup()
 
+# Scale AUC for each pathway
 df_auc_nulls_scaled <- df_auc_nulls |> 
   left_join(df_auc_nulls_summary, by = "ID") |> 
   mutate(AUC_scaled = (AUC - AUC_mean)/AUC_sd)
 
+# Join scaled AUC values to cluster stream data
 df_enrichment_cluster_stream_auc_scaled <- df_enrichment_cluster_stream_auc |> 
   left_join(df_auc_nulls_summary, by = "ID") |> 
   mutate(AUC_scaled = (AUC - AUC_mean)/AUC_sd)
 
+# Remove pathways where all permutations are 0
 pathway_ids_all_zero <- df_enrichment_cluster_stream_auc_scaled |> 
   filter(is.na(AUC_scaled)) |> 
   pull(ID)
@@ -2145,12 +2342,14 @@ df_enrichment_cluster_stream_auc_scaled <- df_enrichment_cluster_stream_auc_scal
 df_auc_nulls_scaled <- df_auc_nulls_scaled |> 
   filter(!(ID %in% pathway_ids_all_zero))
 
+# Examine the distribution of AUC values
 df_enrichment_cluster_stream_auc_scaled  |> 
   select(ID, AUC, AUC_scaled) |> 
   pivot_longer(cols = -ID, names_to = "measure", values_to = "value") |> 
   ggplot(aes(x = value)) + 
   geom_histogram() +
-  facet_wrap(~measure, scales = "free_x")
+  facet_wrap(~measure, scales = "free_x") +
+  theme_bw()
 ```
 
 ```{r}
@@ -2205,7 +2404,94 @@ df_auc_subset_scaled |>
   select(Name, AUC, AUC_scaled, p.value.maxE)
 ```
 
-z-scaling is probably not right here. I doubt this even matters though. I don't know where to go from here? Either move to multivariate or reduce the number of comparisons we're making. There are other stream statistics we can look at I guess. Like what is the maximum enrichment for each pathway in the stream (E curve peaks). Or we could look at the average enrichment in the stream.
+Finding basically the same result as with the FDR correction. 
+
+
+#### Un-normalized standardized AUC
+
+
+```{r}
+# Compute mean and SD for each pathway
+df_auc_nulls_unnormed_summary <- df_auc_nulls_unnormed |> 
+  group_by(ID) |> 
+  summarise(AUC_mean = mean(AUC),
+            AUC_sd = sd(AUC)) |> 
+  ungroup()
+
+# Scale AUC for each pathway
+df_auc_nulls_unnormed_scaled <- df_auc_nulls_unnormed |> 
+  left_join(df_auc_nulls_summary, by = "ID") |> 
+  mutate(AUC_scaled = (AUC - AUC_mean)/AUC_sd)
+
+# Join scaled AUC values to cluster stream data
+df_enrichment_cluster_stream_auc_unnormed_scaled <- df_enrichment_cluster_stream_auc_unnormed |> 
+  left_join(df_auc_nulls_summary, by = "ID") |> 
+  mutate(AUC_scaled = (AUC - AUC_mean)/AUC_sd)
+
+df_enrichment_cluster_stream_auc_unnormed_scaled <- df_enrichment_cluster_stream_auc_unnormed_scaled |> 
+  filter(!(ID %in% pathway_ids_all_zero))
+
+df_auc_nulls_unnormed_scaled <- df_auc_nulls_unnormed_scaled |> 
+  filter(!(ID %in% pathway_ids_all_zero))
+
+# Examine the distribution of AUC values
+df_enrichment_cluster_stream_auc_unnormed_scaled  |> 
+  select(ID, AUC, AUC_scaled) |> 
+  pivot_longer(cols = -ID, names_to = "measure", values_to = "value") |> 
+  ggplot(aes(x = value)) + 
+  geom_histogram() +
+  facet_wrap(~measure, scales = "free_x") +
+  theme_bw()
+```
+
+```{r}
+mat_auc_nulls_unnormed_scaled <- df_auc_nulls_unnormed_scaled |> 
+  mutate(cols = paste0("X", seed)) |> 
+  select(ID, cols, AUC_scaled) |> 
+  pivot_wider(id_cols = ID, names_from = "cols", values_from = "AUC_scaled") |> 
+  column_to_rownames("ID") |> 
+  as.matrix()
+
+# Filter for pathways in PCA subset
+idx <- rownames(mat_auc_nulls_unnormed_scaled) %in% df_pathway_subset$ID
+mat_auc_nulls_unnormed_scaled_subset <- mat_auc_nulls_unnormed_scaled[idx,]
+
+# For each pathway, compute the max over permutations
+df_auc_nulls_unnormed_scaled_subset_max <- apply(mat_auc_nulls_unnormed_scaled_subset, 2, max) |>
+    enframe(name = "col", value = "AUC.max") |> 
+    mutate(seed = as.integer(str_remove(col, "X"))) |> 
+    select(-col)
+
+df_auc_subset_unnormed_scaled <- df_enrichment_cluster_stream_auc_unnormed_scaled |> 
+  semi_join(df_pathway_subset, by = "ID")
+
+ggplot(df_auc_nulls_unnormed_scaled_subset_max, aes(x = AUC.max)) +
+    geom_histogram(fill = "grey70", col = "grey30") +
+  geom_vline(xintercept = df_auc_subset_unnormed_scaled$AUC_scaled,
+             colour = stream_colour) +
+  labs(x = "AUC (scaled)",
+       y = NULL,
+       title = "Null distribution of synaptic-immune maximum scaled enrichment AUC") + 
+  theme_bw()
+```
+
+```{r}
+df_auc_subset_unnormed_scaled <- df_auc_subset_unnormed_scaled |> 
+  mutate(p.value.maxE = 0)
+for (i in 1:nrow(df_auc_subset_unnormed_scaled)) {
+  pval <- (sum(df_auc_nulls_unnormed_scaled_subset_max$AUC.max >= df_auc_subset_unnormed_scaled[[i, "AUC_scaled"]])+1)/(B+1)
+  df_auc_subset_unnormed_scaled[[i, "p.value.maxE"]] <- pval
+}
+
+df_auc_subset_unnormed_scaled |> 
+  arrange(p.value.maxE) |> 
+  select(Name, AUC, AUC_scaled, p.value.maxE)
+```
+
+Finding basically the same result as with the FDR correction. 
+
+
+
 
 ### Max enrichment in stream
 
